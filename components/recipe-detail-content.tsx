@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useCallback } from "react";
 import { Clock, Users, Pencil, Flame, Drumstick, Droplet, Wheat } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MacroRingChart } from "@/components/macro-ring-chart";
+import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { FOODS, NUTRIENT_DEFINITIONS } from "@/lib/mock-data";
 import {
   calculateRecipeNutrients,
@@ -28,7 +33,17 @@ import {
 import { formatNumber, formatNutrient } from "@/lib/format";
 import type { Recipe } from "@/lib/types";
 
+function getScoreBadge(score: number | undefined) {
+  if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
+  if (score >= 85) return { label: "A", color: "bg-emerald-100 text-emerald-900" };
+  if (score >= 70) return { label: "B", color: "bg-lime-100 text-lime-900" };
+  if (score >= 55) return { label: "C", color: "bg-amber-100 text-amber-900" };
+  if (score >= 40) return { label: "D", color: "bg-orange-100 text-orange-900" };
+  return { label: "E", color: "bg-red-100 text-red-900" };
+}
+
 export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
+  const { convertRecipeToFood } = useCustomFoods();
   const totalNutrients = calculateRecipeNutrients(recipe, FOODS);
   const perServing = calculatePerServing(totalNutrients, recipe.servings);
 
@@ -40,30 +55,46 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
 
   const foodMap = new Map(FOODS.map((f) => [f.id, f]));
 
-  const vitaminHighlights = NUTRIENT_DEFINITIONS.filter(
-    (nd) => nd.group === "vitamine",
-  )
-    .map((nd) => ({
-      ...nd,
-      value: getNutrientValue(perServing, nd.id),
-    }))
+  const vitaminHighlights = NUTRIENT_DEFINITIONS.filter((nd) => nd.group === "vitamine")
+    .map((nd) => ({ ...nd, value: getNutrientValue(perServing, nd.id) }))
     .filter((v) => v.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  const mineralHighlights = NUTRIENT_DEFINITIONS.filter(
-    (nd) => nd.group === "mineralstoffe",
-  )
-    .map((nd) => ({
-      ...nd,
-      value: getNutrientValue(perServing, nd.id),
-    }))
+  const mineralHighlights = NUTRIENT_DEFINITIONS.filter((nd) => nd.group === "mineralstoffe")
+    .map((nd) => ({ ...nd, value: getNutrientValue(perServing, nd.id) }))
     .filter((v) => v.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
+
+  const scoreBadge = getScoreBadge(recipe.prodScore);
+
+  const handleConvert = useCallback(() => {
+    convertRecipeToFood(recipe);
+    toast.success("Rezept als Lebensmittel gespeichert");
+  }, [convertRecipeToFood, recipe]);
 
   return (
     <div className="space-y-6">
+      <div
+        className="bg-muted relative h-56 w-full overflow-hidden rounded-xl"
+        style={
+          recipe.imageUrl
+            ? {
+                backgroundImage: `url(${recipe.imageUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
+      >
+        <div className="absolute right-4 top-4">
+          <Badge className={`${scoreBadge.color} border-none px-3 py-1 text-sm font-bold`}>
+            PRODIscore {scoreBadge.label}
+          </Badge>
+        </div>
+      </div>
+
       <PageHeader title={recipe.name}>
         <Badge variant="secondary">{recipe.category}</Badge>
         <Button variant="outline" asChild>
@@ -72,51 +103,47 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
             Bearbeiten
           </Link>
         </Button>
+        <Button onClick={handleConvert}>Als Lebensmittel speichern</Button>
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left column */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Info card */}
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground mb-4">{recipe.description}</p>
-              <div className="flex flex-wrap gap-6">
-                <div className="flex items-center gap-2">
+            <CardContent className="space-y-4 pt-6">
+              <p className="text-muted-foreground">{recipe.description}</p>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span className="flex items-center gap-2">
                   <Clock className="text-muted-foreground h-5 w-5" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Vorbereitung</p>
-                    <p className="text-sm font-medium">{recipe.prepTime} Min.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
+                  {recipe.prepTime} Min. Vorbereitung
+                </span>
+                <span className="flex items-center gap-2">
                   <Clock className="text-muted-foreground h-5 w-5" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Kochzeit</p>
-                    <p className="text-sm font-medium">{recipe.cookTime} Min.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
+                  {recipe.cookTime} Min. Kochzeit
+                </span>
+                <span className="flex items-center gap-2">
                   <Users className="text-muted-foreground h-5 w-5" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Portionen</p>
-                    <p className="text-sm font-medium">{recipe.servings}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
+                  {recipe.servings} Portionen
+                </span>
+                <span className="flex items-center gap-2">
                   <Flame className="h-5 w-5 text-orange-500" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Gesamt</p>
-                    <p className="text-sm font-medium">
-                      {formatNumber(totalKcal, 0)} kcal
-                    </p>
-                  </div>
-                </div>
+                  {formatNumber(totalKcal, 0)} kcal gesamt
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {recipe.allergens?.map((allergen) => (
+                  <Badge key={allergen} variant="destructive" className="text-xs">
+                    {allergen}
+                  </Badge>
+                ))}
+                {recipe.additives?.map((additive) => (
+                  <Badge key={additive} variant="outline" className="text-xs">
+                    {additive}
+                  </Badge>
+                ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Ingredients table */}
           <Card>
             <CardHeader>
               <CardTitle>Zutaten</CardTitle>
@@ -134,11 +161,7 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
                   {recipe.ingredients.map((ingredient) => {
                     const food = foodMap.get(ingredient.foodId);
                     if (!food) return null;
-                    const scaled = scaleNutrients(
-                      food.nutrients,
-                      food.baseAmount,
-                      ingredient.amount,
-                    );
+                    const scaled = scaleNutrients(food.nutrients, food.baseAmount, ingredient.amount);
                     const kcal = getNutrientValue(scaled, "energie");
                     return (
                       <TableRow key={ingredient.foodId}>
@@ -157,7 +180,6 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
             </CardContent>
           </Card>
 
-          {/* Instructions */}
           <Card>
             <CardHeader>
               <CardTitle>Zubereitung</CardTitle>
@@ -177,9 +199,7 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
           </Card>
         </div>
 
-        {/* Right column */}
         <div className="space-y-6">
-          {/* Nutrition summary */}
           <Card>
             <CardHeader>
               <CardTitle>Nährwerte pro Portion</CardTitle>
@@ -226,7 +246,52 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
             </CardContent>
           </Card>
 
-          {/* Macro chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Nachhaltigkeit</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>
+                CO₂ je Portion: {recipe.co2PerPortion ? `${formatNumber(recipe.co2PerPortion, 2)} kg` : "n. a."}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Einschätzung basiert auf Zutatenmix und Produktionsweg.
+              </p>
+            </CardContent>
+          </Card>
+
+          {recipe.referenceTargets && recipe.referenceTargets.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Vergleich Zielwerte</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Parameter</TableHead>
+                      <TableHead className="text-right">Ist</TableHead>
+                      <TableHead className="text-right">Ziel</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recipe.referenceTargets.map((target) => (
+                      <TableRow key={target.id}>
+                        <TableCell>{target.label}</TableCell>
+                        <TableCell className="text-right">
+                          {formatNutrient(getNutrientValue(perServing, target.nutrientId), target.unit)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatNutrient(target.target, target.unit)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Makronährstoff-Verteilung</CardTitle>
@@ -236,7 +301,6 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
             </CardContent>
           </Card>
 
-          {/* Vitamin & mineral highlights */}
           <Card>
             <CardHeader>
               <CardTitle>Vitamine & Mineralstoffe</CardTitle>

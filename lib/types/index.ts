@@ -8,3 +8,6 @@ export * from "./protocol";
 export * from "./counseling";
 export * from "./lab-values";
 export * from "./auth";
+export * from "./platform";
+export * from "./report";
+export * from "./institution";

@@ -89,11 +89,28 @@ export function useMealPlan() {
     }
   }, [plans])
 
+  const getPlanForDate = useCallback(
+    (date: string): DailyMealPlan => {
+      const existing = plans[date]
+      if (existing) return ensureAllSlots(existing)
+      return createEmptyPlan(date)
+    },
+    [plans],
+  )
+
   const getCurrentPlan = useCallback((): DailyMealPlan => {
-    const existing = plans[currentDate]
-    if (existing) return ensureAllSlots(existing)
-    return createEmptyPlan(currentDate)
-  }, [plans, currentDate])
+    return getPlanForDate(currentDate)
+  }, [getPlanForDate, currentDate])
+
+  const getPlansInRange = useCallback(
+    (startDate: string, days: number): DailyMealPlan[] => {
+      const start = parseISO(startDate)
+      return Array.from({ length: days }, (_, index) =>
+        getPlanForDate(format(addDays(start, index), "yyyy-MM-dd")),
+      )
+    },
+    [getPlanForDate],
+  )
 
   const addEntry = useCallback(
     (slotType: MealSlotType, entry: Omit<MealEntry, "id">) => {
@@ -182,6 +199,8 @@ export function useMealPlan() {
   return {
     currentDate,
     currentPlan: getCurrentPlan(),
+    getPlanForDate,
+    getPlansInRange,
     addEntry,
     removeEntry,
     updateEntryAmount,

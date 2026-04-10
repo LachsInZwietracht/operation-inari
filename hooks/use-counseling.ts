@@ -1,7 +1,12 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import type { CounselingSession } from "@/lib/types"
+import type {
+  CounselingMaterial,
+  CounselingProgressMetric,
+  CounselingSession,
+  CounselingTimelineEntry,
+} from "@/lib/types"
 import { COUNSELING_SESSIONS } from "@/lib/mock-data"
 
 const STORAGE_KEY = "prodi_counseling"
@@ -71,15 +76,106 @@ export function useCounseling() {
     [],
   )
 
+  const updateSession = useCallback(
+    (id: string, updater: (session: CounselingSession) => Partial<CounselingSession>) => {
+      const updatedAt = new Date().toISOString()
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === id ? { ...session, ...updater(session), updatedAt } : session,
+        ),
+      )
+    },
+    [],
+  )
+
   const deleteSession = useCallback((id: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== id))
   }, [])
+
+  const addTimelineEntry = useCallback(
+    (sessionId: string, entry: Omit<CounselingTimelineEntry, "id">) => {
+      const entryWithId: CounselingTimelineEntry = {
+        ...entry,
+        id: `timeline_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      }
+      updateSession(sessionId, (session) => ({
+        timeline: [...(session.timeline ?? []), entryWithId],
+      }))
+    },
+    [updateSession],
+  )
+
+  const updateTimelineStatus = useCallback(
+    (sessionId: string, entryId: string, status: CounselingTimelineEntry["status"]) => {
+      updateSession(sessionId, (session) => ({
+        timeline: (session.timeline ?? []).map((entry) =>
+          entry.id === entryId ? { ...entry, status } : entry,
+        ),
+      }))
+    },
+    [updateSession],
+  )
+
+  const addMaterial = useCallback(
+    (sessionId: string, material: Omit<CounselingMaterial, "id">) => {
+      const materialWithId: CounselingMaterial = {
+        ...material,
+        id: `material_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      }
+      updateSession(sessionId, (session) => ({
+        materials: [...(session.materials ?? []), materialWithId],
+      }))
+    },
+    [updateSession],
+  )
+
+  const updateMaterialStatus = useCallback(
+    (sessionId: string, materialId: string, status: CounselingMaterial["status"]) => {
+      updateSession(sessionId, (session) => ({
+        materials: (session.materials ?? []).map((material) =>
+          material.id === materialId ? { ...material, status } : material,
+        ),
+      }))
+    },
+    [updateSession],
+  )
+
+  const updateProgressMetric = useCallback(
+    (sessionId: string, metricId: string, value: number, trend?: CounselingProgressMetric["trend"]) => {
+      updateSession(sessionId, (session) => ({
+        progress: (session.progress ?? []).map((metric) =>
+          metric.id === metricId ? { ...metric, value, trend } : metric,
+        ),
+      }))
+    },
+    [updateSession],
+  )
+
+  const addProgressMetric = useCallback(
+    (sessionId: string, metric: Omit<CounselingProgressMetric, "id">) => {
+      const metricWithId: CounselingProgressMetric = {
+        ...metric,
+        id: `progress_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      }
+      updateSession(sessionId, (session) => ({
+        progress: [...(session.progress ?? []), metricWithId],
+      }))
+    },
+    [updateSession],
+  )
 
   return {
     sessions,
     getSession,
     getForPatient,
     addSession,
+    updateSession,
+    addTimelineEntry,
+    updateTimelineStatus,
+    addMaterial,
+    updateMaterialStatus,
+    updateProgressMetric,
+    addProgressMetric,
     deleteSession,
   }
 }

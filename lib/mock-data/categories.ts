@@ -11,4 +11,7 @@ export const FOOD_CATEGORIES: FoodCategory[] = [
   { id: "cat_nuesse", name: "Nüsse & Samen", icon: "nut" },
   { id: "cat_oele", name: "Öle & Fette", icon: "droplet" },
   { id: "cat_getraenke", name: "Getränke", icon: "glass-water" },
+  { id: "cat_fruehstueck", name: "Frühstück", icon: "coffee" },
+  { id: "cat_snacks", name: "Snacks", icon: "cookie" },
+  { id: "cat_fertiggerichte", name: "Fertiggerichte", icon: "utensils" },
 ];

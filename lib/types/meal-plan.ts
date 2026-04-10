@@ -24,3 +24,16 @@ export interface DailyMealPlan {
   date: string; // ISO date string YYYY-MM-DD
   slots: MealSlot[];
 }
+
+export interface DietLinePreset {
+  id: ID;
+  name: string;
+  description: string;
+  targets: Array<{
+    nutrientId: string;
+    label: string;
+    unit: string;
+    min?: number;
+    max?: number;
+  }>;
+}

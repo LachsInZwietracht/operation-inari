@@ -42,6 +42,31 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL(/\/berichte/);
     await expect(page.getByRole("heading", { name: "Berichte" })).toBeVisible();
 
+    // Navigate to Menüpläne
+    await sidebar.getByRole("link", { name: "Menüpläne" }).click();
+    await expect(page).toHaveURL(/\/institution\/menueplaene/);
+    await expect(page.getByRole("heading", { name: "Menüplanung" })).toBeVisible();
+
+    // Navigate to Produktion
+    await sidebar.getByRole("link", { name: "Produktion" }).click();
+    await expect(page).toHaveURL(/\/institution\/produktion/);
+    await expect(page.getByRole("heading", { name: "Produktionsmanagement" })).toBeVisible();
+
+    // Navigate to Compliance
+    await sidebar.getByRole("link", { name: "Compliance" }).click();
+    await expect(page).toHaveURL(/\/institution\/compliance/);
+    await expect(page.getByRole("heading", { name: "Nährstoff-Compliance" })).toBeVisible();
+
+    // Navigate to Krankenhaus
+    await sidebar.getByRole("link", { name: "Krankenhaus" }).click();
+    await expect(page).toHaveURL(/\/institution\/krankenhaus/);
+    await expect(page.getByRole("heading", { name: "Krankenhausverwaltung" })).toBeVisible();
+
+    // Navigate to Statistiken
+    await sidebar.getByRole("link", { name: "Statistiken", exact: true }).click();
+    await expect(page).toHaveURL(/\/institution\/statistiken/);
+    await expect(page.getByRole("heading", { name: "Einrichtungsstatistiken" })).toBeVisible();
+
     // Navigate back to Dashboard
     await sidebar.getByRole("link", { name: "Dashboard" }).click();
     await expect(page).toHaveURL(/\/dashboard/);

@@ -36,3 +36,14 @@ export function formatDate(date: string | Date): string {
     year: "numeric",
   }).format(d);
 }
+
+/**
+ * Formats a numeric value as Euro currency (e.g. "1.200,00 €")
+ */
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat(deDE, {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+  }).format(value);
+}

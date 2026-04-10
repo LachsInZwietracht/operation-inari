@@ -67,6 +67,16 @@ const RECIPE_CATEGORIES = [
 // Deduplicate categories
 const UNIQUE_CATEGORIES = [...new Set(RECIPE_CATEGORIES)];
 
+const RECIPE_ALLERGENS = [
+  "Gluten",
+  "Milch",
+  "Ei",
+  "Soja",
+  "Schalenfrüchte",
+  "Sellerie",
+  "Fisch",
+];
+
 const recipeSchema = z.object({
   name: z.string().min(1, "Name ist erforderlich"),
   description: z.string(),
@@ -74,6 +84,11 @@ const recipeSchema = z.object({
   servings: z.coerce.number().min(1, "Mindestens 1 Portion"),
   prepTime: z.coerce.number().min(0, "Darf nicht negativ sein"),
   cookTime: z.coerce.number().min(0, "Darf nicht negativ sein"),
+  imageUrl: z.string().optional(),
+  prodScore: z.coerce.number().min(0).max(100).optional(),
+  co2PerPortion: z.coerce.number().min(0).optional(),
+  allergens: z.array(z.string()).optional(),
+  additives: z.string().optional(),
   ingredients: z
     .array(
       z.object({
@@ -136,6 +151,11 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
       servings: recipe?.servings ?? 2,
       prepTime: recipe?.prepTime ?? 10,
       cookTime: recipe?.cookTime ?? 20,
+      imageUrl: recipe?.imageUrl ?? "",
+      prodScore: recipe?.prodScore ?? 75,
+      co2PerPortion: recipe?.co2PerPortion ?? 0,
+      allergens: recipe?.allergens ?? [],
+      additives: recipe?.additives?.join(", ") ?? "",
       ingredients: defaultIngredients.length > 0 ? defaultIngredients : [],
       instructions: defaultInstructions,
     },
@@ -190,6 +210,12 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
 
   function onSubmit(values: RecipeFormValues) {
     const now = new Date().toISOString();
+    const additiveList = values.additives
+      ? values.additives
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+      : undefined;
 
     const recipeData: Recipe = {
       id: recipe?.id ?? crypto.randomUUID(),
@@ -199,6 +225,12 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
       servings: values.servings,
       prepTime: values.prepTime,
       cookTime: values.cookTime,
+      imageUrl: values.imageUrl || recipe?.imageUrl,
+      prodScore: values.prodScore ?? recipe?.prodScore,
+      co2PerPortion: values.co2PerPortion ?? recipe?.co2PerPortion,
+      allergens: values.allergens,
+      additives: additiveList,
+      sourceType: recipe?.sourceType ?? "personal",
       ingredients: values.ingredients.map((i) => ({
         foodId: i.foodId,
         amount: i.amount,
@@ -335,24 +367,66 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
+                  />
 
-                    <FormField
-                      control={form.control}
-                      name="cookTime"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Kochzeit (Min.)</FormLabel>
-                          <FormControl>
-                            <Input type="number" min={0} {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+                  <FormField
+                    control={form.control}
+                    name="cookTime"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Kochzeit (Min.)</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <FormField
+                    control={form.control}
+                    name="imageUrl"
+                    render={({ field }) => (
+                      <FormItem className="md:col-span-3">
+                        <FormLabel>Bild-URL</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://…" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="prodScore"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>PRODIscore</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} max={100} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="co2PerPortion"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CO₂ je Portion (kg)</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} step={0.01} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
               {/* Ingredients */}
               <Card>
@@ -560,6 +634,58 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                       Zutaten hinzufügen, um die Nährwerte zu sehen.
                     </p>
                   )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Allergene & Zusatzstoffe</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="allergens"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">Allergene</FormLabel>
+                        <div className="grid grid-cols-2 gap-2">
+                          {RECIPE_ALLERGENS.map((allergen) => {
+                            const checked = field.value?.includes(allergen) ?? false;
+                            return (
+                              <label key={allergen} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border"
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const current = field.value ?? [];
+                                    if (event.target.checked) {
+                                      field.onChange([...current, allergen]);
+                                    } else {
+                                      field.onChange(current.filter((item) => item !== allergen));
+                                    }
+                                  }}
+                                />
+                                {allergen}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="additives"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">Zusatzstoffe (kommagetrennt)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="z.B. E300, E471" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
                 </CardContent>
               </Card>
             </div>
