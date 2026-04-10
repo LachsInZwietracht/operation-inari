@@ -17,7 +17,7 @@ function n(values: Record<string, number>): NutrientValue[] {
 export const FOODS: Food[] = [
   // Gemuese
   {
-    id: "food_karotte", name: "Karotte", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_karotte", name: "Karotte", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G410100", foodGroupId: "fg_G4", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 36, eiweiss: 0.9, fett: 0.2, kohlenhydrate: 7.6, ballaststoffe: 2.8, zucker: 4.7,
       gesaettigte_fettsaeuren: 0.03, ungesaettigte_fettsaeuren: 0.1, wasser: 88,
@@ -27,7 +27,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_brokkoli", name: "Brokkoli", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_brokkoli", name: "Brokkoli", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G210100", foodGroupId: "fg_G2", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 34, eiweiss: 2.8, fett: 0.4, kohlenhydrate: 4.4, ballaststoffe: 3.0, zucker: 1.7,
       gesaettigte_fettsaeuren: 0.04, ungesaettigte_fettsaeuren: 0.2, wasser: 89,
@@ -37,7 +37,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_tomate", name: "Tomate", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_tomate", name: "Tomate", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G310100", foodGroupId: "fg_G3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 18, eiweiss: 0.9, fett: 0.2, kohlenhydrate: 2.6, ballaststoffe: 1.2, zucker: 2.6,
       gesaettigte_fettsaeuren: 0.03, ungesaettigte_fettsaeuren: 0.1, wasser: 95,
@@ -47,7 +47,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_spinat", name: "Spinat", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_spinat", name: "Spinat", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G110200", foodGroupId: "fg_G1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 23, eiweiss: 2.9, fett: 0.4, kohlenhydrate: 1.4, ballaststoffe: 2.2, zucker: 0.4,
       gesaettigte_fettsaeuren: 0.06, ungesaettigte_fettsaeuren: 0.2, wasser: 91,
@@ -57,7 +57,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_paprika", name: "Paprika (rot)", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_paprika", name: "Paprika (rot)", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G310200", foodGroupId: "fg_G3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 31, eiweiss: 1.0, fett: 0.3, kohlenhydrate: 4.2, ballaststoffe: 2.1, zucker: 4.2,
       gesaettigte_fettsaeuren: 0.03, ungesaettigte_fettsaeuren: 0.15, wasser: 92,
@@ -67,7 +67,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_zucchini", name: "Zucchini", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_zucchini", name: "Zucchini", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G310300", foodGroupId: "fg_G3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 17, eiweiss: 1.2, fett: 0.3, kohlenhydrate: 1.8, ballaststoffe: 1.0, zucker: 1.7,
       gesaettigte_fettsaeuren: 0.08, ungesaettigte_fettsaeuren: 0.1, wasser: 95,
@@ -77,7 +77,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_blumenkohl", name: "Blumenkohl", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_blumenkohl", name: "Blumenkohl", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G220100", foodGroupId: "fg_G2", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 25, eiweiss: 1.9, fett: 0.3, kohlenhydrate: 2.9, ballaststoffe: 2.0, zucker: 1.9,
       gesaettigte_fettsaeuren: 0.04, ungesaettigte_fettsaeuren: 0.15, wasser: 92,
@@ -87,7 +87,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_gurke", name: "Gurke", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_gurke", name: "Gurke", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G310400", foodGroupId: "fg_G3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 12, eiweiss: 0.6, fett: 0.1, kohlenhydrate: 1.8, ballaststoffe: 0.5, zucker: 1.7,
       gesaettigte_fettsaeuren: 0.01, ungesaettigte_fettsaeuren: 0.05, wasser: 96,
@@ -97,7 +97,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_kartoffel", name: "Kartoffel (gekocht)", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_kartoffel", name: "Kartoffel (gekocht)", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "K110100", foodGroupId: "fg_K1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 73, eiweiss: 2.0, fett: 0.1, kohlenhydrate: 15.4, ballaststoffe: 2.2, zucker: 0.8,
       gesaettigte_fettsaeuren: 0.03, ungesaettigte_fettsaeuren: 0.04, wasser: 79,
@@ -107,7 +107,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_zwiebel", name: "Zwiebel", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_zwiebel", name: "Zwiebel", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G510100", foodGroupId: "fg_G5", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 40, eiweiss: 1.1, fett: 0.1, kohlenhydrate: 7.6, ballaststoffe: 1.7, zucker: 4.2,
       gesaettigte_fettsaeuren: 0.02, ungesaettigte_fettsaeuren: 0.05, wasser: 89,
@@ -118,7 +118,7 @@ export const FOODS: Food[] = [
   },
   // Obst
   {
-    id: "food_apfel", name: "Apfel", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_apfel", name: "Apfel", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "O110100", foodGroupId: "fg_O1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 52, eiweiss: 0.3, fett: 0.2, kohlenhydrate: 11.4, ballaststoffe: 2.4, zucker: 10.4,
       gesaettigte_fettsaeuren: 0.03, ungesaettigte_fettsaeuren: 0.06, wasser: 86,
@@ -128,7 +128,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_banane", name: "Banane", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_banane", name: "Banane", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "O510100", foodGroupId: "fg_O5", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 89, eiweiss: 1.1, fett: 0.3, kohlenhydrate: 20.2, ballaststoffe: 2.6, zucker: 12.2,
       gesaettigte_fettsaeuren: 0.11, ungesaettigte_fettsaeuren: 0.07, wasser: 75,
@@ -138,7 +138,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_erdbeere", name: "Erdbeere", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_erdbeere", name: "Erdbeere", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "O310100", foodGroupId: "fg_O3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 32, eiweiss: 0.7, fett: 0.3, kohlenhydrate: 5.5, ballaststoffe: 2.0, zucker: 4.9,
       gesaettigte_fettsaeuren: 0.02, ungesaettigte_fettsaeuren: 0.17, wasser: 91,
@@ -148,7 +148,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_orange", name: "Orange", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_orange", name: "Orange", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "O410100", foodGroupId: "fg_O4", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 47, eiweiss: 0.9, fett: 0.1, kohlenhydrate: 9.4, ballaststoffe: 2.4, zucker: 9.4,
       gesaettigte_fettsaeuren: 0.02, ungesaettigte_fettsaeuren: 0.04, wasser: 87,
@@ -158,7 +158,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_heidelbeere", name: "Heidelbeere", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_heidelbeere", name: "Heidelbeere", categoryId: "cat_obst", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "O310200", foodGroupId: "fg_O3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 57, eiweiss: 0.7, fett: 0.3, kohlenhydrate: 11.6, ballaststoffe: 2.4, zucker: 10.0,
       gesaettigte_fettsaeuren: 0.03, ungesaettigte_fettsaeuren: 0.15, wasser: 84,
@@ -169,7 +169,7 @@ export const FOODS: Food[] = [
   },
   // Fleisch
   {
-    id: "food_haehnchenbrust", name: "Haehnchenbrust", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_haehnchenbrust", name: "Haehnchenbrust", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "R330100", foodGroupId: "fg_R3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 165, eiweiss: 31.0, fett: 3.6, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 1.0, ungesaettigte_fettsaeuren: 1.8, wasser: 65,
@@ -179,7 +179,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_rinderfilet", name: "Rinderfilet", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_rinderfilet", name: "Rinderfilet", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "R110100", foodGroupId: "fg_R1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 218, eiweiss: 26.1, fett: 12.7, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 5.3, ungesaettigte_fettsaeuren: 5.7, wasser: 60,
@@ -189,7 +189,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_schweineschnitzel", name: "Schweineschnitzel", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_schweineschnitzel", name: "Schweineschnitzel", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "R210100", foodGroupId: "fg_R2", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 172, eiweiss: 29.3, fett: 5.7, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 2.0, ungesaettigte_fettsaeuren: 2.8, wasser: 64,
@@ -199,7 +199,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_putenbrust", name: "Putenbrust", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_putenbrust", name: "Putenbrust", categoryId: "cat_fleisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "R330200", foodGroupId: "fg_R3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 135, eiweiss: 30.0, fett: 1.5, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 0.4, ungesaettigte_fettsaeuren: 0.6, wasser: 68,
@@ -210,7 +210,7 @@ export const FOODS: Food[] = [
   },
   // Fisch
   {
-    id: "food_lachs", name: "Lachs", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_lachs", name: "Lachs", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "S120100", foodGroupId: "fg_S1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 208, eiweiss: 20.4, fett: 13.4, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 3.1, ungesaettigte_fettsaeuren: 8.1, wasser: 65,
@@ -220,7 +220,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_thunfisch", name: "Thunfisch", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_thunfisch", name: "Thunfisch", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "S110100", foodGroupId: "fg_S1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 144, eiweiss: 23.3, fett: 4.9, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 1.3, ungesaettigte_fettsaeuren: 2.5, wasser: 71,
@@ -230,7 +230,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_kabeljau", name: "Kabeljau", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_kabeljau", name: "Kabeljau", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "S110200", foodGroupId: "fg_S1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 82, eiweiss: 17.8, fett: 0.7, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 0.1, ungesaettigte_fettsaeuren: 0.3, wasser: 81,
@@ -240,7 +240,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_garnelen", name: "Garnelen", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_garnelen", name: "Garnelen", categoryId: "cat_fisch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "S310100", foodGroupId: "fg_S3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 99, eiweiss: 20.9, fett: 1.7, kohlenhydrate: 0.2, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 0.3, ungesaettigte_fettsaeuren: 0.8, wasser: 76,
@@ -251,7 +251,7 @@ export const FOODS: Food[] = [
   },
   // Milchprodukte
   {
-    id: "food_vollmilch", name: "Vollmilch (3,5 %)", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_vollmilch", name: "Vollmilch (3,5 %)", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "M110100", foodGroupId: "fg_M1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 64, eiweiss: 3.3, fett: 3.5, kohlenhydrate: 4.7, ballaststoffe: 0, zucker: 4.7,
       gesaettigte_fettsaeuren: 2.3, ungesaettigte_fettsaeuren: 0.9, wasser: 87,
@@ -261,7 +261,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_joghurt", name: "Joghurt natur (3,5 %)", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_joghurt", name: "Joghurt natur (3,5 %)", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "M210100", foodGroupId: "fg_M2", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 61, eiweiss: 3.5, fett: 3.5, kohlenhydrate: 3.9, ballaststoffe: 0, zucker: 3.9,
       gesaettigte_fettsaeuren: 2.3, ungesaettigte_fettsaeuren: 0.9, wasser: 88,
@@ -271,7 +271,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_magerquark", name: "Magerquark", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_magerquark", name: "Magerquark", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "M410100", foodGroupId: "fg_M4", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 67, eiweiss: 12.0, fett: 0.3, kohlenhydrate: 4.0, ballaststoffe: 0, zucker: 4.0,
       gesaettigte_fettsaeuren: 0.2, ungesaettigte_fettsaeuren: 0.07, wasser: 82,
@@ -281,7 +281,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_gouda", name: "Gouda", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_gouda", name: "Gouda", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "M310100", foodGroupId: "fg_M3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 356, eiweiss: 24.9, fett: 27.4, kohlenhydrate: 2.2, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 17.6, ungesaettigte_fettsaeuren: 7.5, wasser: 42,
@@ -291,7 +291,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_butter", name: "Butter", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_butter", name: "Butter", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "F110100", foodGroupId: "fg_F1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 717, eiweiss: 0.9, fett: 81.1, kohlenhydrate: 0.1, ballaststoffe: 0, zucker: 0.1,
       gesaettigte_fettsaeuren: 51.4, ungesaettigte_fettsaeuren: 23.4, wasser: 16,
@@ -302,7 +302,7 @@ export const FOODS: Food[] = [
   },
   // Getreide
   {
-    id: "food_haferflocken", name: "Haferflocken", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_haferflocken", name: "Haferflocken", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "C310100", foodGroupId: "fg_C3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 379, eiweiss: 13.2, fett: 6.5, kohlenhydrate: 58.7, ballaststoffe: 10.6, zucker: 0.9,
       gesaettigte_fettsaeuren: 1.1, ungesaettigte_fettsaeuren: 4.2, wasser: 10,
@@ -312,7 +312,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_vollkornbrot", name: "Vollkornbrot", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_vollkornbrot", name: "Vollkornbrot", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "B410100", foodGroupId: "fg_B4", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 213, eiweiss: 7.0, fett: 1.2, kohlenhydrate: 40.5, ballaststoffe: 6.9, zucker: 2.8,
       gesaettigte_fettsaeuren: 0.3, ungesaettigte_fettsaeuren: 0.6, wasser: 43,
@@ -322,7 +322,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_reis", name: "Reis (gekocht)", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_reis", name: "Reis (gekocht)", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "C410100", foodGroupId: "fg_C4", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 130, eiweiss: 2.7, fett: 0.3, kohlenhydrate: 28.2, ballaststoffe: 0.4, zucker: 0.1,
       gesaettigte_fettsaeuren: 0.1, ungesaettigte_fettsaeuren: 0.1, wasser: 68,
@@ -332,7 +332,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_nudeln", name: "Nudeln (gekocht)", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_nudeln", name: "Nudeln (gekocht)", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "C510100", foodGroupId: "fg_C5", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 158, eiweiss: 5.8, fett: 0.9, kohlenhydrate: 30.6, ballaststoffe: 1.8, zucker: 0.6,
       gesaettigte_fettsaeuren: 0.2, ungesaettigte_fettsaeuren: 0.3, wasser: 62,
@@ -342,7 +342,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_weizenmehl", name: "Weizenmehl (Type 405)", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_weizenmehl", name: "Weizenmehl (Type 405)", categoryId: "cat_getreide", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "C110100", foodGroupId: "fg_C1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 348, eiweiss: 10.3, fett: 1.0, kohlenhydrate: 72.3, ballaststoffe: 2.7, zucker: 0.3,
       gesaettigte_fettsaeuren: 0.2, ungesaettigte_fettsaeuren: 0.5, wasser: 13,
@@ -353,7 +353,7 @@ export const FOODS: Food[] = [
   },
   // Huelsenfruechte
   {
-    id: "food_rote_linsen", name: "Rote Linsen (gekocht)", categoryId: "cat_huelsenfruechte", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_rote_linsen", name: "Rote Linsen (gekocht)", categoryId: "cat_huelsenfruechte", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G610100", foodGroupId: "fg_G6", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 116, eiweiss: 9.0, fett: 0.4, kohlenhydrate: 16.9, ballaststoffe: 3.8, zucker: 1.8,
       gesaettigte_fettsaeuren: 0.05, ungesaettigte_fettsaeuren: 0.2, wasser: 70,
@@ -363,7 +363,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_kichererbsen", name: "Kichererbsen (gekocht)", categoryId: "cat_huelsenfruechte", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_kichererbsen", name: "Kichererbsen (gekocht)", categoryId: "cat_huelsenfruechte", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G610200", foodGroupId: "fg_G6", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 164, eiweiss: 8.9, fett: 2.6, kohlenhydrate: 22.5, ballaststoffe: 7.6, zucker: 4.8,
       gesaettigte_fettsaeuren: 0.27, ungesaettigte_fettsaeuren: 1.6, wasser: 60,
@@ -373,7 +373,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_kidneybohnen", name: "Kidneybohnen (gekocht)", categoryId: "cat_huelsenfruechte", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_kidneybohnen", name: "Kidneybohnen (gekocht)", categoryId: "cat_huelsenfruechte", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G610300", foodGroupId: "fg_G6", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 127, eiweiss: 8.7, fett: 0.5, kohlenhydrate: 18.0, ballaststoffe: 6.4, zucker: 0.3,
       gesaettigte_fettsaeuren: 0.07, ungesaettigte_fettsaeuren: 0.3, wasser: 67,
@@ -384,7 +384,7 @@ export const FOODS: Food[] = [
   },
   // Nuesse & Samen
   {
-    id: "food_mandeln", name: "Mandeln", categoryId: "cat_nuesse", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_mandeln", name: "Mandeln", categoryId: "cat_nuesse", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "N110100", foodGroupId: "fg_N1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 579, eiweiss: 21.2, fett: 49.9, kohlenhydrate: 9.1, ballaststoffe: 12.5, zucker: 4.4,
       gesaettigte_fettsaeuren: 3.7, ungesaettigte_fettsaeuren: 40.6, wasser: 4,
@@ -394,7 +394,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_walnuesse", name: "Walnuesse", categoryId: "cat_nuesse", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_walnuesse", name: "Walnuesse", categoryId: "cat_nuesse", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "N110200", foodGroupId: "fg_N1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 654, eiweiss: 15.2, fett: 65.2, kohlenhydrate: 7.0, ballaststoffe: 6.7, zucker: 2.6,
       gesaettigte_fettsaeuren: 6.1, ungesaettigte_fettsaeuren: 53.9, wasser: 4,
@@ -404,7 +404,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_cashews", name: "Cashews", categoryId: "cat_nuesse", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_cashews", name: "Cashews", categoryId: "cat_nuesse", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "N110300", foodGroupId: "fg_N1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 553, eiweiss: 18.2, fett: 43.9, kohlenhydrate: 26.9, ballaststoffe: 3.3, zucker: 5.9,
       gesaettigte_fettsaeuren: 7.8, ungesaettigte_fettsaeuren: 31.4, wasser: 5,
@@ -415,7 +415,7 @@ export const FOODS: Food[] = [
   },
   // Oele & Fette
   {
-    id: "food_olivenoel", name: "Olivenoel", categoryId: "cat_oele", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_olivenoel", name: "Olivenoel", categoryId: "cat_oele", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "F310100", foodGroupId: "fg_F3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 884, eiweiss: 0, fett: 100, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 13.8, ungesaettigte_fettsaeuren: 80.2, wasser: 0,
@@ -425,7 +425,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_rapsoel", name: "Rapsoel", categoryId: "cat_oele", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_rapsoel", name: "Rapsoel", categoryId: "cat_oele", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "F310200", foodGroupId: "fg_F3", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 884, eiweiss: 0, fett: 100, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 7.4, ungesaettigte_fettsaeuren: 85.6, wasser: 0,
@@ -436,7 +436,7 @@ export const FOODS: Food[] = [
   },
   // Getraenke
   {
-    id: "food_orangensaft", name: "Orangensaft", categoryId: "cat_getraenke", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_orangensaft", name: "Orangensaft", categoryId: "cat_getraenke", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "H210100", foodGroupId: "fg_H2", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 45, eiweiss: 0.7, fett: 0.2, kohlenhydrate: 9.3, ballaststoffe: 0.2, zucker: 8.4,
       gesaettigte_fettsaeuren: 0.02, ungesaettigte_fettsaeuren: 0.04, wasser: 89,
@@ -447,7 +447,7 @@ export const FOODS: Food[] = [
   },
   // Additional common foods
   {
-    id: "food_ei", name: "Huehnerei (gekocht)", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_ei", name: "Huehnerei (gekocht)", categoryId: "cat_milch", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "E110100", foodGroupId: "fg_E1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 155, eiweiss: 12.6, fett: 10.6, kohlenhydrate: 1.1, ballaststoffe: 0, zucker: 1.1,
       gesaettigte_fettsaeuren: 3.3, ungesaettigte_fettsaeuren: 5.5, wasser: 75,
@@ -457,7 +457,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_honig", name: "Honig", categoryId: "cat_getraenke", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_honig", name: "Honig", categoryId: "cat_getraenke", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "T110100", foodGroupId: "fg_T1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 304, eiweiss: 0.3, fett: 0, kohlenhydrate: 75.1, ballaststoffe: 0.2, zucker: 75.1,
       gesaettigte_fettsaeuren: 0, ungesaettigte_fettsaeuren: 0, wasser: 17,
@@ -467,7 +467,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_salz", name: "Speisesalz", categoryId: "cat_oele", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_salz", name: "Speisesalz", categoryId: "cat_oele", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "W210100", foodGroupId: "fg_W2", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 0, eiweiss: 0, fett: 0, kohlenhydrate: 0, ballaststoffe: 0, zucker: 0,
       gesaettigte_fettsaeuren: 0, ungesaettigte_fettsaeuren: 0, wasser: 0.2,
@@ -477,7 +477,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_zucker", name: "Zucker (weiss)", categoryId: "cat_getraenke", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_zucker", name: "Zucker (weiss)", categoryId: "cat_getraenke", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "T120100", foodGroupId: "fg_T1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 400, eiweiss: 0, fett: 0, kohlenhydrate: 100, ballaststoffe: 0, zucker: 100,
       gesaettigte_fettsaeuren: 0, ungesaettigte_fettsaeuren: 0, wasser: 0,
@@ -487,7 +487,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_knoblauch", name: "Knoblauch", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_knoblauch", name: "Knoblauch", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "G510200", foodGroupId: "fg_G5", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 149, eiweiss: 6.4, fett: 0.5, kohlenhydrate: 28.2, ballaststoffe: 2.1, zucker: 1.0,
       gesaettigte_fettsaeuren: 0.09, ungesaettigte_fettsaeuren: 0.25, wasser: 59,
@@ -497,7 +497,7 @@ export const FOODS: Food[] = [
     }),
   },
   {
-    id: "food_petersilie", name: "Petersilie", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", baseAmount: 100, ...ts,
+    id: "food_petersilie", name: "Petersilie", categoryId: "cat_gemuese", source: "BLS 3.02", sourceId: "bls", sourceVersion: "3.02", blsCode: "W110100", foodGroupId: "fg_W1", baseAmount: 100, ...ts,
     nutrients: n({
       energie: 36, eiweiss: 3.0, fett: 0.8, kohlenhydrate: 3.0, ballaststoffe: 3.3, zucker: 0.9,
       gesaettigte_fettsaeuren: 0.13, ungesaettigte_fettsaeuren: 0.45, wasser: 88,

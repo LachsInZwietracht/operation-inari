@@ -1,6 +1,7 @@
 export { NUTRIENT_DEFINITIONS } from "./nutrients";
 export { FOOD_CATEGORIES } from "./categories";
 export { FOODS } from "./foods";
+export { FOOD_GROUPS, getFoodGroupName, getFoodGroupDescendants } from "./food-groups";
 export { BRANDED_FOODS } from "./branded-foods";
 export { FOOD_SOURCES } from "./food-sources";
 export { FOOD_DATABASE_UPDATES } from "./database-updates";

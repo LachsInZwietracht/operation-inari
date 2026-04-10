@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { SearchIcon } from "lucide-react"
+import { SearchIcon, Sparkles } from "lucide-react"
 import {
   CommandDialog,
   CommandEmpty,
@@ -13,66 +13,84 @@ import {
 } from "@/components/ui/command"
 import { Button } from "@/components/ui/button"
 import { FOODS, FOOD_CATEGORIES } from "@/lib/mock-data"
+import { fuzzySearchFoods } from "@/lib/search"
+import type { Food } from "@/lib/types"
+
+type SearchResult = Food & { searchScore: number; matchType: string }
 
 function getCategoryName(categoryId: string): string {
   return FOOD_CATEGORIES.find((c) => c.id === categoryId)?.name ?? categoryId
 }
 
-export function FoodSearchCommand() {
-  const [open, setOpen] = React.useState(false)
+function SearchDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const router = useRouter()
+  const [query, setQuery] = React.useState("")
 
-  React.useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setOpen((prev) => !prev)
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown)
-    return () => document.removeEventListener("keydown", onKeyDown)
-  }, [])
+  const results = React.useMemo((): SearchResult[] => {
+    if (!query.trim()) return FOODS.slice(0, 20).map((f) => ({ ...f, searchScore: 1, matchType: "none" }))
+    return fuzzySearchFoods(query, FOODS).slice(0, 20)
+  }, [query])
 
   function handleSelect(foodId: string) {
-    setOpen(false)
+    onOpenChange(false)
+    setQuery("")
     router.push(`/lebensmittel/${foodId}`)
   }
 
   return (
-    <>
-      <CommandDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Lebensmittelsuche"
-        description="Suche nach Lebensmitteln in der Datenbank"
-      >
-        <CommandInput placeholder="Lebensmittel suchen..." />
-        <CommandList>
-          <CommandEmpty>Keine Ergebnisse gefunden.</CommandEmpty>
-          <CommandGroup heading="Lebensmittel">
-            {FOODS.map((food) => (
-              <CommandItem
-                key={food.id}
-                value={food.name}
-                onSelect={() => handleSelect(food.id)}
-              >
-                <span>{food.name}</span>
-                <span className="text-muted-foreground ml-auto text-xs">
+    <CommandDialog
+      open={open}
+      onOpenChange={(val) => {
+        onOpenChange(val)
+        if (!val) setQuery("")
+      }}
+      title="Lebensmittelsuche"
+      description="Fuzzy-Suche mit Tippfehler- und Phonetik-Erkennung"
+    >
+      <CommandInput
+        placeholder="Lebensmittel suchen (Tippfehler werden erkannt)..."
+        value={query}
+        onValueChange={setQuery}
+      />
+      <CommandList>
+        <CommandEmpty>Keine Ergebnisse gefunden.</CommandEmpty>
+        <CommandGroup heading={query.trim() ? `${results.length} Treffer` : "Lebensmittel"}>
+          {results.map((food) => (
+            <CommandItem
+              key={food.id}
+              value={food.id}
+              onSelect={() => handleSelect(food.id)}
+            >
+              <div className="flex w-full items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span>{food.name}</span>
+                  {food.matchType && food.matchType !== "none" && (
+                    <span className="text-[10px] text-purple-500">
+                      {food.matchType === "phonetic" && "klingt wie"}
+                      {food.matchType === "fuzzy" && "ähnlich"}
+                    </span>
+                  )}
+                </div>
+                <span className="text-muted-foreground text-xs">
                   {getCategoryName(food.categoryId)}
                 </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
-    </>
+              </div>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </CommandDialog>
   )
 }
 
-export function FoodSearchTrigger() {
+export function FoodSearchCommand() {
   const [open, setOpen] = React.useState(false)
-  const router = useRouter()
 
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -86,10 +104,23 @@ export function FoodSearchTrigger() {
     return () => document.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  function handleSelect(foodId: string) {
-    setOpen(false)
-    router.push(`/lebensmittel/${foodId}`)
-  }
+  return <SearchDialog open={open} onOpenChange={setOpen} />
+}
+
+export function FoodSearchTrigger() {
+  const [open, setOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setOpen((prev) => !prev)
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   return (
     <>
@@ -100,36 +131,13 @@ export function FoodSearchTrigger() {
       >
         <SearchIcon className="mr-2 size-4" />
         <span>Lebensmittel suchen...</span>
-        <kbd className="bg-muted text-muted-foreground pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium sm:flex">
+        <Sparkles className="mr-1 ml-auto size-3 text-purple-400" />
+        <kbd className="bg-muted text-muted-foreground pointer-events-none hidden h-5 select-none items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium sm:flex">
           <span className="text-xs">&#8984;</span>K
         </kbd>
       </Button>
 
-      <CommandDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Lebensmittelsuche"
-        description="Suche nach Lebensmitteln in der Datenbank"
-      >
-        <CommandInput placeholder="Lebensmittel suchen..." />
-        <CommandList>
-          <CommandEmpty>Keine Ergebnisse gefunden.</CommandEmpty>
-          <CommandGroup heading="Lebensmittel">
-            {FOODS.map((food) => (
-              <CommandItem
-                key={food.id}
-                value={food.name}
-                onSelect={() => handleSelect(food.id)}
-              >
-                <span>{food.name}</span>
-                <span className="text-muted-foreground ml-auto text-xs">
-                  {getCategoryName(food.categoryId)}
-                </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+      <SearchDialog open={open} onOpenChange={setOpen} />
     </>
   )
 }

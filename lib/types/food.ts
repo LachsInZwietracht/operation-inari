@@ -38,6 +38,12 @@ export interface FoodPortionSize {
   amount: number; // grams for this portion definition
 }
 
+export interface FoodGroupNode {
+  id: string;
+  name: string;
+  children?: FoodGroupNode[];
+}
+
 export interface Food extends Timestamped {
   id: ID;
   name: string;
@@ -45,6 +51,10 @@ export interface Food extends Timestamped {
   source: string; // e.g. "BLS 3.02", "Eigene Eingabe"
   sourceId?: FoodSourceId;
   sourceVersion?: string;
+  /** BLS code or other database-specific identifier */
+  blsCode?: string;
+  /** ID of the food group within the hierarchy */
+  foodGroupId?: string;
   nutrients: NutrientValue[];
   /** base amount in grams for the nutrient values */
   baseAmount: number;
