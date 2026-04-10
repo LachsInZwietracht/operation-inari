@@ -86,6 +86,7 @@ export default function InstitutionStatistikenPage() {
       <PageHeader
         title="Einrichtungsstatistiken"
         description="Kostformen, Menüwahl, Kosten und Leistungskennzahlen"
+        helpText="Analysieren Sie Kennzahlen Ihrer Einrichtung: Belegungsraten, Kostformenverteilung, Menüwahl-Statistiken und Kostenentwicklung auf einen Blick."
       />
 
       {/* KPI cards */}

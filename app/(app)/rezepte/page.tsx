@@ -209,7 +209,7 @@ export default function RezeptePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Rezepte" description="Alle Rezepte verwalten">
+      <PageHeader title="Rezepte" description="Alle Rezepte verwalten" helpText="Verwalten Sie Ihre Rezeptsammlung mit automatischer Nährstoffberechnung. Erstellen Sie neue Rezepte, importieren Sie bestehende oder exportieren Sie diese für Ihre Patienten.">
         <Button asChild>
           <Link href="/rezepte/neu">
             <Plus className="mr-2 h-4 w-4" />

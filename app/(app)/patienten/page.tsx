@@ -48,7 +48,7 @@ export default function PatientenPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Patienten" description="Patientenverwaltung und -übersicht">
+      <PageHeader title="Patienten" description="Patientenverwaltung und -übersicht" helpText="Ihre zentrale Patientenübersicht. Legen Sie neue Patienten an, verwalten Sie Stammdaten und greifen Sie auf Beratungshistorien und Ernährungsprotokolle zu.">
         <Button asChild>
           <Link href="/patienten/neu">
             <Plus className="mr-2 h-4 w-4" />

@@ -126,6 +126,7 @@ export default function NeuesLebensmittelPage() {
       <PageHeader
         title="Neues Lebensmittel"
         description="Eigene Produkte, Herstellerartikel oder Rezeptumsetzungen erfassen"
+        helpText="Erfassen Sie ein eigenes Lebensmittel mit allen relevanten Nährstoffangaben. Dieses steht anschließend in der gesamten Anwendung für Rezepte und Ernährungspläne zur Verfügung."
       />
 
       <Card>

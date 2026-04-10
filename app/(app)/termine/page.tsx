@@ -306,6 +306,7 @@ export default function TerminePage() {
       <PageHeader
         title="Termine"
         description="Kalender mit Patientenbezug, Wiederholungen und Erinnerungen"
+        helpText="Verwalten Sie Ihre Beratungstermine mit Patientenzuordnung. Erstellen Sie Einzel- oder Serientermine und lassen Sie sich rechtzeitig erinnern."
       >
         <Button onClick={openCreateDialog}>
           <CalendarPlus className="mr-2 h-4 w-4" />

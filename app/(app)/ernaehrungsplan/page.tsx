@@ -407,6 +407,7 @@ export default function ErnaehrungsplanPage() {
       <PageHeader
         title="Ernährungsplan"
         description={`Steuerung für Tag, Woche oder Zyklus – aktuell ${formattedDate}`}
+        helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der PRODIscore zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
       />
 
       <div className="grid gap-4 md:grid-cols-2">

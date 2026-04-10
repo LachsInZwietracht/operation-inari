@@ -74,6 +74,7 @@ export default function TarifePage() {
       <PageHeader
         title="Produkt-Tarife"
         description="Vergleichen Sie Pakete, verwalten Sie Add-ons und behalten Sie Ihre Rechnungen im Blick"
+        helpText="Vergleichen Sie die verfügbaren Tarife und Add-ons. Verwalten Sie Ihr Abonnement, sehen Sie Ihre Rechnungshistorie ein und passen Sie Ihren Plan an Ihre Bedürfnisse an."
       />
 
       <div className="grid gap-4 md:grid-cols-3">

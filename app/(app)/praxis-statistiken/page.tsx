@@ -198,6 +198,7 @@ export default function PraxisStatistikenPage() {
       <PageHeader
         title="Praxis-Statistiken"
         description="Alle KPIs zur Auslastung, Patientenzahlen und Abrechnung auf einen Blick"
+        helpText="Ihre Praxis-Kennzahlen im Überblick. Analysieren Sie Auslastung, Patientenentwicklung und Umsatz, um Ihre Praxis datenbasiert zu steuern."
       />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

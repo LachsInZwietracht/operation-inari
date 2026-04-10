@@ -126,6 +126,7 @@ export default function ApiExportPage() {
       <PageHeader
         title="API & Export"
         description="Daten exportieren, API-Zugriff verwalten und Integrationen konfigurieren"
+        helpText="Exportieren Sie Ihre Daten in verschiedenen Formaten, verwalten Sie API-Schlüssel für Drittanbieter-Integrationen und konfigurieren Sie automatische Datenübertragungen."
       />
 
       <Tabs defaultValue="export" className="space-y-4">

@@ -77,6 +77,7 @@ export default function LebensmittelPage() {
       <PageHeader
         title="Lebensmittel"
         description="Datenbanken, Herstellerprodukte und eigene Einträge verwalten"
+        helpText="Durchsuchen Sie den Bundeslebensmittelschlüssel (BLS) und weitere Datenbanken. Sie können eigene Lebensmittel anlegen, Nährwerte einsehen und Produkte miteinander vergleichen."
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>

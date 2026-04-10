@@ -182,6 +182,7 @@ export default function KrankenhausPage() {
       <PageHeader
         title="Krankenhausverwaltung"
         description="Bettenbelegung, Kostformen und Bestellungen"
+        helpText="Verwalten Sie die Bettenbelegung, ordnen Sie Kostformen zu und steuern Sie Bestellvorgänge. Die Übersicht zeigt den aktuellen Status aller Stationen und Diätanforderungen."
       />
 
       {/* KPI Cards */}

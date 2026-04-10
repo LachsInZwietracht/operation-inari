@@ -193,6 +193,7 @@ export default function ProduktionPage() {
       <PageHeader
         title="Produktionsmanagement"
         description="Produktions- und Einkaufslisten für die Großküche"
+        helpText="Generieren Sie Produktions- und Einkaufslisten aus Ihren Menüplänen. Planen Sie Mengen für die Großküche und behalten Sie den Überblick über Bestellungen und Lagerbestände."
       />
 
       <Tabs defaultValue="produktion">

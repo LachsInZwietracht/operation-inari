@@ -33,6 +33,7 @@ export default function DatenbankPage() {
       <PageHeader
         title="Datenbank-Updates"
         description="Versionshistorie, Release Notes und Quellenfilter"
+        helpText="Hier sehen Sie alle Aktualisierungen der Lebensmitteldatenbanken. Verfolgen Sie Änderungen im BLS und weiteren Quellen und filtern Sie nach Datenbank oder Zeitraum."
       />
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center">

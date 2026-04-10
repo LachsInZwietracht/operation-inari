@@ -125,6 +125,7 @@ export default function CompliancePage() {
       <PageHeader
         title="Nährstoff-Compliance"
         description="Tägliche und wöchentliche Nährstoffkonformität der Menüpläne"
+        helpText="Prüfen Sie, ob Ihre Menüpläne die Nährstoffvorgaben einhalten. Die Compliance-Übersicht zeigt Abweichungen von DGE-Referenzwerten auf Tages- und Wochenbasis."
       />
 
       {/* Overview Cards */}

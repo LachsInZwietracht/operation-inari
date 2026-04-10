@@ -118,6 +118,7 @@ export default function LeistungPage() {
       <PageHeader
         title="Leistung & Validierung"
         description="Systemperformance, Lasttests und Datenbankstatistiken überwachen"
+        helpText="Überwachen Sie die technische Systemleistung in Echtzeit. Sehen Sie Antwortzeiten, Datenbankauslastung und Fehlerquoten, um einen reibungslosen Betrieb sicherzustellen."
       />
 
       {/* ── KPI Grid ── */}

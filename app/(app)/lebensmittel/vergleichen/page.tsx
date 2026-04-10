@@ -65,6 +65,7 @@ export default function LebensmittelVergleichPage() {
       <PageHeader
         title="Lebensmittel vergleichen"
         description="Zwei Produkte nebeneinander vergleichen und Portionen anpassen"
+        helpText="Stellen Sie zwei Lebensmittel direkt gegenüber und vergleichen Sie deren Nährstoffprofile. Passen Sie die Portionsgrößen an, um realistische Mengen zu vergleichen."
       />
 
       <div className="grid gap-4 md:grid-cols-2">

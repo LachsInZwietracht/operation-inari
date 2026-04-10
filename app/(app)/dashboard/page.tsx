@@ -93,6 +93,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description="Übersicht über Ihre Ernährungsdaten"
+        helpText="Ihr persönliches Dashboard zeigt die wichtigsten Kennzahlen zu Patienten, Terminen und Ernährungsplänen auf einen Blick. Nutzen Sie die Kacheln als Schnelleinstieg in die jeweiligen Bereiche."
       />
 
       {/* Metric cards */}

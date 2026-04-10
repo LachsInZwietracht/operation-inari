@@ -112,6 +112,7 @@ export default function MenuePlannungPage() {
       <PageHeader
         title="Menüplanung"
         description="Wöchentliche und zyklische Menüpläne für die Einrichtung"
+        helpText="Erstellen und verwalten Sie Wochen- und Zyklusmenüpläne für Ihre Einrichtung. Ordnen Sie Rezepte den Mahlzeiten zu und berücksichtigen Sie verschiedene Kostformen."
       >
         <Button variant="outline" disabled>
           <Printer className="mr-2 h-4 w-4" />

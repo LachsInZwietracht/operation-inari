@@ -344,7 +344,11 @@ interface SimpleTooltipPayload {
   energie: number
 }
 
-function MealEnergyTooltip({ active, payload }: TooltipProps<number, string>) {
+type ChartTooltipProps<TPayload> = TooltipProps<number, string> & {
+  payload?: Array<{ payload?: TPayload }>
+}
+
+function MealEnergyTooltip({ active, payload }: ChartTooltipProps<SimpleTooltipPayload>) {
   if (!active || !payload?.length) return null
   const point = payload[0]?.payload as SimpleTooltipPayload | undefined
   if (!point) return null
@@ -364,7 +368,7 @@ interface ContributionPayload {
   share: number
 }
 
-function ContributionTooltip({ active, payload }: TooltipProps<number, string>) {
+function ContributionTooltip({ active, payload }: ChartTooltipProps<ContributionPayload>) {
   if (!active || !payload?.length) return null
   const point = payload[0]?.payload as ContributionPayload | undefined
   if (!point) return null
@@ -378,7 +382,7 @@ function ContributionTooltip({ active, payload }: TooltipProps<number, string>) 
   )
 }
 
-function MacroPieTooltip({ active, payload }: TooltipProps<number, string>) {
+function MacroPieTooltip({ active, payload }: ChartTooltipProps<{ name: string; value: number; unit: string }>) {
   if (!active || !payload?.length) return null
   const point = payload[0]?.payload as { name: string; value: number; unit: string } | undefined
   if (!point) return null
@@ -900,7 +904,7 @@ ${microSentence}`
   if (allPlans.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Berichte" description="Nährstoffanalyse und Auswertungen" />
+        <PageHeader title="Berichte" description="Nährstoffanalyse und Auswertungen" helpText="Erstellen Sie detaillierte Nährstoffanalysen Ihrer Ernährungspläne. Vergleichen Sie Ist- und Sollwerte nach DGE-Referenzen und exportieren Sie Berichte für Ihre Patienten." />
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-muted-foreground">
@@ -914,7 +918,7 @@ ${microSentence}`
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Berichte" description="Nährstoffanalyse und Auswertungen" />
+      <PageHeader title="Berichte" description="Nährstoffanalyse und Auswertungen" helpText="Erstellen Sie detaillierte Nährstoffanalysen Ihrer Ernährungspläne. Vergleichen Sie Ist- und Sollwerte nach DGE-Referenzen und exportieren Sie Berichte für Ihre Patienten." />
 
       {/* Plan selector */}
       <div className="flex items-center gap-3">

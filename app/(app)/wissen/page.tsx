@@ -94,6 +94,7 @@ export default function WissenPage() {
       <PageHeader
         title="Wissensbibliothek"
         description="Lexikon, Qualitätskennzahlen und Nachhaltigkeit an einem Ort"
+        helpText="Ihr Nachschlagewerk für Ernährungswissen. Finden Sie Fachlexikon-Einträge, Qualitätskennzahlen und Nachhaltigkeitsinformationen – ideal als Beratungsgrundlage."
       >
         <Button variant="outline" size="sm">
           <BookOpenCheck className="mr-2 h-4 w-4" />

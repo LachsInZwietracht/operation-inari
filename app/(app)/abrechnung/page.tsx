@@ -216,6 +216,7 @@ export default function AbrechnungPage() {
       <PageHeader
         title="Abrechnung"
         description="Rechnungen, Versicherungen und Zahlungseingänge verwalten"
+        helpText="Erstellen und verwalten Sie Rechnungen für Ihre Beratungsleistungen. Behalten Sie den Überblick über offene Posten, Versicherungsabrechnungen und Zahlungseingänge."
       >
         <Button onClick={scrollToGenerator}>
           <FilePlus2 className="mr-2 h-4 w-4" />

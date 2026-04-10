@@ -52,6 +52,7 @@ export default function AustauschtabellenPage() {
       <PageHeader
         title="Austauschtabellen"
         description="Lebensmittel nach Nährstoffgehalt vergleichen und austauschen"
+        helpText="Finden Sie Lebensmittel mit ähnlichem Nährstoffprofil als Austauschoptionen. Ideal für die Beratung bei Allergien, Unverträglichkeiten oder persönlichen Vorlieben Ihrer Patienten."
       />
 
       <div className="flex flex-col gap-3 sm:flex-row">

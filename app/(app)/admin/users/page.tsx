@@ -160,6 +160,7 @@ export default function AdminUsersPage() {
       <PageHeader
         title="Admin & Sicherheit"
         description="Nutzer verwalten, Rollen absichern und Compliance-Vorgaben erfüllen"
+        helpText="Verwalten Sie Benutzerkonten, Rollen und Berechtigungen. Überwachen Sie Sicherheitsereignisse und stellen Sie die Einhaltung von Datenschutz- und Compliance-Vorgaben sicher."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
