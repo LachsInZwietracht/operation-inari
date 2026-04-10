@@ -58,6 +58,12 @@ import { useProcam } from "@/hooks/use-procam"
 import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
 import type { Patient } from "@/lib/types"
 
+function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
+  if (typeof min === "number" && value < min) return "low"
+  if (typeof max === "number" && value > max) return "high"
+  return "ok"
+}
+
 interface PatientTabsProps {
   patient: Patient
 }

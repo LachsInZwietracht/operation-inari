@@ -55,7 +55,7 @@ export function useCustomFoods() {
       const now = new Date().toISOString();
       const newFood: Food = {
         ...food,
-        id: food.id ?? `custom_food_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: `custom_food_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         createdAt: now,
         updatedAt: now,
         sourceId: food.sourceId ?? "custom",

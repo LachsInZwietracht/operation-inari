@@ -51,6 +51,7 @@ export interface MedicationEntry extends Timestamped {
   startDate: string;
   endDate?: string;
   reason?: string;
+  notes?: string;
 }
 
 export interface ActivityEntry extends Timestamped {

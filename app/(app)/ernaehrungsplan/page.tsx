@@ -276,7 +276,7 @@ export default function ErnaehrungsplanPage() {
   const slotCompliance = useMemo(() => {
     if (!dietLine) return {} as Record<MealSlotType, { label: string; status: "ok" | "low" | "high" }[]>
     const slotCount = currentPlan.slots.length || 1
-    const map: Record<MealSlotType, { label: string; status: "ok" | "low" | "high" }[]> = {}
+    const map = {} as Record<MealSlotType, { label: string; status: "ok" | "low" | "high" }[]>
 
     for (const slot of currentPlan.slots) {
       const summed = sumNutrients(slot.entries.map((entry) => calculateEntryNutrients(entry)))
@@ -685,7 +685,7 @@ export default function ErnaehrungsplanPage() {
                                 {(recipe.tags ?? []).slice(0, 2).join(", ") || recipe.category}
                               </p>
                             </div>
-                            <Button size="xs" variant="outline" onClick={() => handleQuickAddRecipe(recipe.id)}>
+                            <Button size="sm" variant="outline" onClick={() => handleQuickAddRecipe(recipe.id)}>
                               In {MEAL_SLOT_LABELS[paletteSlot]}
                             </Button>
                           </div>

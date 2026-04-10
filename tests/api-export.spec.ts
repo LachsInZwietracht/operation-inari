@@ -14,7 +14,7 @@ test.describe("API & Export", () => {
     await expect(page.getByText("PDF-Export")).toBeVisible();
 
     // Select a scope and export
-    await page.getByText("CSV-Export").closest("[data-slot='card']")!
+    await page.locator("[data-slot='card']", { hasText: "CSV-Export" })
       .getByRole("button", { name: "Exportieren" }).click();
 
     // Toast confirmation
