@@ -172,10 +172,12 @@ export function fuzzySearchFoods<T extends { name: string }>(
   const results: Array<T & FuzzySearchResultMeta> = []
 
   for (const item of items) {
-    let bestMatch: ((SearchMatch & {
-      matchedField: "name" | "synonym"
-      matchedValue: string
-    }) | null) = null
+    let bestMatch:
+      | (SearchMatch & {
+          matchedField: "name" | "synonym"
+          matchedValue: string
+        })
+      | null = null
 
     const evaluateTarget = (target: string, field: "name" | "synonym") => {
       const match = scoreMatch(query, target)
