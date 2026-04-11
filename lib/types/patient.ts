@@ -17,6 +17,60 @@ export interface Patient extends Timestamped {
   insuranceNumber?: string;
   indication?: string;
   notes?: string;
+  amputations?: string[];
+}
+
+export interface EgkCardData {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: Gender;
+  insuranceProvider: string;
+  insuranceNumber: string;
+  street: string;
+  zip: string;
+  city: string;
+}
+
+export interface EgkScanEvent extends Timestamped {
+  id: ID;
+  status: "pending" | "matched" | "archived" | "error";
+  source: "webserial" | "companion" | "simulation";
+  card: EgkCardData;
+  patientId?: ID;
+  notes?: string;
+}
+
+export interface BirthdayReminder extends Timestamped {
+  id: ID;
+  patientId: ID;
+  dueDate: string;
+  channel: "mail" | "call" | "sms";
+  status: "open" | "sent";
+}
+
+export interface MailMergeDocument {
+  patientId: ID;
+  subject: string;
+  body: string;
+}
+
+export interface MailMergeBatch extends Timestamped {
+  id: ID;
+  templateId?: string;
+  templateName: string;
+  recipientCount: number;
+  documentSample?: MailMergeDocument;
+  status: "ready" | "exported";
+  downloadName: string;
+}
+
+export interface MailMergeTemplate {
+  id: string;
+  name: string;
+  category: "termin" | "zusammenfassung" | "geburtstag" | "custom";
+  subject: string;
+  body: string;
 }
 
 export interface AnthropometricEntry extends Timestamped {
@@ -74,10 +128,19 @@ export interface TherapySetting extends Timestamped {
   notes?: string;
 }
 
+export interface TherapyDeviceIntegration extends Timestamped {
+  id: ID;
+  patientId: ID;
+  type: "cgm" | "pump" | "allergen";
+  status: "connected" | "pending" | "error";
+  vendor: string;
+  lastSync?: string;
+}
+
 export interface ScreeningResult extends Timestamped {
   id: ID;
   patientId: ID;
-  tool: "MUST" | "NRS-2002";
+  tool: "MUST" | "NRS-2002" | "MNA" | "SGA";
   score: number;
   riskLevel: "low" | "medium" | "high";
   answers: { question: string; answer: string }[];

@@ -42,3 +42,13 @@ export const PROTOCOL_TYPE_LABELS: Record<ProtocolType, string> = {
   "24h_recall": "24-Stunden-Recall",
   food_frequency: "Food Frequency Questionnaire",
 };
+
+export const AMPUTATION_AREAS = [
+  { id: "hand", label: "Hand (1,2%)", factor: 0.012 },
+  { id: "unterarm", label: "Unterarm (2,3%)", factor: 0.023 },
+  { id: "ganzer_arm", label: "Ganzer Arm (4,9%)", factor: 0.049 },
+  { id: "fuss", label: "Fuß (1,8%)", factor: 0.018 },
+  { id: "unterschenkel", label: "Unterschenkel (5,9%)", factor: 0.059 },
+  { id: "oberbein", label: "Oberbein (10,1%)", factor: 0.101 },
+  { id: "gesamtes_bein", label: "Ganzes Bein (18,6%)", factor: 0.186 },
+] as const;

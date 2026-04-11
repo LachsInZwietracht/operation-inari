@@ -70,6 +70,7 @@ export const PATIENTS: Patient[] = [
     insuranceNumber: "D567890123",
     indication: "Adipositas",
     notes: "BMI > 35. Komorbiditäten: Hypertonie, Schlafapnoe. Ziel: 15 kg Gewichtsreduktion.",
+    amputations: ["unterschenkel"],
     ...ts,
   },
   {
@@ -104,6 +105,7 @@ export const PATIENTS: Patient[] = [
     insuranceNumber: "I678901234",
     indication: "Diabetes mellitus Typ 2",
     notes: "Neu diagnostiziert. Motivation für Lebensstiländerung vorhanden. Sportlich aktiv.",
+    amputations: ["hand"],
     ...ts,
   },
   {
