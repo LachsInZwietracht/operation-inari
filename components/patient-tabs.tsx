@@ -361,6 +361,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     }
   }, [calorieDeficit, latestAnthro, targetWeightValue])
 
+  const isPediatric = ageYears < 18
+
   const bmiPercentile = useMemo(() => {
     if (!isPediatric || !latestAnthro) return null
     const months = Math.max(0, differenceInMonths(parseISO(latestAnthro.date), parseISO(patient.dateOfBirth)))
@@ -394,8 +396,6 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       refAgeYears: reference.ageMonths / 12,
     }
   }, [isPediatric, latestAnthro, patient.dateOfBirth, patient.gender])
-
-  const isPediatric = ageYears < 18
   const derivedAllergens = useMemo(() => {
     const result: string[] = []
     const indication = patient.indication?.toLowerCase() ?? ""
