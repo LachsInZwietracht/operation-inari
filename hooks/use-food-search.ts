@@ -2,13 +2,17 @@
 
 import { useState, useMemo, useCallback } from "react"
 import type { Food } from "@/lib/types"
-import { fuzzySearchFoods, normalizeText } from "@/lib/search"
+import {
+  fuzzySearchFoods,
+  normalizeText,
+  type FuzzySearchResultMeta,
+} from "@/lib/search"
 import { getFoodGroupDescendants } from "@/lib/mock-data/food-groups"
 
 export type SearchMode = "name" | "code" | "group" | "browse"
 
 interface UseFoodSearchReturn {
-  filteredFoods: Array<Food & { searchScore: number; matchType: string }>
+  filteredFoods: Array<Food & FuzzySearchResultMeta>
   searchQuery: string
   setSearchQuery: (query: string) => void
   selectedCategoryId: string | null
@@ -20,7 +24,11 @@ interface UseFoodSearchReturn {
   resultCount: number
 }
 
-export function useFoodSearch(foods: Food[]): UseFoodSearchReturn {
+interface UseFoodSearchOptions {
+  getAliases?: (food: Food) => string[]
+}
+
+export function useFoodSearch(foods: Food[], options?: UseFoodSearchOptions): UseFoodSearchReturn {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [searchMode, setSearchMode] = useState<SearchMode>("name")
@@ -43,7 +51,9 @@ export function useFoodSearch(foods: Food[]): UseFoodSearchReturn {
         if (!query) {
           results = foods.map((f) => ({ ...f, searchScore: 1, matchType: "none" }))
         } else {
-          results = fuzzySearchFoods(query, foods)
+          results = fuzzySearchFoods(query, foods, {
+            getAliases: options?.getAliases,
+          })
         }
         break
       }
@@ -87,7 +97,9 @@ export function useFoodSearch(foods: Food[]): UseFoodSearchReturn {
         }
         // Additionally filter by text query within the group
         if (query) {
-          results = fuzzySearchFoods(query, results)
+          results = fuzzySearchFoods(query, results, {
+            getAliases: options?.getAliases,
+          })
         }
         break
       }
@@ -97,7 +109,9 @@ export function useFoodSearch(foods: Food[]): UseFoodSearchReturn {
         if (!query) {
           results = foods.map((f) => ({ ...f, searchScore: 1, matchType: "none" }))
         } else {
-          results = fuzzySearchFoods(query, foods)
+          results = fuzzySearchFoods(query, foods, {
+            getAliases: options?.getAliases,
+          })
         }
         break
       }
@@ -112,7 +126,7 @@ export function useFoodSearch(foods: Food[]): UseFoodSearchReturn {
     }
 
     return results
-  }, [foods, searchQuery, selectedCategoryId, searchMode, selectedFoodGroupId])
+  }, [foods, searchQuery, selectedCategoryId, searchMode, selectedFoodGroupId, options?.getAliases])
 
   return {
     filteredFoods,

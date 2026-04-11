@@ -15,6 +15,7 @@ import {
   TreePine,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { FoodSynonymManager } from "@/components/food-synonym-manager";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -48,6 +49,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFoodSearch, type SearchMode } from "@/hooks/use-food-search";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
+import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
 import {
   FOODS,
   FOOD_CATEGORIES,
@@ -188,6 +190,14 @@ function FoodGroupTree({
 export default function LebensmittelPage() {
   const router = useRouter();
   const { customFoods } = useCustomFoods();
+  const {
+    getSynonymsForFood,
+    getDisplayName,
+    addSynonym,
+    deleteSynonym,
+    setPrimarySynonym,
+    preferredSynonymMap,
+  } = useFoodSynonyms();
   const [activeSource, setActiveSource] = useState<FoodSourceId | "all">("bls");
   const [activeTab, setActiveTab] = useState("datenbank");
 
@@ -217,7 +227,9 @@ export default function LebensmittelPage() {
     selectedFoodGroupId,
     setSelectedFoodGroupId,
     resultCount,
-  } = useFoodSearch(sourceFilteredFoods);
+  } = useFoodSearch(sourceFilteredFoods, {
+    getAliases: (food) => getSynonymsForFood(food.id).map((synonym) => synonym.name),
+  });
 
   const currentSource =
     activeSource === "all"
@@ -450,25 +462,73 @@ export default function LebensmittelPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredFoods.map((food) => (
-                        <TableRow
-                          key={food.id}
-                          className="cursor-pointer"
-                          onClick={() => router.push(`/lebensmittel/${food.id}`)}
-                        >
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              {food.name}
-                              {food.isCustom && (
-                                <Badge variant="outline" className="text-[10px] uppercase">
-                                  Custom
-                                </Badge>
-                              )}
-                              {showMatchIndicators && (
-                                <MatchTypeBadge matchType={food.matchType} />
-                              )}
-                            </div>
-                          </TableCell>
+                      filteredFoods.map((food) => {
+                        const displayName = getDisplayName(food.id, food.name) ?? food.name;
+                        const synonyms = getSynonymsForFood(food.id);
+                        const previewSynonyms = synonyms.slice(0, 3);
+                        const remainingSynonyms = synonyms.length - previewSynonyms.length;
+                        const matchedAlias =
+                          food.matchedField === "synonym" && food.matchedValue
+                            ? food.matchedValue
+                            : null;
+                        const primaryCandidate = preferredSynonymMap[food.id] ?? synonyms.find((syn) => syn.isPrimary)?.id ?? null;
+                        return (
+                          <TableRow
+                            key={food.id}
+                            className="cursor-pointer"
+                            onClick={() => router.push(`/lebensmittel/${food.id}`)}
+                          >
+                            <TableCell className="font-medium">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span>{displayName}</span>
+                                  {displayName !== food.name && (
+                                    <span className="text-muted-foreground line-through decoration-dotted text-[11px]">
+                                      {food.name}
+                                    </span>
+                                  )}
+                                  {food.isCustom && (
+                                    <Badge variant="outline" className="text-[10px] uppercase">
+                                      Custom
+                                    </Badge>
+                                  )}
+                                  {matchedAlias && (
+                                    <Badge variant="secondary" className="text-[10px] font-normal">
+                                      Alias „{matchedAlias}“
+                                    </Badge>
+                                  )}
+                                  {showMatchIndicators && (
+                                    <MatchTypeBadge matchType={food.matchType} />
+                                  )}
+                                </div>
+                                {synonyms.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {previewSynonyms.map((synonym) => (
+                                      <Badge
+                                        key={synonym.id}
+                                        variant="outline"
+                                        className="text-[10px] font-normal"
+                                      >
+                                        {synonym.name}
+                                      </Badge>
+                                    ))}
+                                    {remainingSynonyms > 0 && (
+                                      <Badge variant="outline" className="text-[10px] font-normal">
+                                        +{remainingSynonyms}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                                <FoodSynonymManager
+                                  food={food}
+                                  synonyms={synonyms}
+                                  activeSynonymId={primaryCandidate}
+                                  addSynonym={addSynonym}
+                                  deleteSynonym={deleteSynonym}
+                                  setPrimarySynonym={setPrimarySynonym}
+                                />
+                              </div>
+                            </TableCell>
                           {searchMode === "code" && (
                             <TableCell>
                               <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
@@ -537,7 +597,8 @@ export default function LebensmittelPage() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))
+                      );
+                    })
                     )}
                   </TableBody>
                 </Table>

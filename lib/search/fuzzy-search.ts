@@ -151,18 +151,54 @@ function computePhoneticScore(queryWords: string[], targetWords: string[]): numb
  * Search a list of foods by name with fuzzy matching.
  * Returns items sorted by relevance score (best first).
  */
+export interface FuzzySearchOptions<T> {
+  getAliases?: (item: T) => string[]
+}
+
+export interface FuzzySearchResultMeta {
+  searchScore: number
+  matchType: string
+  matchedField?: "name" | "synonym"
+  matchedValue?: string
+}
+
 export function fuzzySearchFoods<T extends { name: string }>(
   query: string,
-  items: T[]
-): Array<T & { searchScore: number; matchType: string }> {
+  items: T[],
+  options?: FuzzySearchOptions<T>
+): Array<T & FuzzySearchResultMeta> {
   if (!query.trim()) return items.map((item) => ({ ...item, searchScore: 1, matchType: "none" }))
 
-  const results: Array<T & { searchScore: number; matchType: string }> = []
+  const results: Array<T & FuzzySearchResultMeta> = []
 
   for (const item of items) {
-    const match = scoreMatch(query, item.name)
-    if (match) {
-      results.push({ ...item, searchScore: match.score, matchType: match.matchType })
+    let bestMatch: (SearchMatch & { matchedField: "name" | "synonym"; matchedValue: string }) | null = null
+
+    const evaluateTarget = (target: string, field: "name" | "synonym") => {
+      const match = scoreMatch(query, target)
+      if (!match) return
+      if (!bestMatch || match.score > bestMatch.score) {
+        bestMatch = { ...match, matchedField: field, matchedValue: target }
+      }
+    }
+
+    evaluateTarget(item.name, "name")
+
+    if (options?.getAliases) {
+      const aliases = options.getAliases(item)
+      for (const alias of aliases) {
+        evaluateTarget(alias, "synonym")
+      }
+    }
+
+    if (bestMatch) {
+      results.push({
+        ...item,
+        searchScore: bestMatch.score,
+        matchType: bestMatch.matchType,
+        matchedField: bestMatch.matchedField,
+        matchedValue: bestMatch.matchedValue,
+      })
     }
   }
 

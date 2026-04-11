@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { MacroRingChart } from "@/components/macro-ring-chart";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
+import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
 import { FOODS, NUTRIENT_DEFINITIONS } from "@/lib/mock-data";
 import {
   calculateRecipeNutrients,
@@ -44,6 +45,7 @@ function getScoreBadge(score: number | undefined) {
 
 export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
   const { convertRecipeToFood } = useCustomFoods();
+  const { getDisplayName } = useFoodSynonyms();
   const totalNutrients = calculateRecipeNutrients(recipe, FOODS);
   const perServing = calculatePerServing(totalNutrients, recipe.servings);
 
@@ -163,9 +165,10 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
                     if (!food) return null;
                     const scaled = scaleNutrients(food.nutrients, food.baseAmount, ingredient.amount);
                     const kcal = getNutrientValue(scaled, "energie");
+                    const displayName = getDisplayName(food.id, food.name) ?? food.name;
                     return (
                       <TableRow key={ingredient.foodId}>
-                        <TableCell>{food.name}</TableCell>
+                        <TableCell>{displayName}</TableCell>
                         <TableCell className="text-right">
                           {formatNumber(ingredient.amount, 0)} g
                         </TableCell>

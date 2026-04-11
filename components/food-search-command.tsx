@@ -13,10 +13,11 @@ import {
 } from "@/components/ui/command"
 import { Button } from "@/components/ui/button"
 import { FOODS, FOOD_CATEGORIES } from "@/lib/mock-data"
-import { fuzzySearchFoods } from "@/lib/search"
+import { fuzzySearchFoods, type FuzzySearchResultMeta } from "@/lib/search"
 import type { Food } from "@/lib/types"
+import { useFoodSynonyms } from "@/hooks/use-food-synonyms"
 
-type SearchResult = Food & { searchScore: number; matchType: string }
+type SearchResult = Food & FuzzySearchResultMeta
 
 function getCategoryName(categoryId: string): string {
   return FOOD_CATEGORIES.find((c) => c.id === categoryId)?.name ?? categoryId
@@ -31,11 +32,14 @@ function SearchDialog({
 }) {
   const router = useRouter()
   const [query, setQuery] = React.useState("")
+  const { getSynonymsForFood, getDisplayName } = useFoodSynonyms()
 
   const results = React.useMemo((): SearchResult[] => {
     if (!query.trim()) return FOODS.slice(0, 20).map((f) => ({ ...f, searchScore: 1, matchType: "none" }))
-    return fuzzySearchFoods(query, FOODS).slice(0, 20)
-  }, [query])
+    return fuzzySearchFoods(query, FOODS, {
+      getAliases: (food) => getSynonymsForFood(food.id).map((syn) => syn.name),
+    }).slice(0, 20)
+  }, [query, getSynonymsForFood])
 
   function handleSelect(foodId: string) {
     onOpenChange(false)
@@ -69,7 +73,12 @@ function SearchDialog({
             >
               <div className="flex w-full items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span>{food.name}</span>
+                  <span>{getDisplayName(food.id, food.name) ?? food.name}</span>
+                  {food.matchedField === "synonym" && food.matchedValue && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      Alias „{food.matchedValue}“
+                    </span>
+                  )}
                   {food.matchType && food.matchType !== "none" && (
                     <span className="text-[10px] text-purple-500">
                       {food.matchType === "phonetic" && "klingt wie"}

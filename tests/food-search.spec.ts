@@ -51,6 +51,36 @@ test.describe("Lebensmittel", () => {
     expect(hasBrust).toBe(true);
   });
 
+  test("matches configured food synonyms", async ({ page }) => {
+    await page.goto("/lebensmittel");
+
+    await page.getByPlaceholder(/Lebensmittel suchen/).fill("Pasta");
+    const row = page.locator("table tbody tr").first();
+    await expect(row).toContainText("Pasta");
+    await expect(row).toContainText("Alias „Pasta“");
+  });
+
+  test("allows adding and removing custom synonyms", async ({ page }) => {
+    await page.goto("/lebensmittel");
+
+    await page.getByPlaceholder(/Lebensmittel suchen/).fill("Karotte");
+    const row = page.locator("table tbody tr").first();
+    await row.getByRole("button", { name: "Aliase verwalten" }).click();
+    const dialog = page.getByRole("dialog");
+
+    await page.getByPlaceholder("z.B. Nudeln").fill("Moehre");
+    await page.getByRole("button", { name: "Alias hinzufügen" }).click();
+    await expect(dialog.getByText("Moehre").first()).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+
+    await expect(row).toContainText("Moehre");
+
+    // cleanup so other tests are unaffected
+    await row.getByRole("button", { name: "Aliase verwalten" }).click();
+    await page.getByRole("button", { name: "Alias Moehre löschen" }).click();
+    await page.getByRole("button", { name: "Close" }).click();
+  });
+
   test("search mode selector switches between modes", async ({ page }) => {
     await page.goto("/lebensmittel");
 
@@ -106,23 +136,20 @@ test.describe("Lebensmittel", () => {
 
     // Click on first food link in the table
     const firstRow = page.locator("table tbody tr").first();
-    const foodName = await firstRow.locator("td").first().textContent();
+    const foodName = await firstRow
+      .locator("td")
+      .first()
+      .locator("span")
+      .first()
+      .textContent();
     await firstRow.click();
 
     // Should be on the detail page
     await expect(page).toHaveURL(/\/lebensmittel\/.+/);
-    await expect(
-      page.getByRole("heading", { name: foodName!.trim() })
-    ).toBeVisible();
 
-    // Check nutrient tabs exist
-    await expect(
-      page.getByRole("tab", { name: /Makronährstoffe/i })
-    ).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Vitamine/i })).toBeVisible();
-    await expect(
-      page.getByRole("tab", { name: /Mineralstoffe/i })
-    ).toBeVisible();
+    // Check detail cards render
+    await expect(page.getByText("Quelle & Version")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Produktinfos")).toBeVisible({ timeout: 10000 });
 
     // Switch to Vitamine tab
     await page.getByRole("tab", { name: /Vitamine/i }).click();

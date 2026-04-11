@@ -70,3 +70,18 @@ export interface Food extends Timestamped {
   portionSizes?: FoodPortionSize[];
   tags?: string[];
 }
+
+export interface FoodSynonym extends Timestamped {
+  id: ID;
+  foodId: ID;
+  /** Display alias provided by the practitioner */
+  name: string;
+  /** Locale for multilingual food names */
+  locale?: string;
+  /** Person/source that created this synonym */
+  createdBy: string;
+  source?: "system" | "user";
+  usageCount?: number;
+  /** Flag if this synonym should override the canonical food name */
+  isPrimary?: boolean;
+}
