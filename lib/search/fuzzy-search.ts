@@ -162,6 +162,11 @@ export interface FuzzySearchResultMeta {
   matchedValue?: string
 }
 
+type AugmentedSearchMatch = SearchMatch & {
+  matchedField: "name" | "synonym"
+  matchedValue: string
+}
+
 export function fuzzySearchFoods<T extends { name: string }>(
   query: string,
   items: T[],
@@ -172,12 +177,7 @@ export function fuzzySearchFoods<T extends { name: string }>(
   const results: Array<T & FuzzySearchResultMeta> = []
 
   for (const item of items) {
-    let bestMatch:
-      | (SearchMatch & {
-          matchedField: "name" | "synonym"
-          matchedValue: string
-        })
-      | null = null
+    let bestMatch: AugmentedSearchMatch | null = null
 
     const evaluateTarget = (target: string, field: "name" | "synonym") => {
       const match = scoreMatch(query, target)
@@ -196,13 +196,14 @@ export function fuzzySearchFoods<T extends { name: string }>(
       }
     }
 
-    if (bestMatch) {
+    if (bestMatch !== null) {
+      const finalMatch: AugmentedSearchMatch = bestMatch
       results.push({
         ...item,
-        searchScore: bestMatch.score,
-        matchType: bestMatch.matchType,
-        matchedField: bestMatch.matchedField,
-        matchedValue: bestMatch.matchedValue,
+        searchScore: finalMatch.score,
+        matchType: finalMatch.matchType,
+        matchedField: finalMatch.matchedField,
+        matchedValue: finalMatch.matchedValue,
       })
     }
   }
