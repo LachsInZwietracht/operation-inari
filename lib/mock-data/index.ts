@@ -1,6 +1,7 @@
 export { NUTRIENT_DEFINITIONS } from "./nutrients";
 export { FOOD_CATEGORIES } from "./categories";
 export { FOODS } from "./foods";
+export { FOOD_SYNONYMS } from "./food-synonyms";
 export { FOOD_GROUPS, getFoodGroupName, getFoodGroupDescendants } from "./food-groups";
 export { BRANDED_FOODS } from "./branded-foods";
 export { FOOD_SOURCES } from "./food-sources";
@@ -9,6 +10,7 @@ export { RECIPES } from "./recipes";
 export { MEAL_PLANS } from "./meal-plans";
 export { DIET_LINES } from "./diet-lines";
 export { REFERENCE_VALUES } from "./reference-values";
+export { REFERENCE_STANDARDS, AGE_GROUPS } from "./reference-standards";
 export { PATIENTS } from "./patients";
 export { ANTHROPOMETRIC_DATA } from "./anthropometric-data";
 export { PROTOCOLS } from "./protocols";
@@ -26,6 +28,13 @@ export {
   PROCAM_RESULTS,
   DIGITAL_PROTOCOL_LINKS,
 } from "./patient-extensions";
+export { THERAPY_INTEGRATIONS } from "./therapy-integrations";
+export {
+  MAIL_MERGE_TEMPLATES,
+  MAIL_MERGE_PLACEHOLDERS,
+} from "./patient-mailings";
+export { EGK_CARDS, EGK_SCAN_EVENTS } from "./egk";
+export { GROWTH_PERCENTILES } from "./growth-percentiles";
 export {
   DIET_FORMS,
   INSTITUTION_MENUS,

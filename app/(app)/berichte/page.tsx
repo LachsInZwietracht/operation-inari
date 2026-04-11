@@ -66,7 +66,6 @@ import {
   RECIPES,
   MEAL_PLANS,
   NUTRIENT_DEFINITIONS,
-  REFERENCE_VALUES,
   FOOD_CATEGORIES,
 } from "@/lib/mock-data"
 import {
@@ -88,6 +87,8 @@ import type {
   ReportTemplate,
 } from "@/lib/types"
 import { toast } from "sonner"
+import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
+import { resolveReferenceForPatient, getReferenceAmount } from "@/lib/reference-values"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -291,9 +292,7 @@ function calculatePlanNutrients(
   return sumNutrients(arrays)
 }
 
-function getReferenceForNutrient(nutrientId: string, gender: "m" | "w"): number {
-  return REFERENCE_VALUES.find((r) => r.nutrientId === nutrientId && r.gender === gender)?.amount ?? 0
-}
+// getReferenceForNutrient is now resolved via refConfig from the hook
 
 function getStatusColor(percent: number): string {
   if (percent >= 80) return "var(--color-chart-2)" // green
@@ -459,6 +458,16 @@ export default function BerichtePage() {
 
   const gender: "m" | "w" = "m"
 
+  const { standardId, lifeStage } = useReferenceProfiles()
+  const refConfig = useMemo(() => {
+    return resolveReferenceForPatient({
+      standardId,
+      dateOfBirth: "1990-01-01",
+      gender,
+      lifeStage,
+    })
+  }, [standardId, gender, lifeStage])
+
   // ---- Macro data --------------------------------------------------------
 
   const macroIds = ["eiweiss", "fett", "kohlenhydrate", "ballaststoffe"]
@@ -467,7 +476,7 @@ export default function BerichtePage() {
     return {
       name: def.name,
       value: getNutrientValue(planNutrients, id),
-      reference: getReferenceForNutrient(id, gender),
+      reference: getReferenceAmount(refConfig, id),
       unit: def.unit,
     }
   })
@@ -482,7 +491,7 @@ export default function BerichtePage() {
     .filter((item) => item.value > 0)
 
   const energieValue = getNutrientValue(planNutrients, "energie")
-  const energieRef = getReferenceForNutrient("energie", gender)
+  const energieRef = getReferenceAmount(refConfig, "energie")
   const energieDef = NUTRIENT_DEFINITIONS.find((d) => d.id === "energie")!
   const energyCoverage = percentOfReference(energieValue, energieRef)
 
@@ -529,7 +538,7 @@ export default function BerichtePage() {
 
   const vitaminPercentData = vitaminDefs.map((def) => {
     const value = getNutrientValue(planNutrients, def.id)
-    const ref = getReferenceForNutrient(def.id, gender)
+    const ref = getReferenceAmount(refConfig, def.id)
     const pct = percentOfReference(value, ref)
     return { name: def.shortName, percent: pct, value, reference: ref, unit: def.unit }
   })
@@ -542,7 +551,7 @@ export default function BerichtePage() {
 
   const mineralPercentData = mineralDefs.map((def) => {
     const value = getNutrientValue(planNutrients, def.id)
-    const ref = getReferenceForNutrient(def.id, gender)
+    const ref = getReferenceAmount(refConfig, def.id)
     const pct = percentOfReference(value, ref)
     return { name: def.shortName, percent: pct, value, reference: ref, unit: def.unit }
   })
@@ -1125,7 +1134,7 @@ ${microSentence}`
                   {displayedNutrientIds.map((id) => {
                     const def = NUTRIENT_DEFINITIONS.find((d) => d.id === id)!
                     const val = getNutrientValue(planNutrients, id)
-                    const ref = getReferenceForNutrient(id, gender)
+                    const ref = getReferenceAmount(refConfig, id)
                     const pct = percentOfReference(val, ref)
                     return (
                       <TableRow key={id}>
@@ -1204,7 +1213,7 @@ ${microSentence}`
                 <TableBody>
                   {vitaminDefs.map((def) => {
                     const val = getNutrientValue(planNutrients, def.id)
-                    const ref = getReferenceForNutrient(def.id, gender)
+                    const ref = getReferenceAmount(refConfig, def.id)
                     const pct = percentOfReference(val, ref)
                     return (
                       <TableRow key={def.id}>
@@ -1283,7 +1292,7 @@ ${microSentence}`
                 <TableBody>
                   {mineralDefs.map((def) => {
                     const val = getNutrientValue(planNutrients, def.id)
-                    const ref = getReferenceForNutrient(def.id, gender)
+                    const ref = getReferenceAmount(refConfig, def.id)
                     const pct = percentOfReference(val, ref)
                     return (
                       <TableRow key={def.id}>
@@ -1413,7 +1422,7 @@ ${microSentence}`
                             {macroTableIds.slice(0, 4).map((id) => {
                               const def = NUTRIENT_DEFINITIONS.find((d) => d.id === id)!
                               const val = getNutrientValue(planNutrients, id)
-                              const ref = getReferenceForNutrient(id, gender)
+                              const ref = getReferenceAmount(refConfig, id)
                               return (
                                 <TableRow key={`preview-${id}`}>
                                   <TableCell>{def.shortName ?? def.name}</TableCell>

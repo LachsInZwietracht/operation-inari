@@ -17,16 +17,21 @@ import {
 } from "@/components/ui/table";
 import { NutrientBar } from "@/components/nutrient-bar";
 import { MacroRingChart } from "@/components/macro-ring-chart";
+import { ReferenceProfileSelector } from "@/components/reference-profile-selector";
 import {
   FOOD_CATEGORIES,
   NUTRIENT_DEFINITIONS,
-  REFERENCE_VALUES,
   FOOD_SOURCES,
 } from "@/lib/mock-data";
 import { getNutrientValue } from "@/lib/nutrients";
+import {
+  resolveReferenceForPatient,
+  getReferenceAmount,
+} from "@/lib/reference-values";
+import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import { NUTRIENT_GROUP_LABELS } from "@/lib/constants";
-import type { Food, NutrientGroup } from "@/lib/types";
+import type { Food, NutrientGroup, ResolvedReferenceConfig } from "@/lib/types";
 import { calculateProdScore } from "@/lib/prodi-score";
 import { Progress } from "@/components/ui/progress";
 import { estimateFoodCo2 } from "@/lib/sustainability";
@@ -40,13 +45,6 @@ const SUMMARY_NUTRIENTS = [
   { id: "kohlenhydrate", label: "Kohlenhydrate", unit: "g" },
 ] as const;
 
-function getReferenceValue(nutrientId: string, gender: "m" | "w" = "m") {
-  return (
-    REFERENCE_VALUES.find((rv) => rv.nutrientId === nutrientId && rv.gender === gender)
-      ?.amount ?? 0
-  );
-}
-
 function getNutrientsByGroup(group: NutrientGroup) {
   return NUTRIENT_DEFINITIONS.filter((nd) => nd.group === group).sort(
     (a, b) => a.sortOrder - b.sortOrder,
@@ -56,9 +54,10 @@ function getNutrientsByGroup(group: NutrientGroup) {
 interface NutrientTabContentProps {
   group: NutrientGroup;
   nutrients: { nutrientId: string; amount: number }[];
+  refConfig: ResolvedReferenceConfig;
 }
 
-function NutrientTabContent({ group, nutrients }: NutrientTabContentProps) {
+function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentProps) {
   const definitions = getNutrientsByGroup(group);
 
   return (
@@ -68,14 +67,14 @@ function NutrientTabContent({ group, nutrients }: NutrientTabContentProps) {
           <TableRow>
             <TableHead>Nährstoff</TableHead>
             <TableHead className="text-right">Menge</TableHead>
-            <TableHead className="text-right">Referenz (DGE)</TableHead>
+            <TableHead className="text-right">Referenz ({refConfig.standardName})</TableHead>
             <TableHead className="w-[200px]">Anteil</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {definitions.map((def) => {
             const value = getNutrientValue(nutrients, def.id);
-            const ref = getReferenceValue(def.id);
+            const ref = getReferenceAmount(refConfig, def.id);
 
             return (
               <TableRow key={def.id}>
@@ -101,6 +100,16 @@ function NutrientTabContent({ group, nutrients }: NutrientTabContentProps) {
 }
 
 export function FoodDetailContent({ food }: { food: Food }) {
+  const { standardId, lifeStage } = useReferenceProfiles();
+  const refConfig = useMemo(() => {
+    return resolveReferenceForPatient({
+      standardId,
+      dateOfBirth: "1990-01-01", // Default adult context for food detail view
+      gender: "m",
+      lifeStage,
+    });
+  }, [standardId, lifeStage]);
+
   const categoryName = categoryMap.get(food.categoryId) ?? food.categoryId;
   const sourceMeta = food.sourceId ? FOOD_SOURCES.find((s) => s.id === food.sourceId) : null;
   const prodScore = useMemo(() => calculateProdScore(food.nutrients), [food]);
@@ -268,6 +277,11 @@ export function FoodDetailContent({ food }: { food: Food }) {
         </CardContent>
       </Card>
 
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Nährstoffanalyse</h3>
+        <ReferenceProfileSelector compact />
+      </div>
+
       <Tabs defaultValue="makronaehrstoffe">
         <TabsList className="flex-wrap">
           {(Object.entries(NUTRIENT_GROUP_LABELS) as [NutrientGroup, string][]).map(
@@ -280,7 +294,7 @@ export function FoodDetailContent({ food }: { food: Food }) {
         </TabsList>
         {(Object.keys(NUTRIENT_GROUP_LABELS) as NutrientGroup[]).map((group) => (
           <TabsContent key={group} value={group}>
-            <NutrientTabContent group={group} nutrients={food.nutrients} />
+            <NutrientTabContent group={group} nutrients={food.nutrients} refConfig={refConfig} />
           </TabsContent>
         ))}
       </Tabs>

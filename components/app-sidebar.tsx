@@ -24,6 +24,7 @@ import {
   Network,
   ShieldCheck,
   Gauge,
+  Ruler,
 } from "lucide-react"
 import {
   Sidebar,
@@ -67,6 +68,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Vergleich", icon: Scale, route: "/lebensmittel/vergleichen" },
       { label: "Rezepte", icon: ChefHat, route: "/rezepte" },
       { label: "Ernährungsplan", icon: CalendarDays, route: "/ernaehrungsplan" },
+      { label: "Referenzwerte", icon: Ruler, route: "/referenzwerte" },
       { label: "Austauschtabellen", icon: ArrowLeftRight, route: "/austauschtabellen" },
     ],
   },

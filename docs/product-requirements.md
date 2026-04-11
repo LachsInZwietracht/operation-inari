@@ -52,7 +52,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
   - Additives
 
 ### 1.3 Reference Values
-**Status:** Partially implemented (DGE references available; other regional standards and custom profiles still missing).
+**Status:** Implemented with mock data (DGE, ÖGE, SGE, RDA standards with full age/gender bracket matrix; custom profiles with per-nutrient overrides; life-stage adjustment for pregnancy/lactation; standard comparison view; global standard selector persisted in localStorage; compact selector integrated into food detail, protocol analysis, meal plan, and report views).
 - DGE (Deutsche Gesellschaft fuer Ernaehrung) reference values
 - OeGE (Austrian) reference values
 - SGE (Swiss) reference values
@@ -61,7 +61,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Reference values adjustable by age, gender, pregnancy, lactation
 
 ### 1.4 Advanced Food Search
-**Status:** Implemented with mock data (Kölner Phonetik fuzzy search with trigram similarity, four search modes — name/code/group/browse — with BLS food group hierarchy navigation, match-type indicators, and contextual search tips; food synonym management still pending).
+**Status:** Implemented with mock data (Kölner Phonetik fuzzy search with trigram similarity, four search modes — name/code/group/browse — with BLS food group hierarchy navigation, match-type indicators, contextual search tips, plus synonym management with alias table + UI to replace display names).
 - **Phonetic / fuzzy search (Kölner Phonetik)** — tolerate typos, phonetic misspellings, and umlaut variations when searching German food names. Implement using a phonetic indexing algorithm (e.g., Cologne phonetics or pg_trgm trigram index in PostgreSQL) that generates phonetic codes at food-insert time and matches them during search queries. Essential for usability with compound German food names
 - **Multiple search modes** — support searching by food name, by database code number (e.g., BLS code), by food group hierarchy, and by full database browse. Implement as tabbed search interface or search-mode selector with different query backends per mode
 - **Food synonym management** — allow users to assign display aliases to foods (e.g., show "Nudeln" instead of "Eierteigwaren"). Implement as a `food_synonyms` table linking a user-defined display name to a food ID; synonyms appear in search results and can replace the original name in recipe printouts
@@ -186,7 +186,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 ## 5. Patient/Client Management
 
 ### 5.1 Patient Records
-**Status:** Implemented with mock data (demographics plus diagnoses, medications, insurance, and wizard-driven history tools are accessible in patient tabs).
+**Status:** Implemented with mock data (demographics plus diagnoses, medications, insurance, wizard-driven history tools, eGK-Kartenleser-Workflow, Serienbrief/Mail-Merge und Geburtstagsliste sind verfügbar).
 - Create and manage patient profiles
 - Demographic data (name, DOB, gender, contact)
 - Medical history
@@ -198,7 +198,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - **Birthday list** — auto-generated list of upcoming patient birthdays for the practice. Implement as a dashboard widget or patient list filter that queries patients by birth month/day and displays upcoming birthdays within a configurable time window (e.g., next 30 days)
 
 ### 5.2 Anthropometric Data & Weight Analysis
-**Status:** Implemented with mock data (charts, PAL/BMR calculator, and activity log complete; predictive analytics still future work).
+**Status:** Implemented with mock data (charts, PAL/BMR calculator, activity log, BMI-Amputationskorrektur, Zielgewichtsprojektion und pädiatrische Perzentilen sind live; predictive analytics still future work).
 - BMI calculation and tracking
 - Weight progression charts
 - PAL (Physical Activity Level) calculation
@@ -225,7 +225,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Correlate medication changes with nutrition therapy outcomes
 
 ### 5.5 Medical Calculations
-**Status:** Implemented with mock data (MUST/NRS-2002 widgets and PROCAM calculator/storefront wired up; additional calculators can extend this foundation).
+**Status:** Implemented with mock data (MUST/NRS-2002, PROCAM, Kreatinin-Clearance nach Cockcroft-Gault, MNA und SGA stehen als Wizards bereit; weitere Rechner können auf dieser Basis aufsetzen).
 - PROCAM cardiovascular risk score
 - Lipid ratio calculations (LDL/HDL ratio, triglyceride ratios)
 - BMI classification
@@ -242,7 +242,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 ## 6. Nutrition Therapy & Specialized Diets
 
 ### 6.1 Diabetes Management
-**Status:** Partially implemented (therapy cards with BE targets, glucose ranges, and status toggles now editable; glucose-specific charts still pending).
+**Status:** Implemented with mock data (CGM-/BZ-Analytics mit TIR-Badges, BE-/KE-Rechner, Therapieziele und Modulschalter sind im Einsatz; erweiterte Geräte-Anbindungen folgen später).
 - Blood glucose value tracking and management
 - Action assignments for glucose values
 - BE (Broteinheiten) and KE (Kohlenhydrateinheiten) calculations
@@ -250,13 +250,13 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Diabetes-specific meal planning
 
 ### 6.2 Ketogenic Diet
-**Status:** Partially implemented (ketogenic module surfaced with ratio/target controls; dedicated meal plans forthcoming).
+**Status:** Implemented with mock data (Ratio-Slider, Energieziele, berechnete Makronährstoffblöcke und Ketoplan-Generator stehen bereit; dedizierte Planbibliothek folgt).
 - Ketogenic ratio calculations
 - Specialized parameter settings
 - Ketogenic meal plan creation
 
 ### 6.3 Allergen & Intolerance Management
-**Status:** Partially implemented (patient therapy tab now shows allergen/intolerance targets; automated warnings still future work).
+**Status:** Implemented with mock data (Allergen-Toggles lösen automatische Warnhinweise für Rezepte/Pläne aus, inklusive Integration in die Therapiekarte; Backend-Automation folgt).
 - Pre-configured allergen database (EU allergens)
 - Customizable allergen tracking per patient
 - Additive management
@@ -264,7 +264,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Allergen warnings in recipe/meal plan creation
 
 ### 6.4 Therapeutic Diets
-**Status:** Partially implemented (diet-line presets power meal plan compliance plus therapy toggles; broader catalog and automation pending).
+**Status:** Implemented with mock data (konfigurierbares Therapiekatalog-Panel mit aktivierbaren Diätformen und Zielwerten ist verfügbar; tiefe Automationen bleiben zukünftige Arbeit).
 - Configurable diet forms for various conditions
 - Lactose-free diet support
 - Fructose-reduced diet support

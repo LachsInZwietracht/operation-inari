@@ -5,27 +5,39 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { NutrientBar } from "@/components/nutrient-bar"
 import { NutrientChart, type NutrientChartDataPoint } from "@/components/nutrient-chart"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ReferenceProfileSelector } from "@/components/reference-profile-selector"
 import {
   scaleNutrients,
   sumNutrients,
   getNutrientValue,
 } from "@/lib/nutrients"
-import { FOODS, NUTRIENT_DEFINITIONS, REFERENCE_VALUES } from "@/lib/mock-data"
-import type { NutritionProtocol, Gender } from "@/lib/types"
+import {
+  resolveReferenceForPatient,
+  getReferenceAmount,
+} from "@/lib/reference-values"
+import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
+import { FOODS, NUTRIENT_DEFINITIONS } from "@/lib/mock-data"
+import type { NutritionProtocol, Gender, ResolvedReferenceConfig } from "@/lib/types"
 
 interface ProtocolAnalysisProps {
   protocol: NutritionProtocol
   gender?: Gender
+  dateOfBirth?: string
 }
 
 const foodMap = new Map(FOODS.map((f) => [f.id, f]))
 
-function getReferenceForNutrient(nutrientId: string, gender: "m" | "w"): number {
-  return REFERENCE_VALUES.find((r) => r.nutrientId === nutrientId && r.gender === gender)?.amount ?? 0
-}
+export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: ProtocolAnalysisProps) {
+  const { standardId, lifeStage } = useReferenceProfiles()
 
-export function ProtocolAnalysis({ protocol, gender = "w" }: ProtocolAnalysisProps) {
-  const refGender = gender === "d" ? "w" : gender
+  const refConfig = useMemo<ResolvedReferenceConfig>(() => {
+    return resolveReferenceForPatient({
+      standardId,
+      dateOfBirth: dateOfBirth ?? "1990-01-01",
+      gender,
+      lifeStage,
+    })
+  }, [standardId, dateOfBirth, gender, lifeStage])
 
   const averageNutrients = useMemo(() => {
     if (protocol.days.length === 0) return []
@@ -54,7 +66,7 @@ export function ProtocolAnalysis({ protocol, gender = "w" }: ProtocolAnalysisPro
     return {
       name: def.name,
       value: getNutrientValue(averageNutrients, id),
-      reference: getReferenceForNutrient(id, refGender),
+      reference: getReferenceAmount(refConfig, id),
       unit: def.unit,
     }
   })
@@ -68,15 +80,22 @@ export function ProtocolAnalysis({ protocol, gender = "w" }: ProtocolAnalysisPro
   )
 
   const avgKcal = getNutrientValue(averageNutrients, "energie")
-  const refKcal = getReferenceForNutrient("energie", refGender)
+  const refKcal = getReferenceAmount(refConfig, "energie")
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Durchschnittliche Nährstoffzufuhr ({protocol.days.length} Tage)
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              Durchschnittliche Nährstoffzufuhr ({protocol.days.length} Tage)
+            </CardTitle>
+            <ReferenceProfileSelector
+              dateOfBirth={dateOfBirth}
+              gender={gender}
+              compact
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <NutrientBar
@@ -110,7 +129,7 @@ export function ProtocolAnalysis({ protocol, gender = "w" }: ProtocolAnalysisPro
               {macroIds.map((id) => {
                 const def = NUTRIENT_DEFINITIONS.find((d) => d.id === id)!
                 const value = getNutrientValue(averageNutrients, id)
-                const ref = getReferenceForNutrient(id, refGender)
+                const ref = getReferenceAmount(refConfig, id)
                 return (
                   <NutrientBar
                     key={id}
@@ -130,7 +149,7 @@ export function ProtocolAnalysis({ protocol, gender = "w" }: ProtocolAnalysisPro
             <CardContent className="space-y-3 pt-6">
               {vitaminDefs.map((def) => {
                 const value = getNutrientValue(averageNutrients, def.id)
-                const ref = getReferenceForNutrient(def.id, refGender)
+                const ref = getReferenceAmount(refConfig, def.id)
                 return (
                   <NutrientBar
                     key={def.id}
@@ -150,7 +169,7 @@ export function ProtocolAnalysis({ protocol, gender = "w" }: ProtocolAnalysisPro
             <CardContent className="space-y-3 pt-6">
               {mineralDefs.map((def) => {
                 const value = getNutrientValue(averageNutrients, def.id)
-                const ref = getReferenceForNutrient(def.id, refGender)
+                const ref = getReferenceAmount(refConfig, def.id)
                 return (
                   <NutrientBar
                     key={def.id}

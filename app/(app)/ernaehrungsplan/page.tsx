@@ -67,7 +67,6 @@ import { useMealPlan } from "@/hooks/use-meal-plan"
 import {
   FOODS,
   RECIPES,
-  REFERENCE_VALUES,
   NUTRIENT_DEFINITIONS,
   DIET_LINES,
   FOOD_CATEGORIES,
@@ -89,6 +88,8 @@ import type {
 } from "@/lib/types"
 import { calculateProdScore } from "@/lib/prodi-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
+import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
+import { resolveReferenceForPatient } from "@/lib/reference-values"
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -259,15 +260,23 @@ export default function ErnaehrungsplanPage() {
   )
   const planSustainability = useMemo(() => evaluatePlanSustainability(currentPlan, FOODS, RECIPES), [currentPlan])
 
+  const { standardId, lifeStage } = useReferenceProfiles()
+  const refConfig = useMemo(() => {
+    return resolveReferenceForPatient({
+      standardId,
+      dateOfBirth: "1990-01-01",
+      gender: "m",
+      lifeStage,
+    })
+  }, [standardId, lifeStage])
+
   const referenceMap = useMemo(() => {
     const map = new Map<string, number>()
-    for (const ref of REFERENCE_VALUES) {
-      if (ref.gender === "m") {
-        map.set(ref.nutrientId, ref.amount)
-      }
+    for (const v of refConfig.values) {
+      map.set(v.nutrientId, v.amount)
     }
     return map
-  }, [])
+  }, [refConfig.values])
 
   const nutrientDefMap = useMemo(() => {
     return new Map(NUTRIENT_DEFINITIONS.map((nd) => [nd.id, nd]))
