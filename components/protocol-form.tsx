@@ -95,7 +95,7 @@ const protocolSchema = z.object({
   }),
 })
 
-type ProtocolFormValues = z.infer<typeof protocolSchema>
+type ProtocolFormValues = z.input<typeof protocolSchema>
 
 interface ProtocolFormProps {
   patientId: string
