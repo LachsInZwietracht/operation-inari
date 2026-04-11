@@ -4,7 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EgkCardData } from "@/lib/types";
 import { EGK_CARDS } from "@/lib/mock-data";
 
-type NavigatorWithSerial = Navigator & { serial?: Serial };
+type WebSerialPort = {
+  readable?: ReadableStream<Uint8Array> | null;
+  open(options: { baudRate: number }): Promise<void>;
+  close(): Promise<void>;
+};
+
+type WebSerialAPI = {
+  requestPort(): Promise<WebSerialPort>;
+};
+
+type NavigatorWithSerial = Navigator & { serial?: WebSerialAPI };
 
 export type EgkScannerStatus = "disconnected" | "connecting" | "ready" | "reading" | "error";
 
@@ -19,7 +29,7 @@ export function useEgkScanner() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [isReading, setIsReading] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const serialPortRef = useRef<SerialPort | null>(null);
+  const serialPortRef = useRef<WebSerialPort | null>(null);
   const companionEndpoint = process.env.NEXT_PUBLIC_EGK_COMPANION_URL ?? "/api/egk";
 
   const isSupported = useMemo(() =>
