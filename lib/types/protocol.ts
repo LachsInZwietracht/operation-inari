@@ -42,6 +42,7 @@ export interface ProtocolEntry {
   mealSlot: MealSlotType;
   time?: string; // HH:mm
   notes?: string;
+  measurementMode?: "grams" | "household";
   householdMeasurement?: ProtocolHouseholdMeasurement;
 }
 
