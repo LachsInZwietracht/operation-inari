@@ -67,7 +67,7 @@ import { useTherapyIntegrations } from "@/hooks/use-therapy-integrations"
 import { useScreenings } from "@/hooks/use-screenings"
 import { useProcam } from "@/hooks/use-procam"
 import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
-import type { Patient } from "@/lib/types"
+import type { Patient, AnthropometricEntry } from "@/lib/types"
 import { toast } from "sonner"
 
 function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
