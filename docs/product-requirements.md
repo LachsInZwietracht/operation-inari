@@ -126,7 +126,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Comparison with reference values
 
 ### 3.2 Menu Plans
-**Status:** Partially implemented (week and 4-week cycle planners with teaching-kitchen preview and multi-day nutrient summaries in place; institutional production/shopping flows still pending).
+**Status:** Implemented with mock data (week and 4-week cycle planners with drag-and-drop recipe assignment from sidebar library, inline portion editing, per-diet-form weekly grid, dynamically generated production lists by day with expandable ingredient breakdowns, aggregated weekly shopping lists with category grouping/portion scaling/CSV export, and teaching-kitchen preview with multi-day nutrient summaries).
 - Create multi-day/weekly menu plans (Menueplaene)
 - Support for up to 4-week meal plan cycles
 - Drag-and-drop recipe integration
