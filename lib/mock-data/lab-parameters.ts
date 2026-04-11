@@ -11,4 +11,5 @@ export const LAB_PARAMETERS: LabParameter[] = [
   { id: "lab_ferritin", name: "Ferritin", shortName: "Ferr", unit: "µg/l", referenceMin: 15, referenceMax: 150, description: "Eisenspeicherwert" },
   { id: "lab_vitamin_d", name: "25-OH-Vitamin D", shortName: "Vit D", unit: "ng/ml", referenceMin: 30, referenceMax: 80, description: "Vitamin-D-Status" },
   { id: "lab_kreatinin", name: "Kreatinin", shortName: "Krea", unit: "mg/dl", referenceMin: 0.7, referenceMax: 1.2, description: "Nierenfunktionsmarker" },
+  { id: "lab_creatinine_clearance", name: "Kreatinin-Clearance (berechnet)", shortName: "ClCr", unit: "mL/min", referenceMin: 90, referenceMax: 140, description: "Cockcroft-Gault Rechner" },
 ];

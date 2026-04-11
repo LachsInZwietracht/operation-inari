@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import Link from "next/link"
 import {
   Activity as ActivityIcon,
@@ -13,7 +13,7 @@ import {
   Sparkles,
   Stethoscope,
 } from "lucide-react"
-import { differenceInYears, parseISO } from "date-fns"
+import { addDays, differenceInCalendarDays, differenceInMonths, differenceInYears, parseISO } from "date-fns"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,31 +38,147 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { AnthropometricChart } from "@/components/anthropometric-chart"
 import { AnthropometricForm } from "@/components/anthropometric-form"
+import { PediatricPercentileChart } from "@/components/pediatric-percentile-chart"
+import {
+  AllergenAutomationCard,
+  DiabetesAnalyticsCard,
+  DietCatalogCard,
+  KetogenicPlannerCard,
+} from "@/components/therapy-panels"
 import { formatDate, formatNumber } from "@/lib/format"
+import { downloadCsv } from "@/lib/utils"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
 import {
   COUNSELING_SESSIONS,
   LAB_PARAMETERS,
   PROTOCOLS,
+  GROWTH_PERCENTILES,
 } from "@/lib/mock-data"
-import { PROTOCOL_TYPE_LABELS } from "@/lib/constants"
+import { AMPUTATION_AREAS, PROTOCOL_TYPE_LABELS } from "@/lib/constants"
 import { useDiagnoses } from "@/hooks/use-diagnoses"
 import { useMedications } from "@/hooks/use-medications"
 import { useLabValues } from "@/hooks/use-lab-values"
 import { useActivities } from "@/hooks/use-activities"
 import { useTherapySettings } from "@/hooks/use-therapy-settings"
+import { useTherapyIntegrations } from "@/hooks/use-therapy-integrations"
 import { useScreenings } from "@/hooks/use-screenings"
 import { useProcam } from "@/hooks/use-procam"
 import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
 import type { Patient } from "@/lib/types"
+import { toast } from "sonner"
 
 function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
   if (typeof min === "number" && value < min) return "low"
   if (typeof max === "number" && value > max) return "high"
   return "ok"
 }
+
+const MNA_QUESTIONS = [
+  {
+    id: "appetite",
+    label: "Appetitverlust (3 Monate)",
+    options: [
+      { label: "Kein Verlust", value: 2 },
+      { label: "Leichter Verlust", value: 1 },
+      { label: "Starker Verlust", value: 0 },
+    ],
+  },
+  {
+    id: "weightLoss",
+    label: "Unbeabsichtigter Gewichtsverlust",
+    options: [
+      { label: "< 1 kg", value: 3 },
+      { label: "1–3 kg", value: 2 },
+      { label: "> 3 kg", value: 1 },
+      { label: "> 5 kg", value: 0 },
+    ],
+  },
+  {
+    id: "mobility",
+    label: "Mobilität",
+    options: [
+      { label: "Regelmäßig aktiv", value: 2 },
+      { label: "Eigenständig mobil", value: 1 },
+      { label: "Bettruhe / Rollstuhl", value: 0 },
+    ],
+  },
+  {
+    id: "stress",
+    label: "Psychischer Stress oder akute Erkrankung",
+    options: [
+      { label: "Nein", value: 2 },
+      { label: "Ja", value: 0 },
+    ],
+  },
+  {
+    id: "neuro",
+    label: "Neuropsychologischer Zustand",
+    options: [
+      { label: "Normal", value: 2 },
+      { label: "Leichte Demenz", value: 1 },
+      { label: "Schwere Demenz", value: 0 },
+    ],
+  },
+  {
+    id: "calf",
+    label: "Wadenumfang",
+    options: [
+      { label: "> 31 cm", value: 3 },
+      { label: "≤ 31 cm", value: 0 },
+    ],
+  },
+] as const
+
+const SGA_QUESTIONS = [
+  {
+    id: "weight",
+    label: "Gewichtsverlauf",
+    options: [
+      { id: "stable", label: "< 5 % Verlust", score: 0 },
+      { id: "moderate", label: "5–10 % Verlust", score: 1 },
+      { id: "severe", label: "> 10 % Verlust", score: 2 },
+    ],
+  },
+  {
+    id: "intake",
+    label: "Ernährungsaufnahme",
+    options: [
+      { id: "normal", label: "Keine Änderung", score: 0 },
+      { id: "mild", label: "Leichte Reduktion", score: 1 },
+      { id: "severe", label: "Kaum Aufnahme", score: 2 },
+    ],
+  },
+  {
+    id: "gi",
+    label: "Gastrointestinale Symptome",
+    options: [
+      { id: "none", label: "Keine", score: 0 },
+      { id: "moderate", label: "Übelkeit/Durchfall", score: 1 },
+      { id: "heavy", label: "Persistierend > 2 Wochen", score: 2 },
+    ],
+  },
+  {
+    id: "function",
+    label: "Funktioneller Status",
+    options: [
+      { id: "full", label: "Voll aktiv", score: 0 },
+      { id: "reduced", label: "Reduziert", score: 1 },
+      { id: "bed", label: "Bettruhe", score: 2 },
+    ],
+  },
+  {
+    id: "exam",
+    label: "Klinische Untersuchung",
+    options: [
+      { id: "normal", label: "Normale Fett-/Muskelmasse", score: 0 },
+      { id: "moderate", label: "Mäßige Verluste", score: 1 },
+      { id: "advanced", label: "Ausgeprägte Verluste", score: 2 },
+    ],
+  },
+] as const
 
 interface PatientTabsProps {
   patient: Patient
@@ -75,6 +191,11 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const { getForPatient: getLabValuesForPatient, addEntry: addLabValue } = useLabValues()
   const { getForPatient: getActivitiesForPatient, addEntry: addActivity } = useActivities()
   const { getForPatient: getTherapiesForPatient, upsertSetting } = useTherapySettings()
+  const {
+    getForPatient: getIntegrationsForPatient,
+    addIntegration,
+    updateIntegration,
+  } = useTherapyIntegrations()
   const { getForPatient: getScreeningsForPatient, addEntry: addScreening } = useScreenings()
   const { getForPatient: getProcamForPatient, addResult: addProcam } = useProcam()
   const { getForPatient: getDigitalLinksForPatient, generateLink, updateStatus } = useDigitalProtocols()
@@ -93,6 +214,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const [labParameterId, setLabParameterId] = useState(LAB_PARAMETERS[0]?.id ?? "")
   const [labValueInput, setLabValueInput] = useState("")
   const [labDateInput, setLabDateInput] = useState("")
+  const [labNotesInput, setLabNotesInput] = useState("")
   const [palValue, setPalValue] = useState("1.4")
   const [activityForm, setActivityForm] = useState({
     type: "Spaziergang",
@@ -111,6 +233,12 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     systolic: 130,
     smoker: false,
   })
+  const [targetWeightInput, setTargetWeightInput] = useState("")
+  const [calorieDeficitInput, setCalorieDeficitInput] = useState("500")
+  const [calculatorTab, setCalculatorTab] = useState("creatinine")
+  const [creatinineInput, setCreatinineInput] = useState("1.0")
+  const [mnaInputs, setMnaInputs] = useState<Record<string, number>>({})
+  const [sgaInputs, setSgaInputs] = useState<Record<string, string>>({})
 
   const anthroEntries = getAnthroForPatient(patient.id)
   const sessions = COUNSELING_SESSIONS.filter((s) => s.patientId === patient.id)
@@ -120,6 +248,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const labEntries = getLabValuesForPatient(patient.id)
   const activities = getActivitiesForPatient(patient.id)
   const therapies = getTherapiesForPatient(patient.id)
+  const deviceIntegrations = getIntegrationsForPatient(patient.id)
   const screenings = getScreeningsForPatient(patient.id)
   const procamResults = getProcamForPatient(patient.id)
   const digitalLinks = getDigitalLinksForPatient(patient.id)
@@ -127,6 +256,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const latestAnthro = anthroEntries.length > 0 ? anthroEntries[anthroEntries.length - 1] : null
   const selectedLabParameter = LAB_PARAMETERS.find((param) => param.id === labParameterId)
   const entriesForSelectedLab = labEntries.filter((entry) => entry.parameterId === labParameterId)
+  const creatinineClearanceParam = LAB_PARAMETERS.find((param) => param.id === "lab_creatinine_clearance")
   const ageYears = differenceInYears(new Date(), parseISO(patient.dateOfBirth))
   const weight = latestAnthro?.weight ?? 70
   const height = latestAnthro?.height ?? 170
@@ -137,6 +267,162 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   }, [ageYears, height, patient.gender, weight])
   const totalEnergyExpenditure = Math.round(basalMetabolicRate * pal)
   const activityKcal = activities.reduce((sum, entry) => sum + (entry.energyKcal ?? entry.durationMinutes * 4.5), 0)
+
+  useEffect(() => {
+    if (latestAnthro && !targetWeightInput) {
+      setTargetWeightInput((latestAnthro.weight - 5).toFixed(1))
+    }
+  }, [latestAnthro, targetWeightInput])
+
+  const amputationFactor = useMemo(() => {
+    if (!patient.amputations?.length) return 0
+    return patient.amputations.reduce((sum, id) => {
+      const area = AMPUTATION_AREAS.find((option) => option.id === id)
+      return sum + (area?.factor ?? 0)
+    }, 0)
+  }, [patient.amputations])
+
+  const amputationDescriptions = useMemo(
+    () =>
+      patient.amputations?.map(
+        (id) => AMPUTATION_AREAS.find((option) => option.id === id)?.label ?? id,
+      ) ?? [],
+    [patient.amputations],
+  )
+
+  const getCorrectedBmi = useCallback(
+    (entry: AnthropometricEntry) => {
+      if (!amputationFactor) return entry.bmi
+      const adjustedWeight = entry.weight / (1 - amputationFactor)
+      const heightM = entry.height / 100
+      return Math.round((adjustedWeight / (heightM * heightM)) * 10) / 10
+    },
+    [amputationFactor],
+  )
+
+  const hasAmputation = amputationFactor > 0
+  const correctedWeight = latestAnthro
+    ? hasAmputation
+      ? latestAnthro.weight / (1 - amputationFactor)
+      : latestAnthro.weight
+    : null
+  const correctedBmi = latestAnthro ? getCorrectedBmi(latestAnthro) : null
+  const chartEntries = useMemo(
+    () =>
+      hasAmputation
+        ? anthroEntries.map((entry) => ({ ...entry, bmi: getCorrectedBmi(entry) }))
+        : anthroEntries,
+    [anthroEntries, getCorrectedBmi, hasAmputation],
+  )
+
+  const targetWeightValue = parseFloat(targetWeightInput)
+  const calorieDeficit = parseFloat(calorieDeficitInput)
+  const weightStart = anthroEntries[0]?.weight ?? latestAnthro?.weight ?? 0
+
+  const weightTrend = useMemo(() => {
+    if (anthroEntries.length < 2) return null
+    const first = anthroEntries[0]
+    const last = anthroEntries[anthroEntries.length - 1]
+    const days = Math.max(1, Math.abs(differenceInCalendarDays(parseISO(last.date), parseISO(first.date))))
+    const delta = last.weight - first.weight
+    const perWeek = (delta / days) * 7
+    return {
+      totalChange: Math.round(delta * 10) / 10,
+      perWeek: Math.round(perWeek * 10) / 10,
+      direction: delta === 0 ? "stable" : delta < 0 ? "down" : "up",
+      startDate: first.date,
+      endDate: last.date,
+    }
+  }, [anthroEntries])
+
+  const weightProgressPercent = useMemo(() => {
+    if (!weightStart || !latestAnthro || !targetWeightValue || weightStart <= targetWeightValue) {
+      return 0
+    }
+    const total = weightStart - targetWeightValue
+    const achieved = weightStart - latestAnthro.weight
+    return Math.max(0, Math.min(100, (achieved / total) * 100))
+  }, [latestAnthro, targetWeightValue, weightStart])
+
+  const weightProjection = useMemo(() => {
+    if (!latestAnthro || !targetWeightValue || Number.isNaN(targetWeightValue)) return null
+    if (!calorieDeficit || Number.isNaN(calorieDeficit) || calorieDeficit <= 0) return null
+    const difference = latestAnthro.weight - targetWeightValue
+    if (difference <= 0) {
+      return { finished: true, finishDate: parseISO(latestAnthro.date), days: 0 }
+    }
+    const kcalPerKg = 7700
+    const totalKcal = difference * kcalPerKg
+    const days = Math.max(1, Math.ceil(totalKcal / calorieDeficit))
+    return {
+      finished: false,
+      finishDate: addDays(parseISO(latestAnthro.date), days),
+      days,
+    }
+  }, [calorieDeficit, latestAnthro, targetWeightValue])
+
+  const bmiPercentile = useMemo(() => {
+    if (!isPediatric || !latestAnthro) return null
+    const months = Math.max(0, differenceInMonths(parseISO(latestAnthro.date), parseISO(patient.dateOfBirth)))
+    const reference = GROWTH_PERCENTILES.reduce(
+      (closest, entry) =>
+        Math.abs(entry.ageMonths - months) < Math.abs(closest.ageMonths - months) ? entry : closest,
+      GROWTH_PERCENTILES[0],
+    )
+    const metric = (patient.gender === "m" ? reference.male : reference.female).bmi
+    const bmi = latestAnthro.bmi
+    const { p3, p10, p25, p50, p75, p90, p97 } = metric
+    const bracket =
+      bmi < p3
+        ? "unter P3"
+        : bmi < p10
+          ? "P3–P10"
+          : bmi < p25
+            ? "P10–P25"
+            : bmi < p50
+              ? "P25–P50"
+              : bmi < p75
+                ? "P50–P75"
+                : bmi < p90
+                  ? "P75–P90"
+                  : bmi < p97
+                    ? "P90–P97"
+                    : "über P97"
+    return {
+      bmi,
+      bracket,
+      refAgeYears: reference.ageMonths / 12,
+    }
+  }, [isPediatric, latestAnthro, patient.dateOfBirth, patient.gender])
+
+  const isPediatric = ageYears < 18
+  const derivedAllergens = useMemo(() => {
+    const result: string[] = []
+    const indication = patient.indication?.toLowerCase() ?? ""
+    if (indication.includes("zöliakie") || indication.includes("gluten")) result.push("gluten")
+    if (indication.includes("laktose")) result.push("lactose")
+    if (indication.includes("allerg")) result.push("nuts")
+    return Array.from(new Set(result))
+  }, [patient.indication])
+
+  const creatinineClearance = useMemo(() => {
+    if (!latestAnthro) return null
+    const serum = parseFloat(creatinineInput)
+    if (Number.isNaN(serum) || serum <= 0) return null
+    const referenceWeight = correctedWeight ?? latestAnthro.weight
+    let clearance = ((140 - ageYears) * referenceWeight) / (72 * serum)
+    if (patient.gender === "w") clearance *= 0.85
+    return Math.round(clearance)
+  }, [ageYears, correctedWeight, creatinineInput, latestAnthro, patient.gender])
+
+  const creatinineStage = useMemo(() => {
+    if (!creatinineClearance) return null
+    if (creatinineClearance >= 90) return "Normal"
+    if (creatinineClearance >= 60) return "G2"
+    if (creatinineClearance >= 30) return "G3"
+    if (creatinineClearance >= 15) return "G4"
+    return "G5"
+  }, [creatinineClearance])
 
   const wizardTemplates = {
     recall: {
@@ -178,6 +464,27 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     allergen: "Allergenmanagement",
     intoleranz: "Intoleranzen",
   }
+
+
+  const mnaScore = useMemo(
+    () => Object.values(mnaInputs).reduce((sum, value) => sum + value, 0),
+    [mnaInputs],
+  )
+  const mnaClassification = mnaScore >= 24 ? "Normal" : mnaScore >= 17 ? "Risiko" : "Mangelernährt"
+  const mnaRiskLevel: "low" | "medium" | "high" =
+    mnaClassification === "Normal" ? "low" : mnaClassification === "Risiko" ? "medium" : "high"
+
+  const sgaScore = useMemo(() => {
+    return Object.entries(sgaInputs).reduce((sum, [questionId, selection]) => {
+      const question = SGA_QUESTIONS.find((item) => item.id === questionId)
+      const option = question?.options.find((item) => item.id === selection)
+      return sum + (option?.score ?? 0)
+    }, 0)
+  }, [sgaInputs])
+
+  const sgaClassification = sgaScore <= 3 ? "A" : sgaScore <= 6 ? "B" : "C"
+  const sgaRiskLevel: "low" | "medium" | "high" =
+    sgaClassification === "A" ? "low" : sgaClassification === "B" ? "medium" : "high"
 
   const protocolComparison = useMemo(() => protocols.slice(0, 2), [protocols])
   const comparisonMetrics = [
@@ -236,9 +543,46 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       parameterId: labParameterId,
       value: numericValue,
       date: labDateInput || new Date().toISOString().slice(0, 10),
+      notes: labNotesInput || undefined,
     })
     setLabValueInput("")
     setLabDateInput("")
+    setLabNotesInput("")
+  }
+
+  const handleSaveClearance = () => {
+    if (!creatinineClearance || !creatinineClearanceParam) {
+      toast.error("Bitte Clearance berechnen")
+      return
+    }
+    addLabValue({
+      patientId: patient.id,
+      parameterId: creatinineClearanceParam.id,
+      value: creatinineClearance,
+      date: new Date().toISOString().slice(0, 10),
+      notes: "Cockcroft-Gault Rechner",
+    })
+    toast.success("Clearance im Laborpanel gespeichert")
+  }
+
+  const handleIntegrationSync = (integrationId: string) => {
+    updateIntegration(integrationId, {
+      status: "connected",
+      lastSync: new Date().toISOString(),
+    })
+    toast.success("Gerät synchronisiert")
+  }
+
+  const handleAddIntegration = (type: "cgm" | "pump" | "allergen") => {
+    const newEntry = addIntegration({
+      patientId: patient.id,
+      type,
+      status: "pending",
+      vendor: type === "cgm" ? "LibreLink" : type === "pump" ? "Ypsomed" : "Allergen Cloud",
+    })
+    toast.message("Integration gestartet", {
+      description: `${newEntry.vendor} für ${type.toUpperCase()} vorbereitet`,
+    })
   }
 
   const handleActivitySubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -266,6 +610,42 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       riskLevel,
       answers: [],
     })
+  }
+
+  const handleSaveMna = () => {
+    if (!mnaScore) {
+      toast.error("Bitte alle relevanten Fragen beantworten")
+      return
+    }
+    addScreening({
+      patientId: patient.id,
+      tool: "MNA",
+      score: mnaScore,
+      riskLevel: mnaRiskLevel,
+      answers: MNA_QUESTIONS.map((question) => {
+        const option = question.options.find((opt) => opt.value === mnaInputs[question.id])
+        return { question: question.label, answer: option ? option.label : "–" }
+      }),
+    })
+    toast.success("MNA-Ergebnis gespeichert")
+  }
+
+  const handleSaveSga = () => {
+    if (!Object.keys(sgaInputs).length) {
+      toast.error("Bitte alle SGA-Kriterien erfassen")
+      return
+    }
+    addScreening({
+      patientId: patient.id,
+      tool: "SGA",
+      score: sgaScore,
+      riskLevel: sgaRiskLevel,
+      answers: SGA_QUESTIONS.map((question) => {
+        const option = question.options.find((opt) => opt.id === sgaInputs[question.id])
+        return { question: question.label, answer: option ? option.label : "–" }
+      }),
+    })
+    toast.success("SGA-Dokumentation gespeichert")
   }
 
   const handleProcamSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -362,6 +742,21 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   </dd>
                 </div>
               )}
+              {amputationDescriptions.length > 0 && (
+                <div className="sm:col-span-2">
+                  <dt className="text-sm text-muted-foreground">Amputationen</dt>
+                  <dd className="mt-1 flex flex-wrap gap-2">
+                    {amputationDescriptions.map((label) => (
+                      <Badge key={label} variant="outline">
+                        {label.replace(/\s*\([^)]*\)/, "")}
+                      </Badge>
+                    ))}
+                  </dd>
+                  <p className="text-xs text-muted-foreground">
+                    BMI-Korrektur: {(amputationFactor * 100).toFixed(1)} %
+                  </p>
+                </div>
+              )}
             </dl>
             {patient.notes && (
               <div className="mt-4">
@@ -381,7 +776,14 @@ export function PatientTabs({ patient }: PatientTabsProps) {
               <dl className="grid gap-3 sm:grid-cols-4">
                 <div>
                   <dt className="text-sm text-muted-foreground">Gewicht</dt>
-                  <dd className="text-lg font-semibold">{formatNumber(latestAnthro.weight, 1)} kg</dd>
+                  <dd className="text-lg font-semibold">
+                    {formatNumber(latestAnthro.weight, 1)} kg
+                  </dd>
+                  {hasAmputation && correctedWeight && (
+                    <p className="text-xs text-muted-foreground">
+                      Korrigiert: {formatNumber(correctedWeight, 1)} kg
+                    </p>
+                  )}
                 </div>
                 <div>
                   <dt className="text-sm text-muted-foreground">Größe</dt>
@@ -389,7 +791,14 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 </div>
                 <div>
                   <dt className="text-sm text-muted-foreground">BMI</dt>
-                  <dd className="text-lg font-semibold">{formatNumber(latestAnthro.bmi, 1)}</dd>
+                  <dd className="text-lg font-semibold">
+                    {formatNumber(correctedBmi ?? latestAnthro.bmi, 1)}
+                  </dd>
+                  {hasAmputation && (
+                    <p className="text-xs text-muted-foreground">
+                      Gemessen: {formatNumber(latestAnthro.bmi, 1)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <dt className="text-sm text-muted-foreground">Datum</dt>
@@ -402,8 +811,126 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="anthropometrie" className="space-y-4">
-        {anthroEntries.length > 1 && (
-          <AnthropometricChart entries={anthroEntries} />
+        {chartEntries.length > 1 && (
+          <AnthropometricChart entries={chartEntries} />
+        )}
+
+        {isPediatric && anthroEntries.length > 0 && (
+          <PediatricPercentileChart
+            entries={anthroEntries}
+            gender={patient.gender}
+            birthDate={patient.dateOfBirth}
+          />
+        )}
+
+        {latestAnthro && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Anthropometrie-Insights</CardTitle>
+              <CardDescription>Korrekturen, Perzentile und Trendanalyse.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">BMI (korrigiert)</p>
+                <p className="text-2xl font-semibold">
+                  {formatNumber(correctedBmi ?? latestAnthro.bmi, 1)}
+                </p>
+                {hasAmputation ? (
+                  <p className="text-xs text-muted-foreground">
+                    Faktor {(amputationFactor * 100).toFixed(1)} % · {amputationDescriptions.join(", ")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Keine Korrektur notwendig</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Perzentil</p>
+                {bmiPercentile ? (
+                  <div>
+                    <p className="text-2xl font-semibold">{bmiPercentile.bracket}</p>
+                    <p className="text-xs text-muted-foreground">
+                      BMI {formatNumber(bmiPercentile.bmi, 1)} bei {bmiPercentile.refAgeYears.toFixed(1)} Jahren Referenz
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nur für Patienten &lt; 18 Jahre verfügbar.</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Trend</p>
+                {weightTrend ? (
+                  <div>
+                    <p className="text-2xl font-semibold">
+                      {weightTrend.perWeek > 0 ? "+" : ""}
+                      {formatNumber(weightTrend.perWeek, 1)} kg/Woche
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Gesamt: {weightTrend.totalChange > 0 ? "+" : ""}
+                      {formatNumber(weightTrend.totalChange, 1)} kg · seit {formatDate(weightTrend.startDate)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Trend wird berechnet, sobald mindestens zwei Messungen vorliegen.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {latestAnthro && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Zielgewicht & Projektion</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="target-weight">Zielgewicht (kg)</Label>
+                  <Input
+                    id="target-weight"
+                    type="number"
+                    step="0.1"
+                    value={targetWeightInput}
+                    onChange={(event) => setTargetWeightInput(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="calorie-deficit">Kaloriendefizit / Tag</Label>
+                  <Input
+                    id="calorie-deficit"
+                    type="number"
+                    value={calorieDeficitInput}
+                    onChange={(event) => setCalorieDeficitInput(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Zielerreichung</Label>
+                  <Progress value={weightProgressPercent} className="mt-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatNumber(weightProgressPercent, 0)} % des Weges geschafft
+                  </p>
+                </div>
+              </div>
+              {weightProjection && (
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  {weightProjection.finished ? (
+                    <p>Zielgewicht bereits erreicht. Weiterer Fokus: Stabilisierung.</p>
+                  ) : (
+                    <p>
+                      Prognose: Zielgewicht am {formatDate(weightProjection.finishDate)} (ca. {weightProjection.days}{" "}
+                      Tage)
+                    </p>
+                  )}
+                  {weightTrend && (
+                    <p className="text-xs text-muted-foreground">
+                      Aktueller Trend: {weightTrend.perWeek > 0 ? "+" : ""}
+                      {formatNumber(weightTrend.perWeek, 1)} kg/Woche
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         <Card>
@@ -451,7 +978,14 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                       <TableCell>{formatDate(entry.date)}</TableCell>
                       <TableCell className="text-right">{formatNumber(entry.weight, 1)}</TableCell>
                       <TableCell className="text-right">{formatNumber(entry.height, 0)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(entry.bmi, 1)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatNumber(getCorrectedBmi(entry), 1)}
+                        {hasAmputation && (
+                          <span className="block text-[11px] text-muted-foreground">
+                            Messung: {formatNumber(entry.bmi, 1)}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         {entry.waistCircumference ? formatNumber(entry.waistCircumference, 0) : "–"}
                       </TableCell>
@@ -656,6 +1190,23 @@ export function PatientTabs({ patient }: PatientTabsProps) {
             ) : (
               <p className="text-sm text-muted-foreground">Keine Medikamente dokumentiert.</p>
             )}
+            {medications.length > 0 && (
+              <div>
+                <p className="mt-4 text-xs uppercase text-muted-foreground">Einnahmehistorie</p>
+                <div className="mt-2 space-y-2">
+                  {[...medications]
+                    .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+                    .map((entry) => (
+                      <div key={`med_timeline_${entry.id}`} className="rounded-md border p-3 text-sm">
+                        <p className="font-medium">{entry.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          seit {formatDate(entry.startDate)} · {entry.dosage || "k.A."} · {entry.schedule || "Schema offen"}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -708,7 +1259,39 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   onChange={(event) => setLabDateInput(event.target.value)}
                 />
               </div>
-              <div className="md:col-span-4 flex justify-end">
+              <div className="md:col-span-4">
+                <Label>Notiz</Label>
+                <Textarea
+                  rows={2}
+                  value={labNotesInput}
+                  onChange={(event) => setLabNotesInput(event.target.value)}
+                  placeholder="z. B. nüchtern, Labor Praxis X"
+                />
+              </div>
+              <div className="md:col-span-4 flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (!selectedLabParameter || entriesForSelectedLab.length === 0) {
+                      toast.error("Keine Messungen für Export vorhanden")
+                      return
+                    }
+                    const rows = [
+                      ["Datum", "Wert", "Einheit", "Notiz"],
+                      ...entriesForSelectedLab.map((entry) => [
+                        formatDate(entry.date),
+                        entry.value.toString(),
+                        selectedLabParameter.unit,
+                        entry.notes ?? "",
+                      ]),
+                    ]
+                    downloadCsv(`${patient.lastName}_${selectedLabParameter.shortName}`, rows)
+                    toast.success("CSV exportiert")
+                  }}
+                >
+                  CSV Export
+                </Button>
                 <Button type="submit">Messung speichern</Button>
               </div>
             </form>
@@ -774,6 +1357,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                     <TableHead>Datum</TableHead>
                     <TableHead>Wert</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Notiz</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -803,10 +1387,13 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                                 selectedLabParameter.referenceMin,
                                 selectedLabParameter.referenceMax,
                               ) === "ok"
-                              ? "im Referenzbereich"
-                              : "außerhalb"
+                                ? "im Referenzbereich"
+                                : "außerhalb"
                             : "–"}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {entry.notes ?? "–"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1010,6 +1597,67 @@ export function PatientTabs({ patient }: PatientTabsProps) {
         </Card>
 
         <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Geräte & Automationen</CardTitle>
+              <CardDescription>Live-Sync für CGM, Pumpen und Allergenfilter.</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleAddIntegration("cgm")}>
+                CGM koppeln
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddIntegration("allergen")}>
+                Allergen-Link
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {deviceIntegrations.length > 0 ? (
+              deviceIntegrations.map((integration) => (
+                <div
+                  key={integration.id}
+                  className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-semibold">{integration.vendor}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {integration.type.toUpperCase()} · {integration.lastSync ? `Letzter Sync ${formatDate(integration.lastSync)}` : "noch nicht synchronisiert"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={
+                        integration.status === "connected"
+                          ? "secondary"
+                          : integration.status === "pending"
+                            ? "outline"
+                            : "destructive"
+                      }
+                    >
+                      {integration.status === "connected"
+                        ? "Verbunden"
+                        : integration.status === "pending"
+                          ? "Wartet"
+                          : "Fehler"}
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleIntegrationSync(integration.id)}
+                    >
+                      Sync anstoßen
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">Keine Integrationen hinterlegt.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader>
             <CardTitle>Mangelernährungs-Screening</CardTitle>
             <CardDescription>MUST & NRS-2002 Bewertung und Dokumentation.</CardDescription>
@@ -1077,6 +1725,130 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 )}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Medizinische Rechner</CardTitle>
+            <CardDescription>Creatinin-Clearance, MNA und SGA im Schnellzugriff.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={calculatorTab} onValueChange={setCalculatorTab}>
+              <TabsList className="mb-4 grid w-full grid-cols-3">
+                <TabsTrigger value="creatinine">Kreatinin</TabsTrigger>
+                <TabsTrigger value="mna">MNA</TabsTrigger>
+                <TabsTrigger value="sga">SGA</TabsTrigger>
+              </TabsList>
+              <TabsContent value="creatinine" className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="creatinine-value">Serum-Kreatinin (mg/dl)</Label>
+                    <Input
+                      id="creatinine-value"
+                      type="number"
+                      step="0.1"
+                      value={creatinineInput}
+                      onChange={(event) => setCreatinineInput(event.target.value)}
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Cockcroft-Gault-Formel: ((140 - Alter) × Gewicht) / (72 × Kreatinin)
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/40 p-4">
+                    <p className="text-xs uppercase text-muted-foreground">Kreatinin-Clearance</p>
+                    <p className="text-3xl font-semibold">
+                      {creatinineClearance ? `${creatinineClearance} ml/min` : "–"}
+                    </p>
+                    {creatinineStage && (
+                      <Badge className="mt-2 w-fit" variant="secondary">
+                        Stadium {creatinineStage}
+                      </Badge>
+                    )}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Referenzgewicht: {formatNumber((correctedWeight ?? latestAnthro?.weight) ?? 0, 1)} kg
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="button" variant="outline" disabled={!creatinineClearance} onClick={handleSaveClearance}>
+                    In Laborwerte übernehmen
+                  </Button>
+                </div>
+              </TabsContent>
+              <TabsContent value="mna" className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {MNA_QUESTIONS.map((question) => (
+                    <div key={question.id} className="rounded-lg border p-3">
+                      <p className="font-semibold text-sm">{question.label}</p>
+                      <RadioGroup
+                        className="mt-2 space-y-2"
+                        value={String(mnaInputs[question.id] ?? "")}
+                        onValueChange={(value) =>
+                          setMnaInputs((prev) => ({ ...prev, [question.id]: Number(value) }))
+                        }
+                      >
+                        {question.options.map((option) => (
+                          <Label
+                            key={`${question.id}_${option.value}`}
+                            className="flex cursor-pointer items-center gap-2 text-sm font-normal"
+                          >
+                            <RadioGroupItem value={String(option.value)} />
+                            {option.label}
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Gesamtpunktzahl</p>
+                    <p className="text-2xl font-semibold">{mnaScore}</p>
+                    <p className="text-sm text-muted-foreground">{mnaClassification}</p>
+                  </div>
+                  <Button type="button" onClick={handleSaveMna}>
+                    MNA speichern
+                  </Button>
+                </div>
+              </TabsContent>
+              <TabsContent value="sga" className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {SGA_QUESTIONS.map((question) => (
+                    <div key={question.id} className="rounded-lg border p-3">
+                      <p className="font-semibold text-sm">{question.label}</p>
+                      <RadioGroup
+                        className="mt-2 space-y-2"
+                        value={sgaInputs[question.id] ?? ""}
+                        onValueChange={(value) =>
+                          setSgaInputs((prev) => ({ ...prev, [question.id]: value }))
+                        }
+                      >
+                        {question.options.map((option) => (
+                          <Label
+                            key={`${question.id}_${option.id}`}
+                            className="flex cursor-pointer items-center gap-2 text-sm font-normal"
+                          >
+                            <RadioGroupItem value={option.id} />
+                            {option.label}
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Gesamtpunktzahl</p>
+                    <p className="text-2xl font-semibold">{sgaScore}</p>
+                    <p className="text-sm text-muted-foreground">Klasse {sgaClassification}</p>
+                  </div>
+                  <Button type="button" onClick={handleSaveSga}>
+                    SGA speichern
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
@@ -1173,6 +1945,11 @@ export function PatientTabs({ patient }: PatientTabsProps) {
             )}
           </CardContent>
         </Card>
+
+        <DiabetesAnalyticsCard patientName={`${patient.firstName} ${patient.lastName}`} />
+        <KetogenicPlannerCard />
+        <AllergenAutomationCard initialAllergens={derivedAllergens} />
+        <DietCatalogCard />
       </TabsContent>
 
       <TabsContent value="protokolle" className="space-y-4">

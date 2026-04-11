@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -19,15 +20,18 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 
-import { INDICATION_OPTIONS } from "@/lib/constants"
-import type { Patient, Gender } from "@/lib/types"
+import { AMPUTATION_AREAS, INDICATION_OPTIONS } from "@/lib/constants"
+import type { Patient, Gender, EgkCardData } from "@/lib/types"
+import { useEgkScanner } from "@/hooks/use-egk-scanner"
 
 const patientSchema = z.object({
   firstName: z.string().min(1, "Vorname ist erforderlich"),
@@ -43,6 +47,7 @@ const patientSchema = z.object({
   insuranceNumber: z.string(),
   indication: z.string(),
   notes: z.string(),
+  amputations: z.array(z.string()),
 })
 
 type PatientFormValues = z.infer<typeof patientSchema>
@@ -61,6 +66,17 @@ interface PatientFormProps {
 
 export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) {
   const router = useRouter()
+  const {
+    status: egkStatus,
+    isSupported: egkSupported,
+    connect: connectEgk,
+    scanCard,
+    simulateCard,
+    isReading: isEgkReading,
+    isConnecting: isEgkConnecting,
+    lastCard,
+    lastError,
+  } = useEgkScanner()
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientSchema),
@@ -78,8 +94,48 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
       insuranceNumber: patient?.insuranceNumber ?? "",
       indication: patient?.indication ?? "",
       notes: patient?.notes ?? "",
+      amputations: patient?.amputations ?? [],
     },
   })
+
+  const applyCardData = useCallback(
+    (card: EgkCardData) => {
+      form.setValue("firstName", card.firstName, { shouldDirty: true })
+      form.setValue("lastName", card.lastName, { shouldDirty: true })
+      form.setValue("dateOfBirth", card.dateOfBirth, { shouldDirty: true })
+      form.setValue("gender", card.gender, { shouldDirty: true })
+      form.setValue("street", card.street, { shouldDirty: true })
+      form.setValue("zip", card.zip, { shouldDirty: true })
+      form.setValue("city", card.city, { shouldDirty: true })
+      form.setValue("insuranceProvider", card.insuranceProvider, { shouldDirty: true })
+      form.setValue("insuranceNumber", card.insuranceNumber, { shouldDirty: true })
+    },
+    [form],
+  )
+
+  const handleEgkScan = useCallback(async () => {
+    try {
+      const card = await scanCard()
+      applyCardData(card)
+      toast.success("eGK-Daten übernommen")
+    } catch (error) {
+      toast.error((error as Error).message || "Karte konnte nicht eingelesen werden")
+    }
+  }, [applyCardData, scanCard])
+
+  const handleEgkSimulation = useCallback(() => {
+    const card = simulateCard()
+    applyCardData(card)
+    toast.info("Demokarte übernommen")
+  }, [applyCardData, simulateCard])
+
+  const egkStatusLabel: Record<string, string> = {
+    disconnected: "Getrennt",
+    connecting: "Verbindung wird aufgebaut",
+    ready: "Bereit",
+    reading: "Karte wird gelesen",
+    error: "Fehler",
+  }
 
   function handleSubmit(values: PatientFormValues) {
     onSubmit({
@@ -96,6 +152,7 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
       insuranceNumber: values.insuranceNumber || undefined,
       indication: values.indication || undefined,
       notes: values.notes || undefined,
+      amputations: values.amputations && values.amputations.length > 0 ? values.amputations : undefined,
     })
     toast.success(isEditing ? "Patient aktualisiert!" : "Patient erstellt!")
     router.push("/patienten")
@@ -104,6 +161,58 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <Card className="border-dashed border-primary/40 bg-primary/5">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">eGK-Kartenleser</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Lesen Sie Stammdaten direkt von elektronischen Gesundheitskarten aus.
+              </p>
+            </div>
+            <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!egkSupported && (
+              <p className="text-sm text-muted-foreground">
+                Ihr Browser unterstützt aktuell keine Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche oder den Companion-Connector.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={egkStatus === "ready" || isEgkConnecting}
+                onClick={() => void connectEgk()}
+              >
+                {isEgkConnecting ? "Verbinde..." : "Leser verbinden"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={egkStatus !== "ready" || isEgkReading}
+                onClick={() => void handleEgkScan()}
+              >
+                {isEgkReading ? "Lese Karte..." : "Karte einlesen"}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={handleEgkSimulation}>
+                Demo-Karte nutzen
+              </Button>
+            </div>
+            {lastCard && (
+              <div className="rounded-md border bg-background p-3 text-sm">
+                <p className="font-medium">
+                  Zuletzt gelesen: {lastCard.firstName} {lastCard.lastName}
+                </p>
+                <p className="text-muted-foreground">
+                  {lastCard.street}, {lastCard.zip} {lastCard.city} · {lastCard.insuranceProvider}
+                </p>
+              </div>
+            )}
+            {lastError && <p className="text-sm text-destructive">{lastError}</p>}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Persönliche Daten</CardTitle>
@@ -179,6 +288,46 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="amputations"
+              render={() => {
+                const selected = form.watch("amputations") ?? []
+                return (
+                  <FormItem>
+                    <FormLabel>Amputationen</FormLabel>
+                    <FormDescription>
+                      Optional: korrigiert BMI-Berechnungen bei fehlenden Extremitäten.
+                    </FormDescription>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {AMPUTATION_AREAS.map((area) => {
+                        const isActive = selected.includes(area.id)
+                        return (
+                          <Button
+                            key={area.id}
+                            type="button"
+                            size="sm"
+                            variant={isActive ? "secondary" : "outline"}
+                            onClick={() => {
+                              const current = new Set(form.getValues("amputations"))
+                              if (current.has(area.id)) {
+                                current.delete(area.id)
+                              } else {
+                                current.add(area.id)
+                              }
+                              form.setValue("amputations", Array.from(current), { shouldDirty: true })
+                            }}
+                          >
+                            {area.label}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </FormItem>
+                )
+              }}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
