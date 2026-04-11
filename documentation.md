@@ -141,6 +141,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **PatientTabs:** Multi-tab view covering anthropometrics, diagnoses, medications, lab values, therapy settings, activities, screenings, PROCAM, digital protocols, counseling logs, and more.
   - Each sub-feature stored via dedicated hooks: e.g., `useAnthropometric`, `useDiagnoses`, `useMedications`, `useLabValues`, `useTherapySettings`, `useTherapyIntegrations`, `useScreenings`, `useProcam`, `useDigitalProtocols`, `useActivities`.
   - Charts: `AnthropometricChart`, `PediatricPercentileChart` rely on `GROWTH_PERCENTILES` and user data.
+  - Dietary assessment flows combine `GuidedProtocolAssistant` (templated 24h/FFQ/Freiburg/plant-based presets), the enhanced `ProtocolForm` (household measure mode, metadata capture, quick-add presets), and `ProtocolAnalysis` (method-specific dashboards, meal distributions, nutrient hotspots).
 - **Extension notes:** Because tabs share many hooks, verify that storage keys do not conflict. When adding new therapy panels, update `components/therapy-panels.tsx` and ensure patient types support them.
 
 ### 4.14 Reports (`/berichte`)

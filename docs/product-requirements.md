@@ -150,7 +150,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 ## 4. Dietary Assessment
 
 ### 4.1 Nutrition Protocols
-**Status:** Implemented with mock data (protocol wizard, templates, comparison dashboard, and side-by-side compliance badges available; advanced analytics/export still pending).
+**Status:** Fully implemented (guided assistant with Freiburg + vegetarische/vegane Templates, Haushaltsmodus, Vergleichsdashboard und methodenspezifische Analytics aktiv; Exportbuttons bleiben Mock).
 - Create and manage dietary records/food diaries
 - Input food consumption data with flexible entry methods
 - Compare protocols against intake recommendations
@@ -161,7 +161,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - **Protocol assistant with guided entry** — structured step-by-step protocol entry that walks users through food categories in logical meal order, with quantity confirmation via Enter key for speed. Implement as a wizard-style entry mode alternative to free-form entry, optimized for keyboard-heavy data input
 
 ### 4.2 Simplified Protocol Entry
-**Status:** Partially implemented (Haushaltsmengen workflow covered via wizard templates; standalone reporting/automation TBD).
+**Status:** Implemented (Haushaltsmengenmodus mit Messbechern/Gläsern, Alters-/Geschlechtsangaben und automatische Referenzanalyse direkt im Formular verfügbar).
 - Protocol using common household measurements (no precise weighing)
 - Specify age, gender, and number of documented days
 - Automatic analysis against DACH reference values
@@ -175,7 +175,7 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Configurable protocol templates
 
 ### 4.4 Assessment Methods
-**Status:** Partially implemented (24h recall, FFQ, diary, and Haushaltsmengen selections surfaced in the wizard; further method-specific analytics to follow).
+**Status:** Implemented (24h-Recall, FFQ, Tagebuch, Haushaltsmengen & Freiburg-Flow inkl. methodenspezifischer Insights, Meal-Distribution und Nährstoff-Hotspots).
 - 24-hour recall
 - Food frequency questionnaire (FFQ)
 - Multi-day food diary

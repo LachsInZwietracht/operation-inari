@@ -1,6 +1,7 @@
 "use client"
 
 import { use } from "react"
+import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { ProtocolForm } from "@/components/protocol-form"
 import { useProtocols } from "@/hooks/use-protocols"
@@ -12,6 +13,8 @@ export default function NeuesProtokollPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const searchParams = useSearchParams()
+  const templateId = searchParams.get("template") ?? undefined
   const { getPatient } = usePatients()
   const { addProtocol } = useProtocols()
   const patient = getPatient(id)
@@ -30,7 +33,7 @@ export default function NeuesProtokollPage({
         title="Neues Ernährungsprotokoll"
         description={`${patient.firstName} ${patient.lastName}`}
       />
-      <ProtocolForm patientId={id} onSubmit={addProtocol} />
+      <ProtocolForm patientId={id} templateId={templateId} onSubmit={addProtocol} />
     </div>
   )
 }

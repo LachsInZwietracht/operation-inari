@@ -85,6 +85,7 @@ export function ProtocolDayView({ day }: ProtocolDayViewProps) {
                       "energie",
                     )
                   : 0
+                const measurement = entry.householdMeasurement
 
                 return (
                   <TableRow key={entry.id}>
@@ -93,7 +94,17 @@ export function ProtocolDayView({ day }: ProtocolDayViewProps) {
                         {MEAL_SLOT_LABELS[slot]}
                       </TableCell>
                     )}
-                    <TableCell>{food?.name ?? "Unbekannt"}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p>{food?.name ?? "Unbekannt"}</p>
+                        {measurement && (
+                          <p className="text-xs text-muted-foreground">
+                            {measurement.quantity}× {measurement.unitLabel} (~
+                            {Math.round(measurement.estimatedGrams)} g)
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">{formatNumber(entry.amount, 0)}</TableCell>
                     <TableCell className="text-right">{formatNumber(entryKcal, 0)}</TableCell>
                     <TableCell className="text-right">{entry.time ?? "–"}</TableCell>

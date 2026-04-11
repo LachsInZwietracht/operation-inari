@@ -108,6 +108,10 @@ When working with environment variables in Next.js:
 - Do NOT auto-fix unrelated test failures
 - If tests fail without a clear reason, use playwright mcp to debug the test in a real browser
 
+## Feature Documentation
+
+For a comprehensive feature-by-feature guide covering routes, components, hooks, data flows, and extension notes, see [`documentation.md`](./documentation.md). Consult it when working on unfamiliar areas or tracing data through the app.
+
 # General
 - Don't add any components that are not part of the shadcn library to components/ui
 - If you add images from the internet, make sure that the domain is allowed in remotePatterns in next.config.ts

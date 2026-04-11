@@ -10,7 +10,6 @@ import {
   Pill,
   Plus,
   QrCode,
-  Sparkles,
   Stethoscope,
 } from "lucide-react"
 import { addDays, differenceInCalendarDays, differenceInMonths, differenceInYears, parseISO } from "date-fns"
@@ -48,6 +47,7 @@ import {
   DietCatalogCard,
   KetogenicPlannerCard,
 } from "@/components/therapy-panels"
+import { GuidedProtocolAssistant } from "@/components/guided-protocol-assistant"
 import { formatDate, formatNumber } from "@/lib/format"
 import { downloadCsv } from "@/lib/utils"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
@@ -222,7 +222,6 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     intensity: "moderat",
     date: new Date().toISOString().slice(0, 10),
   })
-  const [wizardMethod, setWizardMethod] = useState<"recall" | "ffq" | "diary" | "haushalt">("recall")
   const [digitalMethod, setDigitalMethod] = useState("Digitales 24h Recall")
   const [mustScore, setMustScore] = useState(1)
   const [nrsScore, setNrsScore] = useState(2)
@@ -423,25 +422,6 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     if (creatinineClearance >= 15) return "G4"
     return "G5"
   }, [creatinineClearance])
-
-  const wizardTemplates = {
-    recall: {
-      title: "24h Recall",
-      steps: ["Frühstück & Getränke", "Mittagessen & Snacks", "Abendessen", "Supplements"],
-    },
-    ffq: {
-      title: "Food Frequency Questionnaire",
-      steps: ["Getreide & Brot", "Obst/Gemüse", "Milchprodukte", "Fertigprodukte & Getränke"],
-    },
-    diary: {
-      title: "Mehr-Tages-Tagebuch",
-      steps: ["Portionsgrößen prüfen", "Fotodokumentation", "Wochenend- vs. Werktag", "Kommentare"],
-    },
-    haushalt: {
-      title: "Haushaltsmengen",
-      steps: ["Messbecher/Faustgrößen", "Esslöffel-Mengen", "Haushaltsrezepte", "Fehlende Mengen notieren"],
-    },
-  } as const
 
   const digitalMethodOptions = [
     "Digitales 24h Recall",
@@ -1996,49 +1976,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4" /> Protokoll-Assistent
-            </CardTitle>
-            <CardDescription>Vorlagen für verschiedene Erhebungsmethoden.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { id: "recall", label: "24h Recall" },
-                  { id: "ffq", label: "FFQ" },
-                  { id: "diary", label: "Mehr-Tages-Tagebuch" },
-                  { id: "haushalt", label: "Haushaltsmengen" },
-                ] as const
-              ).map((option) => (
-                <Button
-                  key={option.id}
-                  size="sm"
-                  variant={wizardMethod === option.id ? "default" : "outline"}
-                  onClick={() => setWizardMethod(option.id)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="font-semibold">{wizardTemplates[wizardMethod].title}</p>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
-                {wizardTemplates[wizardMethod].steps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ul>
-              <div className="mt-4 flex justify-end gap-2">
-                <Button variant="outline" size="sm">
-                  Vorlage speichern
-                </Button>
-                <Button size="sm">In Protokoll übertragen</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <GuidedProtocolAssistant patientId={patient.id} />
 
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">

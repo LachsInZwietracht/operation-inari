@@ -1,10 +1,39 @@
 import { ID, Timestamped } from "./common";
 import { MealSlotType } from "./meal-plan";
+import type { Gender } from "./patient";
 
 export type ProtocolType =
   | "ernaehrungsprotokoll"
   | "24h_recall"
-  | "food_frequency";
+  | "food_frequency"
+  | "household";
+
+export type AssessmentMethod =
+  | "24h_recall"
+  | "ffq"
+  | "diet_diary"
+  | "dietary_history"
+  | "household"
+  | "freiburg"
+  | "vegetarian"
+  | "vegan";
+
+export interface ProtocolHouseholdMeasurement {
+  unitId: string;
+  unitLabel: string;
+  gramsPerUnit: number;
+  quantity: number;
+  estimatedGrams: number;
+}
+
+export interface ProtocolMetadata {
+  assessmentMethod?: AssessmentMethod;
+  documentedDays?: number;
+  participantAge?: number;
+  participantGender?: Gender;
+  templateId?: string;
+  householdModeEnabled?: boolean;
+}
 
 export interface ProtocolEntry {
   id: ID;
@@ -13,6 +42,7 @@ export interface ProtocolEntry {
   mealSlot: MealSlotType;
   time?: string; // HH:mm
   notes?: string;
+  householdMeasurement?: ProtocolHouseholdMeasurement;
 }
 
 export interface ProtocolDay {
@@ -29,4 +59,5 @@ export interface NutritionProtocol extends Timestamped {
   endDate: string; // ISO date YYYY-MM-DD
   days: ProtocolDay[];
   notes?: string;
+  metadata?: ProtocolMetadata;
 }
