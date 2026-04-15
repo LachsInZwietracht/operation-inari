@@ -4,7 +4,7 @@
 
 A modern, web-based nutrition counseling and therapy management platform for clinics, practices, and pharmacies. This is a clone of **PRODI** by Nutri-Science GmbH — the market-leading German nutrition software since 1981.
 
-Our goal: rebuild all core functionality as a modern SaaS application using Next.js, Supabase, and modern web technologies.
+**Strategic Goal:** To become the market leader by combining the scientific and clinical rigor of legacy German tools (PRODI, EBISpro) with the user experience and accessibility of modern SaaS (Nutrium).
 
 ---
 
@@ -15,64 +15,36 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 - Comprehensive food database with **14,000+ foods** from official sources
 - Support for multiple food composition databases:
   - **BLS** (Bundeslebensmittelschluessel) — German standard
-  - **Souci-Fachmann-Kraut (SFK)** — detailed reference work
+  - **Souci-Fachmann-Kraut (SFK)** — detailed reference work (**Critical for scientific parity with EBISpro**)
   - **Swiss Nutrient Database** — for Swiss market
   - **USDA National Nutrient Database** — for international / English-speaking clients
   - **Australian Food Composition Database (AFCD)** — for Australian market and English-language support
 - Up to **330+ nutrients** per food item, including:
   - Macronutrients (protein, fat, carbohydrates, fiber, water, alcohol)
-  - 25 amino acids
-  - 60+ fatty acid profiles
-  - 35+ vitamins and variants
-  - 25+ minerals and trace elements
-  - 35+ carbohydrate subtypes
-  - 12 biogenic amines
-  - 35+ organic acids
-  - Phospholipids, sterols, phytochemicals
-- Clear source identification per food item (which database it originates from)
-- **Multilingual food names** — store and display food names in German, English, French, and Italian. Implement as a `food_translations` table with locale keys linked to each food item; UI language selector determines which name is shown in search results and displays
-- **Preparation context tagging** — tag foods by preparation context (household, commercial kitchen, restaurant) to help users find the right variant. Implement as an enum column on the food table with a filter chip in the search UI
+  - 25 amino acids, 60+ fatty acid profiles, 35+ vitamins, 25+ minerals
+- **Hohenheim Validation:** Calculation logic must be rigorously verified against University of Hohenheim research standards to displace EBISpro.
+- **Multilingual food names** — Implement as a `food_translations` table linked to each food item; UI language selector determines which name is shown.
 
-### 1.2 Manufacturer Product Database
-**Status:** Partially implemented (small mock manufacturer catalog + custom food builder; no large-scale dataset/import yet).
-- **29,000+ branded products** from major food manufacturers
-- Product categories:
-  - General consumer products
-  - Organic products
-  - Diabetes-specific products
-  - Clinical nutrition / enteral & parenteral nutrition
-  - Infant nutrition
-  - Gluten-free products
-  - Lactose-free products
-  - Novel / insect-based foods
-- Ability to add and manage custom food entries with:
-  - Nutrient values
-  - Portion sizes
-  - Allergens
-  - Additives
+### 1.2 Manufacturer Product Database (The "Data Moat")
+**Status:** Partially implemented (small mock manufacturer catalog + custom food builder).
+- **29,000+ branded products** from major food manufacturers.
+- **Live API Integration (Market Leader Feature):** Move beyond PRODI's static updates by integrating with **Open Food Facts (OFF)** and direct clinical manufacturer feeds (Fresenius Kabi, Nutricia, Abbott).
+- Ability to add and manage custom food entries with nutrient values, portions, and allergens.
 
 ### 1.3 Reference Values
 **Status:** Implemented (mock data, localStorage persistence).
-- DGE (Deutsche Gesellschaft fuer Ernaehrung) reference values
-- OeGE (Austrian) reference values
-- SGE (Swiss) reference values
-- RDA values
-- Custom/user-defined intake recommendations
-- Reference values adjustable by age, gender, pregnancy, lactation
+- DGE (German), OeGE (Austrian), SGE (Swiss), and RDA values.
+- Reference values adjustable by age, gender, pregnancy, lactation.
 
 ### 1.4 Advanced Food Search
-**Status:** Implemented (Kölner Phonetik, trigram search, four search modes, synonym management).
-- **Phonetic / fuzzy search (Kölner Phonetik)** — tolerate typos, phonetic misspellings, and umlaut variations when searching German food names. Implement using a phonetic indexing algorithm (e.g., Cologne phonetics or pg_trgm trigram index in PostgreSQL) that generates phonetic codes at food-insert time and matches them during search queries. Essential for usability with compound German food names
-- **Multiple search modes** — support searching by food name, by database code number (e.g., BLS code), by food group hierarchy, and by full database browse. Implement as tabbed search interface or search-mode selector with different query backends per mode
-- **Food synonym management** — allow users to assign display aliases to foods (e.g., show "Nudeln" instead of "Eierteigwaren"). Implement as a `food_synonyms` table linking a user-defined display name to a food ID; synonyms appear in search results and can replace the original name in recipe printouts
+**Status:** Implemented (Kölner Phonetik, trigram search, synonym management).
+- **Phonetic / fuzzy search (Kölner Phonetik)** — tolerate typos and umlaut variations. Implement using phonetic indexing (e.g., pg_trgm trigram index in PostgreSQL) to generate codes at food-insert time. This is a primary competitive advantage over international SaaS.
+- **Multiple search modes** — food name, database code (BLS code), food group hierarchy, and full browse.
+- **Food synonym management** — `food_synonyms` table linking user-defined names to food IDs; synonyms replace original names in search and printouts.
 
 ### 1.5 Database Management
-**Status:** Partially implemented (mock version history, comparison tool; no update pipeline).
-- Database versioning and update mechanism
-- Data origin filter (show/hide food sources)
-- Search and filter across all databases
-- Food comparison tool (side-by-side, adjustable portions)
-- **Global search & replace foods** — find and replace a specific food item across all recipes, meal plans, and protocols in one operation. Implement as a batch-update tool in the database management section that queries all tables referencing the old food ID and replaces with the new one, showing a preview of affected items before committing
+**Status:** Partially implemented (mock version history, comparison tool).
+- **Global search & replace foods** — find and replace a specific food ID across all recipes, meal plans, and protocols in one operation. Essential for handling database version updates.
 
 ---
 
@@ -80,493 +52,128 @@ Our goal: rebuild all core functionality as a modern SaaS application using Next
 
 ### 2.1 Recipe Creation & Editing
 **Status:** Implemented (mock data, localStorage).
-- Create, store, and manage recipes
-- Ingredient entry with flexible portion/quantity input
-- Automatic nutritional calculation for entire recipe
-- Assign categories/tags to recipes
-- Attach images to recipes
-- Set target intake recommendations per recipe
-- **Structured recipe rows** — support three row types within a recipe: Title (section headers like "Sauce"), Ingredient (food item with quantity), and Text (free-text notes like "let rest for 10 min"). Implement as a polymorphic `recipe_rows` table with a `row_type` enum and conditional fields; render each type differently in the recipe editor and printout
-- **Preparation instructions field** — dedicated rich-text field for cooking/preparation steps separate from the ingredient list. Implement as a `preparation_instructions` column (text/JSONB for rich text) on the recipe table, rendered below the ingredient list in the recipe detail view
-- **Water loss / cooking loss factor** — account for weight change during cooking (evaporation, drip loss) when calculating per-portion nutrients. Implement as an optional `cooking_loss_percent` field on the recipe; final nutrient-per-portion calculation divides total nutrients by (cooked weight = raw weight × (1 - loss%)) instead of raw weight
-- **Recipe-level shopping list output** — generate a shopping list from any individual recipe with configurable portion count and synonym resolution (e.g., resolve "Nudeln" back to "Eierteigwaren" for shopping). Implement as a "Generate shopping list" action on the recipe detail page that multiplies quantities by a user-entered portion count and groups items by food category
+- **Structured recipe rows** — support three types: Title (section headers), Ingredient (food ID + quantity), and Text (notes). Implement as a polymorphic `recipe_rows` table with a `row_type` enum.
+- **Preparation instructions field** — dedicated rich-text field (JSONB) rendered below the ingredient list.
+- **Water loss / cooking loss factor** — Optional `cooking_loss_percent` field on the recipe; final nutrient calculation: total nutrients / (raw weight × (1 - loss%)).
+- **Recipe-level shopping list output** — generate list with configurable portion count and synonym resolution.
 
 ### 2.2 Recipe Analysis
-**Status:** Partially implemented (basic breakdowns; advanced analytics pending).
-- Full nutrient breakdown of recipe
-- Comparison against intake recommendations (graphical + tabular)
-- PRODIscore-style food quality rating (5-level scale)
-- Allergen declaration per recipe (LMIV-compliant)
-- CO2 footprint calculation per recipe
-
-### 2.3 Recipe-as-Food Conversion
-**Status:** Implemented (localStorage).
-- Convert finished recipes into reusable food items
-- Use converted recipes as ingredients in other recipes or meal plans
+**Status:** Partially implemented (basic breakdowns).
+- Full nutrient breakdown and comparison against intake recommendations.
+- **PRODIscore-style food quality rating** (5-level scale).
+- Allergen declaration (LMIV-compliant) and CO2 footprint calculation.
 
 ### 2.4 Recipe Libraries
-**Status:** Partially implemented (filters, import/export placeholders; collaboration pending).
-- Personal recipe collections
-- Shared/community recipe library
-- Recipe import/export functionality
-- Recipe lock management for multi-user environments
-- **Pre-built recipe & plan library** — ship with 1,300+ professionally created recipes and daily plans covering common indications (diabetes, renal, weight loss, pediatric, etc.) plus 7 elaborated daily plan collections (28 plans each). Source recipes from licensed nutritional content or create original content; store as seed data in the database with an `is_system` flag so they cannot be accidentally deleted but can be cloned and customized by users
-- **Professional recipe exchange platform** — allow practitioners to publish recipes to a shared professional library and import recipes from other practitioners, with structured nutritional metadata intact. Implement as a community marketplace within the app where recipes can be shared publicly or within professional groups, preserving all nutrient calculations and portion data on import
-- **Meal-Master recipe import** — support importing recipes from Meal-Master format (.mmf/.txt), a legacy but widely-used recipe exchange format. Implement a parser that reads Meal-Master structured text, maps ingredient lines to food database entries (with fuzzy matching), and creates recipe objects
+**Status:** Partially implemented.
+- **Pre-built recipe & plan library** — ship with 1,300+ professionally created recipes (seed data with `is_system` flag).
+- **Professional recipe exchange platform** — allow practitioners to publish recipes to a shared library within the app.
+- **Meal-Master recipe import** — parser for `.mmf/.txt` legacy formats to migrate users from PRODI/EBISpro.
 
 ---
 
 ## 3. Meal Planning
 
 ### 3.1 Daily Meal Plans
-**Status:** Implemented (mock data, drag & drop, diet-line presets, compliance indicators).
-- Create daily meal plans (Tagesplaene)
-- Assign meals to time slots (breakfast, snack, lunch, snack, dinner)
-- Automatic nutritional calculation for entire day
-- Comparison with reference values
+**Status:** Implemented (mock data, drag & drop).
+- Automatic nutritional calculation for entire day across breakfast, snack, lunch, etc.
 
 ### 3.2 Menu Plans
-**Status:** Implemented (mock data, week/4-week cycle planners, drag-and-drop, production lists, shopping lists).
-- Create multi-day/weekly menu plans (Menueplaene)
-- Support for up to 4-week meal plan cycles
-- Drag-and-drop recipe integration
-- Teaching kitchen plans (Lehrkuechenplan)
+**Status:** Implemented (mock data, week/4-week cycle planners).
+- Support for multi-day cycles and Teaching kitchen plans (Lehrkuechenplan).
 
 ### 3.3 Exchange Tables
-**Status:** Implemented (mock data; export formats pending).
-- Food exchange/substitution lists
-- Swap foods with similar nutritional profiles
-- Sorting, filtering, and export of exchange tables
-
-### 3.4 Meal Plan Evaluation
-**Status:** Partially implemented (basic bars/badges; deeper analytics outstanding).
-- Graphical and tabular nutrient evaluation
-- Average nutritional intake across planning periods
-- Dietary specification compliance checks
-- Food group diversity analysis
+**Status:** Implemented (mock data).
+- Food substitution lists based on similar nutritional profiles.
 
 ---
 
 ## 4. Dietary Assessment
 
 ### 4.1 Nutrition Protocols
-**Status:** Implemented (guided assistant, templates, household mode, analytics; export buttons still mock).
-- Create and manage dietary records/food diaries
-- Input food consumption data with flexible entry methods
-- Compare protocols against intake recommendations
-- Compare multiple dietary protocols side by side
-- Template-based protocol entry
-- **Freiburger Ernährungsprotokoll template** — include the standardized Freiburg nutrition protocol as a built-in template with food-order matching the official DIN A4 printed form layout. Implement as a predefined protocol template with fixed category sections (beverages, bread, spreads, dairy, etc.) that guides sequential entry and can be printed in the standard form format
-- **Vegetarian & vegan protocol templates** — dedicated protocol templates optimized for plant-based diets with relevant food categories (legumes, tofu/tempeh, plant milks, supplements like B12) pre-configured. Implement as additional seed templates selectable in the protocol wizard
-- **Protocol assistant with guided entry** — structured step-by-step protocol entry that walks users through food categories in logical meal order, with quantity confirmation via Enter key for speed. Implement as a wizard-style entry mode alternative to free-form entry, optimized for keyboard-heavy data input
-
-### 4.2 Simplified Protocol Entry
-**Status:** Implemented (household measure mode, age/gender inputs, auto reference analysis).
-- Protocol using common household measurements (no precise weighing)
-- Specify age, gender, and number of documented days
-- Automatic analysis against DACH reference values
+**Status:** Implemented (guided assistant, templates, analytics).
+- **AI-Assisted Food Matching (Market Leader Feature):** Implement NLP (Natural Language Processing) to map free-text patient entries ("1 Brötchen") to correct database IDs.
+- **Freiburger Ernährungsprotokoll template** — standardized Freiburg protocol matching official DIN A4 layout.
 
 ### 4.3 Digital Client Protocol (Remote Entry)
-**Status:** Implemented (mock data; real connectivity outstanding).
-- Web-based dietary protocol entry for patients/clients
-- Accessible via PC, tablet, and smartphone
-- Patients can log food intake remotely
-- Data syncs to practitioner's dashboard
-- Configurable protocol templates
-
-### 4.4 Assessment Methods
-**Status:** Implemented (24h-recall, FFQ, diary, household measures, Freiburg flow).
-- 24-hour recall
-- Food frequency questionnaire (FFQ)
-- Multi-day food diary
-- Dietary history
+**Status:** Implemented (mock data).
+- Web-based entry for patients via smartphone; real-time sync to practitioner's dashboard.
 
 ---
 
 ## 5. Patient/Client Management
 
 ### 5.1 Patient Records
-**Status:** Implemented (mock data, eGK workflow, mail merge, birthday list).
-- Create and manage patient profiles
-- Demographic data (name, DOB, gender, contact)
-- Medical history
-- Diagnosis documentation with ICD codes
-- Insurance information
-- Search, filter, and sort patient database
-- **Health insurance card reader (eGK) support** — read patient master data directly from German electronic health insurance cards (elektronische Gesundheitskarte). Implement using the Web Serial API or a small companion desktop app that communicates with USB card readers (Cherry ST-2000 series, etc.) and pushes patient data (name, DOB, insurance number, insurance provider) into the patient creation form via a WebSocket or REST endpoint. Fallback: manual entry with a "scan card" button that opens the companion app
-- **Serial letter / mail merge** — generate bulk personalized correspondence (e.g., appointment reminders, nutrition summaries, recall letters) by merging patient data fields into document templates. Implement a template editor with placeholder tokens (e.g., `{{patient.name}}`, `{{patient.last_visit}}`) and a "Generate for selection" action that produces individual PDFs for a filtered patient list using a server-side PDF renderer
-- **Birthday list** — auto-generated list of upcoming patient birthdays for the practice. Implement as a dashboard widget or patient list filter that queries patients by birth month/day and displays upcoming birthdays within a configurable time window (e.g., next 30 days)
+**Status:** Implemented (mock data, eGK workflow, mail merge).
+- **eGK Card Reader Support:** Read German insurance cards directly via Web Serial API or WebSocket companion app.
+- **Serial letter / mail merge** — Generate personalized PDFs using tokens (e.g., `{{patient.name}}`).
+- **Birthday list** — dashboard widget for upcoming patient birthdays.
 
 ### 5.2 Anthropometric Data & Weight Analysis
-**Status:** Implemented (mock data; predictive analytics still future work).
-- BMI calculation and tracking
-- Weight progression charts
-- PAL (Physical Activity Level) calculation
-- Energy requirement calculations (WHO basal metabolic rate formula)
-- Activity tracking with sport types
-- Anthropometric measurements over time
-- **BMI amputation correction** — adjust BMI calculation for patients with amputations using standard correction factors (e.g., lower leg = 6.0%, upper leg = 18.6%). Implement by adding an optional `amputation` field on the patient profile with predefined body-part selections; the BMI formula automatically applies the corresponding weight correction factor from clinical reference tables
-- **Target weight projection** — calculate estimated time to reach a goal weight based on current weight trend and energy deficit. Implement as a "what-if" calculator on the weight analysis page: user enters target weight and daily caloric deficit, system projects a date using a linear model and displays it on the weight progression chart as a projected trend line
-- **Percentile curves for children & adolescents** — display BMI, weight, and height against age- and gender-specific percentile curves (WHO/RKI reference data). Implement by storing WHO Child Growth Standards percentile tables in the database; when the patient is under 18, the weight/BMI chart overlays the P3, P10, P25, P50, P75, P90, P97 curves using Recharts reference lines. Requires age-in-months calculation from DOB
-
-### 5.3 Laboratory Values
-**Status:** Implemented (mock data; advanced exports pending).
-- Input and track 40+ laboratory parameters
-- Trend graphics for lab value progression
-- Configurable lab data sheets
-- Set reference/normal values for patient groups
-- Graphical representation of metabolic parameter progression with normal ranges
-
-### 5.4 Medication Management
 **Status:** Implemented (mock data).
-- Document patient medications
-- Record dosages and schedules
-- Medication history tracking
-- Correlate medication changes with nutrition therapy outcomes
+- **BMI amputation correction** — adjust BMI formula using clinical correction factors (e.g., lower leg = 6.0%).
+- **Target weight projection** — "what-if" calculator using current weight trends.
+- **Percentile curves** — Overlay WHO/RKI P3-P97 curves for children (Requires age-in-months calculation).
+- **Bedside Mode:** UI optimized for iPad/Tablet use in clinical wards with high-contrast, touch-friendly charts.
 
 ### 5.5 Medical Calculations
 **Status:** Implemented (mock data, MUST/NRS-2002/PROCAM/MNA/SGA wizards).
-- PROCAM cardiovascular risk score
-- Lipid ratio calculations (LDL/HDL ratio, triglyceride ratios)
-- BMI classification
-- Energy requirement formulas
-- **Creatinine clearance calculation** — estimate renal function using the Cockcroft-Gault formula (inputs: serum creatinine, age, weight, gender). Implement as a calculator widget in the medical calculations section that takes lab values and patient demographics as input and outputs estimated creatinine clearance in mL/min. Critical for renal diet planning
-- Malnutrition screening/assessment tools:
-  - MUST (Malnutrition Universal Screening Tool)
-  - NRS 2002 (Nutritional Risk Screening)
-  - **MNA (Mini Nutritional Assessment)** — standardized screening tool specifically for elderly patients (65+). Implement as a guided questionnaire form (18 items covering dietary intake, weight loss, mobility, BMI, neuropsychological problems) that auto-calculates the MNA score and classifies nutritional status (normal / at risk / malnourished)
-  - **SGA (Subjective Global Assessment)** — clinical assessment tool based on medical history and physical examination. Implement as a structured form with sections for weight change, dietary intake change, GI symptoms, functional capacity, and physical signs (subcutaneous fat loss, muscle wasting, edema); produces an SGA rating (A = well nourished, B = moderate/suspected malnutrition, C = severe malnutrition)
-
----
-
-## 6. Nutrition Therapy & Specialized Diets
-
-### 6.1 Diabetes Management
-**Status:** Implemented (mock data; device integrations follow later).
-- Blood glucose value tracking and management
-- Action assignments for glucose values
-- BE (Broteinheiten) and KE (Kohlenhydrateinheiten) calculations
-- Tabular and graphical diabetes analysis
-- Diabetes-specific meal planning
-
-### 6.2 Ketogenic Diet
-**Status:** Implemented (mock data; dedicated plan library follows).
-- Ketogenic ratio calculations
-- Specialized parameter settings
-- Ketogenic meal plan creation
-
-### 6.3 Allergen & Intolerance Management
-**Status:** Implemented (mock data; backend automation follows).
-- Pre-configured allergen database (EU allergens)
-- Customizable allergen tracking per patient
-- Additive management
-- LMIV-compliant allergen declarations
-- Allergen warnings in recipe/meal plan creation
-
-### 6.4 Therapeutic Diets
-**Status:** Implemented (mock data; deep automations future work).
-- Configurable diet forms for various conditions
-- Lactose-free diet support
-- Fructose-reduced diet support
-- Gluten-free diet support
-- Vegetarian and vegan protocols
-- Renal diet calculations
-- Low-sodium diets
-- Custom therapeutic diet creation
-
----
-
-## 7. Counseling & Documentation
-
-### 7.1 Counseling Session Management
-**Status:** Implemented (mock data).
-- Document counseling activities/sessions (Beratungsticker)
-- Assign indications and counseling goals per session
-- Track counseling progress over time
-- Counseling text templates library with **40+ pre-written counseling texts** covering common nutrition topics (diabetes nutrition, weight management, food allergies, renal diet, pediatric nutrition, etc.). Ship as seed content in rich text format that practitioners can use as-is or customize. Implement as a `counseling_templates` table with category, title, and rich-text body; accessible via a template picker in the session documentation editor
-- Assign counseling materials to patients
-
-### 7.2 Reports & Printouts
-**Status:** Implemented (mock data, report builder; real export pending).
-- Tabular nutrient comparisons
-- Pie charts for nutrient distribution
-- Graphical food composition visualizations
-- Intake vs. reference value assessments
-- Short-form and comprehensive printable reports
-- Written evaluations alongside data tables
-
-### 7.3 Specialized Outputs
-**Status:** Implemented (mock data).
-- Health claims and nutrient profiling declarations
-- CO2 footprint reports
-- Food group diversity reports
-- LMIV-compliant nutrition labels for food manufacturers
-- PRODIscore food quality ratings
-
-### 7.4 Text Processing & Export
-**Status:** Implemented (mock data; real export pending).
-- Built-in text editor/processor
-- Export to PDF
-- Customizable report templates
-- Insert patient data fields into templates
-- Configurable nutrient display (show/hide specific nutrients)
-- **Custom nutrient quotients & ratios** — allow users to define custom calculated nutrient ratios (e.g., omega-6:omega-3 ratio, calcium:phosphorus ratio) that appear as derived columns in nutrient tables and reports. Implement as a `custom_nutrient_ratios` table storing numerator nutrient ID, denominator nutrient ID, and display name; calculate on-the-fly during report generation and display alongside standard nutrients
-- **Quality report generation (Qualitätsbericht)** — generate comprehensive institutional quality reports combining patient statistics, nutritional compliance data, diet form distribution, and counseling activity summaries into a single formatted document. Implement as a report builder that aggregates data from multiple modules (patients, meal plans, counseling sessions) into a structured PDF with configurable sections, practice logo/header, and auto-populated summary statistics
+- **Creatinine clearance calculation** — Cockcroft-Gault formula; critical for renal diet planning.
+- **MNA (Mini Nutritional Assessment)** — guided 18-item questionnaire for elderly patients.
+- **SGA (Subjective Global Assessment)** — structured assessment based on physical signs and history.
 
 ---
 
 ## 8. Institutional / Clinical Features
 
-### 8.1 Weekly Meal Planning for Institutions
-**Status:** Implemented (mock data, weekly/4-week cycle planners).
-- Create, save, and import weekly meal plans for facilities
-- Support for 4-week meal plan cycles
-- Drag-and-drop recipe integration
-- Customizable diet forms with unlimited options
-- Multiple diet lines running in parallel
-
-### 8.2 Kitchen Production Management
-**Status:** Implemented (mock data, production/shopping lists).
-- Shopping lists organized by food groups
-- Production lists organized by kitchen station and/or day
-- Meal plan printouts with preparation instructions
-- Portion scaling for different group sizes
-- Cost calculation and optimization (5-10% savings target)
-
-### 8.3 Nutritional Compliance for Institutions
-**Status:** Implemented (mock data, compliance dashboard).
-- Daily nutritional value calculations per meal plan
-- Average nutritional intake across weeks or planning periods
-- Dietary specification compliance verification
-- Quality assurance reporting
-
 ### 8.4 Hospital Management Features
 **Status:** Implemented (mock data, bed grid, dietary order board).
-- Dietary & laboratory orders via screen interface
-- Automated patient scheduling (Disposition)
-- Menu selection with allergy/intolerance display
-- Kitchen production lists with portion counts and dietary form specs
-- Cost calculation for therapies and medications
-- **Patient self-service menu selection** — allow hospital patients to choose their meals from available options on a tablet or bedside terminal, with automatic allergy/intolerance warnings and diet-form filtering. Implement as a simplified patient-facing UI (accessible via a patient-specific link or QR code) that shows only menu items compatible with the patient's assigned diet form and flagged allergens; selections are pushed to the kitchen production system in real-time via Supabase Realtime
-- **Table cards / tray cards** — auto-generate per-patient meal tray cards showing the patient's name, room/bed, diet form, allergens, and selected meal items for each meal slot. Implement as a print-optimized view that queries the day's menu selections grouped by ward/room and renders them as a grid of cards formatted for standard label printers or A4 sheets (cut marks included)
-- **Hospital management system integration (ODBC/API)** — import patient census data, bed assignments, and diet prescriptions from external hospital information systems. Implement as a configurable integration endpoint that accepts HL7 ADT messages or structured CSV/JSON imports to sync patient master data and diet orders into our system. Provide a webhook or polling mechanism for bidirectional sync
-
-### 8.5 Statistics for Institutions
-**Status:** Implemented (mock data, charts and KPIs).
-- Dietary form statistics
-- Menu choice statistics
-- Laboratory performance statistics
-- Diagnosis statistics
-- Therapy performance statistics
-
----
-
-## 9. Practice Management
-
-### 9.1 Appointment Scheduling
-**Status:** Implemented (mock data, localStorage).
-- Calendar-based scheduling
-- Patient appointment management
-- Recurring appointment support
-- Appointment reminders (email/push)
-
-### 9.2 Billing & Invoicing
-**Status:** Implemented (mock data).
-- Create invoices for counseling sessions
-- Track payments
-- Insurance billing support
-- Financial reporting
-
-### 9.3 Patient Statistics
-**Status:** Implemented (mock data).
-- Tabular and graphical patient statistics
-- Statistical overview of counseling activities
-- Min/max values, mean, standard deviation, variance
-- Practice performance dashboards
+- **Patient self-service menu selection** — tablet/bedside terminal selection for patients, filtered by diet form and allergens.
+- **Table cards / tray cards** — auto-generate cards for meal trays showing room/bed, diet form, and selection.
+- **HIS Integration (HL7/FHIR):** Bidirectional sync with Hospital Information Systems to handle patient census data and diet orders.
 
 ---
 
 ## 10. User Management & Security
 
 ### 10.1 Authentication & Authorization
-**Status:** Implemented (mock data, Supabase-ready auth flow).
-- User accounts with password protection
-- Role-based access control (admin, practitioner, assistant, patient)
-- Supervisor/admin account with master permissions
-- Multi-user support for team practices
-
-### 10.2 Data Security
-**Status:** Implemented (mock data, security center UI).
-- GDPR-compliant data handling
-- Database backup and restore
-- Audit logging
-- Encrypted data storage and transmission
+- **SSO (Active Directory/LDAP):** Mandatory for clinical sales to allow hospital IT to manage user access centrally.
 
 ---
 
 ## 11. Technical Requirements
 
-### 11.1 Platform
-**Status:** Partially implemented (responsive web app; offline/mobile polish pending).
-- **Web application** (responsive, works on desktop and mobile)
-- Progressive Web App (PWA) for offline capability
-- Modern browser support (Chrome, Firefox, Safari, Edge)
-- **Multilingual UI** — support German (default), English, French, and Italian interface languages to serve the DACH region plus international practitioners. Implement using `next-intl` or a similar i18n library with JSON locale files per language; user selects language in profile settings; all UI strings, labels, and system messages are translated. Food names use the multilingual food name data from section 1.1. Start with German + English, add French and Italian in a later phase
-
-### 11.2 Architecture
-**Status:** Partially implemented (Next.js + Supabase foundation; full backend wiring in progress).
-- Next.js App Router
-- Supabase backend (PostgreSQL, Auth, Storage, Realtime)
-- Server-side rendering for performance
-- API-first design for future integrations
-
 ### 11.3 Integrations
-**Status:** Implemented (mock data, full UI; real backend connectivity outstanding).
-- Data import/export (CSV, JSON, PDF, **XML, HTML, Excel**)
-- API for third-party integrations
-- **HL7 message import** — import patient demographics, lab results, and diet orders from HL7 v2.x ADT/ORU messages, which are the standard format used by existing German hospital information systems. Implement an HL7 parser (use a library like `node-hl7-complete` or similar) that accepts HL7 messages via file upload or a dedicated API endpoint, maps segments (PID, OBX, ORC) to our patient, lab value, and diet order models, and creates/updates records accordingly. This is distinct from FHIR (which is newer/REST-based) and covers legacy systems that most German hospitals still run
-- Potential future: electronic health record (EHR) integration via FHIR
-- Potential future: pharmacy system integration
-
-### 11.4 Performance
-**Status:** Implemented (mock data, dashboard UI; real telemetry outstanding).
-- Fast search across 40,000+ food items
-- Real-time nutrient calculations
-- Responsive UI for complex data visualizations
-- Support for concurrent multi-user access
+- **HL7 message import** — HL7 v2.x parser to map segments (PID, OBX, ORC) to patient and lab models. This covers legacy systems where FHIR is not yet available.
+- **Web Serial/WebUSB** — for medical device and eGK card reader communication.
 
 ---
 
-## 12. Additional Features
+## 14. Prioritization (Market-Leader Roadmap)
 
-### 12.1 Knowledge Base
-**Status:** Implemented (mock data).
-- Integrated nutrition lexicon
-- Herb lexicon
-- Educational resources for patients
-- Consultation text library
-- **Consumer Q&A library (Infothek)** — 250+ curated questions and answers on common consumer nutrition topics (e.g., "Is coconut oil healthy?", "How much protein do I need?"). Practitioners can share these directly with patients as educational handouts or link them in counseling sessions. Implement as a searchable `knowledge_articles` table with category tags, rich-text content, and a "share with patient" action that sends a link or PDF to the patient's portal
+### MVP (Phase 1) - Core Platform & Scientific Precision
+1. Food database with phonetic/fuzzy search (BLS + SFK).
+2. **Mathematical Validation:** Verify calculation logic against DGE/Hohenheim standards.
+3. Recipe creation with structured rows and water loss factors.
 
-### 12.2 Food Quality Scoring
-**Status:** Implemented (mock data).
-- PRODIscore-equivalent food rating system
-- 5-level scale evaluating nutritional quality
-- Works for individual foods and complete recipes
-- Visual indicator in food search and recipe creation
+### Phase 2 - Professional Features & Automation
+1. Patient management (eGK reader, ICD codes, birthday list).
+2. **AI Protocol Matching:** Implement NLP mapping for free-text diaries.
+3. Digital client protocol (Remote Entry).
+4. Weight analysis with percentile curves and amputation correction.
 
-### 12.3 Sustainability
-**Status:** Implemented (mock data).
-- CO2 footprint calculations for selected foods
-- Environmental impact awareness in meal planning
+### Phase 3 - Expert & Institutional Features
+1. Lab values, Diabetes module, and Medication management.
+2. **SSO Integration:** Support for LDAP/Active Directory.
+3. **Bedside Optimized UI:** Tablet-first ward assistant with QR scanning.
+4. PROCAM score and medical calculations (Creatinine clearance, MNA, SGA).
 
----
+### Phase 4 - Full Clinical Integration
+1. **HL7/FHIR Sync:** Bidirectional HIS integration.
+2. Kitchen production and tray card generation.
+3. Quality report generation (Qualitätsbericht).
 
-## 13. Product Tiers (SaaS Model)
-
-### Free / Trial
-**Status:** Implemented (mock data).
-- Limited food database access
-- Basic recipe creation (up to 10 recipes)
-- Single user
-- 14-day full feature trial
-
-### Compact (Entry-Level)
-**Status:** Implemented (mock data).
-- ~50 nutrients per food
-- Recipe and meal plan management
-- Basic food database
-- Single user
-
-### Basis (Professional)
-**Status:** Implemented (mock data).
-- ~60 nutrients per food
-- Patient management
-- Digital client protocols
-- Counseling documentation
-- Multi-user support
-
-### Expert (Premium)
-**Status:** Implemented (mock data).
-- 80+ nutrients per food
-- Diabetes counseling module
-- Lab value tracking
-- Medication management
-- Statistical analysis
-- Recipe-as-food conversion
-- PROCAM score
-- Full reporting suite
-
-### Plus Database Add-on
-**Status:** Implemented (mock data).
-- Full BLS database (14,800 foods)
-- Up to 330 nutrients per food
-- SFK database access
-- Additional manufacturer products
-
-### Institution / Menu
-**Status:** Implemented (mock data).
-- Weekly meal planning for facilities
-- Kitchen production management
-- Cost optimization
-- Multi-diet support
-- Nutritional compliance reporting
-
----
-
-## 14. Prioritization (MVP vs. Future)
-
-> Phases align with database-guide.md migration phases for backend work.
-
-### MVP (Phase 1) - Core Platform
-1. Food & nutrient database with search (incl. phonetic/fuzzy search, multiple search modes)
-2. Recipe creation and nutritional analysis (incl. structured rows, preparation instructions, water loss)
-3. Daily meal planning
-4. User authentication and basic profiles
-5. Basic reporting (nutrient tables, charts)
-6. Responsive web UI
-7. Pre-built recipe & plan library (seed content)
-
-### Phase 2 - Professional Features
-1. Patient/client management (incl. ICD codes, birthday list, eGK card reader)
-2. Dietary protocols and assessment (incl. Freiburger protocol, vegan/vegetarian templates, guided entry)
-3. Digital client protocol (remote entry)
-4. Counseling session documentation (incl. 40+ pre-written counseling texts)
-5. Weight analysis and BMI tracking (incl. percentile curves for children, target weight projection, amputation correction)
-6. Reference value comparisons
-7. Exchange tables
-8. Serial letter / mail merge
-9. Recipe-level shopping lists
-
-### Phase 3 - Expert Features
-1. Lab value tracking
-2. Diabetes management module
-3. Medication management
-4. Allergen/intolerance management
-5. Therapeutic diet configurations
-6. Advanced statistics
-7. PROCAM score and medical calculations (incl. creatinine clearance, MNA, SGA)
-8. Custom nutrient quotients & ratios
-9. Quality report generation (Qualitätsbericht)
-10. Global search & replace foods
-
-### Phase 4 - Institutional Features
-1. Multi-week meal planning
-2. Kitchen production management
-3. Shopping list generation
-4. Cost management
-5. Hospital/clinic workflow features (incl. patient self-service menu selection, tray cards, HIS integration)
-6. Institutional statistics
-7. HL7 message import
-
-### Phase 5 - Ecosystem
-1. SaaS billing and tier management
-2. API for third-party integrations
-3. Mobile PWA optimization
-4. Knowledge base and lexicons (incl. consumer Q&A Infothek)
-5. Community recipe sharing (incl. professional recipe exchange platform)
-6. Sustainability/CO2 features
-7. Multilingual UI (German + English first, then French + Italian)
-8. USDA and Australian database integration
-9. Meal-Master recipe import
-10. Food synonym management
-11. Multilingual food names
+### Phase 5 - Ecosystem & Scaling
+1. **Manufacturer Live API:** Integrate Open Food Facts and clinical manufacturer feeds.
+2. Professional Recipe Exchange.
+3. Multilingual UI (German + English first, then French + Italian).
+4. Meal-Master recipe import.

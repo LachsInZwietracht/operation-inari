@@ -4,7 +4,7 @@
 
 **Prodi** is a modern German nutrition counseling web application replacing the outdated desktop-only PRODI software. It provides food database browsing, recipe management, daily meal planning, and nutrient analysis with DGE reference value comparisons.
 
-**Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus localStorage persistence for recipes/meal plans/custom foods. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
+**Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus Supabase-first persistence with local fallback for custom foods, recipes, meal plans, and nutrition protocols. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 

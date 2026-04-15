@@ -53,6 +53,7 @@ export interface ProtocolDay {
 
 export interface NutritionProtocol extends Timestamped {
   id: ID;
+  legacyId?: ID;
   patientId: ID;
   title: string;
   type: ProtocolType;

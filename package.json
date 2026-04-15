@@ -12,7 +12,9 @@
     "etl:bls": "npx tsx scripts/etl/import-bls.ts",
     "etl:verify:bls": "npx tsx scripts/etl/verify-bls-import.ts",
     "etl:reference-values": "npx tsx scripts/etl/import-reference-values.ts",
-    "etl:recipes": "npx tsx scripts/etl/import-recipes-and-meal-plans.ts"
+    "etl:recipes": "npx tsx scripts/etl/import-recipes-and-meal-plans.ts",
+    "validate:nutrients": "tsx scripts/validate-nutrient-math.ts",
+    "etl:off": "npx tsx -r dotenv/config scripts/etl/import-off.ts dotenv_config_path=.env.local"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

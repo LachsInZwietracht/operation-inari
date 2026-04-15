@@ -20,10 +20,11 @@
 - **Auth integration:** `components/auth-form.tsx` talks to Supabase via `createClient`. Authentication state isn’t enforced yet, but forms and flows are ready.
 
 ## 3. Data & State Layers
-- **Recipes and foods:** Food data is served from Supabase via the `useFoods()` hook (provided app-wide by `FoodsProvider`). Recipes are also loaded from Supabase (`fetchRecipes()` in the relevant server components) and passed into clients, where they are merged with any custom `prodi_custom_recipes` entries. Legacy mocks remain only for ETL seeding.
+- **Recipes, foods, and protocols:** Food data is served from Supabase via the `useFoods()` hook (provided app-wide by `FoodsProvider`). Custom foods are also persisted to Supabase with local fallback via `useCustomFoods()`. Recipes and nutrition protocols are also loaded from Supabase (`fetchRecipes()` or `fetchProtocolsClient()` in the relevant components) and passed into client hooks, where they are merged with any local overrides (stored in `localStorage` as fallback).
 - **Reference values:** `useReferenceProfiles` stores the active standard & life stage in `localStorage`. `resolveReferenceForPatient` converts those choices into per-nutrient baselines.
 - **Patient-related hooks:**
-  - `usePatients` stores additions/edits (`prodi_patients`).
+  - `usePatients` provides patient record management with `localStorage` persistence and background Supabase synchronization (`prodi_patients`).
+  - `useProtocols` provides Supabase-first persistence for nutrition protocols (`prodi_protocols` as local fallback).
   - `useEgkScanner` simulates card readers; `useEgkInbox` keeps scanned card events.
   - `useMailMergeHistory`, `useBirthdayReminders`, `useDiagnoses`, etc. provide specialized local persistence for sub-features in the patient tabs.
 - **Practice hooks:** `usePracticeAppointments` and `usePracticeInvoices` manage scheduling/billing data (keys `prodi_practice_*`).
@@ -141,7 +142,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **PatientTabs:** Multi-tab view covering anthropometrics, diagnoses, medications, lab values, therapy settings, activities, screenings, PROCAM, digital protocols, counseling logs, and more.
   - Each sub-feature stored via dedicated hooks: e.g., `useAnthropometric`, `useDiagnoses`, `useMedications`, `useLabValues`, `useTherapySettings`, `useTherapyIntegrations`, `useScreenings`, `useProcam`, `useDigitalProtocols`, `useActivities`.
   - Charts: `AnthropometricChart`, `PediatricPercentileChart` rely on `GROWTH_PERCENTILES` and user data.
-  - Dietary assessment flows combine `GuidedProtocolAssistant` (templated 24h/FFQ/Freiburg/plant-based presets), the enhanced `ProtocolForm` (household measure mode, metadata capture, quick-add presets), and `ProtocolAnalysis` (method-specific dashboards, meal distributions, nutrient hotspots).
+  - Dietary assessment flows combine `GuidedProtocolAssistant` (templated 24h/FFQ/Freiburg/plant-based presets), the enhanced `ProtocolForm` (household measure mode, metadata capture, quick-add presets), and `ProtocolAnalysis` (method-specific dashboards, meal distributions, nutrient hotspots). These flows use the `useProtocols` hook for Supabase-first persistence with automatic `localStorage` fallback and food reference normalization.
 - **Extension notes:** Because tabs share many hooks, verify that storage keys do not conflict. When adding new therapy panels, update `components/therapy-panels.tsx` and ensure patient types support them.
 
 ### 4.14 Reports (`/berichte`)

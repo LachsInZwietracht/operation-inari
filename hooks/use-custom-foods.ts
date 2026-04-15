@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import type { Food, FoodPortionSize, Recipe } from "@/lib/types";
 import {
   calculatePerServing,
   calculateRecipeNutrients,
 } from "@/lib/nutrients";
+import { fetchCustomFoodsClient, persistCustomFood, deleteCustomFoodClient } from "@/lib/data/custom-foods-client";
+import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "prodi_custom_foods";
 
@@ -38,7 +40,55 @@ function buildDefaultPortions(): FoodPortionSize[] {
 }
 
 export function useCustomFoods(baseFoods: Food[]) {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [customFoods, setCustomFoods] = useState<Food[]>(() => loadFromStorage());
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false);
+  const migrationDone = useRef(false);
+
+  // Load from Supabase when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+
+    let cancelled = false;
+    setIsLoadingRemote(true);
+
+    async function loadPersistedFoods() {
+      try {
+        const persistedFoods = await fetchCustomFoodsClient();
+        if (cancelled) return;
+
+        setCustomFoods((prev) => {
+          const localOnly = prev.filter(p => !persistedFoods.some(r => r.id === p.id));
+          const merged = [...persistedFoods, ...localOnly];
+          return merged;
+        });
+
+        // Migration of local-only foods
+        if (!migrationDone.current) {
+          migrationDone.current = true;
+          const localOnly = customFoods.filter(p => !persistedFoods.some(r => r.id === p.id));
+          for (const food of localOnly) {
+            void persistCustomFood(food).catch(err => {
+              console.error(`Failed to migrate custom food ${food.name}:`, err);
+            });
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message && message !== "AUTH_REQUIRED") {
+          console.error("Failed to load custom foods from Supabase:", error);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingRemote(false);
+      }
+    }
+
+    void loadPersistedFoods();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, authLoading]);
 
   useEffect(() => {
     saveToStorage(customFoods);
@@ -61,15 +111,31 @@ export function useCustomFoods(baseFoods: Food[]) {
         source: food.source ?? "Eigene Eingabe",
         isCustom: true,
       };
+      
       setCustomFoods((prev) => [...prev, newFood]);
+      
+      // Background sync
+      if (isAuthenticated) {
+        void persistCustomFood(newFood).catch((error) => {
+          console.error("Failed to persist custom food:", error);
+        });
+      }
+      
       return newFood;
     },
-    [],
+    [isAuthenticated],
   );
 
   const deleteFood = useCallback((id: string) => {
     setCustomFoods((prev) => prev.filter((food) => food.id !== id));
-  }, []);
+    
+    // Background sync
+    if (isAuthenticated) {
+      void deleteCustomFoodClient(id).catch((error) => {
+        console.error("Failed to delete custom food:", error);
+      });
+    }
+  }, [isAuthenticated]);
 
   const convertRecipeToFood = useCallback(
     (recipe: Recipe) => {
@@ -101,9 +167,16 @@ export function useCustomFoods(baseFoods: Food[]) {
         return [...filtered, newFood];
       });
 
+      // Background sync
+      if (isAuthenticated) {
+        void persistCustomFood(newFood).catch((error) => {
+          console.error("Failed to persist converted recipe food:", error);
+        });
+      }
+
       return newFood;
     },
-    [allFoods],
+    [allFoods, isAuthenticated],
   );
 
   return {
@@ -112,5 +185,6 @@ export function useCustomFoods(baseFoods: Food[]) {
     addFood,
     deleteFood,
     convertRecipeToFood,
+    isLoadingRemote
   };
 }

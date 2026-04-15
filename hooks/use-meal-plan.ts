@@ -6,6 +6,7 @@ import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot } from "@/l
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization"
 import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
 import { getLocalMealPlansRecord, saveLocalMealPlansRecord } from "@/lib/data/local-meal-plans"
+import { useAuth } from "@/hooks/use-auth"
 
 const ALL_SLOT_TYPES: MealSlotType[] = [
   "fruehstueck",
@@ -61,21 +62,27 @@ function buildInitialPlans(initialPlans: DailyMealPlan[], foods: Food[]): Record
 }
 
 export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = []) {
-  const lastPersistedState = useRef<string>("")
-  const hasLoadedPersistedPlans = useRef(false)
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [currentDate, setCurrentDate] = useState(() =>
     format(new Date(), "yyyy-MM-dd")
   )
   const [plans, setPlans] = useState<Record<string, DailyMealPlan>>(() =>
     buildInitialPlans(initialPlans, foods)
   )
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false)
+  const migrationDone = useRef(false)
 
+  // Sync to local storage for offline/fallback
   useEffect(() => {
     saveLocalMealPlansRecord(plans, foods)
   }, [foods, plans])
 
+  // Load from Supabase when authenticated
   useEffect(() => {
+    if (!isAuthenticated || authLoading) return
+
     let cancelled = false
+    setIsLoadingRemote(true)
 
     async function loadPersistedPlans() {
       try {
@@ -87,16 +94,29 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           for (const plan of persistedPlans) {
             next[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
           }
-          lastPersistedState.current = JSON.stringify(next)
           return next
         })
+
+        // Migration of local-only plans
+        if (!migrationDone.current) {
+          migrationDone.current = true
+          const localDates = Object.keys(plans)
+          const remoteDates = new Set(persistedPlans.map(p => p.date))
+          const datesToMigrate = localDates.filter(d => !remoteDates.has(d))
+          
+          for (const date of datesToMigrate) {
+            const plan = plans[date]
+            if (plan && plan.slots.some(s => s.entries.length > 0)) {
+              void persistMealPlan(plan).catch(err => {
+                console.error(`Failed to migrate meal plan for ${date}:`, err)
+              })
+            }
+          }
+        }
       } catch (error) {
         console.error("Failed to load meal plans from Supabase:", error)
-        lastPersistedState.current = JSON.stringify(plans)
       } finally {
-        if (!cancelled) {
-          hasLoadedPersistedPlans.current = true
-        }
+        if (!cancelled) setIsLoadingRemote(false)
       }
     }
 
@@ -105,44 +125,7 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     return () => {
       cancelled = true
     }
-  }, [foods])
-
-  useEffect(() => {
-    if (!hasLoadedPersistedPlans.current) return
-
-    const serializedPlans = JSON.stringify(plans)
-    if (serializedPlans === lastPersistedState.current) return
-    lastPersistedState.current = serializedPlans
-
-    let cancelled = false
-
-    async function persistPlans() {
-      const localFallback: Record<string, DailyMealPlan> = {}
-
-      for (const plan of Object.values(plans)) {
-        try {
-          await persistMealPlan(plan)
-          if (cancelled) return
-        } catch (error) {
-          const message = error instanceof Error ? error.message : ""
-          if (message && message !== "AUTH_REQUIRED") {
-            console.error(`Failed to persist meal plan ${plan.date}:`, error)
-          }
-          localFallback[plan.date] = plan
-        }
-      }
-
-      if (!cancelled) {
-        saveLocalMealPlansRecord(localFallback, foods)
-      }
-    }
-
-    void persistPlans()
-
-    return () => {
-      cancelled = true
-    }
-  }, [foods, plans])
+  }, [isAuthenticated, authLoading, foods])
 
   const getPlanForDate = useCallback(
     (date: string): DailyMealPlan => {
@@ -167,6 +150,14 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     [getPlanForDate],
   )
 
+  const syncPlanToSupabase = useCallback((plan: DailyMealPlan) => {
+    if (isAuthenticated) {
+      void persistMealPlan(plan).catch(err => {
+        console.error(`Failed to sync meal plan for ${plan.date}:`, err)
+      })
+    }
+  }, [isAuthenticated])
+
   const addEntry = useCallback(
     (slotType: MealSlotType, entry: Omit<MealEntry, "id">) => {
       setPlans((prev) => {
@@ -182,13 +173,16 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           }
         })
 
+        const updatedPlan = { ...plan, slots: newSlots }
+        syncPlanToSupabase(updatedPlan)
+
         return {
           ...prev,
-          [currentDate]: { ...plan, slots: newSlots },
+          [currentDate]: updatedPlan,
         }
       })
     },
-    [currentDate]
+    [currentDate, syncPlanToSupabase]
   )
 
   const removeEntry = useCallback(
@@ -205,13 +199,16 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           }
         })
 
+        const updatedPlan = { ...plan, slots: newSlots }
+        syncPlanToSupabase(updatedPlan)
+
         return {
           ...prev,
-          [currentDate]: { ...plan, slots: newSlots },
+          [currentDate]: updatedPlan,
         }
       })
     },
-    [currentDate]
+    [currentDate, syncPlanToSupabase]
   )
 
   const updateEntryAmount = useCallback(
@@ -230,13 +227,16 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           }
         })
 
+        const updatedPlan = { ...plan, slots: newSlots }
+        syncPlanToSupabase(updatedPlan)
+
         return {
           ...prev,
-          [currentDate]: { ...plan, slots: newSlots },
+          [currentDate]: updatedPlan,
         }
       })
     },
-    [currentDate]
+    [currentDate, syncPlanToSupabase]
   )
 
   const setDate = useCallback((date: string) => {
@@ -262,5 +262,6 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     setDate,
     goToNextDay,
     goToPreviousDay,
+    isLoadingRemote
   }
 }

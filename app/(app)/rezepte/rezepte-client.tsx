@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { Plus, Search, Import, Download, Filter } from "lucide-react";
 import { toast } from "sonner";
@@ -26,8 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchRecipesClient, persistPersonalRecipe } from "@/lib/data/recipes-client";
-import { getLocalRecipes, saveLocalRecipes } from "@/lib/data/local-recipes";
+import { useRecipes } from "@/hooks/use-recipes";
 
 const RECIPE_CATEGORIES = [
   "Alle",
@@ -56,11 +55,11 @@ interface RezeptePageClientProps {
   recipes: Recipe[];
 }
 
-export function RezeptePageClient({ recipes }: RezeptePageClientProps) {
+export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClientProps) {
   const foods = useFoods();
+  const { allRecipes, addRecipe } = useRecipes(initialRecipes, foods);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Alle");
-  const [customRecipes, setCustomRecipes] = useState<Recipe[]>([]);
   const [libraryFilter, setLibraryFilter] = useState<"all" | "personal" | "community">("all");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -68,73 +67,12 @@ export function RezeptePageClient({ recipes }: RezeptePageClientProps) {
   const [importPayload, setImportPayload] = useState(SAMPLE_IMPORT_PAYLOAD);
   const [exportFormat, setExportFormat] = useState<"json" | "csv">("json");
 
-  function mergeRecipes(baseRecipes: Recipe[], incomingRecipe: Recipe): Recipe[] {
-    return [...baseRecipes.filter((entry) => entry.id !== incomingRecipe.id), incomingRecipe];
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadPersonalRecipes() {
-      const localRecipes = getLocalRecipes(foods);
-
-      try {
-        const persistedRecipes = await fetchRecipesClient({ sourceType: "personal" });
-        if (cancelled) return;
-
-        const merged = [
-          ...persistedRecipes,
-          ...localRecipes.filter(
-            (localRecipe) =>
-              !persistedRecipes.some(
-                (persistedRecipe) =>
-                  persistedRecipe.id === localRecipe.id ||
-                  persistedRecipe.legacyId === localRecipe.id,
-              ),
-          ),
-        ];
-
-        setCustomRecipes(merged);
-      } catch (error) {
-        if (cancelled) return;
-        console.error("Failed to load personal recipes from Supabase:", error);
-        setCustomRecipes(localRecipes);
-      }
-    }
-
-    void loadPersonalRecipes();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [foods]);
-
-  const allRecipes = useMemo(() => {
-    const withFlags = recipes.map((recipe) => ({
-      ...recipe,
-      sourceType: recipe.sourceType ?? "community",
-    }));
-    const customWithMeta = customRecipes.map((recipe) => ({
-      ...recipe,
-      sourceType: "personal" as const,
-    }));
-    return [...withFlags, ...customWithMeta].filter(
-      (recipe, index, allRecipes) =>
-        allRecipes.findIndex(
-          (candidate) =>
-            candidate.id === recipe.id ||
-            (candidate.legacyId && candidate.legacyId === recipe.id) ||
-            (recipe.legacyId && candidate.id === recipe.legacyId),
-        ) === index,
-    );
-  }, [customRecipes, recipes]);
-
   const filtered = useMemo(() => {
     return allRecipes.filter((recipe) => {
       const matchesSearch =
         search === "" ||
         recipe.name.toLowerCase().includes(search.toLowerCase()) ||
-        recipe.description.toLowerCase().includes(search.toLowerCase());
+        (recipe.description && recipe.description.toLowerCase().includes(search.toLowerCase()));
       const matchesCategory =
         category === "Alle" || recipe.category === category;
       const matchesLibrary =
@@ -147,24 +85,6 @@ export function RezeptePageClient({ recipes }: RezeptePageClientProps) {
     });
   }, [allRecipes, search, category, libraryFilter]);
 
-  async function addCustomRecipe(recipe: Recipe) {
-    try {
-      const persisted = await persistPersonalRecipe(recipe);
-      setCustomRecipes((prev) => mergeRecipes(prev, persisted));
-      saveLocalRecipes(
-        getLocalRecipes(foods).filter((entry) => entry.id !== recipe.id),
-        foods,
-      );
-      return persisted;
-    } catch (error) {
-      console.error("Failed to persist imported recipe to Supabase:", error);
-      const localRecipes = mergeRecipes(getLocalRecipes(foods), recipe);
-      saveLocalRecipes(localRecipes, foods);
-      setCustomRecipes((prev) => mergeRecipes(prev, recipe));
-      return recipe;
-    }
-  }
-
   async function handleImportRecipe(recipe: Recipe) {
     const now = new Date().toISOString();
     const clone: Recipe = {
@@ -174,7 +94,7 @@ export function RezeptePageClient({ recipes }: RezeptePageClientProps) {
       updatedAt: now,
       sourceType: "personal",
     };
-    await addCustomRecipe(clone);
+    await addRecipe(clone);
     toast.success("Rezept in eigene Sammlung importiert");
   }
 
@@ -220,7 +140,7 @@ export function RezeptePageClient({ recipes }: RezeptePageClientProps) {
             updatedAt: now,
             sourceType: "personal",
           };
-          await addCustomRecipe(recipe);
+          await addRecipe(recipe);
         }
       } else {
         const rows = importPayload.trim().split(/\n+/).slice(1);
@@ -242,7 +162,7 @@ export function RezeptePageClient({ recipes }: RezeptePageClientProps) {
             updatedAt: now,
             sourceType: "personal",
           };
-          await addCustomRecipe(recipe);
+          await addRecipe(recipe);
         }
       }
       toast.success("Import abgeschlossen");

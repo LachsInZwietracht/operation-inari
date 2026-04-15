@@ -4,6 +4,7 @@ export type Gender = "m" | "w" | "d";
 
 export interface Patient extends Timestamped {
   id: ID;
+  legacyId?: ID;
   firstName: string;
   lastName: string;
   dateOfBirth: string; // ISO date YYYY-MM-DD

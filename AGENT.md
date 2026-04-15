@@ -4,7 +4,7 @@
 
 **Prodi** is a modern German nutrition counseling web application replacing the outdated desktop-only PRODI software. It provides food database browsing, recipe management, daily meal planning, and nutrient analysis with DGE reference value comparisons.
 
-**Current state:** MVP with mock data and localStorage persistence plus advanced food search (phonetic + synonym management). Supabase schema is implemented (migrations in `supabase/migrations/`) with BLS 4.0 ETL ready — see `docs/backend-tasks.md` for remaining migration work.
+**Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus Supabase-first persistence with local fallback for custom foods, recipes, meal plans, and nutrition protocols. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
 
 This file provides guidance to Codex (the GitHub Copilot / OpenAI agent) when working with code in this repository.
 
@@ -47,7 +47,7 @@ This is a Next.js 15 application using the App Router with:
 - Charts: Recharts for data visualization
 - Theme: next-themes for dark/light mode support
 - Notifications: Sonner for toast notifications
-- Backend: Supabase integration configured
+- Backend: Supabase integration for food data, recipes, meal plans, protocols, and auth
 - Forms: React Hook Form with Zod validation
 - Additional Libraries: Embla Carousel, Command Menu (cmdk), Date handling (date-fns)
 
@@ -55,7 +55,9 @@ This is a Next.js 15 application using the App Router with:
 
 - `app/` - Next.js App Router pages and layouts
 - `components/ui/` - Complete shadcn/ui component library including accordion, alert-dialog, avatar, badge, breadcrumb, button, calendar, card, carousel, checkbox, collapsible, command, context-menu, dialog, drawer, dropdown-menu, form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, toggle, tooltip, and more
-- `hooks/` - Custom React hooks (e.g., `use-mobile.ts` for responsive design)
+- `hooks/` - Custom React hooks (e.g., `use-patients.ts`, `use-meal-plan.ts`, `use-protocols.ts`)
+- `lib/data/` - Client-side data repositories (e.g., `recipes-client.ts`, `protocols-client.ts`)
+- `lib/supabase/` - Supabase client, server, and middleware utilities
 - `lib/utils.ts` - Utility functions including Tailwind class merging
 - `supabase/` - Supabase configuration, migrations, and seed data
 - `supabase/migrations/` - Database schema migrations (run in order)

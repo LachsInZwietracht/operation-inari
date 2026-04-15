@@ -42,4 +42,35 @@ test.describe("Nutrition Protocols", () => {
     await expect(page.getByRole("heading", { name: "Neues Ernährungsprotokoll" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByPlaceholder("z.B. 3-Tage-Ernährungsprotokoll")).toBeVisible();
   });
+
+  test("creates protocol and reloads it from persisted storage", async ({ page }) => {
+    const protocolTitle = `Persisted Protocol ${Date.now()}`;
+
+    await page.goto(`/patienten/${PROTOCOL_PATIENT.id}/protokolle/neu`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+
+    await expect(page.getByRole("heading", { name: "Neues Ernährungsprotokoll" })).toBeVisible({ timeout: 30_000 });
+    await page.getByLabel("Titel").fill(protocolTitle);
+    await page.getByLabel("Datum").fill("2026-04-01");
+
+    await page.getByRole("button", { name: /Lebensmittel hinzufügen/i }).click();
+    const searchInput = page.locator("[cmdk-input]").first();
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill("Hafer");
+    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
+
+    await page.getByRole("button", { name: "Protokoll erstellen" }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/patienten/${PROTOCOL_PATIENT.id}$`), { timeout: 30_000 });
+    const protocolsTab = page.getByRole("tab", { name: "Protokolle" });
+    await protocolsTab.click();
+    await expect(page.getByRole("link", { name: new RegExp(protocolTitle) })).toBeVisible({ timeout: 30_000 });
+
+    await page.evaluate(() => localStorage.removeItem("prodi_protocols"));
+    await page.reload();
+    await page.getByRole("tab", { name: "Protokolle" }).click();
+    await expect(page.getByRole("link", { name: new RegExp(protocolTitle) })).toBeVisible({ timeout: 30_000 });
+  });
 });

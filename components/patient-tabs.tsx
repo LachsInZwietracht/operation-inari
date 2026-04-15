@@ -54,7 +54,6 @@ import { useAnthropometric } from "@/hooks/use-anthropometric"
 import {
   COUNSELING_SESSIONS,
   LAB_PARAMETERS,
-  PROTOCOLS,
   GROWTH_PERCENTILES,
 } from "@/lib/mock-data"
 import { AMPUTATION_AREAS, PROTOCOL_TYPE_LABELS } from "@/lib/constants"
@@ -67,6 +66,7 @@ import { useTherapyIntegrations } from "@/hooks/use-therapy-integrations"
 import { useScreenings } from "@/hooks/use-screenings"
 import { useProcam } from "@/hooks/use-procam"
 import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
+import { useProtocols } from "@/hooks/use-protocols"
 import type { Patient, AnthropometricEntry } from "@/lib/types"
 import { toast } from "sonner"
 
@@ -199,6 +199,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const { getForPatient: getScreeningsForPatient, addEntry: addScreening } = useScreenings()
   const { getForPatient: getProcamForPatient, addResult: addProcam } = useProcam()
   const { getForPatient: getDigitalLinksForPatient, generateLink, updateStatus } = useDigitalProtocols()
+  const { getForPatient: getProtocolsForPatient } = useProtocols()
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false)
@@ -241,7 +242,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
 
   const anthroEntries = getAnthroForPatient(patient.id)
   const sessions = COUNSELING_SESSIONS.filter((s) => s.patientId === patient.id)
-  const protocols = PROTOCOLS.filter((p) => p.patientId === patient.id)
+  const protocols = getProtocolsForPatient(patient.id)
   const diagnoses = getDiagnosesForPatient(patient.id)
   const medications = getMedicationsForPatient(patient.id)
   const labEntries = getLabValuesForPatient(patient.id)

@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { differenceInYears } from "date-fns"
-import { Info, ListChecks, Plus, Sparkles, Trash2 } from "lucide-react"
+import { Info, ListChecks, Loader2, Plus, Sparkles, Trash2, Zap } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -66,6 +66,7 @@ import {
 import { PROTOCOL_TEMPLATES } from "@/lib/protocol-templates"
 import { usePatients } from "@/hooks/use-patients"
 import { useFoods } from "@/components/foods-provider"
+import { matchSmartInput } from "@/lib/nlp-matching"
 
 const entrySchema = z.object({
   foodId: z.string().min(1),
@@ -100,7 +101,7 @@ type ProtocolFormValues = z.input<typeof protocolSchema>
 interface ProtocolFormProps {
   patientId: string
   templateId?: string
-  onSubmit: (protocol: Omit<NutritionProtocol, "id" | "createdAt" | "updatedAt">) => void
+  onSubmit: (protocol: Omit<NutritionProtocol, "id" | "createdAt" | "updatedAt">) => Promise<NutritionProtocol> | NutritionProtocol
 }
 
 const MEAL_SLOTS: MealSlotType[] = [
@@ -121,6 +122,8 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
   const { getPatient } = usePatients()
   const patient = getPatient(patientId)
   const [foodDialogOpen, setFoodDialogOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [smartInputs, setSmartInputs] = useState<Record<number, string>>({})
   const [activeDayIndex, setActiveDayIndex] = useState(0)
   const [templateStepsState, setTemplateStepsState] = useState<Record<string, number[]>>({})
 
@@ -216,49 +219,51 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
     }
   }
 
+  function appendEntry(dayIndex: number, entry: {
+    foodId: string;
+    amount: number;
+    mealSlot: string;
+    time: string;
+    measurementMode: "grams" | "household";
+    householdUnit?: string;
+    householdQuantity?: number;
+  }) {
+    const currentEntries = form.getValues(`days.${dayIndex}.entries`) ?? []
+    form.setValue(`days.${dayIndex}.entries`, [...currentEntries, entry])
+  }
+
   function handleAddFood(foodId: string) {
-    const currentEntries = form.getValues(`days.${activeDayIndex}.entries`) ?? []
-    const defaultHouseholdUnit = HOUSEHOLD_MEASURES[0]?.id
-    const defaultQuantity = 1
     const measurementMode = householdModeEnabled ? "household" : "grams"
-    const householdMeasurement =
-      measurementMode === "household"
-        ? buildHouseholdMeasurement(defaultHouseholdUnit, defaultQuantity)
-        : undefined
-    const amount = householdMeasurement?.estimatedGrams ?? 100
-    form.setValue(`days.${activeDayIndex}.entries`, [
-      ...currentEntries,
-      {
-        foodId,
-        amount,
-        mealSlot: "mittagessen",
-        time: "",
-        measurementMode,
-        householdUnit: householdMeasurement?.unitId,
-        householdQuantity: householdMeasurement?.quantity,
-      },
-    ])
+    const unit = HOUSEHOLD_MEASURES[0]?.id
+    const quantity = 1
+    const amount = measurementMode === "household" ? computeHouseholdAmount(unit, quantity) : 100
+    
+    appendEntry(activeDayIndex, {
+      foodId,
+      amount,
+      mealSlot: "mittagessen",
+      time: "",
+      measurementMode,
+      householdUnit: measurementMode === "household" ? unit : undefined,
+      householdQuantity: measurementMode === "household" ? quantity : undefined,
+    })
     setFoodDialogOpen(false)
   }
 
   function handleQuickAdd(dayIndex: number, presetId: string) {
     const preset = HOUSEHOLD_PRESETS.find((item) => item.id === presetId)
     if (!preset) return
-    const quantity = preset.quantity
-    const amount = computeHouseholdAmount(preset.measureId, quantity)
-    const entries = form.getValues(`days.${dayIndex}.entries`) ?? []
-    form.setValue(`days.${dayIndex}.entries`, [
-      ...entries,
-      {
-        foodId: preset.foodId,
-        amount,
-        mealSlot: preset.mealSlot,
-        time: preset.defaultTime ?? "",
-        measurementMode: "household",
-        householdUnit: preset.measureId,
-        householdQuantity: quantity,
-      },
-    ])
+    const amount = computeHouseholdAmount(preset.measureId, preset.quantity)
+    
+    appendEntry(dayIndex, {
+      foodId: preset.foodId,
+      amount,
+      mealSlot: preset.mealSlot,
+      time: preset.defaultTime ?? "",
+      measurementMode: "household",
+      householdUnit: preset.measureId,
+      householdQuantity: preset.quantity,
+    })
   }
 
   function removeEntry(dayIndex: number, entryIndex: number) {
@@ -269,46 +274,79 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
     )
   }
 
-  function handleSubmit(values: ProtocolFormValues) {
+  async function handleSubmit(values: ProtocolFormValues) {
+    setSaving(true)
     const dates = values.days.map((d) => d.date).sort()
 
-    onSubmit({
-      patientId,
-      title: values.title,
-      type: values.type as ProtocolType,
-      startDate: dates[0],
-      endDate: dates[dates.length - 1],
-      notes: values.notes || undefined,
-      days: values.days.map((day) => ({
-        date: day.date,
-        entries: day.entries.map((entry, i) => {
-          const measurement =
-            entry.measurementMode === "household"
-              ? buildHouseholdMeasurement(entry.householdUnit, entry.householdQuantity)
-              : undefined
-          return {
-            id: `pe_new_${i}_${Date.now()}`,
-            foodId: entry.foodId,
-            amount: entry.amount,
-            mealSlot: entry.mealSlot as MealSlotType,
-            time: entry.time || undefined,
-            householdMeasurement: measurement,
-          }
-        }),
-      })),
-      metadata: {
-        assessmentMethod: (values.metadata.assessmentMethod as AssessmentMethod) ?? undefined,
-        documentedDays:
-          values.metadata.documentedDays ?? values.days.filter((day) => day.entries.length).length,
-        participantAge: values.metadata.participantAge || undefined,
-        participantGender: values.metadata.participantGender || undefined,
-        templateId: selectedTemplate?.id,
-        householdModeEnabled,
-      },
-    })
+    try {
+      await onSubmit({
+        patientId,
+        title: values.title,
+        type: values.type as ProtocolType,
+        startDate: dates[0],
+        endDate: dates[dates.length - 1],
+        notes: values.notes || undefined,
+        days: values.days.map((day) => ({
+          date: day.date,
+          entries: day.entries.map((entry, i) => {
+            const measurement =
+              entry.measurementMode === "household"
+                ? buildHouseholdMeasurement(entry.householdUnit, entry.householdQuantity)
+                : undefined
+            return {
+              id: `pe_new_${i}_${Date.now()}`,
+              foodId: entry.foodId,
+              amount: entry.amount,
+              mealSlot: entry.mealSlot as MealSlotType,
+              time: entry.time || undefined,
+              measurementMode: entry.measurementMode,
+              householdMeasurement: measurement,
+            }
+          }),
+        })),
+        metadata: {
+          assessmentMethod: (values.metadata.assessmentMethod as AssessmentMethod) ?? undefined,
+          documentedDays:
+            values.metadata.documentedDays ?? values.days.filter((day) => day.entries.length).length,
+          participantAge: values.metadata.participantAge || undefined,
+          participantGender: values.metadata.participantGender || undefined,
+          templateId: selectedTemplate?.id,
+          householdModeEnabled,
+        },
+      })
 
-    toast.success("Protokoll erstellt!")
-    router.push(`/patienten/${patientId}`)
+      toast.success("Protokoll erstellt!")
+      router.push(`/patienten/${patientId}`)
+      router.refresh()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSmartAdd = (dayIndex: number) => {
+    const input = smartInputs[dayIndex]
+    if (!input) return
+
+    const result = matchSmartInput(input, foods)
+    if (result) {
+      appendEntry(dayIndex, {
+        foodId: result.foodId,
+        amount: result.amount,
+        mealSlot: "mittagessen",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        measurementMode: result.unit ? "household" : "grams",
+        householdUnit: result.unit,
+        householdQuantity: result.quantity,
+      })
+      setSmartInputs((prev) => ({ ...prev, [dayIndex]: "" }))
+      toast.success(`Hinzugefügt: ${result.foodName}`, {
+        description: `${result.quantity ? `${result.quantity} ${result.unit}` : `${result.amount}g`}`
+      })
+    } else {
+      toast.error("Lebensmittel nicht erkannt", {
+        description: "Versuchen Sie es mit einer anderen Beschreibung wie '1 Glas Apfelsaft'."
+      })
+    }
   }
 
   const watchedDays = form.watch("days")
@@ -773,7 +811,37 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="flex-1 space-y-2">
+                    <FormLabel className="text-xs text-muted-foreground">Smart-Eingabe (z.B. &quot;1 Glas Apfelsaft&quot;)</FormLabel>
+                    <div className="relative">
+                      <Input
+                        placeholder="z.B. 2 Scheiben Vollkornbrot"
+                        value={smartInputs[dayIndex] || ""}
+                        onChange={(e) => setSmartInputs(prev => ({ ...prev, [dayIndex]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            handleSmartAdd(dayIndex)
+                          }
+                        }}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 text-purple-500 hover:bg-purple-50 hover:text-purple-600"
+                        onClick={() => handleSmartAdd(dayIndex)}
+                        disabled={!smartInputs[dayIndex]}
+                      >
+                        <Zap className="h-4 w-4 fill-current" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -823,7 +891,10 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
           </Button>
 
           <div className="flex gap-3">
-            <Button type="submit">Protokoll erstellen</Button>
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Protokoll erstellen
+            </Button>
             <Button type="button" variant="outline" onClick={() => router.back()}>
               Abbrechen
             </Button>

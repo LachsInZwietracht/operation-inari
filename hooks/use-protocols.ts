@@ -1,33 +1,23 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+
 import type { Food, NutritionProtocol } from "@/lib/types"
 import { PROTOCOLS } from "@/lib/mock-data"
 import { normalizeProtocolFoodReferences } from "@/lib/data/food-reference-normalization"
-
-const STORAGE_KEY = "prodi_protocols"
-
-function loadFromStorage(foods: Food[]): NutritionProtocol[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      return (JSON.parse(raw) as NutritionProtocol[]).map((protocol) =>
-        normalizeProtocolFoodReferences(protocol, foods),
-      )
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return []
-}
+import { deleteProtocolClient, fetchProtocolsClient, persistProtocol } from "@/lib/data/protocols-client"
+import { getLocalProtocols, saveLocalProtocols } from "@/lib/data/local-protocols"
 
 function buildInitial(foods: Food[]): NutritionProtocol[] {
-  const stored = loadFromStorage(foods)
-  const storedIds = new Set(stored.map((p) => p.id))
+  const stored = getLocalProtocols(foods)
+  const storedIds = new Set(
+    stored.flatMap((protocol) => [protocol.id, protocol.legacyId].filter(Boolean)),
+  )
+
   const mockOnly = PROTOCOLS
-    .filter((p) => !storedIds.has(p.id))
+    .filter((protocol) => !storedIds.has(protocol.id))
     .map((protocol) => normalizeProtocolFoodReferences(protocol, foods))
+
   return [...mockOnly, ...stored].sort(
     (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
   )
@@ -37,49 +27,120 @@ export function useProtocols(foods: Food[] = []) {
   const [protocols, setProtocols] = useState<NutritionProtocol[]>(() => buildInitial(foods))
 
   useEffect(() => {
-    try {
-      const custom = protocols.filter(
-        (p) => !PROTOCOLS.find((m) => m.id === p.id),
-      )
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom))
-    } catch {
-      // Ignore quota errors
+    let cancelled = false
+
+    async function loadPersistedProtocols() {
+      try {
+        const persistedProtocols = await fetchProtocolsClient()
+        if (cancelled) return
+
+        setProtocols((prev) => {
+          const merged = [...prev]
+
+          for (const persisted of persistedProtocols.map((protocol) =>
+            normalizeProtocolFoodReferences(protocol, foods),
+          )) {
+            const existingIndex = merged.findIndex(
+              (entry) => entry.id === persisted.id || entry.id === persisted.legacyId,
+            )
+
+            if (existingIndex >= 0) {
+              merged[existingIndex] = persisted
+            } else {
+              merged.push(persisted)
+            }
+          }
+
+          return merged.sort(
+            (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+          )
+        })
+      } catch (error) {
+        console.error("Failed to load protocols from Supabase:", error)
+      }
     }
-  }, [protocols])
+
+    void loadPersistedProtocols()
+
+    return () => {
+      cancelled = true
+    }
+  }, [foods])
+
+  useEffect(() => {
+    const localOnly = protocols.filter(
+      (protocol) =>
+        !PROTOCOLS.find((mock) => mock.id === protocol.id) &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(protocol.id),
+    )
+
+    saveLocalProtocols(localOnly, foods)
+  }, [foods, protocols])
 
   const getProtocol = useCallback(
     (id: string): NutritionProtocol | undefined =>
-      protocols.find((p) => p.id === id),
+      protocols.find((protocol) => protocol.id === id || protocol.legacyId === id),
     [protocols],
   )
 
   const getForPatient = useCallback(
     (patientId: string): NutritionProtocol[] =>
-      protocols.filter((p) => p.patientId === patientId),
+      protocols.filter((protocol) => protocol.patientId === patientId),
     [protocols],
   )
 
   const addProtocol = useCallback(
-    (protocol: Omit<NutritionProtocol, "id" | "createdAt" | "updatedAt">) => {
+    async (protocol: Omit<NutritionProtocol, "id" | "createdAt" | "updatedAt">) => {
       const now = new Date().toISOString()
-      const newProtocol: NutritionProtocol = {
+      const draftProtocol: NutritionProtocol = {
         ...normalizeProtocolFoodReferences(protocol as NutritionProtocol, foods),
         id: `protocol_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         createdAt: now,
         updatedAt: now,
       }
-      setProtocols((prev) =>
-        [...prev, newProtocol].sort(
-          (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
-        ),
-      )
-      return newProtocol
+
+      try {
+        const persistedProtocol = await persistProtocol(draftProtocol)
+        const normalized = normalizeProtocolFoodReferences(persistedProtocol, foods)
+
+        setProtocols((prev) =>
+          [...prev.filter((entry) => entry.id !== draftProtocol.id), normalized].sort(
+            (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+          ),
+        )
+
+        return normalized
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ""
+        if (message && message !== "AUTH_REQUIRED") {
+          console.error("Failed to persist protocol to Supabase:", error)
+        }
+
+        setProtocols((prev) =>
+          [...prev, draftProtocol].sort(
+            (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+          ),
+        )
+
+        return draftProtocol
+      }
     },
     [foods],
   )
 
-  const deleteProtocol = useCallback((id: string) => {
-    setProtocols((prev) => prev.filter((p) => p.id !== id))
+  const deleteProtocol = useCallback(async (id: string) => {
+    try {
+      await deleteProtocolClient(id)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ""
+      if (message && message !== "AUTH_REQUIRED") {
+        console.error("Failed to delete protocol from Supabase:", error)
+      }
+    }
+
+    setProtocols((prev) =>
+      prev.filter((protocol) => protocol.id !== id && protocol.legacyId !== id),
+    )
   }, [])
 
   return {
