@@ -4,9 +4,18 @@ import { cookies } from "next/headers"
 export async function createClient() {
   const cookieStore = await cookies()
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Supabase environment variables are missing. Using fallback mode.")
+    // We return a client that will fail gracefully or we can just let it throw a more descriptive error
+    // but createServerClient from @supabase/ssr requires non-empty strings.
+  }
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl || "https://placeholder.supabase.co",
+    supabaseAnonKey || "placeholder-key",
     {
       cookies: {
         getAll() {

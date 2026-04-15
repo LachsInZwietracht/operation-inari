@@ -93,83 +93,88 @@ async function fetchFoodsPaginated(
 }
 
 export async function fetchFoods(options: FoodQueryOptions = {}): Promise<FoodQueryResult> {
-  const client = await resolveClient(options.supabase);
-  const includeNutrients = options.includeNutrients ?? true;
-  const includePortions = options.includePortions ?? false;
-  const withCount = options.withCount ?? true;
+  try {
+    const client = await resolveClient(options.supabase);
+    const includeNutrients = options.includeNutrients ?? true;
+    const includePortions = options.includePortions ?? false;
+    const withCount = options.withCount ?? true;
 
-  const selectColumns = [
-    "id",
-    "name",
-    "data_source_id",
-    "source_food_id",
-    "source_version",
-    "bls_code",
-    "food_group_id",
-    "category_id",
-    "manufacturer",
-    "allergens",
-    "additives",
-    "tags",
-    "is_branded",
-    "is_custom",
-    "is_recipe_derived",
-    "co2_per_portion",
-    "sustainability_score",
-    "prod_score",
-    "data_quality_score",
-    "imported_at",
-    "created_at",
-    "updated_at",
-  ];
+    const selectColumns = [
+      "id",
+      "name",
+      "data_source_id",
+      "source_food_id",
+      "source_version",
+      "bls_code",
+      "food_group_id",
+      "category_id",
+      "manufacturer",
+      "allergens",
+      "additives",
+      "tags",
+      "is_branded",
+      "is_custom",
+      "is_recipe_derived",
+      "co2_per_portion",
+      "sustainability_score",
+      "prod_score",
+      "data_quality_score",
+      "imported_at",
+      "created_at",
+      "updated_at",
+    ];
 
-  if (includeNutrients) {
-    selectColumns.push("food_nutrients(nutrient_id,amount,per_amount)");
+    if (includeNutrients) {
+      selectColumns.push("food_nutrients(nutrient_id,amount,per_amount)");
+    }
+    if (includePortions) {
+      selectColumns.push("food_portions(label,amount_grams)");
+    }
+
+    const selectOptions = withCount ? { count: "exact" as const } : undefined;
+
+    let query = client
+      .from("foods")
+      .select(selectColumns.join(","), selectOptions)
+      .order("name", { ascending: true });
+
+    if (options.search) {
+      const escapedSearch = escapeForILike(options.search);
+      query = query.ilike("name", `%${escapedSearch}%`);
+    }
+    if (options.categoryId) {
+      query = query.eq("category_id", options.categoryId);
+    }
+    if (options.dataSourceId) {
+      query = query.eq("data_source_id", options.dataSourceId);
+    }
+    if (includeNutrients && options.nutrientIds?.length) {
+      query = query.in(
+        "food_nutrients.nutrient_id",
+        options.nutrientIds
+      );
+    }
+
+    if (typeof options.limit === "number") {
+      const start = options.offset ?? 0;
+      query = query.range(start, start + options.limit - 1);
+    }
+
+    const { data, error, count } = await query;
+    if (error) {
+      throw new Error(`Failed to fetch foods: ${error.message}`);
+    }
+
+    const rows = (data ?? []) as unknown as FoodRowWithRelations[];
+
+    return {
+      foods: rows.map(mapFoodRow),
+      count: count ?? null,
+    };
+  } catch (error) {
+    console.error("fetchFoods error:", error);
+    return { foods: [], count: 0 };
   }
-  if (includePortions) {
-    selectColumns.push("food_portions(label,amount_grams)");
-  }
-
-  const selectOptions = withCount ? { count: "exact" as const } : undefined;
-
-  let query = client
-    .from("foods")
-    .select(selectColumns.join(","), selectOptions)
-    .order("name", { ascending: true });
-
-  if (options.search) {
-    const escapedSearch = escapeForILike(options.search);
-    query = query.ilike("name", `%${escapedSearch}%`);
-  }
-  if (options.categoryId) {
-    query = query.eq("category_id", options.categoryId);
-  }
-  if (options.dataSourceId) {
-    query = query.eq("data_source_id", options.dataSourceId);
-  }
-  if (includeNutrients && options.nutrientIds?.length) {
-    query = query.in(
-      "food_nutrients.nutrient_id",
-      options.nutrientIds
-    );
-  }
-
-  if (typeof options.limit === "number") {
-    const start = options.offset ?? 0;
-    query = query.range(start, start + options.limit - 1);
-  }
-
-  const { data, error, count } = await query;
-  if (error) {
-    throw new Error(`Failed to fetch foods: ${error.message}`);
-  }
-
-  const rows = (data ?? []) as unknown as FoodRowWithRelations[];
-
-  return {
-    foods: rows.map(mapFoodRow),
-    count: count ?? null,
-  };
 }
 
 export interface FetchFoodByIdOptions {
@@ -182,102 +187,112 @@ export async function fetchFoodById(
   id: string,
   options: FetchFoodByIdOptions = {}
 ): Promise<Food | null> {
-  const client = await resolveClient(options.supabase);
-  const includeNutrients = options.includeNutrients ?? true;
-  const includePortions = options.includePortions ?? true;
+  try {
+    const client = await resolveClient(options.supabase);
+    const includeNutrients = options.includeNutrients ?? true;
+    const includePortions = options.includePortions ?? true;
 
-  const selectColumns = [
-    "id",
-    "name",
-    "data_source_id",
-    "source_food_id",
-    "source_version",
-    "bls_code",
-    "food_group_id",
-    "category_id",
-    "manufacturer",
-    "allergens",
-    "additives",
-    "tags",
-    "is_branded",
-    "is_custom",
-    "is_recipe_derived",
-    "co2_per_portion",
-    "sustainability_score",
-    "prod_score",
-    "data_quality_score",
-    "imported_at",
-    "created_at",
-    "updated_at",
-  ];
+    const selectColumns = [
+      "id",
+      "name",
+      "data_source_id",
+      "source_food_id",
+      "source_version",
+      "bls_code",
+      "food_group_id",
+      "category_id",
+      "manufacturer",
+      "allergens",
+      "additives",
+      "tags",
+      "is_branded",
+      "is_custom",
+      "is_recipe_derived",
+      "co2_per_portion",
+      "sustainability_score",
+      "prod_score",
+      "data_quality_score",
+      "imported_at",
+      "created_at",
+      "updated_at",
+    ];
 
-  if (includeNutrients) {
-    selectColumns.push("food_nutrients(nutrient_id,amount,per_amount)");
+    if (includeNutrients) {
+      selectColumns.push("food_nutrients(nutrient_id,amount,per_amount)");
+    }
+    if (includePortions) {
+      selectColumns.push("food_portions(label,amount_grams)");
+    }
+
+    const { data, error } = await client
+      .from("foods")
+      .select(selectColumns.join(","))
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") return null;
+      throw new Error(`Failed to fetch food ${id}: ${error.message}`);
+    }
+
+    const row = data as unknown as FoodRowWithRelations | null;
+    return row ? mapFoodRow(row) : null;
+  } catch (error) {
+    console.error(`fetchFoodById(${id}) error:`, error);
+    return null;
   }
-  if (includePortions) {
-    selectColumns.push("food_portions(label,amount_grams)");
-  }
-
-  const { data, error } = await client
-    .from("foods")
-    .select(selectColumns.join(","))
-    .eq("id", id)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw new Error(`Failed to fetch food ${id}: ${error.message}`);
-  }
-
-  const row = data as unknown as FoodRowWithRelations | null;
-  return row ? mapFoodRow(row) : null;
 }
 
 export const fetchBrandedFoods = cache(async () => {
-  const client = await resolveClient();
-  const selectColumns = [
-    "id",
-    "name",
-    "data_source_id",
-    "source_food_id",
-    "source_version",
-    "bls_code",
-    "food_group_id",
-    "category_id",
-    "manufacturer",
-    "allergens",
-    "additives",
-    "tags",
-    "is_branded",
-    "is_custom",
-    "is_recipe_derived",
-    "co2_per_portion",
-    "sustainability_score",
-    "prod_score",
-    "data_quality_score",
-    "imported_at",
-    "created_at",
-    "updated_at",
-    "food_nutrients(nutrient_id,amount,per_amount)",
-    "food_portions(label,amount_grams)",
-  ];
+  try {
+    const client = await resolveClient();
+    const selectColumns = [
+      "id",
+      "name",
+      "data_source_id",
+      "source_food_id",
+      "source_version",
+      "bls_code",
+      "food_group_id",
+      "category_id",
+      "manufacturer",
+      "allergens",
+      "additives",
+      "tags",
+      "is_branded",
+      "is_custom",
+      "is_recipe_derived",
+      "co2_per_portion",
+      "sustainability_score",
+      "prod_score",
+      "data_quality_score",
+      "imported_at",
+      "created_at",
+      "updated_at",
+      "food_nutrients(nutrient_id,amount,per_amount)",
+      "food_portions(label,amount_grams)",
+    ];
 
-  const { data, error } = await client
-    .from("foods")
-    .select(selectColumns.join(","))
-    .or("is_branded.eq.true,data_source_id.eq.hersteller")
-    .order("name", { ascending: true });
+    const { data, error } = await client
+      .from("foods")
+      .select(selectColumns.join(","))
+      .or("is_branded.eq.true,data_source_id.eq.hersteller")
+      .order("name", { ascending: true });
 
-  if (error) {
-    throw new Error(`Failed to fetch branded foods: ${error.message}`);
-  }
+    if (error) {
+      throw new Error(`Failed to fetch branded foods: ${error.message}`);
+    }
 
-  const rows = (data ?? []) as unknown as FoodRowWithRelations[];
-  if (rows.length === 0) {
+    const rows = (data ?? []) as unknown as FoodRowWithRelations[];
+    if (rows.length === 0) {
+      return BRANDED_FOODS;
+    }
+
+    return rows.map(mapFoodRow);
+  } catch (error) {
+    console.error("fetchBrandedFoods error:", error);
     return BRANDED_FOODS;
   }
-
-  return rows.map(mapFoodRow);
 });
 
 export async function fetchCatalogFoodById(
@@ -492,30 +507,35 @@ export const fetchFoodsForInstitution = cache(async () => {
 });
 
 export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> => {
-  const client = await resolveClient();
-  const { data, error } = await client
-    .from("foods")
-    .select("id,name,category_id,data_source_id,is_custom")
-    .order("name", { ascending: true })
-    .limit(10000);
+  try {
+    const client = await resolveClient();
+    const { data, error } = await client
+      .from("foods")
+      .select("id,name,category_id,data_source_id,is_custom")
+      .order("name", { ascending: true })
+      .limit(10000);
 
-  if (error) {
-    throw new Error(`Failed to load food search index: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to load food search index: ${error.message}`);
+    }
+
+    type SearchRow = {
+      id: string;
+      name: string;
+      category_id: string | null;
+      data_source_id: string;
+      is_custom: boolean;
+    };
+
+    return ((data ?? []) as SearchRow[]).map((row) => ({
+      id: row.id,
+      name: row.name,
+      categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
+      sourceId: row.data_source_id as FoodSourceId,
+      isCustom: row.is_custom,
+    }));
+  } catch (error) {
+    console.error("fetchFoodSearchIndex error:", error);
+    return [];
   }
-
-  type SearchRow = {
-    id: string;
-    name: string;
-    category_id: string | null;
-    data_source_id: string;
-    is_custom: boolean;
-  };
-
-  return ((data ?? []) as SearchRow[]).map((row) => ({
-    id: row.id,
-    name: row.name,
-    categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
-    sourceId: row.data_source_id as FoodSourceId,
-    isCustom: row.is_custom,
-  }));
 });
