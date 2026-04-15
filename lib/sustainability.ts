@@ -10,10 +10,13 @@ const CATEGORY_CO2_FACTORS: Record<string, number> = {
   cat_fisch: 5.4,
   cat_fleisch: 13.5,
   cat_milch: 3.5,
+  cat_eier: 4.8,
   cat_getraenke: 0.8,
+  cat_gewuerze: 0.6,
   cat_fruehstueck: 1.9,
   cat_snacks: 2.4,
   cat_fertiggerichte: 4.2,
+  cat_unbekannt: 2.2,
 }
 
 const PLANT_BASED_CATEGORIES = new Set([
@@ -23,6 +26,7 @@ const PLANT_BASED_CATEGORIES = new Set([
   "cat_huelsenfruechte",
   "cat_nuesse",
   "cat_oele",
+  "cat_gewuerze",
   "cat_fruehstueck",
   "cat_snacks",
 ])
@@ -31,6 +35,7 @@ const ANIMAL_BASED_CATEGORIES = new Set([
   "cat_fleisch",
   "cat_fisch",
   "cat_milch",
+  "cat_eier",
 ])
 
 interface EntryFootprint {
@@ -71,7 +76,7 @@ function entryFootprint(entry: MealEntry, slot: MealSlotType, foods: Food[], rec
     return estimateFoodCo2(food, entry.amount)
   }
 
-  const recipe = recipes.find((r) => r.id === entry.referenceId)
+  const recipe = recipes.find((r) => r.id === entry.referenceId || r.legacyId === entry.referenceId)
   if (!recipe) return 0
   const perServing = estimateRecipeCo2(recipe, foods)
   return perServing * entry.amount
@@ -82,7 +87,7 @@ function entryLabel(entry: MealEntry, foods: Food[], recipes: Recipe[]): string 
     const food = foods.find((f) => f.id === entry.referenceId)
     return food?.name ?? "Lebensmittel"
   }
-  const recipe = recipes.find((r) => r.id === entry.referenceId)
+  const recipe = recipes.find((r) => r.id === entry.referenceId || r.legacyId === entry.referenceId)
   return recipe?.name ?? "Rezept"
 }
 

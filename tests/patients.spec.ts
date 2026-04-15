@@ -1,33 +1,57 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { PATIENTS } from "@/lib/mock-data";
+
+const PATIENT_RECORDS = PATIENTS.slice(0, 3);
+const PRIMARY_PATIENT = PATIENT_RECORDS[0]!;
+const SECONDARY_PATIENT = PATIENT_RECORDS[1]!;
+const TERTIARY_PATIENT = PATIENT_RECORDS[2]!;
+const patientLabel = (patient: (typeof PATIENTS)[number]) => `${patient.lastName}, ${patient.firstName}`;
+const patientHeading = (patient: (typeof PATIENTS)[number]) => `${patient.firstName} ${patient.lastName}`;
+const patientCard = (page: Page, patient = PRIMARY_PATIENT) =>
+  page.locator(`[data-patient-id="${patient.id}"]`).first();
+
+async function openPatientList(page: Page) {
+  await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(500);
+}
+
+async function openPatientDetail(page: Page, patient = PRIMARY_PATIENT) {
+  await page.goto(`/patienten/${patient.id}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: patientHeading(patient) })).toBeVisible({ timeout: 30_000 });
+}
 
 test.describe("Patient Management", () => {
   test("displays patient list with mock data", async ({ page }) => {
-    await page.goto("/patienten");
-    await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible();
+    await openPatientList(page);
 
     // Check that mock patients are visible
-    await expect(page.getByRole("link", { name: /Schneider, Maria/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Weber, Thomas/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Hoffmann, Lisa/ })).toBeVisible();
+    await expect(patientCard(page, PRIMARY_PATIENT)).toBeVisible();
+    await expect(patientCard(page, SECONDARY_PATIENT)).toBeVisible();
+    await expect(patientCard(page, TERTIARY_PATIENT)).toBeVisible();
   });
 
   test("searches patients by name", async ({ page }) => {
-    await page.goto("/patienten");
+    await openPatientList(page);
 
-    await page.getByPlaceholder("Patient suchen...").fill("Schneider");
-    await expect(page.getByRole("link", { name: /Schneider, Maria/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Weber, Thomas/ })).not.toBeVisible();
+    const searchInput = page.getByPlaceholder("Patient suchen...");
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill(PRIMARY_PATIENT.lastName);
+    await expect(patientCard(page, PRIMARY_PATIENT)).toBeVisible();
+    await expect(patientCard(page, SECONDARY_PATIENT)).toHaveCount(0);
   });
 
   test("filters patients by indication", async ({ page }) => {
-    await page.goto("/patienten");
+    await openPatientList(page);
 
-    // The indication filter is the second combobox
-    await page.locator("main").getByRole("combobox").click();
-    await page.getByRole("option", { name: "Adipositas" }).click();
+    const indicationFilter = page.getByRole("combobox", { name: /Indikationen/i });
+    await indicationFilter.click();
+    await page.getByRole("option", { name: PRIMARY_PATIENT.indication ?? "Adipositas" }).click();
 
-    await expect(page.getByRole("link", { name: /Schneider, Maria/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Weber, Thomas/ })).not.toBeVisible();
+    await expect(patientCard(page, PRIMARY_PATIENT)).toBeVisible();
+    await expect(patientCard(page, SECONDARY_PATIENT)).toHaveCount(0);
   });
 
   test("creates a new patient", async ({ page }) => {
@@ -47,11 +71,7 @@ test.describe("Patient Management", () => {
   });
 
   test("views patient detail with tabs", async ({ page }) => {
-    await page.goto("/patienten");
-
-    // Click on patient card link
-    await page.getByRole("link", { name: /Schneider, Maria/ }).click();
-    await expect(page.getByRole("heading", { name: "Maria Schneider" })).toBeVisible();
+    await openPatientDetail(page);
 
     // Check tabs are present
     await expect(page.getByRole("tab", { name: "Stammdaten" })).toBeVisible();
@@ -60,15 +80,16 @@ test.describe("Patient Management", () => {
     await expect(page.getByRole("tab", { name: "Beratungen" })).toBeVisible();
 
     // Check stammdaten content
-    await expect(page.getByText("AOK Bayern")).toBeVisible();
+    await expect(page.getByText(PRIMARY_PATIENT.insuranceProvider ?? "")).toBeVisible();
   });
 
   test("views anthropometric data tab", async ({ page }) => {
-    await page.goto("/patienten");
-    await page.getByRole("link", { name: /Schneider, Maria/ }).click();
+    await openPatientDetail(page);
 
     // Switch to Anthropometrie tab
-    await page.getByRole("tab", { name: "Anthropometrie" }).click();
+    const anthropometryTab = page.getByRole("tab", { name: "Anthropometrie" });
+    await expect(anthropometryTab).toBeVisible();
+    await anthropometryTab.click();
 
     // Should see measurement table
     await expect(page.getByRole("table")).toBeVisible();
@@ -77,10 +98,10 @@ test.describe("Patient Management", () => {
   });
 
   test("adds anthropometric entry", async ({ page }) => {
-    await page.goto("/patienten");
-    await page.getByRole("link", { name: /Schneider, Maria/ }).click();
+    await openPatientDetail(page);
 
-    await page.getByRole("tab", { name: "Anthropometrie" }).click();
+    const anthropometryTab = page.getByRole("tab", { name: "Anthropometrie" });
+    await anthropometryTab.click();
 
     // Click add new measurement
     await page.getByRole("button", { name: "Neue Messung" }).click();

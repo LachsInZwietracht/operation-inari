@@ -611,12 +611,17 @@ export default function BeratungDetailPage({
         </Card>
       )}
 
-      <Card>
+      <Card data-testid="counseling-session-documentation">
         <CardHeader>
-          <CardTitle className="text-base">Dokumentation</CardTitle>
+          <CardTitle className="text-base" data-testid="counseling-session-documentation-title">
+            Dokumentation
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
+          <div
+            data-testid="counseling-session-content"
+            className="text-sm whitespace-pre-wrap font-mono leading-relaxed"
+          >
             {session.content}
           </div>
         </CardContent>

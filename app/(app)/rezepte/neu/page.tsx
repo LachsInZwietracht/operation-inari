@@ -1,17 +1,12 @@
-"use client";
+import { NeuesRezeptPageClient } from "./neues-rezept-client";
+import { fetchAllFoods } from "@/lib/data/foods";
+import { FoodsProvider } from "@/components/foods-provider";
 
-import { PageHeader } from "@/components/page-header";
-import { RecipeForm } from "@/components/recipe-form";
-
-export default function NeuesRezeptPage() {
+export default async function NeuesRezeptPage() {
+  const foods = await fetchAllFoods();
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Neues Rezept erstellen"
-        description="Erstellen Sie ein neues Rezept mit Zutaten und Zubereitung"
-        helpText="Legen Sie ein neues Rezept an, fügen Sie Zutaten aus der Lebensmitteldatenbank hinzu und beschreiben Sie die Zubereitung. Die Nährwerte werden automatisch berechnet."
-      />
-      <RecipeForm />
-    </div>
+    <FoodsProvider foods={foods}>
+      <NeuesRezeptPageClient />
+    </FoodsProvider>
   );
 }

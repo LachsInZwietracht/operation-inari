@@ -4,28 +4,43 @@ import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 import type { Recipe } from "@/lib/types";
 import { RecipeDetailContent } from "@/components/recipe-detail-content";
-
-function getCustomRecipe(id: string): Recipe | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const stored = localStorage.getItem("prodi_custom_recipes");
-    if (!stored) return null;
-    const recipes: Recipe[] = JSON.parse(stored);
-    return recipes.find((r) => r.id === id) ?? null;
-  } catch {
-    return null;
-  }
-}
+import { useFoods } from "@/components/foods-provider";
+import { fetchRecipeByIdClient } from "@/lib/data/recipes-client";
+import { findLocalRecipeById } from "@/lib/data/local-recipes";
 
 export function RecipeDetailClient({ recipeId }: { recipeId: string }) {
+  const foods = useFoods();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const found = getCustomRecipe(recipeId);
-    setRecipe(found);
-    setLoaded(true);
-  }, [recipeId]);
+    let cancelled = false;
+
+    async function loadRecipe() {
+      try {
+        const persistedRecipe = await fetchRecipeByIdClient(recipeId);
+        if (cancelled) return;
+
+        if (persistedRecipe) {
+          setRecipe(persistedRecipe);
+          setLoaded(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load recipe from Supabase:", error);
+      }
+
+      if (cancelled) return;
+      setRecipe(findLocalRecipeById(recipeId, foods));
+      setLoaded(true);
+    }
+
+    void loadRecipe();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [foods, recipeId]);
 
   if (!loaded) {
     return (

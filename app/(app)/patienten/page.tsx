@@ -49,6 +49,8 @@ import { COUNSELING_SESSIONS, MAIL_MERGE_PLACEHOLDERS, MAIL_MERGE_TEMPLATES } fr
 import { INDICATION_OPTIONS } from "@/lib/constants"
 import type { EgkCardData, Patient } from "@/lib/types"
 
+const UNASSIGNED_EGK_VALUE = "__unassigned__"
+
 export default function PatientenPage() {
   const { patients } = usePatients()
   const [search, setSearch] = useState("")
@@ -344,19 +346,24 @@ export default function PatientenPage() {
             className="pl-9"
           />
         </div>
-        <Select value={indicationFilter} onValueChange={setIndicationFilter}>
-          <SelectTrigger className="w-full sm:w-[220px]">
-            <SelectValue placeholder="Alle Indikationen" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="alle">Alle Indikationen</SelectItem>
-            {INDICATION_OPTIONS.map((ind) => (
-              <SelectItem key={ind} value={ind}>
-                {ind}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="sm:w-[220px]">
+          <Label htmlFor="indication-filter" className="sr-only">
+            Indikationen
+          </Label>
+          <Select value={indicationFilter} onValueChange={setIndicationFilter}>
+            <SelectTrigger id="indication-filter" className="w-full">
+              <SelectValue placeholder="Alle Indikationen" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="alle">Alle Indikationen</SelectItem>
+              {INDICATION_OPTIONS.map((ind) => (
+                <SelectItem key={ind} value={ind}>
+                  {ind}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="border-dashed border-primary/40 bg-primary/5">
@@ -435,14 +442,17 @@ export default function PatientenPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Select
-                          value={matchedPatient?.id ?? ""}
-                          onValueChange={(value) => handleAssignEgkEvent(event.id, value)}
+                          value={matchedPatient?.id ?? UNASSIGNED_EGK_VALUE}
+                          onValueChange={(value) => {
+                            if (value === UNASSIGNED_EGK_VALUE) return
+                            handleAssignEgkEvent(event.id, value)
+                          }}
                         >
                           <SelectTrigger className="w-[220px]">
                             <SelectValue placeholder="Patient verknüpfen" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Unzugeordnet</SelectItem>
+                            <SelectItem value={UNASSIGNED_EGK_VALUE}>Unzugeordnet</SelectItem>
                             {patients.map((patient) => (
                               <SelectItem key={`egk_select_${patient.id}`} value={patient.id}>
                                 {patient.lastName}, {patient.firstName}

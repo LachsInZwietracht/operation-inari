@@ -6,8 +6,6 @@ export { FOOD_GROUPS, getFoodGroupName, getFoodGroupDescendants } from "./food-g
 export { BRANDED_FOODS } from "./branded-foods";
 export { FOOD_SOURCES } from "./food-sources";
 export { FOOD_DATABASE_UPDATES } from "./database-updates";
-export { RECIPES } from "./recipes";
-export { MEAL_PLANS } from "./meal-plans";
 export { DIET_LINES } from "./diet-lines";
 export { REFERENCE_VALUES } from "./reference-values";
 export { REFERENCE_STANDARDS, AGE_GROUPS } from "./reference-standards";

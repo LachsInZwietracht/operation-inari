@@ -18,11 +18,9 @@ import {
 import { NutrientBar } from "@/components/nutrient-bar";
 import { MacroRingChart } from "@/components/macro-ring-chart";
 import { ReferenceProfileSelector } from "@/components/reference-profile-selector";
-import {
-  FOOD_CATEGORIES,
-  NUTRIENT_DEFINITIONS,
-  FOOD_SOURCES,
-} from "@/lib/mock-data";
+import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
+import { FOOD_SOURCES } from "@/lib/data/food-sources";
 import { getNutrientValue } from "@/lib/nutrients";
 import {
   resolveReferenceForPatient,

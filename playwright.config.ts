@@ -1,12 +1,25 @@
 import { defineConfig, devices } from "@playwright/test";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
+// Load .env.local so Playwright tests have access to Supabase env vars
+const envPath = resolve(__dirname, ".env.local");
+try {
+  const envContent = readFileSync(envPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex);
+    const value = trimmed.slice(eqIndex + 1);
+    if (!process.env[key]) process.env[key] = value;
+  }
+} catch {
+  // .env.local is optional
+}
+
+const STORAGE_STATE = "tests/.auth/user.json";
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -34,9 +47,18 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
+    /* Auth setup — runs once before all test projects */
+    {
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
+    },
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ["setup"],
     },
     // {
     //   name: "firefox",

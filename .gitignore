@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Raw data files (BLS, OFF, etc.) — too large for git
+/data/
+
 # Playwright
 node_modules/
 /test-results/
@@ -47,3 +50,4 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 .playwright-mcp/
+tests/.auth/

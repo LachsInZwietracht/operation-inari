@@ -39,17 +39,20 @@ test.describe("API & Export", () => {
     await page.getByRole("tab", { name: "REST API" }).click();
 
     // API keys table should show
-    await expect(page.getByText("Produktion")).toBeVisible();
-    await expect(page.getByText("Entwicklung")).toBeVisible();
-    await expect(page.getByText("pk_live_****a8f3")).toBeVisible();
+    const apiKeysTable = page.locator('[data-testid="api-keys-table"]');
+    await expect(apiKeysTable.getByRole("cell", { name: "Produktion" })).toBeVisible();
+    await expect(apiKeysTable.getByRole("cell", { name: "Entwicklung" })).toBeVisible();
+    await expect(apiKeysTable.getByText("pk_live_****a8f3", { exact: true })).toBeVisible();
 
     // API endpoints table should show
-    await expect(page.getByText("API-Endpunkte")).toBeVisible();
-    await expect(page.getByText("/api/v1/foods")).toBeVisible();
-    await expect(page.getByText("/api/v1/recipes")).toBeVisible();
+    const apiEndpointsTable = page.locator('[data-testid="api-endpoints-table"]');
+    const foodsRow = apiEndpointsTable.getByRole("row", { name: /\/api\/v1\/foods\s/ });
+    const recipesRow = apiEndpointsTable.getByRole("row", { name: /\/api\/v1\/recipes\s/ });
+    await expect(foodsRow).toBeVisible();
+    await expect(recipesRow).toBeVisible();
 
     // Click on an endpoint to expand the sample response
-    await page.getByText("/api/v1/foods").first().click();
+    await foodsRow.click();
     await expect(page.getByText("Beispiel-Antwort")).toBeVisible();
     await expect(page.getByText('"food_karotte"')).toBeVisible();
   });
@@ -65,7 +68,7 @@ test.describe("API & Export", () => {
     await expect(page.getByText("DEBInet Import")).toBeVisible();
 
     // Webhook table should display entries
-    await expect(page.getByText("Webhooks")).toBeVisible();
+    await expect(page.getByText("Webhooks", { exact: true })).toBeVisible();
     await expect(page.getByText("patient.created")).toBeVisible();
     await expect(page.getByText("protocol.submitted")).toBeVisible();
   });

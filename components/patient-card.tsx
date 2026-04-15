@@ -12,7 +12,7 @@ interface PatientCardProps {
 
 export function PatientCard({ patient, lastSessionDate }: PatientCardProps) {
   return (
-    <Link href={`/patienten/${patient.id}`}>
+    <Link href={`/patienten/${patient.id}`} data-patient-id={patient.id}>
       <Card className="transition-colors hover:bg-muted/50">
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between">

@@ -17,6 +17,7 @@ export interface RecipeReferenceTarget {
 
 export interface Recipe extends Timestamped {
   id: ID;
+  legacyId?: ID;
   name: string;
   description: string;
   category: string;

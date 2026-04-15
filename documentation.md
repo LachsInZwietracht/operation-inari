@@ -7,7 +7,7 @@
 - **State conventions:** Each hook documents its storage key. Never reset or delete user data without migrations.
 - **Routing:** Production UI lives under `app/(app)`. Auth is under `app/(auth)`. `app/page.tsx` redirects to `/dashboard`.
 - **UI primitives:** Components under `components/ui/` wrap Radix primitives; `PageHeader`, `Card`, `Badge`, etc. keep the layout consistent. Prefer reusing them.
-- **Testing:** There are no automated tests per feature; rely on manual flows described under each section. When adding logic, consider Playwright coverage.
+- **Testing:** Playwright end-to-end tests live in `tests/` and cover major features (navigation, food search, recipes, protocols, patients, meal plans, and more). When adding logic, extend or add Playwright tests for coverage.
 
 ## 2. Global Architecture Overview
 - **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, header search trigger, and `PwaStatus`.
@@ -20,14 +20,14 @@
 - **Auth integration:** `components/auth-form.tsx` talks to Supabase via `createClient`. Authentication state isn’t enforced yet, but forms and flows are ready.
 
 ## 3. Data & State Layers
-- **Recipes and foods:** `FOODS`, `RECIPES`, `BRANDED_FOODS`, etc. combine with `useCustomFoods` to allow extending the dataset. Recipes can be converted into foods.
+- **Recipes and foods:** Food data is served from Supabase via the `useFoods()` hook (provided app-wide by `FoodsProvider`). Recipes are also loaded from Supabase (`fetchRecipes()` in the relevant server components) and passed into clients, where they are merged with any custom `prodi_custom_recipes` entries. Legacy mocks remain only for ETL seeding.
 - **Reference values:** `useReferenceProfiles` stores the active standard & life stage in `localStorage`. `resolveReferenceForPatient` converts those choices into per-nutrient baselines.
 - **Patient-related hooks:**
   - `usePatients` stores additions/edits (`prodi_patients`).
   - `useEgkScanner` simulates card readers; `useEgkInbox` keeps scanned card events.
   - `useMailMergeHistory`, `useBirthdayReminders`, `useDiagnoses`, etc. provide specialized local persistence for sub-features in the patient tabs.
 - **Practice hooks:** `usePracticeAppointments` and `usePracticeInvoices` manage scheduling/billing data (keys `prodi_practice_*`).
-- **Meal plan data:** `useMealPlan` merges mock plans with stored entries under `prodi_meal_plans`.
+- **Meal plan data:** Server components fetch shared templates from Supabase with `fetchMealPlans()` and pass them into `useMealPlan(initialPlans)`, which merges them with per-user overrides stored under `prodi_meal_plans`.
 - **Search & synonyms:** `useFoodSearch` handles multi-mode search states. `useFoodSynonyms` merges system + user synonyms and persists them (`prodi_food_synonyms_v1`).
 
 ## 4. Feature Reference
@@ -37,7 +37,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Purpose:** High-level KPIs (food/recipe counts, today’s plan, macro chart, quick actions).
 - **Implementation:**
   - `app/(app)/dashboard/page.tsx` renders `metrics`, macro chart, and today’s meal plan summary.
-  - Uses `FOODS`, `RECIPES`, `MEAL_PLANS`, `MEAL_SLOT_LABELS`, nutrient utilities, and `MacroRingChart`.
+  - Server loader pulls foods via `fetchAllFoodsForList()`, recipes via `fetchRecipes()`, and plan templates via `fetchMealPlans()`; these feed the client component alongside `MEAL_SLOT_LABELS`, nutrient utilities, and `MacroRingChart`.
 - **Extensions/Pitfalls:**
   - When adding new metrics, keep `metrics` array declarative. Ensure calculations use the same nutrient helpers as other features for consistency.
   - Quick-action routes should exist; update sidebar + documentation if you add more.
@@ -81,12 +81,12 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Search/filter by category and source (personal vs community).
   - Add/import/export actions; dialogs handle JSON/CSV import/export.
   - Local storage key: `prodi_custom_recipes` (via helper functions at top of file).
-- **Mock vs custom:** `RECIPES` flagged with `sourceType`. Custom ones stored with `sourceType: "personal"`.
+- **Data mix:** Server-side `fetchRecipes()` provides community/institution recipes (flagged via `sourceType`). Custom ones stored locally keep `sourceType: "personal"` and are merged client-side.
 - **Import/export:** `handleImportSubmit`, `handleExport` operate on `filtered` array. CSV uses fixed headers.
 - **Extensions:** Validate imported recipes more rigorously; add ingredient parsing later.
 
 ### 4.7 Recipe Detail (`/rezepte/[id]`)
-- **Routing:** `app/(app)/rezepte/[id]/page.tsx` uses mock recipe when available, otherwise hydration client.
+- **Routing:** `app/(app)/rezepte/[id]/page.tsx` fetches the recipe from Supabase; when absent (custom/local entries), it renders `RecipeDetailClient` which reads from `prodi_custom_recipes`.
 - **Component:** `components/recipe-detail-content.tsx`
   - Displays hero image, metadata, ingredients table, instructions, macro panel, sustainability, reference comparisons, macro ring, vitamin/mineral highlights.
   - Hooks: `useCustomFoods` (convert recipe to food), `useFoodSynonyms` (alias display names).
@@ -101,14 +101,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Live nutrient preview via `useNutrientCalculation` (sum of selected foods scaled to servings).
   - Local persistence: `getCustomRecipes`/`saveCustomRecipes` functions.
   - Additional metadata: allergens, additives (comma-separated), PRODIscore, CO₂ per portion.
-- **Editing limitations:** Standard recipes (from `RECIPES`) cannot be saved over; editing path warns users.
+- **Editing limitations:** Supabase-provided recipes are read-only in the editor; only locally created entries can be updated (the edit client warns accordingly).
 - **Extension tips:** When adding new fields ensure schema + `Recipe` type stay in sync. Keep `useNutrientCalculation` inputs valid (only include ingredients with `foodId`).
 
 ### 4.9 Meal Planning (`/ernaehrungsplan`)
 - **Component:** `app/(app)/ernaehrungsplan/page.tsx`
   - Features: calendar navigation (day/week/cycle views), command palette to add entries (foods/recipes), nutrient bars, compliance indicators, exchange dialog, sustainability stats.
   - Hooks: `useMealPlan` for state (per-day plans, add/remove/update entries), `useReferenceProfiles` for reference comparisons.
-  - Data: `FOODS`, `RECIPES`, `NUTRIENT_DEFINITIONS`, `DIET_LINES`, `FOOD_CATEGORIES`.
+  - Data: Supabase foods (`useFoods()`), server-fetched recipes (`fetchRecipes()`), `NUTRIENT_DEFINITIONS`, `DIET_LINES`, `FOOD_CATEGORIES`.
   - Calculations: `scaleNutrients`, `sumNutrients`, `calculateRecipeNutrients`, `getNutrientValue`, `MEAL_SLOT_LABELS`, `calculateProdScore`, `evaluatePlanSustainability`.
 - **Persistence:** Local storage by date; merging ensures empty slots added automatically.
 - **Extension notes:** Keep `MealSlotCard` drag IDs in sync if adding DnD interactions. Exchange dialog uses categories + nutrients; ensure new categories exist in data.
@@ -147,7 +147,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.14 Reports (`/berichte`)
 - **Component:** `app/(app)/berichte/page.tsx`
   - Features: Template selection (`useReportTemplates`), nutrient charts, macro distribution, LMIV tables, placeholder tokens, health claim checks, report generation dialogs.
-  - Data: `MEAL_PLANS`, `FOODS`, `RECIPES`, `NUTRIENT_DEFINITIONS`.
+  - Data: Supabase templates (`fetchMealPlans()`), foods (`useFoods()`), recipes (`fetchRecipes()`), and `NUTRIENT_DEFINITIONS`.
   - Calculations: `scaleNutrients`, `sumNutrients`, `percentOfReference`, `resolveReferenceForPatient`.
 - **Extension notes:** `REPORT_SECTIONS` drives toggles, maintain IDs when referencing in other modules. `LOCALSTORAGE_KEY` for saved plans must stay consistent.
 
@@ -172,7 +172,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.18 Wissen (`/wissen`)
 - **Component:** `app/(app)/wissen/page.tsx`
   - Features: knowledge cards search/filter, PRODIscore monitor for sample recipe + plan, sustainability metrics, top foods highlights.
-  - Data: `KNOWLEDGE_CARDS`, `SUSTAINABILITY_METRICS`, `FOODS`, `FOOD_CATEGORIES`, `MEAL_PLANS`, `RECIPES`.
+  - Data: `KNOWLEDGE_CARDS`, `SUSTAINABILITY_METRICS`, `FOODS`, `FOOD_CATEGORIES`, plus Supabase meal plans/recipes for scoring examples.
   - Calculations: `calculateRecipeNutrients`, `calculatePerServing`, `calculateProdScore`, `evaluatePlanSustainability`.
 - **Extension notes:** When adding categories, update `knowledgeCategories` derivation. Keep `categoryMap` in sync with `FOOD_CATEGORIES`.
 
@@ -227,8 +227,6 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Shows release history with `FOOD_DATABASE_UPDATES` + `FOOD_SOURCES` metadata.
   - Filter by source, highlight counts.
 - **Extension notes:** When integrating real release data, maintain `Card` layout structure and summary counts.
-
-### 4.25 Wissen (Knowledge) – already covered above.
 
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette tied to `useFoodSynonyms` for alias display. When changing search heuristics, update `fuzzySearchFoods` in `@/lib/search`.

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Food, FoodPortionSize, Recipe } from "@/lib/types";
-import { FOODS } from "@/lib/mock-data";
 import {
   calculatePerServing,
   calculateRecipeNutrients,
@@ -38,7 +37,7 @@ function buildDefaultPortions(): FoodPortionSize[] {
   ];
 }
 
-export function useCustomFoods() {
+export function useCustomFoods(baseFoods: Food[]) {
   const [customFoods, setCustomFoods] = useState<Food[]>(() => loadFromStorage());
 
   useEffect(() => {
@@ -46,8 +45,8 @@ export function useCustomFoods() {
   }, [customFoods]);
 
   const allFoods = useMemo(
-    () => [...FOODS, ...customFoods],
-    [customFoods],
+    () => [...baseFoods, ...customFoods],
+    [baseFoods, customFoods],
   );
 
   const addFood = useCallback(

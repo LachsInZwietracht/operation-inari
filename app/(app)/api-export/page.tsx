@@ -250,7 +250,7 @@ export default function ApiExportPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table data-testid="api-keys-table">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Bezeichnung</TableHead>
@@ -335,7 +335,7 @@ export default function ApiExportPage() {
               <CardDescription>REST API v1 — Basis-URL: https://api.prodi.app/v1</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table data-testid="api-endpoints-table">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[80px]">Methode</TableHead>
@@ -431,7 +431,7 @@ export default function ApiExportPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table data-testid="webhook-table">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Status</TableHead>

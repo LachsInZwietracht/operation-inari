@@ -24,7 +24,7 @@ import {
 import { MacroRingChart } from "@/components/macro-ring-chart";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
-import { FOODS, NUTRIENT_DEFINITIONS } from "@/lib/mock-data";
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import {
   calculateRecipeNutrients,
   calculatePerServing,
@@ -33,6 +33,7 @@ import {
 } from "@/lib/nutrients";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import type { Recipe } from "@/lib/types";
+import { useFoods } from "@/components/foods-provider";
 
 function getScoreBadge(score: number | undefined) {
   if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
@@ -44,9 +45,10 @@ function getScoreBadge(score: number | undefined) {
 }
 
 export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
-  const { convertRecipeToFood } = useCustomFoods();
+  const foods = useFoods();
+  const { convertRecipeToFood } = useCustomFoods(foods);
   const { getDisplayName } = useFoodSynonyms();
-  const totalNutrients = calculateRecipeNutrients(recipe, FOODS);
+  const totalNutrients = calculateRecipeNutrients(recipe, foods);
   const perServing = calculatePerServing(totalNutrients, recipe.servings);
 
   const totalKcal = getNutrientValue(totalNutrients, "energie");
@@ -55,7 +57,7 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
   const fat = getNutrientValue(perServing, "fett");
   const carbs = getNutrientValue(perServing, "kohlenhydrate");
 
-  const foodMap = new Map(FOODS.map((f) => [f.id, f]));
+  const foodMap = new Map(foods.map((f) => [f.id, f]));
 
   const vitaminHighlights = NUTRIENT_DEFINITIONS.filter((nd) => nd.group === "vitamine")
     .map((nd) => ({ ...nd, value: getNutrientValue(perServing, nd.id) }))

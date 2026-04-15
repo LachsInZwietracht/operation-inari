@@ -11,11 +11,11 @@ import { Badge } from "@/components/ui/badge"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { formatDate, formatNumber } from "@/lib/format"
 import { getNutrientValue, scaleNutrients, sumNutrients } from "@/lib/nutrients"
-import { FOODS } from "@/lib/mock-data"
-import type { ProtocolDay, MealSlotType } from "@/lib/types"
+import type { ProtocolDay, MealSlotType, Food } from "@/lib/types"
 
 interface ProtocolDayViewProps {
   day: ProtocolDay
+  foods: Food[]
 }
 
 const MEAL_ORDER: MealSlotType[] = [
@@ -26,9 +26,8 @@ const MEAL_ORDER: MealSlotType[] = [
   "abendessen",
 ]
 
-const foodMap = new Map(FOODS.map((f) => [f.id, f]))
-
-export function ProtocolDayView({ day }: ProtocolDayViewProps) {
+export function ProtocolDayView({ day, foods }: ProtocolDayViewProps) {
+  const foodMap = new Map(foods.map((f) => [f.id, f]))
   const entriesBySlot = new Map<MealSlotType, typeof day.entries>()
   for (const entry of day.entries) {
     const existing = entriesBySlot.get(entry.mealSlot) ?? []

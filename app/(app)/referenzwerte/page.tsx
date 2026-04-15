@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { REFERENCE_STANDARDS, AGE_GROUPS } from "@/lib/mock-data/reference-standards";
-import { NUTRIENT_DEFINITIONS } from "@/lib/mock-data";
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { resolveReferenceValues } from "@/lib/reference-values";
 import { LIFE_STAGE_LABELS } from "@/lib/types/reference-values";
@@ -736,6 +736,7 @@ export default function ReferenzwertePage() {
         {REFERENCE_STANDARDS.map((s) => (
           <Card
             key={s.id}
+            data-testid={`reference-standard-${s.id}`}
             className={
               standardId === s.id
                 ? "ring-2 ring-primary"

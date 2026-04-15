@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Flame, Drumstick, Droplet, Wheat } from "lucide-react";
+import { Plus, Trash2, Flame, Drumstick, Droplet, Wheat, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -41,11 +41,13 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 
-import { FOODS } from "@/lib/mock-data";
 import { useNutrientCalculation } from "@/hooks/use-nutrient-calculation";
 import { getNutrientValue } from "@/lib/nutrients";
 import { formatNumber } from "@/lib/format";
 import type { Recipe, Ingredient } from "@/lib/types";
+import { useFoods } from "@/components/foods-provider";
+import { persistPersonalRecipe } from "@/lib/data/recipes-client";
+import { getLocalRecipes, saveLocalRecipes, upsertLocalRecipe } from "@/lib/data/local-recipes";
 
 const RECIPE_CATEGORIES = [
   "Suppe",
@@ -113,25 +115,11 @@ interface RecipeFormProps {
   isEditing?: boolean;
 }
 
-function getCustomRecipes(): Recipe[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const stored = localStorage.getItem("prodi_custom_recipes");
-    if (!stored) return [];
-    return JSON.parse(stored) as Recipe[];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomRecipes(recipes: Recipe[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("prodi_custom_recipes", JSON.stringify(recipes));
-}
-
 export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const router = useRouter();
   const [foodDialogOpen, setFoodDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const foods = useFoods();
 
   const defaultIngredients: { foodId: string; amount: number }[] =
     recipe?.ingredients.map((i) => ({
@@ -183,7 +171,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
 
   const { totalNutrients, perServingNutrients } = useNutrientCalculation(
     ingredientsForCalc,
-    FOODS,
+    foods,
     watchedServings ?? 1,
   );
 
@@ -193,7 +181,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const perServingFat = getNutrientValue(perServingNutrients, "fett");
   const perServingCarbs = getNutrientValue(perServingNutrients, "kohlenhydrate");
 
-  const foodMap = new Map(FOODS.map((f) => [f.id, f]));
+  const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
 
   function getFoodName(foodId: string): string {
     return foodMap.get(foodId)?.name ?? "Unbekannt";
@@ -208,7 +196,8 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
     setFoodDialogOpen(false);
   }
 
-  function onSubmit(values: RecipeFormValues) {
+  async function onSubmit(values: RecipeFormValues) {
+    setSaving(true);
     const now = new Date().toISOString();
     const additiveList = values.additives
       ? values.additives
@@ -240,27 +229,40 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
       updatedAt: now,
     };
 
-    const existing = getCustomRecipes();
+    try {
+      if (isEditing && recipe) {
+        const existing = getLocalRecipes(foods);
+        const isLocalRecipe = existing.some((entry) => entry.id === recipe.id);
+        const isPersistedRecipe =
+          recipe.sourceType === "personal" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recipe.id);
 
-    if (isEditing && recipe) {
-      // Check if it's a mock recipe
-      const isMock = !existing.find((r) => r.id === recipe.id);
-      if (isMock) {
-        toast.error("Standardrezepte können nicht bearbeitet werden.");
-        return;
+        if (!isLocalRecipe && !isPersistedRecipe) {
+          toast.error("Standardrezepte können nicht bearbeitet werden.");
+          return;
+        }
       }
-      const updated = existing.map((r) =>
-        r.id === recipe.id ? recipeData : r,
-      );
-      saveCustomRecipes(updated);
-      toast.success("Rezept erfolgreich aktualisiert!");
-    } else {
-      existing.push(recipeData);
-      saveCustomRecipes(existing);
-      toast.success("Rezept erfolgreich erstellt!");
-    }
 
-    router.push(`/rezepte/${recipeData.id}`);
+      let savedRecipe = recipeData;
+
+      try {
+        savedRecipe = await persistPersonalRecipe(recipeData);
+        const remainingLocalRecipes = getLocalRecipes(foods).filter((entry) => entry.id !== recipeData.id);
+        saveLocalRecipes(remainingLocalRecipes, foods);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message && message !== "AUTH_REQUIRED") {
+          console.error("Failed to persist recipe to Supabase:", error);
+        }
+        savedRecipe = upsertLocalRecipe(recipeData, foods);
+      }
+
+      toast.success(isEditing ? "Rezept erfolgreich aktualisiert!" : "Rezept erfolgreich erstellt!");
+      router.push(`/rezepte/${savedRecipe.id}`);
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
   }
 
   // Already-selected food IDs for filtering
@@ -562,7 +564,8 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
               </Card>
 
               <div className="flex gap-3">
-                <Button type="submit">
+                <Button type="submit" disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isEditing ? "Rezept aktualisieren" : "Rezept erstellen"}
                 </Button>
                 <Button
@@ -704,7 +707,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         <CommandList>
           <CommandEmpty>Kein Lebensmittel gefunden.</CommandEmpty>
           <CommandGroup heading="Lebensmittel">
-            {FOODS.filter((f) => !selectedFoodIds.has(f.id)).map((food) => (
+            {foods.filter((f) => !selectedFoodIds.has(f.id)).map((food) => (
               <CommandItem
                 key={food.id}
                 value={food.name}

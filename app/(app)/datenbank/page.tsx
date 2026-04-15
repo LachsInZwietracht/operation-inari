@@ -18,7 +18,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { FOOD_DATABASE_UPDATES, FOOD_SOURCES } from "@/lib/mock-data";
+import { FOOD_SOURCES } from "@/lib/data/food-sources";
+import { FOOD_DATABASE_UPDATES } from "@/lib/mock-data";
 import { formatNumber } from "@/lib/format";
 
 export default function DatenbankPage() {

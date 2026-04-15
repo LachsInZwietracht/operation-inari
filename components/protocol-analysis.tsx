@@ -26,21 +26,20 @@ import {
   MEAL_SLOT_LABELS,
   PROTOCOL_TYPE_LABELS,
 } from "@/lib/constants"
-import { FOODS, NUTRIENT_DEFINITIONS } from "@/lib/mock-data"
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
 import type {
   Gender,
   MealSlotType,
   NutritionProtocol,
   ResolvedReferenceConfig,
 } from "@/lib/types"
+import { useFoods } from "@/components/foods-provider"
 
 interface ProtocolAnalysisProps {
   protocol: NutritionProtocol
   gender?: Gender
   dateOfBirth?: string
 }
-
-const foodMap = new Map(FOODS.map((f) => [f.id, f]))
 const MEAL_SLOTS: MealSlotType[] = [
   "fruehstueck",
   "snack_vormittag",
@@ -50,7 +49,9 @@ const MEAL_SLOTS: MealSlotType[] = [
 ]
 
 export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: ProtocolAnalysisProps) {
+  const foods = useFoods()
   const { standardId, lifeStage } = useReferenceProfiles()
+  const foodMap = useMemo(() => new Map(foods.map((f) => [f.id, f])), [foods])
   const method = protocol.metadata?.assessmentMethod
   const methodLabel = method
     ? ASSESSMENT_METHOD_LABELS[method]
@@ -93,7 +94,7 @@ export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: Protoc
       nutrientId: nv.nutrientId,
       amount: nv.amount / numDays,
     }))
-  }, [protocol])
+  }, [protocol, foodMap])
 
   const macroIds = ["eiweiss", "fett", "kohlenhydrate", "ballaststoffe"]
   const macroChartData: NutrientChartDataPoint[] = macroIds.map((id) => {
@@ -132,7 +133,7 @@ export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: Protoc
           value: dayKcal,
         }
       }),
-    [protocol.days],
+    [protocol.days, foodMap],
   )
 
   const energyStats = useMemo(() => {
@@ -162,7 +163,7 @@ export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: Protoc
       value: totals.get(slot) ?? 0,
       percentage: totalEnergy ? Math.round(((totals.get(slot) ?? 0) / totalEnergy) * 100) : 0,
     }))
-  }, [protocol.days])
+  }, [protocol.days, foodMap])
 
   const totalEntries = protocol.days.reduce((sum, day) => sum + day.entries.length, 0)
   const householdEntries = protocol.days.reduce(

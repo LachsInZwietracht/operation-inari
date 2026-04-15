@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import { FoodDetailContent } from "@/components/food-detail-content";
-import { FOODS, BRANDED_FOODS } from "@/lib/mock-data";
-import type { Food } from "@/lib/types";
 import { FoodDetailClient } from "./food-detail-client";
-
-const STATIC_FOODS: Food[] = [...FOODS, ...BRANDED_FOODS];
+import { fetchCatalogFoodById } from "@/lib/data/foods";
 
 export default async function LebensmittelDetailPage({
   params,
@@ -12,7 +9,7 @@ export default async function LebensmittelDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const food = STATIC_FOODS.find((item) => item.id === id);
+  const food = await fetchCatalogFoodById(id);
 
   if (food) {
     return <FoodDetailContent food={food} />;

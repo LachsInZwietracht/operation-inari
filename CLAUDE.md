@@ -4,7 +4,7 @@
 
 **Prodi** is a modern German nutrition counseling web application replacing the outdated desktop-only PRODI software. It provides food database browsing, recipe management, daily meal planning, and nutrient analysis with DGE reference value comparisons.
 
-**Current state:** MVP with mock data and localStorage persistence plus advanced food search (phonetic + synonym management). No backend integration yet — see `docs/backend-tasks.md` for planned Supabase migration.
+**Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus localStorage persistence for recipes/meal plans/custom foods. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -16,6 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run lint` - Run ESLint
 - `npm run typecheck` - Run TypeScript type checking
 - `npm run test` - Run Playwright end-to-end tests
+- `npm run etl:bls` - Import BLS 4.0 data into Supabase (requires `SUPABASE_SERVICE_ROLE_KEY`)
 
 ## Framework and Library Recommendations
 
@@ -56,7 +57,11 @@ This is a Next.js 15 application using the App Router with:
 - `components/ui/` - Complete shadcn/ui component library including accordion, alert-dialog, avatar, badge, breadcrumb, button, calendar, card, carousel, checkbox, collapsible, command, context-menu, dialog, drawer, dropdown-menu, form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, toggle, tooltip, and more
 - `hooks/` - Custom React hooks (e.g., `use-mobile.ts` for responsive design)
 - `lib/utils.ts` - Utility functions including Tailwind class merging
-- `supabase/` - Supabase configuration and setup
+- `supabase/` - Supabase configuration, migrations, and seed data
+- `supabase/migrations/` - Database schema migrations (run in order)
+- `scripts/etl/` - ETL scripts for importing external nutrition databases
+- `data/` - Raw data files (BLS, OFF, etc.) — gitignored, not committed
+- `docs/` - Project documentation including `database-guide.md`
 - `tests/` - Playwright test files
 - `public/` - Static assets
 
@@ -111,6 +116,10 @@ When working with environment variables in Next.js:
 ## Feature Documentation
 
 For a comprehensive feature-by-feature guide covering routes, components, hooks, data flows, and extension notes, see [`documentation.md`](./documentation.md). Consult it when working on unfamiliar areas or tracing data through the app.
+
+## Database & Nutrition Data
+
+For everything related to the nutrition database layer — schema design, available datasets, ETL pipelines, nutrient ID mappings, migration strategy, and search architecture — see [`docs/database-guide.md`](./docs/database-guide.md). Consult it when working on Supabase tables, food data imports, or the mock-to-real-data migration.
 
 # General
 - Don't add any components that are not part of the shadcn library to components/ui

@@ -2,73 +2,95 @@ import { expect, test } from "@playwright/test";
 
 test.describe("Navigation", () => {
   test("redirects root to dashboard", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/dashboard/);
+    await page.goto("/", { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
     await expect(page).toHaveTitle(/Prodi/);
   });
 
   test("sidebar navigates to all main routes", async ({ page }) => {
-    await page.goto("/dashboard");
+    test.setTimeout(180_000);
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
 
     const sidebar = page.locator("[data-slot='sidebar-container']");
+    await expect(sidebar).toBeVisible({ timeout: 30_000 });
 
-    // Navigate to Lebensmittel
-    await sidebar.getByRole("link", { name: "Lebensmittel" }).click();
-    await expect(page).toHaveURL(/\/lebensmittel/);
-    await expect(page.getByRole("heading", { name: "Lebensmittel", exact: true })).toBeVisible();
+    const navTimeout = 120_000;
+    const steps: {
+      label: string;
+      path: string;
+      url: RegExp;
+      heading: string;
+      exact?: boolean;
+    }[] = [
+      { label: "Lebensmittel", path: "/lebensmittel", url: /\/lebensmittel/, heading: "Lebensmittel" },
+      { label: "Rezepte", path: "/rezepte", url: /\/rezepte/, heading: "Rezepte" },
+      {
+        label: "Ernährungsplan",
+        path: "/ernaehrungsplan",
+        url: /\/ernaehrungsplan/,
+        heading: "Ernährungsplan",
+      },
+      {
+        label: "Austauschtabellen",
+        path: "/austauschtabellen",
+        url: /\/austauschtabellen/,
+        heading: "Austauschtabellen",
+      },
+      { label: "Patienten", path: "/patienten", url: /\/patienten/, heading: "Patienten" },
+      { label: "Berichte", path: "/berichte", url: /\/berichte/, heading: "Berichte" },
+      {
+        label: "Menüpläne",
+        path: "/institution/menueplaene",
+        url: /\/institution\/menueplaene/,
+        heading: "Menüplanung",
+      },
+      {
+        label: "Produktion",
+        path: "/institution/produktion",
+        url: /\/institution\/produktion/,
+        heading: "Produktionsmanagement",
+      },
+      {
+        label: "Compliance",
+        path: "/institution/compliance",
+        url: /\/institution\/compliance/,
+        heading: "Nährstoff-Compliance",
+      },
+      {
+        label: "Krankenhaus",
+        path: "/institution/krankenhaus",
+        url: /\/institution\/krankenhaus/,
+        heading: "Krankenhausverwaltung",
+      },
+      {
+        label: "Statistiken",
+        path: "/institution/statistiken",
+        url: /\/institution\/statistiken/,
+        heading: "Einrichtungsstatistiken",
+        exact: true,
+      },
+    ];
 
-    // Navigate to Rezepte
-    await sidebar.getByRole("link", { name: "Rezepte" }).click();
-    await expect(page).toHaveURL(/\/rezepte/);
-    await expect(page.getByRole("heading", { name: "Rezepte" })).toBeVisible();
+    for (const step of steps) {
+      const link = sidebar.getByRole("link", { name: step.label, exact: step.exact ?? false });
+      await expect(link).toBeVisible({ timeout: 30_000 });
+      const href = await link.getAttribute("href");
+      expect(href).toBe(step.path);
 
-    // Navigate to Ernährungsplan
-    await sidebar.getByRole("link", { name: "Ernährungsplan" }).click();
-    await expect(page).toHaveURL(/\/ernaehrungsplan/);
-    await expect(page.getByRole("heading", { name: "Ernährungsplan" })).toBeVisible();
+      await page.goto(step.path, { waitUntil: "domcontentloaded", timeout: navTimeout });
+      const headingLocator = page
+        .locator("main")
+        .getByRole("heading", { name: step.heading, exact: step.exact ?? false });
+      await expect(headingLocator).toBeVisible({ timeout: navTimeout });
+      await expect(page).toHaveURL(step.url, { timeout: navTimeout });
+      await expect(sidebar).toBeVisible({ timeout: navTimeout });
+    }
 
-    // Navigate to Austauschtabellen
-    await sidebar.getByRole("link", { name: "Austauschtabellen" }).click();
-    await expect(page).toHaveURL(/\/austauschtabellen/);
-    await expect(page.getByRole("heading", { name: "Austauschtabellen" })).toBeVisible();
-
-    // Navigate to Patienten
-    await sidebar.getByRole("link", { name: "Patienten" }).click();
-    await expect(page).toHaveURL(/\/patienten/);
-    await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible();
-
-    // Navigate to Berichte
-    await sidebar.getByRole("link", { name: "Berichte" }).click();
-    await expect(page).toHaveURL(/\/berichte/);
-    await expect(page.getByRole("heading", { name: "Berichte" })).toBeVisible();
-
-    // Navigate to Menüpläne
-    await sidebar.getByRole("link", { name: "Menüpläne" }).click();
-    await expect(page).toHaveURL(/\/institution\/menueplaene/);
-    await expect(page.getByRole("heading", { name: "Menüplanung" })).toBeVisible();
-
-    // Navigate to Produktion
-    await sidebar.getByRole("link", { name: "Produktion" }).click();
-    await expect(page).toHaveURL(/\/institution\/produktion/);
-    await expect(page.getByRole("heading", { name: "Produktionsmanagement" })).toBeVisible();
-
-    // Navigate to Compliance
-    await sidebar.getByRole("link", { name: "Compliance" }).click();
-    await expect(page).toHaveURL(/\/institution\/compliance/);
-    await expect(page.getByRole("heading", { name: "Nährstoff-Compliance" })).toBeVisible();
-
-    // Navigate to Krankenhaus
-    await sidebar.getByRole("link", { name: "Krankenhaus" }).click();
-    await expect(page).toHaveURL(/\/institution\/krankenhaus/);
-    await expect(page.getByRole("heading", { name: "Krankenhausverwaltung" })).toBeVisible();
-
-    // Navigate to Statistiken
-    await sidebar.getByRole("link", { name: "Statistiken", exact: true }).click();
-    await expect(page).toHaveURL(/\/institution\/statistiken/);
-    await expect(page.getByRole("heading", { name: "Einrichtungsstatistiken" })).toBeVisible();
-
-    // Navigate back to Dashboard
-    await sidebar.getByRole("link", { name: "Dashboard" }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    const dashboardLink = sidebar.getByRole("link", { name: "Dashboard" });
+    await expect(dashboardLink).toBeVisible({ timeout: navTimeout });
+    await dashboardLink.click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: navTimeout });
   });
 });

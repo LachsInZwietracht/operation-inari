@@ -11,10 +11,13 @@ test.describe("Reference Values", () => {
 
   test("displays all four standard cards", async ({ page }) => {
     await page.goto("/referenzwerte");
-    await expect(page.getByText("DGE")).toBeVisible();
-    await expect(page.getByText("ÖGE")).toBeVisible();
-    await expect(page.getByText("SGE")).toBeVisible();
-    await expect(page.getByText("RDA")).toBeVisible();
+    const standardCard = (id: string) =>
+      page.locator(`[data-testid="reference-standard-${id}"]`);
+
+    await expect(standardCard("dge")).toBeVisible();
+    await expect(standardCard("oege")).toBeVisible();
+    await expect(standardCard("sge")).toBeVisible();
+    await expect(standardCard("rda")).toBeVisible();
   });
 
   test("switches active standard", async ({ page }) => {
@@ -95,8 +98,10 @@ test.describe("Reference Values", () => {
 
   test("food detail page shows reference selector", async ({ page }) => {
     await page.goto("/lebensmittel");
-    // Click on a food item to view its detail
-    await page.getByRole("link").filter({ hasText: /Apfel|Banane|Vollmilch|Haferflocken/ }).first().click();
+    const firstRow = page.locator("table tbody tr").first();
+    await expect(firstRow).toBeVisible({ timeout: 30_000 });
+    await firstRow.locator("td").nth(1).click();
+    await page.waitForURL(/\/lebensmittel\//, { timeout: 15_000 });
 
     // The compact reference selector should be visible
     await expect(page.getByText("Nährstoffanalyse")).toBeVisible();

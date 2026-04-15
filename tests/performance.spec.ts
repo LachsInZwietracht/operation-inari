@@ -8,13 +8,15 @@ test.describe("Performance & Validation", () => {
       page.getByRole("heading", { name: "Leistung & Validierung" })
     ).toBeVisible();
 
+    const main = page.locator("main");
+
     // KPI cards should render
-    await expect(page.getByText("Antwortzeit")).toBeVisible();
-    await expect(page.getByText("Durchsatz")).toBeVisible();
-    await expect(page.getByText("Cache-Trefferrate")).toBeVisible();
-    await expect(page.getByText("DB-Abfragezeit")).toBeVisible();
-    await expect(page.getByText("Fehlerrate")).toBeVisible();
-    await expect(page.getByText("Verfügbarkeit")).toBeVisible();
+    await expect(main.getByText("Antwortzeit", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("Durchsatz", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("Cache-Trefferrate", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("DB-Abfragezeit", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("Fehlerrate", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("Verfügbarkeit", { exact: true }).first()).toBeVisible();
   });
 
   test("shows response time chart", async ({ page }) => {
@@ -61,11 +63,12 @@ test.describe("Performance & Validation", () => {
     await page.goto("/leistung");
 
     // System resources card
-    await expect(page.getByText("Systemressourcen")).toBeVisible();
-    await expect(page.getByText("CPU")).toBeVisible();
-    await expect(page.getByText("RAM")).toBeVisible();
-    await expect(page.getByText("Speicher")).toBeVisible();
-    await expect(page.getByText("Netzwerk")).toBeVisible();
+    const systemCard = page.locator("main");
+    await expect(page.getByText("Systemressourcen", { exact: true })).toBeVisible();
+    await expect(systemCard.getByText("CPU", { exact: true }).first()).toBeVisible();
+    await expect(systemCard.getByText("RAM", { exact: true }).first()).toBeVisible();
+    await expect(systemCard.getByText("Speicher", { exact: true }).first()).toBeVisible();
+    await expect(systemCard.getByText("Netzwerk", { exact: true }).first()).toBeVisible();
 
     // Database stats
     await expect(page.getByText("Datenbankabfragen")).toBeVisible();

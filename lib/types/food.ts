@@ -6,6 +6,10 @@ export type FoodSourceId =
   | "sfk"
   | "usda"
   | "afcd"
+  | "swiss"
+  | "ciqual"
+  | "cofid"
+  | "off"
   | "hersteller"
   | "custom";
 
@@ -84,4 +88,12 @@ export interface FoodSynonym extends Timestamped {
   usageCount?: number;
   /** Flag if this synonym should override the canonical food name */
   isPrimary?: boolean;
+}
+
+export interface FoodSearchItem {
+  id: ID;
+  name: string;
+  categoryId: ID;
+  sourceId?: FoodSourceId;
+  isCustom?: boolean;
 }

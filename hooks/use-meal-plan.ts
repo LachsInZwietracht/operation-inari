@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { addDays, subDays, format, parseISO } from "date-fns"
-import type { DailyMealPlan, MealSlotType, MealEntry, MealSlot } from "@/lib/types"
-import { MEAL_PLANS } from "@/lib/mock-data"
-
-const STORAGE_KEY = "prodi_meal_plans"
+import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot } from "@/lib/types"
+import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization"
+import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
+import { getLocalMealPlansRecord, saveLocalMealPlansRecord } from "@/lib/data/local-meal-plans"
 
 const ALL_SLOT_TYPES: MealSlotType[] = [
   "fruehstueck",
@@ -46,26 +46,12 @@ function ensureAllSlots(plan: DailyMealPlan): DailyMealPlan {
   }
 }
 
-function loadFromStorage(): Record<string, DailyMealPlan> {
-  if (typeof window === "undefined") return {}
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      return JSON.parse(raw) as Record<string, DailyMealPlan>
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return {}
-}
+function buildInitialPlans(initialPlans: DailyMealPlan[], foods: Food[]): Record<string, DailyMealPlan> {
+  const stored = getLocalMealPlansRecord(foods)
 
-function buildInitialPlans(): Record<string, DailyMealPlan> {
-  const stored = loadFromStorage()
-
-  // Merge mock plans (stored takes precedence)
   const merged: Record<string, DailyMealPlan> = {}
-  for (const plan of MEAL_PLANS) {
-    merged[plan.date] = ensureAllSlots(plan)
+  for (const plan of initialPlans) {
+    merged[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
   }
   for (const [date, plan] of Object.entries(stored)) {
     merged[date] = ensureAllSlots(plan)
@@ -74,20 +60,89 @@ function buildInitialPlans(): Record<string, DailyMealPlan> {
   return merged
 }
 
-export function useMealPlan() {
+export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = []) {
+  const lastPersistedState = useRef<string>("")
+  const hasLoadedPersistedPlans = useRef(false)
   const [currentDate, setCurrentDate] = useState(() =>
     format(new Date(), "yyyy-MM-dd")
   )
-  const [plans, setPlans] = useState<Record<string, DailyMealPlan>>(buildInitialPlans)
+  const [plans, setPlans] = useState<Record<string, DailyMealPlan>>(() =>
+    buildInitialPlans(initialPlans, foods)
+  )
 
-  // Persist to localStorage on every plans change
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(plans))
-    } catch {
-      // Ignore quota errors
+    saveLocalMealPlansRecord(plans, foods)
+  }, [foods, plans])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPersistedPlans() {
+      try {
+        const persistedPlans = await fetchMealPlansClient()
+        if (cancelled) return
+
+        setPlans((prev) => {
+          const next = { ...prev }
+          for (const plan of persistedPlans) {
+            next[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+          }
+          lastPersistedState.current = JSON.stringify(next)
+          return next
+        })
+      } catch (error) {
+        console.error("Failed to load meal plans from Supabase:", error)
+        lastPersistedState.current = JSON.stringify(plans)
+      } finally {
+        if (!cancelled) {
+          hasLoadedPersistedPlans.current = true
+        }
+      }
     }
-  }, [plans])
+
+    void loadPersistedPlans()
+
+    return () => {
+      cancelled = true
+    }
+  }, [foods])
+
+  useEffect(() => {
+    if (!hasLoadedPersistedPlans.current) return
+
+    const serializedPlans = JSON.stringify(plans)
+    if (serializedPlans === lastPersistedState.current) return
+    lastPersistedState.current = serializedPlans
+
+    let cancelled = false
+
+    async function persistPlans() {
+      const localFallback: Record<string, DailyMealPlan> = {}
+
+      for (const plan of Object.values(plans)) {
+        try {
+          await persistMealPlan(plan)
+          if (cancelled) return
+        } catch (error) {
+          const message = error instanceof Error ? error.message : ""
+          if (message && message !== "AUTH_REQUIRED") {
+            console.error(`Failed to persist meal plan ${plan.date}:`, error)
+          }
+          localFallback[plan.date] = plan
+        }
+      }
+
+      if (!cancelled) {
+        saveLocalMealPlansRecord(localFallback, foods)
+      }
+    }
+
+    void persistPlans()
+
+    return () => {
+      cancelled = true
+    }
+  }, [foods, plans])
 
   const getPlanForDate = useCallback(
     (date: string): DailyMealPlan => {

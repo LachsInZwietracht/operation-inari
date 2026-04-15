@@ -96,9 +96,12 @@ export function scoreMatch(query: string, target: string): SearchMatch | null {
   const targetWords = normTarget.split(/[\s,()-]+/).filter(Boolean)
   const queryWords = normQuery.split(/[\s,()-]+/).filter(Boolean)
 
-  // Check if all query words match some part of the target
+  // Check if all query words appear inside some target word (handles compound
+  // names like "Vollkornbrot" matching query "brot"). Only forward direction —
+  // the reverse (qw.includes(tw)) causes false positives with short target
+  // words like "rot", "eis", "e" appearing inside unrelated queries.
   const allWordsMatch = queryWords.every((qw) =>
-    targetWords.some((tw) => tw.includes(qw) || qw.includes(tw))
+    targetWords.some((tw) => tw.includes(qw))
   )
   if (allWordsMatch && queryWords.length > 0) {
     return { score: 0.75, matchType: "contains" }

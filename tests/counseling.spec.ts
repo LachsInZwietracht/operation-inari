@@ -1,39 +1,51 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { PATIENTS } from "@/lib/mock-data";
+
+const COUNSELING_PATIENT = PATIENTS.find((patient) => patient.id === "patient_1")!;
+
+async function openCounselingTab(page: Page) {
+  await page.goto(`/patienten/${COUNSELING_PATIENT.id}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
+  });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: `${COUNSELING_PATIENT.firstName} ${COUNSELING_PATIENT.lastName}` })).toBeVisible({ timeout: 30_000 });
+  const counselingTab = page.getByRole("tab", { name: "Beratungen" });
+  await expect(counselingTab).toBeVisible({ timeout: 30_000 });
+  await counselingTab.click();
+}
 
 test.describe("Counseling Sessions", () => {
   test("views existing counseling session", async ({ page }) => {
-    await page.goto("/patienten");
-    await page.getByRole("link", { name: /Schneider, Maria/ }).click();
-
-    // Go to Beratungen tab
-    await page.getByRole("tab", { name: "Beratungen" }).click();
+    await openCounselingTab(page);
 
     // Should see existing sessions
     await expect(page.getByText(/Erstberatung – Adipositas/)).toBeVisible();
 
     // Click on session
-    await page.getByRole("link", { name: /Erstberatung – Adipositas/ }).first().click();
+    const sessionLink = page.getByRole("link", { name: /Erstberatung – Adipositas/ }).first();
+    await expect(sessionLink).toBeVisible();
+    await sessionLink.click();
 
     // Should show session detail
-    await expect(page.getByText("Dokumentation")).toBeVisible();
-    await expect(page.getByText("Anamnese")).toBeVisible();
+    await expect(page.getByTestId("counseling-session-documentation-title")).toBeVisible();
+    await expect(page.getByTestId("counseling-session-content")).toContainText("Anamnese");
   });
 
   test("creates counseling session with template", async ({ page }) => {
-    await page.goto("/patienten");
-    await page.getByRole("link", { name: /Schneider, Maria/ }).click();
-
-    await page.getByRole("tab", { name: "Beratungen" }).click();
+    await openCounselingTab(page);
     await page.getByRole("link", { name: "Neue Beratung" }).click();
 
-    await expect(page.getByRole("heading", { name: "Neue Beratungssitzung" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Neue Beratungssitzung" })).toBeVisible({ timeout: 30_000 });
 
     // Click template button
     await page.getByRole("button", { name: "Vorlage einfügen" }).click();
 
     // Select a template from the dialog
     await expect(page.getByRole("heading", { name: "Vorlage auswählen" })).toBeVisible();
-    await page.locator("[data-slot=card]").filter({ hasText: "Erstberatung Adipositas" }).first().click();
+    const templateCard = page.locator("[data-slot=card]").filter({ hasText: "Erstberatung Adipositas" }).first();
+    await expect(templateCard).toBeVisible();
+    await templateCard.click();
 
     // Template content should be inserted into the textarea
     const textarea = page.locator('textarea[placeholder="Beratungsdokumentation..."]');

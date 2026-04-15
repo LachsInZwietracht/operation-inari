@@ -1,39 +1,16 @@
-"use client"
+import { NeuesProtokollPageClient } from "./neues-protokoll-client";
+import { fetchAllFoodsForList } from "@/lib/data/foods";
+import { FoodsProvider } from "@/components/foods-provider";
 
-import { use } from "react"
-import { useSearchParams } from "next/navigation"
-import { PageHeader } from "@/components/page-header"
-import { ProtocolForm } from "@/components/protocol-form"
-import { useProtocols } from "@/hooks/use-protocols"
-import { usePatients } from "@/hooks/use-patients"
-
-export default function NeuesProtokollPage({
+export default async function NeuesProtokollPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = use(params)
-  const searchParams = useSearchParams()
-  const templateId = searchParams.get("template") ?? undefined
-  const { getPatient } = usePatients()
-  const { addProtocol } = useProtocols()
-  const patient = getPatient(id)
-
-  if (!patient) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Patient nicht gefunden" />
-      </div>
-    )
-  }
-
+  const foods = await fetchAllFoodsForList();
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Neues Ernährungsprotokoll"
-        description={`${patient.firstName} ${patient.lastName}`}
-      />
-      <ProtocolForm patientId={id} templateId={templateId} onSubmit={addProtocol} />
-    </div>
-  )
+    <FoodsProvider foods={foods}>
+      <NeuesProtokollPageClient params={params} />
+    </FoodsProvider>
+  );
 }

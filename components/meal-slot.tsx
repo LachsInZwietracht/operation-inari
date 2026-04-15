@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState, type DragEvent } from "react"
+import { useCallback, useMemo, useState, type DragEvent } from "react"
 import { X, Plus } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import { FOODS, RECIPES } from "@/lib/mock-data"
 import { scaleNutrients, getNutrientValue, calculateRecipeNutrients, calculatePerServing } from "@/lib/nutrients"
 import { formatNumber } from "@/lib/format"
-import type { MealSlot, MealSlotType, MealEntry } from "@/lib/types"
+import type { MealSlot, MealSlotType, MealEntry, Food, Recipe } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { createRecipeLookup } from "@/lib/recipes"
 
 export const MEAL_PLAN_DRAG_TYPE = "application/prodi-entry-type"
 export const MEAL_PLAN_DRAG_ID = "application/prodi-entry-id"
@@ -32,26 +32,37 @@ interface MealSlotProps {
   onDropPayload?: (slotType: MealSlotType, payload: DragPayload) => void
   complianceIndicators?: ComplianceIndicator[]
   onOpenExchange?: (slotType: MealSlotType) => void
+  foods: Food[]
+  recipes: Recipe[]
 }
 
-function getEntryName(entry: MealEntry): string {
+function getEntryName(
+  entry: MealEntry,
+  foodMap: Map<string, Food>,
+  recipeMap: Map<string, Recipe>,
+): string {
   if (entry.type === "food") {
-    return FOODS.find((f) => f.id === entry.referenceId)?.name ?? "Unbekannt"
+    return foodMap.get(entry.referenceId)?.name ?? "Unbekannt"
   }
-  return RECIPES.find((r) => r.id === entry.referenceId)?.name ?? "Unbekannt"
+  return recipeMap.get(entry.referenceId)?.name ?? "Unbekannt"
 }
 
-function getEntryKcal(entry: MealEntry): number {
+function getEntryKcal(
+  entry: MealEntry,
+  foodMap: Map<string, Food>,
+  recipeMap: Map<string, Recipe>,
+  foods: Food[],
+): number {
   if (entry.type === "food") {
-    const food = FOODS.find((f) => f.id === entry.referenceId)
+    const food = foodMap.get(entry.referenceId)
     if (!food) return 0
     const scaled = scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
     return getNutrientValue(scaled, "energie")
   }
 
-  const recipe = RECIPES.find((r) => r.id === entry.referenceId)
+  const recipe = recipeMap.get(entry.referenceId)
   if (!recipe) return 0
-  const totalNutrients = calculateRecipeNutrients(recipe, FOODS)
+  const totalNutrients = calculateRecipeNutrients(recipe, foods)
   const perServing = calculatePerServing(totalNutrients, recipe.servings)
   const scaled = scaleNutrients(perServing, 1, entry.amount)
   return getNutrientValue(scaled, "energie")
@@ -71,8 +82,15 @@ export function MealSlotCard({
   onDropPayload,
   complianceIndicators,
   onOpenExchange,
+  foods,
+  recipes,
 }: MealSlotProps) {
-  const totalKcal = slot.entries.reduce((sum, entry) => sum + getEntryKcal(entry), 0)
+  const foodMap = useMemo(() => new Map(foods.map((f) => [f.id, f])), [foods])
+  const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
+  const totalKcal = slot.entries.reduce(
+    (sum, entry) => sum + getEntryKcal(entry, foodMap, recipeMap, foods),
+    0,
+  )
   const [isDragOver, setIsDragOver] = useState(false)
 
   const handleAmountChange = useCallback(
@@ -165,14 +183,14 @@ export function MealSlotCard({
           </p>
         )}
         {slot.entries.map((entry) => {
-          const kcal = getEntryKcal(entry)
+          const kcal = getEntryKcal(entry, foodMap, recipeMap, foods)
           const unitLabel = entry.type === "food" ? "g" : entry.amount === 1 ? "Portion" : "Portionen"
 
           return (
             <div key={entry.id}>
               <div className="flex items-center gap-2">
                 <span className="flex-1 truncate text-sm font-medium">
-                  {getEntryName(entry)}
+                  {getEntryName(entry, foodMap, recipeMap)}
                 </span>
                 <div className="flex items-center gap-1">
                   <Input

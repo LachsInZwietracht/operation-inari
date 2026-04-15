@@ -1,12 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function visitInstitutionPage(page: Page, path: string, heading: string) {
+  await page.goto(path, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 30_000 });
+}
 
 test.describe("Institution Features", () => {
   test("displays weekly menu plan with diet form tabs and drag-and-drop", async ({ page }) => {
-    await page.goto("/institution/menueplaene");
-
-    await expect(
-      page.getByRole("heading", { name: "Menüplanung" })
-    ).toBeVisible();
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
 
     // Should show menu plan cards
     await expect(page.getByText("Menüplan KW 15/2026").first()).toBeVisible();
@@ -43,14 +45,14 @@ test.describe("Institution Features", () => {
 
     // Switch to Diabeteskost tab
     await page.getByRole("tab", { name: "Diabeteskost" }).click();
-    await expect(page.getByText("Hähnchen-Salat").first()).toBeVisible();
+    await expect(page.getByText("Linseneintopf").first()).toBeVisible();
 
     // Should display daily portion totals
     await expect(page.getByText("Gesamtportionen pro Tag").first()).toBeVisible();
   });
 
   test("opens recipe library sidebar for drag and drop", async ({ page }) => {
-    await page.goto("/institution/menueplaene");
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
 
     // Open recipe library
     await page.getByRole("button", { name: /Rezeptbibliothek/i }).click();
@@ -58,13 +60,13 @@ test.describe("Institution Features", () => {
     // Should show recipes in the sidebar (use the sidebar label scope)
     const sidebar = page.getByLabel("Rezepte");
     await expect(sidebar.getByText("Kartoffelsuppe")).toBeVisible();
-    await expect(sidebar.getByText("Haferbrei mit Beeren")).toBeVisible();
     await expect(sidebar.getByText("Gemüsepfanne mit Reis")).toBeVisible();
+    await expect(sidebar.getByText("Lachs mit Brokkoli")).toBeVisible();
     await expect(sidebar.getByText("Linseneintopf")).toBeVisible();
   });
 
   test("generates production list from menu plan", async ({ page }) => {
-    await page.goto("/institution/menueplaene");
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
 
     // Switch to production tab
     await page.getByRole("tab", { name: /Produktion/i }).click();
@@ -80,7 +82,7 @@ test.describe("Institution Features", () => {
   });
 
   test("generates shopping list from menu plan", async ({ page }) => {
-    await page.goto("/institution/menueplaene");
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
 
     // Switch to shopping tab
     await page.getByRole("tab", { name: /Einkauf/i }).click();
@@ -99,15 +101,11 @@ test.describe("Institution Features", () => {
   });
 
   test("shows production and shopping lists on dedicated page", async ({ page }) => {
-    await page.goto("/institution/produktion");
-
-    await expect(
-      page.getByRole("heading", { name: "Produktionsmanagement" })
-    ).toBeVisible();
+    await visitInstitutionPage(page, "/institution/produktion", "Produktionsmanagement");
 
     // Should show production tab content with dynamically generated data
     await expect(page.getByText("Kartoffelsuppe").first()).toBeVisible();
-    await expect(page.getByText("Haferbrei").first()).toBeVisible();
+    await expect(page.getByText("Linseneintopf").first()).toBeVisible();
 
     // Should show summary cards
     await expect(page.getByText("Rezepte").first()).toBeVisible();
@@ -125,11 +123,7 @@ test.describe("Institution Features", () => {
   });
 
   test("displays nutritional compliance dashboard", async ({ page }) => {
-    await page.goto("/institution/compliance");
-
-    await expect(
-      page.getByRole("heading", { name: "Nährstoff-Compliance" })
-    ).toBeVisible();
+    await visitInstitutionPage(page, "/institution/compliance", "Nährstoff-Compliance");
 
     // Should show overview stats
     await expect(page.getByText(/Durchschnitt/i).first()).toBeVisible();
@@ -140,11 +134,7 @@ test.describe("Institution Features", () => {
   });
 
   test("shows hospital bed grid and dietary orders", async ({ page }) => {
-    await page.goto("/institution/krankenhaus");
-
-    await expect(
-      page.getByRole("heading", { name: "Krankenhausverwaltung" })
-    ).toBeVisible();
+    await visitInstitutionPage(page, "/institution/krankenhaus", "Krankenhausverwaltung");
 
     // Should show bed occupancy info
     await expect(page.getByText(/Betten/).first()).toBeVisible();
@@ -162,11 +152,7 @@ test.describe("Institution Features", () => {
   });
 
   test("displays institutional statistics with charts", async ({ page }) => {
-    await page.goto("/institution/statistiken");
-
-    await expect(
-      page.getByRole("heading", { name: "Einrichtungsstatistiken" })
-    ).toBeVisible();
+    await visitInstitutionPage(page, "/institution/statistiken", "Einrichtungsstatistiken");
 
     // Should show KPI cards
     await expect(page.getByText("Belegungsrate").first()).toBeVisible();

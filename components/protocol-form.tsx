@@ -49,7 +49,6 @@ import {
 } from "@/components/ui/toggle-group"
 import { Checkbox } from "@/components/ui/checkbox"
 
-import { FOODS } from "@/lib/mock-data"
 import {
   ASSESSMENT_METHOD_LABELS,
   HOUSEHOLD_MEASURES,
@@ -66,6 +65,7 @@ import {
 } from "@/lib/types"
 import { PROTOCOL_TEMPLATES } from "@/lib/protocol-templates"
 import { usePatients } from "@/hooks/use-patients"
+import { useFoods } from "@/components/foods-provider"
 
 const entrySchema = z.object({
   foodId: z.string().min(1),
@@ -117,6 +117,7 @@ const ASSESSMENT_METHOD_OPTIONS = Object.entries(
 
 export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormProps) {
   const router = useRouter()
+  const foods = useFoods()
   const { getPatient } = usePatients()
   const patient = getPatient(patientId)
   const [foodDialogOpen, setFoodDialogOpen] = useState(false)
@@ -164,7 +165,7 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
     remove: removeDay,
   } = useFieldArray({ control: form.control, name: "days" })
 
-  const foodMap = new Map(FOODS.map((f) => [f.id, f]))
+  const foodMap = new Map(foods.map((f) => [f.id, f]))
   const householdMeasureMap = useMemo(
     () => new Map(HOUSEHOLD_MEASURES.map((measure) => [measure.id, measure])),
     [],
@@ -840,7 +841,7 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
         <CommandList>
           <CommandEmpty>Kein Lebensmittel gefunden.</CommandEmpty>
           <CommandGroup heading="Lebensmittel">
-            {FOODS.map((food) => (
+            {foods.map((food) => (
               <CommandItem
                 key={food.id}
                 value={food.name}

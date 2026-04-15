@@ -7,7 +7,7 @@ import {
   normalizeText,
   type FuzzySearchResultMeta,
 } from "@/lib/search"
-import { getFoodGroupDescendants } from "@/lib/mock-data/food-groups"
+import { getFoodGroupDescendants } from "@/lib/data/food-groups"
 
 export type SearchMode = "name" | "code" | "group" | "browse"
 

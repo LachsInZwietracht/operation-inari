@@ -1,3 +1,5 @@
+'use client';
+
 import Link from "next/link";
 import { Clock, Users, Flame, Download } from "lucide-react";
 import {
@@ -12,11 +14,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { calculateRecipeNutrients, getNutrientValue } from "@/lib/nutrients";
-import { FOODS } from "@/lib/mock-data";
-import type { Recipe } from "@/lib/types";
+import type { Recipe, Food } from "@/lib/types";
 
 interface RecipeCardProps {
   recipe: Recipe;
+  foods: Food[];
   onImport?: () => void;
 }
 
@@ -29,8 +31,8 @@ function getProdScoreBadge(score: number | undefined) {
   return { label: "E", color: "bg-red-100 text-red-900" };
 }
 
-export function RecipeCard({ recipe, onImport }: RecipeCardProps) {
-  const nutrients = calculateRecipeNutrients(recipe, FOODS);
+export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
+  const nutrients = calculateRecipeNutrients(recipe, foods);
   const totalKcal = getNutrientValue(nutrients, "energie");
   const totalTime = recipe.prepTime + recipe.cookTime;
   const scoreBadge = getProdScoreBadge(recipe.prodScore);

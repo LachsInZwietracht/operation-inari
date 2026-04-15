@@ -1,11 +1,8 @@
-import { RECIPES } from "@/lib/mock-data";
 import { RecipeDetailContent } from "@/components/recipe-detail-content";
 import { RecipeDetailClient } from "./recipe-detail-client";
-import type { Recipe } from "@/lib/types";
-
-function findMockRecipe(id: string): Recipe | undefined {
-  return RECIPES.find((r) => r.id === id);
-}
+import { fetchAllFoods } from "@/lib/data/foods";
+import { fetchRecipeById } from "@/lib/data/recipes";
+import { FoodsProvider } from "@/components/foods-provider";
 
 export default async function RecipeDetailPage({
   params,
@@ -13,11 +10,18 @@ export default async function RecipeDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const mockRecipe = findMockRecipe(id);
+  const [foods, recipe] = await Promise.all([
+    fetchAllFoods(),
+    fetchRecipeById(id),
+  ]);
 
-  if (mockRecipe) {
-    return <RecipeDetailContent recipe={mockRecipe} />;
-  }
-
-  return <RecipeDetailClient recipeId={id} />;
+  return (
+    <FoodsProvider foods={foods}>
+      {recipe ? (
+        <RecipeDetailContent recipe={recipe} />
+      ) : (
+        <RecipeDetailClient recipeId={id} />
+      )}
+    </FoodsProvider>
+  );
 }

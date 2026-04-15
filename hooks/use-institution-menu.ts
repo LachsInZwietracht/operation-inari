@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { INSTITUTION_MENUS, RECIPES, FOODS } from "@/lib/mock-data";
+import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
+import { INSTITUTION_MENUS } from "@/lib/mock-data";
 import type {
   InstitutionMenu,
   InstitutionMealSlot,
@@ -10,53 +11,36 @@ import type {
   ShoppingItem,
 } from "@/lib/types/institution";
 import type { MealSlotType } from "@/lib/types/meal-plan";
+import type { Food } from "@/lib/types";
+import type { Recipe } from "@/lib/types";
+import { useFoods } from "@/components/foods-provider";
+import { createRecipeLookup } from "@/lib/recipes";
 
 const STORAGE_KEY = "institution-menus";
 
-// ── Category mapping for shopping list ────────────────────────────
-
-const FOOD_CATEGORY_MAP: Record<string, { categoryId: string; categoryName: string }> = {
-  food_kartoffel: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_karotte: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_zwiebel: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_tomate: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_brokkoli: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_paprika: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_spinat: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_gurke: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_zucchini: { categoryId: "cat_gemuese", categoryName: "Gemuese" },
-  food_haehnchenbrust: { categoryId: "cat_fleisch", categoryName: "Fleisch" },
-  food_lachs: { categoryId: "cat_fisch", categoryName: "Fisch" },
-  food_vollmilch: { categoryId: "cat_milch", categoryName: "Milchprodukte" },
-  food_magerquark: { categoryId: "cat_milch", categoryName: "Milchprodukte" },
-  food_gouda: { categoryId: "cat_milch", categoryName: "Milchprodukte" },
-  food_haferflocken: { categoryId: "cat_getreide", categoryName: "Getreide" },
-  food_vollkornbrot: { categoryId: "cat_getreide", categoryName: "Getreide" },
-  food_reis: { categoryId: "cat_getreide", categoryName: "Getreide" },
-  food_nudeln: { categoryId: "cat_getreide", categoryName: "Getreide" },
-  food_rote_linsen: { categoryId: "cat_huelsen", categoryName: "Huelsenfruechte" },
-  food_olivenoel: { categoryId: "cat_fette", categoryName: "Oele & Fette" },
-  food_butter: { categoryId: "cat_fette", categoryName: "Oele & Fette" },
-  food_heidelbeere: { categoryId: "cat_obst", categoryName: "Obst" },
-  food_erdbeere: { categoryId: "cat_obst", categoryName: "Obst" },
-  food_banane: { categoryId: "cat_obst", categoryName: "Obst" },
-  food_honig: { categoryId: "cat_snacks", categoryName: "Snacks" },
-};
-
-const CATEGORY_COST_PER_KG: Record<string, number> = {
-  Gemuese: 4,
-  Fleisch: 12,
-  Fisch: 15,
-  Milchprodukte: 5,
-  Getreide: 4,
-  Huelsenfruechte: 6,
-  "Oele & Fette": 10,
-  Obst: 6,
-  Snacks: 8,
-};
-
 const DEFAULT_CATEGORY = { categoryId: "cat_sonstiges", categoryName: "Sonstiges" };
 const DEFAULT_COST_PER_KG = 6;
+
+// ── Category mapping for shopping list ────────────────────────────
+
+const CATEGORY_COST_PER_KG: Record<string, number> = {
+  cat_gemuese: 4,
+  cat_obst: 6,
+  cat_fleisch: 12,
+  cat_fisch: 15,
+  cat_milch: 5,
+  cat_eier: 7,
+  cat_getreide: 4,
+  cat_huelsenfruechte: 6,
+  cat_nuesse: 14,
+  cat_oele: 10,
+  cat_getraenke: 2,
+  cat_gewuerze: 30,
+  cat_fruehstueck: 5,
+  cat_snacks: 8,
+  cat_fertiggerichte: 8,
+  cat_unbekannt: DEFAULT_COST_PER_KG,
+};
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -86,18 +70,30 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function getCategoryInfo(foodId: string): { categoryId: string; categoryName: string } {
-  return FOOD_CATEGORY_MAP[foodId] ?? DEFAULT_CATEGORY;
-}
-
-function getCostPerKg(categoryName: string): number {
-  return CATEGORY_COST_PER_KG[categoryName] ?? DEFAULT_COST_PER_KG;
+function getCostPerKg(categoryId: string): number {
+  return CATEGORY_COST_PER_KG[categoryId] ?? DEFAULT_COST_PER_KG;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────
 
-export function useInstitutionMenu() {
+export function useInstitutionMenu(recipes: Recipe[] = []) {
+  const foods = useFoods();
   const [menus, setMenus] = useState<InstitutionMenu[]>(loadFromStorage);
+  const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
+  const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes]);
+  const categoryNameMap = useMemo(
+    () => new Map(FOOD_CATEGORIES.map((cat) => [cat.id, cat.name])),
+    [],
+  );
+
+  function getCategoryInfo(foodId: string) {
+    const food = foodMap.get(foodId);
+    if (!food) return DEFAULT_CATEGORY;
+    return {
+      categoryId: food.categoryId,
+      categoryName: categoryNameMap.get(food.categoryId) ?? DEFAULT_CATEGORY.categoryName,
+    };
+  }
 
   // Persist whenever menus change
   useEffect(() => {
@@ -284,22 +280,20 @@ export function useInstitutionMenu() {
 
       for (const dietMenu of day.dietMenus) {
         for (const slot of dietMenu.slots) {
-          const recipe = RECIPES.find((r) => r.id === slot.recipeId);
+          const recipe = recipeMap.get(slot.recipeId);
           if (!recipe) continue;
 
           const scale = slot.portionCount / recipe.servings;
 
-          const ingredients: ProductionIngredient[] = recipe.ingredients.map(
-            (ing) => {
-              const food = FOODS.find((f) => f.id === ing.foodId);
-              return {
-                foodId: ing.foodId,
-                foodName: food?.name ?? ing.foodId,
-                totalAmount: Math.round(ing.amount * scale * 100) / 100,
-                unit: "g",
-              };
-            },
-          );
+          const ingredients: ProductionIngredient[] = recipe.ingredients.map((ing) => {
+            const food = foodMap.get(ing.foodId);
+            return {
+              foodId: ing.foodId,
+              foodName: food?.name ?? ing.foodId,
+              totalAmount: Math.round(ing.amount * scale * 100) / 100,
+              unit: "g",
+            };
+          });
 
           items.push({
             recipeId: recipe.id,
@@ -314,7 +308,7 @@ export function useInstitutionMenu() {
 
       return items;
     },
-    [menus],
+    [menus, foodMap, recipeMap],
   );
 
   // ── Shopping list ─────────────────────────────────────────────
@@ -336,13 +330,13 @@ export function useInstitutionMenu() {
       for (const day of week.days) {
         for (const dietMenu of day.dietMenus) {
           for (const slot of dietMenu.slots) {
-            const recipe = RECIPES.find((r) => r.id === slot.recipeId);
+            const recipe = recipeMap.get(slot.recipeId);
             if (!recipe) continue;
 
             const scale = slot.portionCount / recipe.servings;
 
             for (const ing of recipe.ingredients) {
-              const food = FOODS.find((f) => f.id === ing.foodId);
+              const food = foodMap.get(ing.foodId);
               const foodName = food?.name ?? ing.foodId;
               const scaledAmount = ing.amount * scale;
 
@@ -365,7 +359,7 @@ export function useInstitutionMenu() {
 
       for (const [foodId, data] of aggregated) {
         const { categoryId, categoryName } = getCategoryInfo(foodId);
-        const costPerKg = getCostPerKg(categoryName);
+        const costPerKg = getCostPerKg(categoryId);
         const totalAmount = Math.round(data.totalAmount * 100) / 100;
         const estimatedCost =
           Math.round((totalAmount / 1000) * costPerKg * 100) / 100;
@@ -390,7 +384,7 @@ export function useInstitutionMenu() {
 
       return items;
     },
-    [menus],
+    [menus, foodMap, recipeMap],
   );
 
   return {
