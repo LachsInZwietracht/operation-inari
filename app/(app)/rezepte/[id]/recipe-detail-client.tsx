@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 import type { Recipe } from "@/lib/types";
 import { RecipeDetailContent } from "@/components/recipe-detail-content";
-import { useFoods } from "@/components/foods-provider";
 import { fetchRecipeByIdClient } from "@/lib/data/recipes-client";
 import { findLocalRecipeById } from "@/lib/data/local-recipes";
 
 export function RecipeDetailClient({ recipeId }: { recipeId: string }) {
-  const foods = useFoods();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -31,7 +29,9 @@ export function RecipeDetailClient({ recipeId }: { recipeId: string }) {
       }
 
       if (cancelled) return;
-      setRecipe(findLocalRecipeById(recipeId, foods));
+      // Pass empty list since full list is not available. 
+      // Detail content will handle ingredient hydration.
+      setRecipe(findLocalRecipeById(recipeId, []));
       setLoaded(true);
     }
 
@@ -40,7 +40,7 @@ export function RecipeDetailClient({ recipeId }: { recipeId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [foods, recipeId]);
+  }, [recipeId]);
 
   if (!loaded) {
     return (

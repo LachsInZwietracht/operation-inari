@@ -221,9 +221,26 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         sourceType: recipe?.sourceType ?? "personal",
         createdAt: recipe?.createdAt ?? new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        // Save cached nutrient values for list view performance
+        cachedKcalPerPortion: perServingKcal,
+        cachedProteinPerPortion: perServingProtein,
+        cachedFatPerPortion: perServingFat,
+        cachedCarbsPerPortion: perServingCarbs,
       };
 
-      await persistPersonalRecipe(formattedRecipe);
+      // Always try to persist to Supabase if possible
+      try {
+        await persistPersonalRecipe(formattedRecipe);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message === "AUTH_REQUIRED") {
+          console.info("Recipe saved locally only (not authenticated)");
+        } else {
+          console.error("Supabase sync failed, falling back to local storage:", error);
+        }
+      }
+
+      // Always update local storage as a reliable fallback/cache
       upsertLocalRecipe(formattedRecipe, availableFoods);
       
       toast.success(isEditing ? "Rezept aktualisiert" : "Rezept erstellt");

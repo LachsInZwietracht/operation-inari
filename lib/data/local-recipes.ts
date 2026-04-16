@@ -12,7 +12,7 @@ export function getLocalRecipes(foods: Food[] = []): Recipe[] {
     if (!stored) return [];
 
     return (JSON.parse(stored) as Recipe[]).map((recipe) =>
-      normalizeRecipeFoodReferences(recipe, foods),
+      foods.length > 0 ? normalizeRecipeFoodReferences(recipe, foods) : recipe,
     );
   } catch {
     return [];
@@ -22,7 +22,9 @@ export function getLocalRecipes(foods: Food[] = []): Recipe[] {
 export function saveLocalRecipes(recipes: Recipe[], foods: Food[] = []) {
   if (typeof window === "undefined") return;
 
-  const normalized = recipes.map((recipe) => normalizeRecipeFoodReferences(recipe, foods));
+  const normalized = foods.length > 0 
+    ? recipes.map((recipe) => normalizeRecipeFoodReferences(recipe, foods))
+    : recipes;
   localStorage.setItem(CUSTOM_RECIPES_STORAGE_KEY, JSON.stringify(normalized));
 }
 

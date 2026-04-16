@@ -1,6 +1,6 @@
 import { RecipeDetailContent } from "@/components/recipe-detail-content";
 import { RecipeDetailClient } from "./recipe-detail-client";
-import { fetchAllFoods } from "@/lib/data/foods";
+import { fetchFoodsByIds } from "@/lib/data/foods";
 import { fetchRecipeById } from "@/lib/data/recipes";
 import { FoodsProvider } from "@/components/foods-provider";
 
@@ -10,10 +10,11 @@ export default async function RecipeDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [foods, recipe] = await Promise.all([
-    fetchAllFoods(),
-    fetchRecipeById(id),
-  ]);
+  const recipe = await fetchRecipeById(id);
+  
+  // Hydrate only the foods needed for this specific recipe
+  const foodIds = recipe?.ingredients.map(i => i.foodId) ?? [];
+  const foods = await fetchFoodsByIds(foodIds);
 
   return (
     <FoodsProvider foods={foods}>

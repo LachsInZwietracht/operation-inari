@@ -6,6 +6,7 @@ import { BRANDED_FOODS } from "@/lib/mock-data/branded-foods";
 import type { Food, FoodSearchItem, FoodSourceId } from "@/lib/types/food";
 import type { NutrientValue } from "@/lib/types/nutrients";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { withTimeout } from "@/lib/data/utils";
 
 const FALLBACK_CATEGORY_ID = "cat_unbekannt";
 
@@ -160,7 +161,11 @@ export async function fetchFoods(options: FoodQueryOptions = {}): Promise<FoodQu
       query = query.range(start, start + options.limit - 1);
     }
 
-    const { data, error, count } = await query;
+    const { data, error, count } = await withTimeout(
+      query,
+      10000,
+      "Supabase foods request timed out"
+    );
     if (error) {
       throw new Error(`Failed to fetch foods: ${error.message}`);
     }
@@ -181,6 +186,31 @@ export interface FetchFoodByIdOptions {
   includeNutrients?: boolean;
   includePortions?: boolean;
   supabase?: SupabaseClient;
+}
+
+export async function fetchFoodsByIds(
+  ids: string[],
+  supabase?: SupabaseClient,
+): Promise<Food[]> {
+  if (!ids || ids.length === 0) return [];
+  try {
+    const client = await resolveClient(supabase);
+    const { data, error } = await withTimeout(
+      client
+        .from("foods")
+        .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
+        .in("id", ids),
+      10000,
+      "Supabase foods lookup timed out"
+    );
+
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as FoodRowWithRelations[];
+    return rows.map(mapFoodRow);
+  } catch (error) {
+    console.error("fetchFoodsByIds error:", error);
+    return [];
+  }
 }
 
 export async function fetchFoodById(
@@ -224,11 +254,15 @@ export async function fetchFoodById(
       selectColumns.push("food_portions(label,amount_grams)");
     }
 
-    const { data, error } = await client
-      .from("foods")
-      .select(selectColumns.join(","))
-      .eq("id", id)
-      .single();
+    const { data, error } = await withTimeout(
+      client
+        .from("foods")
+        .select(selectColumns.join(","))
+        .eq("id", id)
+        .single(),
+      5000,
+      "Supabase food lookup timed out"
+    );
 
     if (error) {
       if (error.code === "PGRST116") return null;
@@ -273,11 +307,15 @@ export const fetchBrandedFoods = cache(async () => {
       "food_portions(label,amount_grams)",
     ];
 
-    const { data, error } = await client
-      .from("foods")
-      .select(selectColumns.join(","))
-      .or("is_branded.eq.true,data_source_id.eq.hersteller")
-      .order("name", { ascending: true });
+    const { data, error } = await withTimeout(
+      client
+        .from("foods")
+        .select(selectColumns.join(","))
+        .or("is_branded.eq.true,data_source_id.eq.hersteller")
+        .order("name", { ascending: true }),
+      5000,
+      "Supabase branded foods request timed out"
+    );
 
     if (error) {
       throw new Error(`Failed to fetch branded foods: ${error.message}`);
@@ -353,7 +391,7 @@ function mapFoodRow(row: FoodRowWithRelations): Food {
     isBranded: row.is_branded,
     isCustom: row.is_custom,
     isRecipeDerived: row.is_recipe_derived,
-    portionSizes,
+    portionSizes: portionSizes ?? [],
     tags: row.tags ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -539,11 +577,15 @@ export const fetchFoodsForInstitution = cache(async () => {
 export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> => {
   try {
     const client = await resolveClient();
-    const { data, error } = await client
-      .from("foods")
-      .select("id,name,category_id,data_source_id,is_custom")
-      .order("name", { ascending: true })
-      .limit(10000);
+    const { data, error } = await withTimeout(
+      client
+        .from("foods")
+        .select("id,name,category_id,data_source_id,is_custom")
+        .order("name", { ascending: true })
+        .limit(10000),
+      10000,
+      "Supabase food search index request timed out"
+    );
 
     if (error) {
       throw new Error(`Failed to load food search index: ${error.message}`);

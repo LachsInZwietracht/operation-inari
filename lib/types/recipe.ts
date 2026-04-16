@@ -35,4 +35,9 @@ export interface Recipe extends Timestamped {
   tags?: string[];
   sourceType?: RecipeLibraryScope;
   teachingKitchenNotes?: string;
+  // Cached nutrient totals for performance in list views
+  cachedKcalPerPortion?: number;
+  cachedProteinPerPortion?: number;
+  cachedFatPerPortion?: number;
+  cachedCarbsPerPortion?: number;
 }

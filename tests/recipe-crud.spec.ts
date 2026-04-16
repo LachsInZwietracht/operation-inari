@@ -35,7 +35,7 @@ test.describe("Rezepte", () => {
     await expect(page.getByRole("heading", { name: /Neues Rezept/i })).toBeVisible();
 
     // Fill in the recipe form
-    await page.getByLabel("Name").fill(recipeName);
+    await page.getByLabel("Name des Rezepts").fill(recipeName);
     await page.getByLabel("Beschreibung").fill("Ein einfaches Testrezept");
 
     // Select category
@@ -46,7 +46,7 @@ test.describe("Rezepte", () => {
     await page.getByLabel("Portionen").fill("2");
 
     // Set prep time
-    await page.getByLabel("Vorbereitung (Min.)").fill("15");
+    await page.getByLabel("Vorbereitungszeit (Min.)").fill("15");
 
     // Add an ingredient via search dialog
     await page.getByRole("button", { name: /Zutat hinzufügen/i }).click();

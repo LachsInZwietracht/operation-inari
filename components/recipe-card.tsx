@@ -32,8 +32,11 @@ function getProdScoreBadge(score: number | undefined) {
 }
 
 export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
-  const nutrients = calculateRecipeNutrients(recipe, foods);
-  const totalKcal = getNutrientValue(nutrients, "energie");
+  const totalKcal = recipe.cachedKcalPerPortion ?? (() => {
+    const nutrients = calculateRecipeNutrients(recipe, foods);
+    return getNutrientValue(nutrients, "energie");
+  })();
+  
   const totalTime = recipe.prepTime + recipe.cookTime;
   const scoreBadge = getProdScoreBadge(recipe.prodScore);
 

@@ -32,8 +32,10 @@ import {
   scaleNutrients,
 } from "@/lib/nutrients";
 import { formatNumber, formatNutrient } from "@/lib/format";
-import type { Recipe } from "@/lib/types";
+import type { Recipe, Food } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
+import { fetchFoodsByIds } from "@/lib/data/foods-client";
+import { useEffect, useState } from "react";
 
 function getScoreBadge(score: number | undefined) {
   if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
@@ -46,18 +48,46 @@ function getScoreBadge(score: number | undefined) {
 
 export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
   const foods = useFoods();
-  const { convertRecipeToFood } = useCustomFoods(foods);
+  const [availableFoods, setAvailableFoods] = useState<Food[]>(foods);
+  const { convertRecipeToFood } = useCustomFoods(availableFoods);
   const { getDisplayName } = useFoodSynonyms();
-  const totalNutrients = calculateRecipeNutrients(recipe, foods);
+
+  useEffect(() => {
+    // If we only have some (or no) foods, fetch the ones specifically for this recipe
+    const ingredientIds = recipe.ingredients.map(i => i.foodId);
+    const missingIds = ingredientIds.filter(id => !availableFoods.some(f => f.id === id));
+    
+    if (missingIds.length > 0) {
+      fetchFoodsByIds(missingIds).then(newFoods => {
+        setAvailableFoods(prev => [...prev, ...newFoods]);
+      });
+    }
+  }, [recipe.ingredients, availableFoods]);
+
+  const totalNutrients = calculateRecipeNutrients(recipe, availableFoods);
   const perServing = calculatePerServing(totalNutrients, recipe.servings);
 
-  const totalKcal = getNutrientValue(totalNutrients, "energie");
-  const perServingKcal = getNutrientValue(perServing, "energie");
-  const protein = getNutrientValue(perServing, "eiweiss");
-  const fat = getNutrientValue(perServing, "fett");
-  const carbs = getNutrientValue(perServing, "kohlenhydrate");
+  const totalKcal = totalNutrients.length > 0 
+    ? getNutrientValue(totalNutrients, "energie")
+    : (recipe.cachedKcalPerPortion ? recipe.cachedKcalPerPortion * recipe.servings : 0);
 
-  const foodMap = new Map(foods.map((f) => [f.id, f]));
+  const perServingKcal = perServing.length > 0
+    ? getNutrientValue(perServing, "energie")
+    : (recipe.cachedKcalPerPortion ?? 0);
+
+  const protein = perServing.length > 0
+    ? getNutrientValue(perServing, "eiweiss")
+    : (recipe.cachedProteinPerPortion ?? 0);
+
+  const fat = perServing.length > 0
+    ? getNutrientValue(perServing, "fett")
+    : (recipe.cachedFatPerPortion ?? 0);
+
+  const carbs = perServing.length > 0
+    ? getNutrientValue(perServing, "kohlenhydrate")
+    : (recipe.cachedCarbsPerPortion ?? 0);
+
+  const foodMap = new Map(availableFoods.map((f) => [f.id, f]));
 
   const vitaminHighlights = NUTRIENT_DEFINITIONS.filter((nd) => nd.group === "vitamine")
     .map((nd) => ({ ...nd, value: getNutrientValue(perServing, nd.id) }))

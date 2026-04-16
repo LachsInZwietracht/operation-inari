@@ -30,6 +30,10 @@ interface RecipeRow {
   teaching_kitchen_notes: string | null;
   created_at: string;
   updated_at: string;
+  cached_kcal_per_portion: number | null;
+  cached_protein_per_portion: number | null;
+  cached_fat_per_portion: number | null;
+  cached_carbs_per_portion: number | null;
 }
 
 interface IngredientRow {
@@ -95,6 +99,10 @@ function mapRecipeRow(row: RecipeRowWithRelations): Recipe {
     teachingKitchenNotes: row.teaching_kitchen_notes ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cachedKcalPerPortion: row.cached_kcal_per_portion ?? undefined,
+    cachedProteinPerPortion: row.cached_protein_per_portion ?? undefined,
+    cachedFatPerPortion: row.cached_fat_per_portion ?? undefined,
+    cachedCarbsPerPortion: row.cached_carbs_per_portion ?? undefined,
   };
 }
 
@@ -131,6 +139,10 @@ function baseRecipeQuery(client: SupabaseClient) {
         "teaching_kitchen_notes",
         "created_at",
         "updated_at",
+        "cached_kcal_per_portion",
+        "cached_protein_per_portion",
+        "cached_fat_per_portion",
+        "cached_carbs_per_portion",
         "recipe_ingredients(id,recipe_id,food_id,amount,sort_order)",
       ].join(",")
     );
@@ -213,6 +225,10 @@ export async function persistPersonalRecipe(
     source_type: "personal",
     teaching_kitchen_notes: recipe.teachingKitchenNotes ?? null,
     user_id: userId,
+    cached_kcal_per_portion: recipe.cachedKcalPerPortion ?? null,
+    cached_protein_per_portion: recipe.cachedProteinPerPortion ?? null,
+    cached_fat_per_portion: recipe.cachedFatPerPortion ?? null,
+    cached_carbs_per_portion: recipe.cachedCarbsPerPortion ?? null,
   };
 
   const { data: persistedRecipe, error: recipeError } = await client
