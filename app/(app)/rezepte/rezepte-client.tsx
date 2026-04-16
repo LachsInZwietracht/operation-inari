@@ -16,7 +16,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Recipe } from "@/lib/types";
-import { useFoods } from "@/components/foods-provider";
 import {
   Dialog,
   DialogContent,
@@ -56,8 +55,9 @@ interface RezeptePageClientProps {
 }
 
 export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClientProps) {
-  const foods = useFoods();
-  const { allRecipes, addRecipe } = useRecipes(initialRecipes, foods);
+  // Note: allRecipes might contain food references that are not yet loaded
+  // This is okay for the list view since it mainly shows recipe metadata
+  const { allRecipes, addRecipe } = useRecipes(initialRecipes, []);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Alle");
   const [libraryFilter, setLibraryFilter] = useState<"all" | "personal" | "community">("all");
@@ -236,7 +236,7 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
           <RecipeCard
             key={recipe.id}
             recipe={recipe}
-            foods={foods}
+            foods={[]}
             onImport={
               recipe.sourceType !== "personal"
                 ? () => handleImportRecipe(recipe)

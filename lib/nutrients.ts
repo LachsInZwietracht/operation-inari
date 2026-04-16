@@ -48,6 +48,7 @@ export function getNutrientValue(nutrients: NutrientValue[], nutrientId: string)
  * nutrient values of all ingredients.
  */
 export function calculateRecipeNutrients(recipe: Recipe, foods: Food[]): NutrientValue[] {
+  if (!foods || foods.length === 0) return [];
   const foodMap = new Map(foods.map((f) => [f.id, f]));
 
   const scaledArrays: NutrientValue[][] = [];

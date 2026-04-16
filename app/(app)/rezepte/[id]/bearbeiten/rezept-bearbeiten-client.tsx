@@ -5,8 +5,6 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { RecipeForm } from "@/components/recipe-form";
 import type { Recipe } from "@/lib/types";
-import { useFoods } from "@/components/foods-provider";
-import { normalizeRecipeFoodReferences } from "@/lib/data/food-reference-normalization";
 import { fetchRecipeByIdClient } from "@/lib/data/recipes-client";
 import { findLocalRecipeById } from "@/lib/data/local-recipes";
 
@@ -16,16 +14,12 @@ interface RezeptBearbeitenPageClientProps {
 }
 
 export function RezeptBearbeitenPageClient({ recipeId, recipe: initialRecipe }: RezeptBearbeitenPageClientProps) {
-  const foods = useFoods();
-  const normalizedInitialRecipe = initialRecipe
-    ? normalizeRecipeFoodReferences(initialRecipe, foods)
-    : null;
-  const [recipe, setRecipe] = useState<Recipe | null>(normalizedInitialRecipe);
-  const [loaded, setLoaded] = useState(Boolean(normalizedInitialRecipe));
+  const [recipe, setRecipe] = useState<Recipe | null>(initialRecipe);
+  const [loaded, setLoaded] = useState(Boolean(initialRecipe));
 
   useEffect(() => {
-    if (normalizedInitialRecipe) {
-      setRecipe(normalizedInitialRecipe);
+    if (initialRecipe) {
+      setRecipe(initialRecipe);
       setLoaded(true);
       return;
     }
@@ -38,7 +32,7 @@ export function RezeptBearbeitenPageClient({ recipeId, recipe: initialRecipe }: 
         if (cancelled) return;
 
         if (persistedRecipe) {
-          setRecipe(normalizeRecipeFoodReferences(persistedRecipe, foods));
+          setRecipe(persistedRecipe);
           setLoaded(true);
           return;
         }
@@ -47,7 +41,9 @@ export function RezeptBearbeitenPageClient({ recipeId, recipe: initialRecipe }: 
       }
 
       if (cancelled) return;
-      setRecipe(findLocalRecipeById(recipeId, foods));
+      // Note: findLocalRecipeById typically needs full foods list for normalization
+      // but we'll let RecipeForm handle the fetching of full food details for ingredients
+      setRecipe(findLocalRecipeById(recipeId, [])); 
       setLoaded(true);
     }
 
@@ -56,7 +52,7 @@ export function RezeptBearbeitenPageClient({ recipeId, recipe: initialRecipe }: 
     return () => {
       cancelled = true;
     };
-  }, [foods, normalizedInitialRecipe, recipeId]);
+  }, [initialRecipe, recipeId]);
 
   if (!loaded) {
     return (
@@ -70,7 +66,8 @@ export function RezeptBearbeitenPageClient({ recipeId, recipe: initialRecipe }: 
     notFound();
   }
 
-  const isSystemRecipe = Boolean(normalizedInitialRecipe);
+  // If initialRecipe was provided, it's a system/community recipe being cloned/edited
+  const isSystemRecipe = Boolean(initialRecipe && initialRecipe.sourceType !== 'personal');
 
   return (
     <div className="space-y-6">

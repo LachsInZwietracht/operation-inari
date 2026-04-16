@@ -392,13 +392,18 @@ function isUuid(value: string) {
  * hitting Supabase repeatedly within a single request.
  */
 export const fetchAllFoods = cache(async () => {
-  return fetchFoodsPaginated(
-    {
-      includeNutrients: true,
-      includePortions: true,
-    },
-    2000
-  );
+  try {
+    return await fetchFoodsPaginated(
+      {
+        includeNutrients: true,
+        includePortions: true,
+      },
+      2000
+    );
+  } catch (error) {
+    console.error("fetchAllFoods error:", error);
+    return [];
+  }
 });
 
 /**
@@ -453,57 +458,82 @@ const PROTOCOL_NUTRIENT_IDS = NUTRIENT_DEFINITIONS.map((definition) => definitio
  * for list views (table columns + PRODIscore).  ~97% smaller payload.
  */
 export const fetchAllFoodsForList = cache(async () => {
-  return fetchFoodsPaginated(
-    {
-      includeNutrients: true,
-      nutrientIds: LIST_NUTRIENT_IDS,
-      includePortions: false,
-    },
-    2500
-  );
+  try {
+    return await fetchFoodsPaginated(
+      {
+        includeNutrients: true,
+        nutrientIds: LIST_NUTRIENT_IDS,
+        includePortions: false,
+      },
+      2500
+    );
+  } catch (error) {
+    console.error("fetchAllFoodsForList error:", error);
+    return [];
+  }
 });
 
 export const fetchFoodsForMealPlans = cache(async () => {
-  return fetchFoodsPaginated(
-    {
-      includeNutrients: true,
-      nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
-      includePortions: false,
-    },
-    2500
-  );
+  try {
+    return await fetchFoodsPaginated(
+      {
+        includeNutrients: true,
+        nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
+        includePortions: false,
+      },
+      2500
+    );
+  } catch (error) {
+    console.error("fetchFoodsForMealPlans error:", error);
+    return [];
+  }
 });
 
 export const fetchFoodsForReports = cache(async () => {
-  return fetchFoodsPaginated(
-    {
-      includeNutrients: true,
-      nutrientIds: REPORT_NUTRIENT_IDS,
-      includePortions: false,
-    },
-    2500
-  );
+  try {
+    return await fetchFoodsPaginated(
+      {
+        includeNutrients: true,
+        nutrientIds: REPORT_NUTRIENT_IDS,
+        includePortions: false,
+      },
+      2500
+    );
+  } catch (error) {
+    console.error("fetchFoodsForReports error:", error);
+    return [];
+  }
 });
 
 export const fetchFoodsForProtocols = cache(async () => {
-  return fetchFoodsPaginated(
-    {
-      includeNutrients: true,
-      nutrientIds: PROTOCOL_NUTRIENT_IDS,
-      includePortions: false,
-    },
-    2500
-  );
+  try {
+    return await fetchFoodsPaginated(
+      {
+        includeNutrients: true,
+        nutrientIds: PROTOCOL_NUTRIENT_IDS,
+        includePortions: false,
+      },
+      2500
+    );
+  } catch (error) {
+    console.error("fetchFoodsForProtocols error:", error);
+    return [];
+  }
 });
 
 export const fetchFoodsForInstitution = cache(async () => {
-  return fetchFoodsPaginated(
-    {
-      includeNutrients: false,
-      includePortions: false,
-    },
-    2500
-  );
+  try {
+    return await fetchFoodsPaginated(
+      {
+        includeNutrients: false,
+        includePortions: false,
+      },
+      2500
+    );
+  } catch (error) {
+    console.error("fetchFoodsForInstitution error:", error);
+    return [];
+  }
 });
 
 export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> => {

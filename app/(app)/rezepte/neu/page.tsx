@@ -1,12 +1,12 @@
 import { NeuesRezeptPageClient } from "./neues-rezept-client";
-import { fetchAllFoods } from "@/lib/data/foods";
-import { FoodsProvider } from "@/components/foods-provider";
+import { fetchFoodSearchIndex } from "@/lib/data/foods";
+import { FoodSearchProvider } from "@/components/foods-provider";
 
 export default async function NeuesRezeptPage() {
-  const foods = await fetchAllFoods();
+  const foods = await fetchFoodSearchIndex();
   return (
-    <FoodsProvider foods={foods}>
+    <FoodSearchProvider foods={foods}>
       <NeuesRezeptPageClient />
-    </FoodsProvider>
+    </FoodSearchProvider>
   );
 }

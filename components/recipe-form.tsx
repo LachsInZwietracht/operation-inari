@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,24 +32,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  CommandDialog,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from "@/components/ui/command";
 
 import { useNutrientCalculation } from "@/hooks/use-nutrient-calculation";
 import { getNutrientValue } from "@/lib/nutrients";
 import { formatNumber } from "@/lib/format";
-import type { Recipe, Ingredient } from "@/lib/types";
-import { useFoods } from "@/components/foods-provider";
+import type { Recipe, Ingredient, Food } from "@/lib/types";
+import { useFoodSearchIndex } from "@/components/foods-provider";
 import { persistPersonalRecipe } from "@/lib/data/recipes-client";
-import { getLocalRecipes, saveLocalRecipes, upsertLocalRecipe } from "@/lib/data/local-recipes";
+import { upsertLocalRecipe } from "@/lib/data/local-recipes";
+import { FoodSearchDialog } from "@/components/food-search-dialog";
+import { fetchFoodsByIds } from "@/lib/data/foods-client";
 
-const RECIPE_CATEGORIES = [
+const UNIQUE_CATEGORIES = [
   "Suppe",
   "Hauptgericht",
   "Beilage",
@@ -57,17 +51,8 @@ const RECIPE_CATEGORIES = [
   "Snack",
   "Salat",
   "Dessert",
-  "Suppen",
-  "Hauptgerichte",
-  "Eintöpfe",
-  "Salate",
-  "Snacks",
-  "Beilagen",
-  "Desserts",
+  "Eintöpfe"
 ];
-
-// Deduplicate categories
-const UNIQUE_CATEGORIES = [...new Set(RECIPE_CATEGORIES)];
 
 const RECIPE_ALLERGENS = [
   "Gluten",
@@ -119,16 +104,34 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const router = useRouter();
   const [foodDialogOpen, setFoodDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const foods = useFoods();
+  const [availableFoods, setAvailableFoods] = useState<Food[]>([]);
+  const searchIndex = useFoodSearchIndex();
 
-  const defaultIngredients: { foodId: string; amount: number }[] =
+  // Pre-load ingredients' full food data
+  useEffect(() => {
+    if (!recipe?.ingredients.length) return;
+    
+    async function loadIngredientFoods() {
+      try {
+        const ids = recipe!.ingredients.map(i => i.foodId);
+        const foods = await fetchFoodsByIds(ids);
+        setAvailableFoods(foods);
+      } catch (err) {
+        console.error("Failed to pre-load ingredient foods:", err);
+      }
+    }
+    
+    void loadIngredientFoods();
+  }, [recipe]);
+
+  const defaultIngredients = useMemo(() => 
     recipe?.ingredients.map((i) => ({
       foodId: i.foodId,
       amount: i.amount,
-    })) ?? [];
+    })) ?? [], [recipe]);
 
-  const defaultInstructions: { value: string }[] =
-    recipe?.instructions.map((s) => ({ value: s })) ?? [{ value: "" }];
+  const defaultInstructions = useMemo(() => 
+    recipe?.instructions.map((s) => ({ value: s })) ?? [{ value: "" }], [recipe]);
 
   const form = useForm<RecipeFormValues>({
     resolver: zodResolver(recipeSchema),
@@ -164,123 +167,86 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const watchedIngredients = form.watch("ingredients");
   const watchedServings = form.watch("servings");
 
-  // Build Ingredient[] for hook
   const ingredientsForCalc: Ingredient[] = (watchedIngredients ?? [])
     .filter((i) => i.foodId && i.amount > 0)
     .map((i) => ({ foodId: i.foodId, amount: i.amount }));
 
-  const { totalNutrients, perServingNutrients } = useNutrientCalculation(
+  const { perServingNutrients } = useNutrientCalculation(
     ingredientsForCalc,
-    foods,
+    availableFoods,
     watchedServings ?? 1,
   );
 
-  const totalKcal = getNutrientValue(totalNutrients, "energie");
   const perServingKcal = getNutrientValue(perServingNutrients, "energie");
   const perServingProtein = getNutrientValue(perServingNutrients, "eiweiss");
   const perServingFat = getNutrientValue(perServingNutrients, "fett");
   const perServingCarbs = getNutrientValue(perServingNutrients, "kohlenhydrate");
 
-  const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
+  const foodMap = useMemo(() => new Map(availableFoods.map((food) => [food.id, food])), [availableFoods]);
 
   function getFoodName(foodId: string): string {
-    return foodMap.get(foodId)?.name ?? "Unbekannt";
+    return foodMap.get(foodId)?.name ?? "Wird geladen...";
   }
 
-  function handleAddFood(foodId: string) {
-    // Don't add duplicates
-    const existing = watchedIngredients?.find((i) => i.foodId === foodId);
+  function handleFoodSelected(food: Food) {
+    setAvailableFoods(prev => {
+      if (prev.find(f => f.id === food.id)) return prev;
+      return [...prev, food];
+    });
+    
+    const existing = watchedIngredients?.find((i) => i.foodId === food.id);
     if (!existing) {
-      appendIngredient({ foodId, amount: 100 });
+      appendIngredient({ foodId: food.id, amount: 100 });
     }
-    setFoodDialogOpen(false);
   }
 
   async function onSubmit(values: RecipeFormValues) {
     setSaving(true);
-    const now = new Date().toISOString();
-    const additiveList = values.additives
-      ? values.additives
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-      : undefined;
-
-    const recipeData: Recipe = {
-      id: recipe?.id ?? crypto.randomUUID(),
-      name: values.name,
-      description: values.description,
-      category: values.category,
-      servings: values.servings,
-      prepTime: values.prepTime,
-      cookTime: values.cookTime,
-      imageUrl: values.imageUrl || recipe?.imageUrl,
-      prodScore: values.prodScore ?? recipe?.prodScore,
-      co2PerPortion: values.co2PerPortion ?? recipe?.co2PerPortion,
-      allergens: values.allergens,
-      additives: additiveList,
-      sourceType: recipe?.sourceType ?? "personal",
-      ingredients: values.ingredients.map((i) => ({
-        foodId: i.foodId,
-        amount: i.amount,
-      })),
-      instructions: values.instructions.map((s) => s.value),
-      createdAt: recipe?.createdAt ?? now,
-      updatedAt: now,
-    };
-
     try {
-      if (isEditing && recipe) {
-        const existing = getLocalRecipes(foods);
-        const isLocalRecipe = existing.some((entry) => entry.id === recipe.id);
-        const isPersistedRecipe =
-          recipe.sourceType === "personal" &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recipe.id);
+      const formattedRecipe: Recipe = {
+        id: recipe?.id ?? `recipe_${Date.now()}`,
+        name: values.name,
+        description: values.description,
+        category: values.category,
+        servings: values.servings,
+        prepTime: values.prepTime,
+        cookTime: values.cookTime,
+        imageUrl: values.imageUrl || undefined,
+        prodScore: values.prodScore,
+        co2PerPortion: values.co2PerPortion,
+        allergens: values.allergens,
+        additives: values.additives ? values.additives.split(",").map(s => s.trim()) : undefined,
+        ingredients: values.ingredients.map(i => ({ foodId: i.foodId, amount: i.amount })),
+        instructions: values.instructions.map(s => s.value),
+        sourceType: recipe?.sourceType ?? "personal",
+        createdAt: recipe?.createdAt ?? new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-        if (!isLocalRecipe && !isPersistedRecipe) {
-          toast.error("Standardrezepte können nicht bearbeitet werden.");
-          return;
-        }
-      }
-
-      let savedRecipe = recipeData;
-
-      try {
-        savedRecipe = await persistPersonalRecipe(recipeData);
-        const remainingLocalRecipes = getLocalRecipes(foods).filter((entry) => entry.id !== recipeData.id);
-        saveLocalRecipes(remainingLocalRecipes, foods);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "";
-        if (message && message !== "AUTH_REQUIRED") {
-          console.error("Failed to persist recipe to Supabase:", error);
-        }
-        savedRecipe = upsertLocalRecipe(recipeData, foods);
-      }
-
-      toast.success(isEditing ? "Rezept erfolgreich aktualisiert!" : "Rezept erfolgreich erstellt!");
-      router.push(`/rezepte/${savedRecipe.id}`);
+      await persistPersonalRecipe(formattedRecipe);
+      upsertLocalRecipe(formattedRecipe, availableFoods);
+      
+      toast.success(isEditing ? "Rezept aktualisiert" : "Rezept erstellt");
+      router.push("/rezepte");
       router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error("Speichern fehlgeschlagen");
     } finally {
       setSaving(false);
     }
   }
 
-  // Already-selected food IDs for filtering
-  const selectedFoodIds = new Set(
-    (watchedIngredients ?? []).map((i) => i.foodId),
-  );
-
   return (
     <>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Left: Form fields */}
-            <div className="space-y-6 lg:col-span-2">
-              {/* Basic info */}
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+            {/* Left Column: Form Details */}
+            <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Grunddaten</CardTitle>
+                  <CardTitle>Allgemeine Informationen</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
@@ -288,61 +254,40 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
+                        <FormLabel>Name des Rezepts</FormLabel>
                         <FormControl>
-                          <Input placeholder="Rezeptname" {...field} />
+                          <Input placeholder="z.B. Mediterrane Gemüsepfanne" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Beschreibung</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Kurze Beschreibung des Rezepts"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Kategorie</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Kategorie wählen" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {UNIQUE_CATEGORIES.map((cat) => (
-                              <SelectItem key={cat} value={cat}>
-                                {cat}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Kategorie</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Wählen..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {UNIQUE_CATEGORIES.map((cat) => (
+                                <SelectItem key={cat} value={cat}>
+                                  {cat}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                     <FormField
                       control={form.control}
                       name="servings"
@@ -356,248 +301,202 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                         </FormItem>
                       )}
                     />
+                  </div>
 
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="prepTime"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Vorbereitung (Min.)</FormLabel>
+                          <FormLabel>Vorbereitungszeit (Min.)</FormLabel>
                           <FormControl>
                             <Input type="number" min={0} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
-                  />
+                    />
+                    <FormField
+                      control={form.control}
+                      name="cookTime"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Kochzeit (Min.)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <FormField
                     control={form.control}
-                    name="cookTime"
+                    name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Kochzeit (Min.)</FormLabel>
+                        <FormLabel>Beschreibung</FormLabel>
                         <FormControl>
-                          <Input type="number" min={0} {...field} />
+                          <Textarea
+                            placeholder="Kurze Beschreibung des Gerichts..."
+                            className="min-h-[100px]"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <FormField
-                    control={form.control}
-                    name="imageUrl"
-                    render={({ field }) => (
-                      <FormItem className="md:col-span-3">
-                        <FormLabel>Bild-URL</FormLabel>
-                        <FormControl>
-                          <Input placeholder="https://…" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="prodScore"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>PRODIscore</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={100} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="co2PerPortion"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>CO₂ je Portion (kg)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} step={0.01} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
               {/* Ingredients */}
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Zutaten</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {ingredientFields.length > 0 && (
-                    <div className="space-y-3">
-                      {ingredientFields.map((field, index) => (
-                        <div
-                          key={field.id}
-                          className="flex items-center gap-3"
-                        >
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">
-                              {getFoodName(
-                                watchedIngredients?.[index]?.foodId ?? "",
-                              )}
-                            </p>
-                          </div>
-                          <FormField
-                            control={form.control}
-                            name={`ingredients.${index}.amount`}
-                            render={({ field: amountField }) => (
-                              <FormItem className="w-24">
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    placeholder="g"
-                                    {...amountField}
-                                  />
-                                </FormControl>
-                              </FormItem>
-                            )}
-                          />
-                          <span className="text-muted-foreground text-sm">g</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeIngredient(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {form.formState.errors.ingredients?.root && (
-                    <p className="text-destructive text-sm">
-                      {form.formState.errors.ingredients.root.message}
-                    </p>
-                  )}
-                  {form.formState.errors.ingredients?.message && (
-                    <p className="text-destructive text-sm">
-                      {form.formState.errors.ingredients.message}
-                    </p>
-                  )}
-
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={() => setFoodDialogOpen(true)}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Zutat hinzufügen
                   </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {ingredientFields.map((field, index) => (
+                      <div key={field.id} className="flex items-end gap-4">
+                        <div className="flex-1">
+                          <p className="mb-1 text-sm font-medium">
+                            {getFoodName(watchedIngredients?.[index]?.foodId ?? "")}
+                          </p>
+                          <FormField
+                            control={form.control}
+                            name={`ingredients.${index}.amount`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <div className="flex items-center gap-2">
+                                    <Input type="number" min={1} className="w-24" {...field} />
+                                    <span className="text-sm text-muted-foreground">g</span>
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeIngredient(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+
+                    {ingredientFields.length === 0 && (
+                      <div className="text-muted-foreground py-8 text-center text-sm border-2 border-dashed rounded-lg">
+                        Noch keine Zutaten hinzugefügt.
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
 
               {/* Instructions */}
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Zubereitung</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {instructionFields.map((field, index) => (
-                    <div key={field.id} className="flex gap-3">
-                      <span className="bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium">
-                        {index + 1}
-                      </span>
-                      <FormField
-                        control={form.control}
-                        name={`instructions.${index}.value`}
-                        render={({ field: stepField }) => (
-                          <FormItem className="flex-1">
-                            <FormControl>
-                              <Textarea
-                                placeholder={`Schritt ${index + 1}`}
-                                {...stepField}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {instructionFields.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeInstruction(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-
-                  {form.formState.errors.instructions?.root && (
-                    <p className="text-destructive text-sm">
-                      {form.formState.errors.instructions.root.message}
-                    </p>
-                  )}
-                  {form.formState.errors.instructions?.message && (
-                    <p className="text-destructive text-sm">
-                      {form.formState.errors.instructions.message}
-                    </p>
-                  )}
-
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={() => appendInstruction({ value: "" })}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Schritt hinzufügen
                   </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {instructionFields.map((field, index) => (
+                      <div key={field.id} className="flex gap-4">
+                        <div className="flex-1">
+                          <FormField
+                            control={form.control}
+                            name={`instructions.${index}.value`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="sr-only">Schritt {index + 1}</FormLabel>
+                                <div className="flex gap-3">
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold">
+                                    {index + 1}
+                                  </span>
+                                  <FormControl>
+                                    <Textarea
+                                      placeholder={`Schritt ${index + 1} beschreiben...`}
+                                      {...field}
+                                    />
+                                  </FormControl>
+                                </div>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeInstruction(index)}
+                          className="mt-8"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
 
-              <div className="flex gap-3">
-                <Button type="submit" disabled={saving}>
+              <div className="flex gap-4">
+                <Button type="submit" className="flex-1" disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isEditing ? "Rezept aktualisieren" : "Rezept erstellen"}
+                  {isEditing ? "Rezept speichern" : "Rezept erstellen"}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.back()}
+                  disabled={saving}
                 >
                   Abbrechen
                 </Button>
               </div>
             </div>
 
-            {/* Right: Live nutrition */}
+            {/* Right Column: Nutrition Preview */}
             <div className="space-y-6">
-              <Card className="sticky top-20">
+              <Card className="sticky top-6">
                 <CardHeader>
-                  <CardTitle>Nährwerte (live)</CardTitle>
+                  <CardTitle>Nährwert-Vorschau</CardTitle>
+                  <p className="text-xs text-muted-foreground">Pro Portion ({watchedServings} Portionen)</p>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-muted-foreground text-center text-sm">
-                    Gesamt: {formatNumber(totalKcal, 0)} kcal
-                  </div>
-
+                <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-center gap-2">
                       <Flame className="h-4 w-4 text-orange-500" />
                       <div>
-                        <p className="text-xs text-muted-foreground">
-                          kcal / Portion
-                        </p>
+                        <p className="text-xs text-muted-foreground">Energie</p>
                         <p className="text-sm font-semibold">
-                          {formatNumber(perServingKcal, 0)}
+                          {formatNumber(perServingKcal, 0)} kcal
                         </p>
                       </div>
                     </div>
@@ -633,7 +532,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                   </div>
 
                   {ingredientsForCalc.length === 0 && (
-                    <p className="text-muted-foreground text-center text-xs">
+                    <p className="text-muted-foreground text-center text-xs mt-4">
                       Zutaten hinzufügen, um die Nährwerte zu sehen.
                     </p>
                   )}
@@ -696,32 +595,12 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         </form>
       </Form>
 
-      {/* Food search dialog */}
-      <CommandDialog
+      <FoodSearchDialog
         open={foodDialogOpen}
         onOpenChange={setFoodDialogOpen}
-        title="Lebensmittel suchen"
-        description="Wählen Sie ein Lebensmittel aus der Datenbank"
-      >
-        <CommandInput placeholder="Lebensmittel suchen..." />
-        <CommandList>
-          <CommandEmpty>Kein Lebensmittel gefunden.</CommandEmpty>
-          <CommandGroup heading="Lebensmittel">
-            {foods.filter((f) => !selectedFoodIds.has(f.id)).map((food) => (
-              <CommandItem
-                key={food.id}
-                value={food.name}
-                onSelect={() => handleAddFood(food.id)}
-              >
-                <span>{food.name}</span>
-                <span className="text-muted-foreground ml-auto text-xs">
-                  {getNutrientValue(food.nutrients, "energie")} kcal/100g
-                </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+        onSelect={handleFoodSelected}
+        searchIndex={searchIndex}
+      />
     </>
   );
 }
