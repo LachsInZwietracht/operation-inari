@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
@@ -426,36 +427,36 @@ function isUuid(value: string) {
 
 /**
  * Cached helper that fetches the complete foods catalog (including nutrients)
- * so multiple server components/layouts can share the same data without
- * hitting Supabase repeatedly within a single request.
  */
 export const fetchAllFoods = cache(async () => {
-  try {
-    return await fetchFoodsPaginated(
-      {
-        includeNutrients: true,
-        includePortions: true,
-      },
-      2000
-    );
-  } catch (error) {
-    console.error("fetchAllFoods error:", error);
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await fetchFoodsPaginated(
+          {
+            includeNutrients: true,
+            includePortions: true,
+          },
+          2000
+        );
+      } catch (error) {
+        console.error("fetchAllFoods error:", error);
+        return [];
+      }
+    },
+    ["all-foods-full"],
+    { revalidate: 3600, tags: ["foods", "bls"] }
+  )();
 });
 
 /**
- * Nutrients needed by the list/table views: 4 display columns + 11 for
- * PRODIscore fallback calculation.  Fetching only these instead of all ~37
- * cuts the payload from ~46 MB to ~2-3 MB.
+ * Nutrients needed by the list/table views.
  */
 const LIST_NUTRIENT_IDS = [
-  // Table display
   "energie",
   "eiweiss",
   "fett",
   "kohlenhydrate",
-  // PRODIscore calculation (calculateProdScore in lib/prodi-score.ts)
   "ballaststoffe",
   "gesaettigte_fettsaeuren",
   "ungesaettigte_fettsaeuren",
@@ -492,122 +493,157 @@ const REPORT_NUTRIENT_IDS = Array.from(
 const PROTOCOL_NUTRIENT_IDS = NUTRIENT_DEFINITIONS.map((definition) => definition.id);
 
 /**
- * Lightweight variant of fetchAllFoods that only ships the nutrients required
- * for list views (table columns + PRODIscore).  ~97% smaller payload.
+ * Lightweight variant of fetchAllFoods for list views.
  */
 export const fetchAllFoodsForList = cache(async () => {
-  try {
-    return await fetchFoodsPaginated(
-      {
-        includeNutrients: true,
-        nutrientIds: LIST_NUTRIENT_IDS,
-        includePortions: false,
-      },
-      2500
-    );
-  } catch (error) {
-    console.error("fetchAllFoodsForList error:", error);
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await fetchFoodsPaginated(
+          {
+            includeNutrients: true,
+            nutrientIds: LIST_NUTRIENT_IDS,
+            includePortions: false,
+          },
+          2500
+        );
+      } catch (error) {
+        console.error("fetchAllFoodsForList error:", error);
+        return [];
+      }
+    },
+    ["all-foods-list"],
+    { revalidate: 3600, tags: ["foods", "bls"] }
+  )();
 });
 
 export const fetchFoodsForMealPlans = cache(async () => {
-  try {
-    return await fetchFoodsPaginated(
-      {
-        includeNutrients: true,
-        nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
-        includePortions: false,
-      },
-      2500
-    );
-  } catch (error) {
-    console.error("fetchFoodsForMealPlans error:", error);
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await fetchFoodsPaginated(
+          {
+            includeNutrients: true,
+            nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
+            includePortions: false,
+          },
+          2500
+        );
+      } catch (error) {
+        console.error("fetchFoodsForMealPlans error:", error);
+        return [];
+      }
+    },
+    ["foods-meal-plans"],
+    { revalidate: 3600, tags: ["foods", "bls"] }
+  )();
 });
 
 export const fetchFoodsForReports = cache(async () => {
-  try {
-    return await fetchFoodsPaginated(
-      {
-        includeNutrients: true,
-        nutrientIds: REPORT_NUTRIENT_IDS,
-        includePortions: false,
-      },
-      2500
-    );
-  } catch (error) {
-    console.error("fetchFoodsForReports error:", error);
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await fetchFoodsPaginated(
+          {
+            includeNutrients: true,
+            nutrientIds: REPORT_NUTRIENT_IDS,
+            includePortions: false,
+          },
+          2500
+        );
+      } catch (error) {
+        console.error("fetchFoodsForReports error:", error);
+        return [];
+      }
+    },
+    ["foods-reports"],
+    { revalidate: 3600, tags: ["foods", "bls"] }
+  )();
 });
 
 export const fetchFoodsForProtocols = cache(async () => {
-  try {
-    return await fetchFoodsPaginated(
-      {
-        includeNutrients: true,
-        nutrientIds: PROTOCOL_NUTRIENT_IDS,
-        includePortions: false,
-      },
-      2500
-    );
-  } catch (error) {
-    console.error("fetchFoodsForProtocols error:", error);
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await fetchFoodsPaginated(
+          {
+            includeNutrients: true,
+            nutrientIds: PROTOCOL_NUTRIENT_IDS,
+            includePortions: false,
+          },
+          2500
+        );
+      } catch (error) {
+        console.error("fetchFoodsForProtocols error:", error);
+        return [];
+      }
+    },
+    ["foods-protocols"],
+    { revalidate: 3600, tags: ["foods", "bls"] }
+  )();
 });
 
 export const fetchFoodsForInstitution = cache(async () => {
-  try {
-    return await fetchFoodsPaginated(
-      {
-        includeNutrients: false,
-        includePortions: false,
-      },
-      2500
-    );
-  } catch (error) {
-    console.error("fetchFoodsForInstitution error:", error);
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await fetchFoodsPaginated(
+          {
+            includeNutrients: false,
+            includePortions: false,
+          },
+          2500
+        );
+      } catch (error) {
+        console.error("fetchFoodsForInstitution error:", error);
+        return [];
+      }
+    },
+    ["foods-institution"],
+    { revalidate: 3600, tags: ["foods", "bls"] }
+  )();
 });
 
 export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> => {
-  try {
-    const client = await resolveClient();
-    const { data, error } = await withTimeout(
-      client
-        .from("foods")
-        .select("id,name,category_id,data_source_id,is_custom")
-        .order("name", { ascending: true })
-        .limit(10000),
-      10000,
-      "Supabase food search index request timed out"
-    );
+  return unstable_cache(
+    async () => {
+      try {
+        const client = await resolveClient();
+        const { data, error } = await withTimeout(
+          client
+            .from("foods")
+            .select("id,name,category_id,data_source_id,is_custom")
+            .order("name", { ascending: true })
+            .limit(10000),
+          10000,
+          "Supabase food search index request timed out"
+        );
 
-    if (error) {
-      throw new Error(`Failed to load food search index: ${error.message}`);
-    }
+        if (error) {
+          throw new Error(`Failed to load food search index: ${error.message}`);
+        }
 
-    type SearchRow = {
-      id: string;
-      name: string;
-      category_id: string | null;
-      data_source_id: string;
-      is_custom: boolean;
-    };
+        type SearchRow = {
+          id: string;
+          name: string;
+          category_id: string | null;
+          data_source_id: string;
+          is_custom: boolean;
+        };
 
-    return ((data ?? []) as SearchRow[]).map((row) => ({
-      id: row.id,
-      name: row.name,
-      categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
-      sourceId: row.data_source_id as FoodSourceId,
-      isCustom: row.is_custom,
-    }));
-  } catch (error) {
-    console.error("fetchFoodSearchIndex error:", error);
-    return [];
-  }
+        return ((data ?? []) as SearchRow[]).map((row) => ({
+          id: row.id,
+          name: row.name,
+          categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
+          sourceId: row.data_source_id as FoodSourceId,
+          isCustom: row.is_custom,
+        }));
+      } catch (error) {
+        console.error("fetchFoodSearchIndex error:", error);
+        return [];
+      }
+    },
+    ["food-search-index"],
+    { revalidate: 3600, tags: ["foods", "bls", "search-index"] }
+  )();
 });

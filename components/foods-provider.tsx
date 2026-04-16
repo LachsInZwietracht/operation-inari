@@ -1,10 +1,16 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import type { Food, FoodSearchItem } from "@/lib/types";
 
+interface FoodSearchContextType {
+  index: FoodSearchItem[];
+  isLoading: boolean;
+  loadIndex: () => Promise<void>;
+}
+
 const FoodsContext = createContext<Food[] | null>(null);
-const FoodSearchContext = createContext<FoodSearchItem[] | null>(null);
+const FoodSearchContext = createContext<FoodSearchContextType | null>(null);
 
 export function FoodsProvider({
   foods,
@@ -17,14 +23,39 @@ export function FoodsProvider({
 }
 
 export function FoodSearchProvider({
-  foods,
+  foods: initialFoods,
   children,
 }: {
   foods: FoodSearchItem[];
   children: ReactNode;
 }) {
+  const [index, setIndex] = useState<FoodSearchItem[]>(initialFoods);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadIndex = useCallback(async () => {
+    if (index.length > 0 || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      // We use a dynamic import to avoid bundling server-side code on the client
+      // or we can use an API route / Server Action.
+      // Given we are in a client component, we'll call a server action or fetch.
+      const response = await fetch("/api/foods/search-index");
+      if (response.ok) {
+        const data = await response.json();
+        setIndex(data);
+      }
+    } catch (error) {
+      console.error("Failed to load food search index:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [index.length, isLoading]);
+
   return (
-    <FoodSearchContext.Provider value={foods}>{children}</FoodSearchContext.Provider>
+    <FoodSearchContext.Provider value={{ index, isLoading, loadIndex }}>
+      {children}
+    </FoodSearchContext.Provider>
   );
 }
 
@@ -36,10 +67,18 @@ export function useFoods() {
   return value;
 }
 
-export function useFoodSearchIndex() {
+export function useFoodSearch() {
   const value = useContext(FoodSearchContext);
   if (!value) {
-    throw new Error("useFoodSearchIndex must be used within a FoodSearchProvider");
+    throw new Error("useFoodSearch must be used within a FoodSearchProvider");
   }
   return value;
+}
+
+/**
+ * @deprecated Use useFoodSearch instead
+ */
+export function useFoodSearchIndex() {
+  const { index } = useFoodSearch();
+  return index;
 }

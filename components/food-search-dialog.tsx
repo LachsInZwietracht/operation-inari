@@ -16,6 +16,8 @@ import { useFoodSynonyms } from "@/hooks/use-food-synonyms"
 import { createClient } from "@/lib/supabase/client"
 import { fuzzySearchFoods } from "@/lib/search/fuzzy-search"
 import { fetchFoodById } from "@/lib/data/foods-client"
+import { useFoodSearch } from "@/components/foods-provider"
+import { Loader2 } from "lucide-react"
 
 type SearchResult = FoodSearchItem & {
   searchScore?: number
@@ -40,7 +42,6 @@ interface FoodSearchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSelect: (food: Food) => void
-  searchIndex: FoodSearchItem[]
   title?: string
   description?: string
 }
@@ -49,7 +50,6 @@ export function FoodSearchDialog({
   open,
   onOpenChange,
   onSelect,
-  searchIndex,
   title = "Lebensmittel suchen",
   description = "Wählen Sie ein Lebensmittel aus der Datenbank"
 }: FoodSearchDialogProps) {
@@ -58,9 +58,17 @@ export function FoodSearchDialog({
   const [debouncedQuery, setDebouncedQuery] = React.useState("")
   const [userId, setUserId] = React.useState<string | null>(null)
   const [remoteResults, setRemoteResults] = React.useState<SearchResult[]>([])
-  const [isLoading, setIsLoading] = React.useState(false)
+  const [isSearchingRemote, setIsSearchingRemote] = React.useState(false)
   const [isFetchingFull, setIsFetchingFull] = React.useState(false)
   const { getDisplayName, getSynonymsForFood } = useFoodSynonyms()
+  const { index: searchIndex, isLoading: isIndexLoading, loadIndex } = useFoodSearch()
+
+  // Trigger lazy index load when dialog opens
+  React.useEffect(() => {
+    if (open) {
+      loadIndex()
+    }
+  }, [open, loadIndex])
 
   React.useEffect(() => {
     let active = true
@@ -82,12 +90,12 @@ export function FoodSearchDialog({
     const trimmed = debouncedQuery.trim()
     if (!trimmed || trimmed.length < 2) {
       setRemoteResults([])
-      setIsLoading(false)
+      setIsSearchingRemote(false)
       return
     }
 
     const abortController = new AbortController()
-    setIsLoading(true)
+    setIsSearchingRemote(true)
     supabase
       .rpc("search_foods", {
         search_query: trimmed,
@@ -98,7 +106,7 @@ export function FoodSearchDialog({
       .then(({ data, error }) => {
         if (error) {
           setRemoteResults([])
-          setIsLoading(false)
+          setIsSearchingRemote(false)
           return
         }
         const mapped: SearchResult[] = (data ?? []).map((row: unknown) => {
@@ -114,7 +122,7 @@ export function FoodSearchDialog({
           }
         })
         setRemoteResults(mapped)
-        setIsLoading(false)
+        setIsSearchingRemote(false)
       })
 
     return () => abortController.abort()
@@ -180,8 +188,13 @@ export function FoodSearchDialog({
           onValueChange={setQuery}
         />
         <CommandList>
+          {(isIndexLoading || isSearchingRemote) && (
+             <div className="flex items-center justify-center p-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+             </div>
+          )}
           <CommandEmpty>
-            {isLoading ? "Suche läuft..." : "Keine Ergebnisse gefunden."}
+            {isSearchingRemote || isIndexLoading ? "Suche läuft..." : "Keine Ergebnisse gefunden."}
           </CommandEmpty>
           <CommandGroup heading={query.trim() ? `${results.length} Treffer` : "Vorschläge"}>
             {results.map((food: SearchResult) => (

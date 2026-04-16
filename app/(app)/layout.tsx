@@ -3,14 +3,11 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { FoodSearchTrigger } from "@/components/food-search-command"
 import { Separator } from "@/components/ui/separator"
 import { PwaStatus } from "@/components/pwa-status"
-import { fetchFoodSearchIndex } from "@/lib/data/foods"
 import { FoodSearchProvider } from "@/components/foods-provider"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const searchFoods = await fetchFoodSearchIndex()
-
   return (
-    <FoodSearchProvider foods={searchFoods}>
+    <FoodSearchProvider foods={[]}>
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { SearchIcon, Sparkles } from "lucide-react"
+import { Loader2, SearchIcon, Sparkles } from "lucide-react"
 import {
   Command,
   CommandEmpty,
@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import type { FoodSearchItem, FoodSourceId } from "@/lib/types"
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms"
-import { useFoodSearchIndex } from "@/components/foods-provider"
+import { useFoodSearch } from "@/components/foods-provider"
 import { createClient } from "@/lib/supabase/client"
 import { fuzzySearchFoods } from "@/lib/search/fuzzy-search"
 
@@ -48,19 +48,23 @@ function getCategoryName(categoryId: string): string {
 function SearchDialog({
   open,
   onOpenChange,
-  foods,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  foods: FoodSearchItem[]
 }) {
   const router = useRouter()
+  const { index: foods, isLoading: isIndexLoading, loadIndex } = useFoodSearch()
+  
+  React.useEffect(() => {
+    if (open) loadIndex()
+  }, [open, loadIndex])
+
   const supabase = React.useMemo(() => createClient(), [])
   const [query, setQuery] = React.useState("")
   const [debouncedQuery, setDebouncedQuery] = React.useState("")
   const [userId, setUserId] = React.useState<string | null>(null)
   const [remoteResults, setRemoteResults] = React.useState<SearchResult[]>([])
-  const [isLoading, setIsLoading] = React.useState(false)
+  const [isSearchingRemote, setIsSearchingRemote] = React.useState(false)
   const [serverError, setServerError] = React.useState<string | null>(null)
   const { getDisplayName, getSynonymsForFood } = useFoodSynonyms()
 
@@ -85,12 +89,12 @@ function SearchDialog({
     if (!trimmed) {
       setRemoteResults([])
       setServerError(null)
-      setIsLoading(false)
+      setIsSearchingRemote(false)
       return
     }
 
     const abortController = new AbortController()
-    setIsLoading(true)
+    setIsSearchingRemote(true)
     supabase
       .rpc("search_foods", {
         search_query: trimmed,
@@ -102,7 +106,7 @@ function SearchDialog({
         if (error) {
           setServerError(error.message)
           setRemoteResults([])
-          setIsLoading(false)
+          setIsSearchingRemote(false)
           return
         }
         const mapped: SearchResult[] = (data ?? []).map((row: unknown) => {
@@ -119,7 +123,7 @@ function SearchDialog({
         })
         setRemoteResults(mapped)
         setServerError(null)
-        setIsLoading(false)
+        setIsSearchingRemote(false)
       })
 
     return () => abortController.abort()
@@ -187,8 +191,13 @@ function SearchDialog({
             onValueChange={setQuery}
           />
           <CommandList>
+            {(isIndexLoading || isSearchingRemote) && (
+              <div className="flex items-center justify-center p-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
             <CommandEmpty>
-              {isLoading ? "Suche läuft..." : serverError ?? "Keine Ergebnisse gefunden."}
+              {isSearchingRemote || isIndexLoading ? "Suche läuft..." : serverError ?? "Keine Ergebnisse gefunden."}
             </CommandEmpty>
             <CommandGroup heading={query.trim() ? `${results.length} Treffer` : "Lebensmittel"}>
               {results.map((food) => (
@@ -227,7 +236,6 @@ function SearchDialog({
 }
 
 export function FoodSearchTrigger() {
-  const foods = useFoodSearchIndex()
   const [open, setOpen] = React.useState(false)
 
   React.useEffect(() => {
@@ -257,7 +265,7 @@ export function FoodSearchTrigger() {
         </kbd>
       </Button>
 
-      <SearchDialog open={open} onOpenChange={setOpen} foods={foods} />
+      <SearchDialog open={open} onOpenChange={setOpen} />
     </>
   )
 }
