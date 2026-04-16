@@ -48,7 +48,7 @@ export function FoodSearchProvider({
           id: row[0],
           name: row[1],
           categoryId: row[2],
-          sourceId: row[3] as any, // casting sourceId since it comes from compact int/string
+          sourceId: row[3] as FoodSearchItem["sourceId"],
           isCustom: Boolean(row[4]),
         }));
         setIndex(inflated);

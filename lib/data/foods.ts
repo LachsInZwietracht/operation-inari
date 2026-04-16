@@ -427,6 +427,129 @@ function isUuid(value: string) {
   );
 }
 
+/* ─── RPC-based food fetching (single query instead of sequential batches) ─── */
+
+interface RpcFoodRow {
+  food_id: string;
+  food_name: string;
+  data_source_id: string;
+  source_food_id: string;
+  source_version: string | null;
+  bls_code: string | null;
+  food_group_id: string | null;
+  category_id: string | null;
+  manufacturer: string | null;
+  allergens: string[] | null;
+  additives: string[] | null;
+  tags: string[] | null;
+  is_branded: boolean;
+  is_custom: boolean;
+  is_recipe_derived: boolean;
+  co2_per_portion: number | null;
+  sustainability_score: number | null;
+  prod_score: number | null;
+  data_quality_score: number | null;
+  imported_at: string;
+  created_at: string;
+  updated_at: string;
+  nutrients: Array<{ nutrient_id: string; amount: number; per_amount: number }> | null;
+}
+
+function mapRpcFoodRow(row: RpcFoodRow): Food {
+  const rawNutrients = Array.isArray(row.nutrients) ? row.nutrients : [];
+  const nutrients: NutrientValue[] = rawNutrients.map((n) => ({
+    nutrientId: n.nutrient_id,
+    amount: Number(n.amount),
+  }));
+
+  const baseAmount = rawNutrients[0]?.per_amount
+    ? Number(rawNutrients[0].per_amount)
+    : 100;
+
+  return {
+    id: row.food_id,
+    name: row.food_name,
+    categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
+    source: formatSourceFromRpc(row),
+    sourceId: row.data_source_id as FoodSourceId,
+    sourceVersion: row.source_version ?? undefined,
+    blsCode: row.bls_code ?? undefined,
+    foodGroupId: row.food_group_id ?? undefined,
+    nutrients,
+    baseAmount,
+    manufacturer: row.manufacturer ?? undefined,
+    allergens: row.allergens ?? undefined,
+    additives: row.additives ?? undefined,
+    co2PerPortion: row.co2_per_portion ?? undefined,
+    sustainabilityScore: row.sustainability_score ?? undefined,
+    prodScore: row.prod_score ?? undefined,
+    isBranded: row.is_branded,
+    isCustom: row.is_custom,
+    isRecipeDerived: row.is_recipe_derived,
+    portionSizes: [],
+    tags: row.tags ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function formatSourceFromRpc(row: RpcFoodRow): string {
+  const version = row.source_version ?? "";
+  switch (row.data_source_id as FoodSourceId) {
+    case "bls":
+      return version ? `BLS ${version}` : "BLS";
+    case "custom":
+      return "Eigene Eingabe";
+    case "hersteller":
+      return "Hersteller";
+    default:
+      return version
+        ? `${row.data_source_id.toUpperCase()} ${version}`
+        : row.data_source_id.toUpperCase();
+  }
+}
+
+export interface FetchFoodsViaRpcOptions {
+  nutrientIds?: string[];
+  foodIds?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchFoodsViaRpc(options: FetchFoodsViaRpcOptions = {}): Promise<Food[]> {
+  try {
+    const client = await createServiceClient();
+    const { data, error } = await withTimeout(
+      client.rpc("get_foods_with_nutrients", {
+        nutrient_filter: options.nutrientIds ?? null,
+        food_id_filter: options.foodIds ?? null,
+        page_limit: options.limit ?? 10000,
+        page_offset: options.offset ?? 0,
+      }),
+      15000,
+      "Supabase RPC get_foods_with_nutrients timed out",
+    );
+
+    if (error) {
+      throw new Error(`RPC get_foods_with_nutrients failed: ${error.message}`);
+    }
+
+    return ((data ?? []) as RpcFoodRow[]).map(mapRpcFoodRow);
+  } catch (error) {
+    console.error("fetchFoodsViaRpc error, falling back to paginated:", error);
+    // Fall back to the existing batch approach
+    return fetchFoodsPaginated(
+      {
+        includeNutrients: true,
+        nutrientIds: options.nutrientIds,
+        includePortions: false,
+      },
+      2500,
+      true,
+    );
+  }
+}
+
 /**
  * Cached helper that fetches the complete foods catalog (including nutrients)
  */
@@ -502,15 +625,7 @@ export const fetchAllFoodsForList = cache(async () => {
   return unstable_cache(
     async () => {
       try {
-        return await fetchFoodsPaginated(
-          {
-            includeNutrients: true,
-            nutrientIds: LIST_NUTRIENT_IDS,
-            includePortions: false,
-          },
-          2500,
-          true
-        );
+        return await fetchFoodsViaRpc({ nutrientIds: LIST_NUTRIENT_IDS });
       } catch (error) {
         console.error("fetchAllFoodsForList error:", error);
         return [];
@@ -525,15 +640,7 @@ export const fetchFoodsForMealPlans = cache(async () => {
   return unstable_cache(
     async () => {
       try {
-        return await fetchFoodsPaginated(
-          {
-            includeNutrients: true,
-            nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
-            includePortions: false,
-          },
-          2500,
-          true
-        );
+        return await fetchFoodsViaRpc({ nutrientIds: MEAL_PLAN_NUTRIENT_IDS });
       } catch (error) {
         console.error("fetchFoodsForMealPlans error:", error);
         return [];
@@ -548,15 +655,7 @@ export const fetchFoodsForReports = cache(async () => {
   return unstable_cache(
     async () => {
       try {
-        return await fetchFoodsPaginated(
-          {
-            includeNutrients: true,
-            nutrientIds: REPORT_NUTRIENT_IDS,
-            includePortions: false,
-          },
-          2500,
-          true
-        );
+        return await fetchFoodsViaRpc({ nutrientIds: REPORT_NUTRIENT_IDS });
       } catch (error) {
         console.error("fetchFoodsForReports error:", error);
         return [];
@@ -571,15 +670,7 @@ export const fetchFoodsForProtocols = cache(async () => {
   return unstable_cache(
     async () => {
       try {
-        return await fetchFoodsPaginated(
-          {
-            includeNutrients: true,
-            nutrientIds: PROTOCOL_NUTRIENT_IDS,
-            includePortions: false,
-          },
-          2500,
-          true
-        );
+        return await fetchFoodsViaRpc({ nutrientIds: PROTOCOL_NUTRIENT_IDS });
       } catch (error) {
         console.error("fetchFoodsForProtocols error:", error);
         return [];
@@ -594,14 +685,7 @@ export const fetchFoodsForInstitution = cache(async () => {
   return unstable_cache(
     async () => {
       try {
-        return await fetchFoodsPaginated(
-          {
-            includeNutrients: false,
-            includePortions: false,
-          },
-          2500,
-          true
-        );
+        return await fetchFoodsViaRpc({});
       } catch (error) {
         console.error("fetchFoodsForInstitution error:", error);
         return [];

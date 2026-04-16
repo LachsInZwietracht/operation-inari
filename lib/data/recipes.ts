@@ -1,7 +1,9 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Recipe } from "@/lib/types";
+import { createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -137,6 +139,31 @@ function baseRecipeQuery(client: SupabaseClient) {
 }
 
 export const fetchRecipes = cache(async (options: FetchRecipesOptions = {}): Promise<Recipe[]> => {
+  // Use unstable_cache for the default (no supabase, no filters) case
+  if (!options.supabase && !options.limit && !options.offset && !options.sourceType) {
+    return unstable_cache(
+      async () => {
+        try {
+          const client = await createServiceClient();
+          const { data, error } = await withTimeout(
+            baseRecipeQuery(client).order("name", { ascending: true }),
+            5000,
+            "Supabase recipes request timed out",
+          );
+          if (error) throw new Error(error.message);
+          const rows = (data ?? []) as unknown as RecipeRowWithRelations[];
+          return rows.map((row) => mapRecipeRow(row));
+        } catch (error) {
+          console.warn("Falling back to local recipes:", error);
+          return [];
+        }
+      },
+      ["recipes-all"],
+      { revalidate: 3600, tags: ["recipes"] },
+    )();
+  }
+
+  // Fallback: direct fetch with options
   try {
     const client = await resolveClient(options.supabase);
     let query = baseRecipeQuery(client).order("name", { ascending: true });

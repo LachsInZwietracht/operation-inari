@@ -88,9 +88,10 @@ import { calculateProdScore } from "@/lib/prodi-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { resolveReferenceForPatient } from "@/lib/reference-values"
-import { useFoods } from "@/components/foods-provider"
+import { useFoods, useFoodSearch } from "@/components/foods-provider"
 import { createRecipeLookup } from "@/lib/recipes"
 import { useNutrientValues } from "@/hooks/use-nutrient-values"
+import type { FoodSearchItem } from "@/lib/types"
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -153,6 +154,7 @@ interface ErnaehrungsplanPageClientProps {
 
 export function ErnaehrungsplanPageClient({ recipes, initialPlans }: ErnaehrungsplanPageClientProps) {
   const foods = useFoods()
+  const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
   const {
     currentDate,
     currentPlan,
@@ -238,6 +240,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
   const handleOpenExchange = (slotType: MealSlotType) => {
     setExchangeSlot(slotType)
     setExchangeDialogOpen(true)
+    loadFoodSearchIndex()
   }
 
   const handleSelectExchangeFood = (foodId: string) => {
@@ -339,9 +342,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
     )
   }, [recipeSearch, recipes])
 
+  // Use the lightweight search index for the exchange dialog (instead of all 7,140 full Food objects)
+  const exchangeSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
   const filteredExchangeFoods = useMemo(() => {
     const query = exchangeSearch.toLowerCase()
-    return foods
+    return exchangeSource
       .filter((food) => {
         const matchesSearch = !query || food.name.toLowerCase().includes(query)
         const matchesCategory = exchangeCategory === "alle" || food.categoryId === exchangeCategory
@@ -350,7 +355,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
       .sort((a, b) =>
         (exchangeNutrientValues.get(b.id) ?? 0) - (exchangeNutrientValues.get(a.id) ?? 0),
       )
-  }, [exchangeCategory, exchangeNutrientValues, exchangeSearch, foods])
+  }, [exchangeCategory, exchangeNutrientValues, exchangeSearch, exchangeSource])
 
   const baseWeekStart = startOfWeek(parsedDate, { weekStartsOn: 1 })
   const computedWeekStart = addWeeks(baseWeekStart, weekOffset)

@@ -1,8 +1,9 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DailyMealPlan, MealEntry, MealSlot, MealSlotType } from "@/lib/types";
-import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient as createServerSupabaseClient, createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
 
 const SLOT_ORDER: MealSlotType[] = [
@@ -92,6 +93,37 @@ function mapMealPlanRow(row: MealPlanRow): DailyMealPlan {
 export const fetchMealPlans = cache(async (
   options: FetchMealPlansOptions = {}
 ): Promise<DailyMealPlan[]> => {
+  // Use unstable_cache for system/template plans (no user, no custom supabase)
+  const isSystemOnly = !options.supabase && !options.userId && (options.includeSystem ?? true);
+  if (isSystemOnly && !options.limit) {
+    return unstable_cache(
+      async () => {
+        try {
+          const client = await createServiceClient();
+          const { data, error } = await withTimeout(
+            client
+              .from("daily_meal_plans")
+              .select(
+                "id,date,user_id,meal_entries(id,meal_plan_id,slot_type,entry_type,reference_id,amount,sort_order)"
+              )
+              .is("user_id", null)
+              .order("date", { ascending: false }),
+            5000,
+            "Supabase meal plan request timed out",
+          );
+          if (error) throw new Error(error.message);
+          return (data ?? []).map((row) => mapMealPlanRow(row as MealPlanRow));
+        } catch (error) {
+          console.warn("Falling back to local meal plans:", error);
+          return [];
+        }
+      },
+      ["meal-plans-system"],
+      { revalidate: 300, tags: ["meal-plans"] },
+    )();
+  }
+
+  // Fallback: direct fetch with options
   try {
     const client = await resolveClient(options.supabase);
     let query = client
