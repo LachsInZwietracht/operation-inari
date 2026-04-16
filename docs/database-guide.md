@@ -21,8 +21,10 @@ Single source of truth for Operation Prodi's nutrition database layer: schema de
 ## 1. Current State of the Codebase
 
 > **Latest dev update — April 2025**
+> - **Remote Supabase:** The project is connected to a hosted Supabase instance (project ref `fiywitnrtuewnvainyfe`). Local Supabase is no longer required for development. The CLI is linked via `supabase link`; push new migrations with `supabase db push`.
+> - **Remote setup workflow:** After linking, push migrations (`supabase db push`), then seed nutrient definitions + data sources (run `supabase/seed.sql` against the remote DB), then run all ETL scripts: `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:reference-values`, `npm run etl:recipes`. ETL scripts require `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` env vars (not the `NEXT_PUBLIC_` variants).
 > - **BLS pipeline:** Run `npm run etl:bls` then `npm run etl:verify:bls` (requires `SUPABASE_SERVICE_ROLE_KEY`). The verifier compares Supabase row counts with the Excel input and fails fast on drift.
-> - **Local refresh workflow:** Bring up Docker (`supabase start`), run `supabase db reset` after syncing migrations, then re-run the BLS import + verifier to restock the local database. The seed now requires every `data_sources.version` value (e.g., the `hersteller` source uses `'varies'`).
+> - **Local dev (optional):** If you prefer local Supabase, bring up Docker (`supabase start`), run `supabase db reset` after syncing migrations, then re-run the BLS import + verifier. The seed now requires every `data_sources.version` value (e.g., the `hersteller` source uses `'varies'`).
 > - **Category mapping:** `scripts/etl/import-bls.ts` now resolves subgroup IDs (`fg_G6`, etc.) and maps them to the expanded UI categories (`cat_eier`, `cat_gewuerze`, `cat_unbekannt`). Keep those IDs in sync with `lib/mock-data/categories.ts`.
 >   - Kartoffeln (`fg_K`) intentionally stay under `cat_gemuese` for now; add a dedicated category later if the UI needs potatoes separated.
 > - **Recipe + meal plan seeding:** After the BLS import succeeds, run `npm run etl:recipes` to upsert the shared recipe catalog (with normalized ingredients) and the default meal plan templates. The script resolves legacy ingredient IDs to Supabase foods via their BLS codes.

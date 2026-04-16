@@ -4,7 +4,7 @@
 
 **Prodi** is a modern German nutrition counseling web application replacing the outdated desktop-only PRODI software. It provides food database browsing, recipe management, daily meal planning, and nutrient analysis with DGE reference value comparisons.
 
-**Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus Supabase-first persistence with local fallback for custom foods, recipes, meal plans, and nutrition protocols. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
+**Current state:** MVP with BLS 4.0 food data served from a hosted Supabase project (7,140 foods, 265k nutrient values, 2,268 DGE reference values). Supabase-first persistence with local fallback for custom foods, recipes, meal plans, and nutrition protocols. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -16,7 +16,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run lint` - Run ESLint
 - `npm run typecheck` - Run TypeScript type checking
 - `npm run test` - Run Playwright end-to-end tests
-- `npm run etl:bls` - Import BLS 4.0 data into Supabase (requires `SUPABASE_SERVICE_ROLE_KEY`)
+- `npm run etl:bls` - Import BLS 4.0 data into Supabase (requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`)
+- `npm run etl:verify:bls` - Verify BLS import row counts
+- `npm run etl:reference-values` - Import DGE reference values
+- `npm run etl:recipes` - Import shared recipes and meal plan templates
 
 ## Framework and Library Recommendations
 
