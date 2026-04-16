@@ -236,6 +236,7 @@ function SearchDialog({
 }
 
 export function FoodSearchTrigger() {
+  const { loadIndex } = useFoodSearch()
   const [open, setOpen] = React.useState(false)
 
   React.useEffect(() => {
@@ -256,6 +257,8 @@ export function FoodSearchTrigger() {
         variant="outline"
         className="text-muted-foreground relative w-full justify-start text-sm sm:w-64"
         onClick={() => setOpen(true)}
+        onMouseEnter={() => loadIndex()}
+        onFocus={() => loadIndex()}
       >
         <SearchIcon className="mr-2 size-4" />
         <span>Lebensmittel suchen...</span>

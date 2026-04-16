@@ -42,8 +42,16 @@ export function FoodSearchProvider({
       // Given we are in a client component, we'll call a server action or fetch.
       const response = await fetch("/api/foods/search-index");
       if (response.ok) {
-        const data = await response.json();
-        setIndex(data);
+        const compactData = await response.json();
+        // Inflate compact arrays: [id, name, categoryId, sourceId, isCustom]
+        const inflated: FoodSearchItem[] = compactData.map((row: [string, string, string, string, number]) => ({
+          id: row[0],
+          name: row[1],
+          categoryId: row[2],
+          sourceId: row[3] as any, // casting sourceId since it comes from compact int/string
+          isCustom: Boolean(row[4]),
+        }));
+        setIndex(inflated);
       }
     } catch (error) {
       console.error("Failed to load food search index:", error);

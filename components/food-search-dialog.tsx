@@ -81,8 +81,9 @@ export function FoodSearchDialog({
     }
   }, [supabase])
 
+  // Debounce search to keep UI fluid
   React.useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedQuery(query), 200)
+    const id = window.setTimeout(() => setDebouncedQuery(query), 150)
     return () => window.clearTimeout(id)
   }, [query])
 

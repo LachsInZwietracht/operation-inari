@@ -2,13 +2,24 @@ import { NextResponse } from "next/server";
 import { fetchFoodSearchIndex } from "@/lib/data/foods";
 
 /**
- * API route to fetch the food search index.
- * This is served with Next.js caching and can be consumed by client components.
+ * Compact API route to fetch the food search index.
+ * Returns an Array of Arrays to minimize JSON overhead.
+ * Format: [id, name, categoryId, sourceId, isCustom]
  */
 export async function GET() {
   try {
     const index = await fetchFoodSearchIndex();
-    return NextResponse.json(index, {
+    
+    // Convert objects to compact arrays
+    const compact = index.map(item => [
+      item.id,
+      item.name,
+      item.categoryId,
+      item.sourceId,
+      item.isCustom ? 1 : 0
+    ]);
+
+    return NextResponse.json(compact, {
       headers: {
         "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
       },

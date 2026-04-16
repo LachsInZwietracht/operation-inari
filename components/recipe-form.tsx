@@ -37,6 +37,7 @@ import { useNutrientCalculation } from "@/hooks/use-nutrient-calculation";
 import { getNutrientValue } from "@/lib/nutrients";
 import { formatNumber } from "@/lib/format";
 import type { Recipe, Ingredient, Food } from "@/lib/types";
+import { useFoodSearch } from "@/components/foods-provider";
 import { persistPersonalRecipe } from "@/lib/data/recipes-client";
 import { upsertLocalRecipe } from "@/lib/data/local-recipes";
 import { FoodSearchDialog } from "@/components/food-search-dialog";
@@ -104,6 +105,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const [foodDialogOpen, setFoodDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [availableFoods, setAvailableFoods] = useState<Food[]>([]);
+  const { loadIndex } = useFoodSearch();
 
   // Pre-load ingredients' full food data
   useEffect(() => {
@@ -376,6 +378,8 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => setFoodDialogOpen(true)}
+                    onMouseEnter={() => loadIndex()}
+                    onFocus={() => loadIndex()}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Zutat hinzufügen
