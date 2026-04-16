@@ -6,7 +6,7 @@ import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { BRANDED_FOODS } from "@/lib/mock-data/branded-foods";
 import type { Food, FoodSearchItem, FoodSourceId } from "@/lib/types/food";
 import type { NutrientValue } from "@/lib/types/nutrients";
-import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient as createServerSupabaseClient, createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
 
 const FALLBACK_CATEGORY_ID = "cat_unbekannt";
@@ -70,7 +70,8 @@ export interface FoodQueryResult {
 
 async function fetchFoodsPaginated(
   options: FoodQueryOptions,
-  batchSize = 2000
+  batchSize = 2000,
+  isAdmin = false
 ): Promise<Food[]> {
   const { offset, ...rest } = options;
   let currentOffset = offset ?? 0;
@@ -82,7 +83,7 @@ async function fetchFoodsPaginated(
       limit: batchSize,
       offset: currentOffset,
       withCount: false,
-    });
+    }, isAdmin);
     aggregated.push(...page);
 
     if (page.length < batchSize) {
@@ -94,9 +95,9 @@ async function fetchFoodsPaginated(
   return aggregated;
 }
 
-export async function fetchFoods(options: FoodQueryOptions = {}): Promise<FoodQueryResult> {
+export async function fetchFoods(options: FoodQueryOptions = {}, isAdmin = false): Promise<FoodQueryResult> {
   try {
-    const client = await resolveClient(options.supabase);
+    const client = options.supabase || (isAdmin ? await createServiceClient() : await resolveClient());
     const includeNutrients = options.includeNutrients ?? true;
     const includePortions = options.includePortions ?? false;
     const withCount = options.withCount ?? true;
@@ -280,7 +281,7 @@ export async function fetchFoodById(
 
 export const fetchBrandedFoods = cache(async () => {
   try {
-    const client = await resolveClient();
+    const client = await resolveClient(undefined, true);
     const selectColumns = [
       "id",
       "name",
@@ -352,8 +353,9 @@ export async function fetchCatalogFoodById(
   return brandedFoods.find((item) => item.id === id) ?? null;
 }
 
-async function resolveClient(provided?: SupabaseClient) {
+async function resolveClient(provided?: SupabaseClient, isAdmin = false) {
   if (provided) return provided;
+  if (isAdmin) return await createServiceClient();
   return await createServerSupabaseClient();
 }
 
@@ -437,7 +439,8 @@ export const fetchAllFoods = cache(async () => {
             includeNutrients: true,
             includePortions: true,
           },
-          2000
+          2000,
+          true
         );
       } catch (error) {
         console.error("fetchAllFoods error:", error);
@@ -505,7 +508,8 @@ export const fetchAllFoodsForList = cache(async () => {
             nutrientIds: LIST_NUTRIENT_IDS,
             includePortions: false,
           },
-          2500
+          2500,
+          true
         );
       } catch (error) {
         console.error("fetchAllFoodsForList error:", error);
@@ -527,7 +531,8 @@ export const fetchFoodsForMealPlans = cache(async () => {
             nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
             includePortions: false,
           },
-          2500
+          2500,
+          true
         );
       } catch (error) {
         console.error("fetchFoodsForMealPlans error:", error);
@@ -549,7 +554,8 @@ export const fetchFoodsForReports = cache(async () => {
             nutrientIds: REPORT_NUTRIENT_IDS,
             includePortions: false,
           },
-          2500
+          2500,
+          true
         );
       } catch (error) {
         console.error("fetchFoodsForReports error:", error);
@@ -571,7 +577,8 @@ export const fetchFoodsForProtocols = cache(async () => {
             nutrientIds: PROTOCOL_NUTRIENT_IDS,
             includePortions: false,
           },
-          2500
+          2500,
+          true
         );
       } catch (error) {
         console.error("fetchFoodsForProtocols error:", error);
@@ -592,7 +599,8 @@ export const fetchFoodsForInstitution = cache(async () => {
             includeNutrients: false,
             includePortions: false,
           },
-          2500
+          2500,
+          true
         );
       } catch (error) {
         console.error("fetchFoodsForInstitution error:", error);
@@ -608,7 +616,7 @@ export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> =>
   return unstable_cache(
     async () => {
       try {
-        const client = await resolveClient();
+        const client = await resolveClient(undefined, true);
         const { data, error } = await withTimeout(
           client
             .from("foods")

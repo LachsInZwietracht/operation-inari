@@ -9,8 +9,6 @@ export async function createClient() {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.warn("Supabase environment variables are missing. Using fallback mode.")
-    // We return a client that will fail gracefully or we can just let it throw a more descriptive error
-    // but createServerClient from @supabase/ssr requires non-empty strings.
   }
 
   return createServerClient(
@@ -28,10 +26,29 @@ export async function createClient() {
             )
           } catch {
             // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing sessions.
           }
         },
       },
     },
   )
+}
+
+/**
+ * Creates a Supabase client using the Service Role Key.
+ * This client bypasses RLS and does NOT use cookies, making it safe for unstable_cache.
+ */
+export async function createServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Missing Supabase Service Role configuration for server-side cache.");
+  }
+
+  return createServerClient(supabaseUrl, supabaseServiceKey, {
+    cookies: {
+      getAll() { return [] },
+      setAll() { },
+    },
+  });
 }
