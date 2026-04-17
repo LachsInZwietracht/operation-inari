@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   Download,
@@ -44,18 +44,13 @@ import {
   API_KEYS,
   WEBHOOK_CONFIGS,
   INTEGRATION_TOGGLES,
-  EXPORT_HISTORY,
 } from "@/lib/mock-data"
 import { formatDate } from "@/lib/format"
+import type { ExportFormat, ExportJobRecord, ExportScope } from "@/lib/types"
+import { SUPPORTED_EXPORTS } from "@/lib/exports/constants"
+import { downloadResponseFile } from "@/lib/utils"
 
-const EXPORT_SCOPES = [
-  "Lebensmittel",
-  "Rezepte",
-  "Patienten",
-  "Ernährungspläne",
-  "Berichte",
-  "Laborwerte",
-]
+const EXPORT_SCOPES: ExportScope[] = ["Lebensmittel", "Rezepte", "Patienten", "Ernährungspläne", "Berichte"]
 
 const METHOD_STYLES: Record<string, string> = {
   GET: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
@@ -72,7 +67,7 @@ const STATUS_STYLES: Record<string, { label: string; variant: "default" | "secon
 
 export default function ApiExportPage() {
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null)
-  const [exportScopes, setExportScopes] = useState<Record<string, string>>({
+  const [exportScopes, setExportScopes] = useState<Record<ExportFormat, ExportScope>>({
     CSV: "Lebensmittel",
     JSON: "Rezepte",
     PDF: "Patienten",
@@ -80,6 +75,12 @@ export default function ApiExportPage() {
   const [importFormat, setImportFormat] = useState("CSV")
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all")
   const [historyFormatFilter, setHistoryFormatFilter] = useState("all")
+  const [exportJobs, setExportJobs] = useState<ExportJobRecord[]>([])
+  const [isExporting, setIsExporting] = useState<Record<ExportFormat, boolean>>({
+    CSV: false,
+    JSON: false,
+    PDF: false,
+  })
   const [integrationStates, setIntegrationStates] = useState<Record<string, boolean>>(
     Object.fromEntries(INTEGRATION_TOGGLES.map((t) => [t.id, t.enabled]))
   )
@@ -88,10 +89,68 @@ export default function ApiExportPage() {
   )
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({})
 
-  function handleExport(format: string) {
-    toast.success(`${format}-Export gestartet`, {
-      description: `${exportScopes[format]} wird als ${format} exportiert.`,
-    })
+  async function loadExportJobs() {
+    try {
+      const response = await fetch("/api/export-jobs", { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const data = (await response.json()) as Array<{
+        id: string
+        user_id: string
+        type: "export" | "import"
+        format: ExportFormat
+        scope: ExportScope
+        status: "abgeschlossen" | "in Bearbeitung" | "fehlgeschlagen"
+        created_at: string
+        file_size?: string | null
+        created_by: string
+        file_name?: string | null
+        parameters?: Record<string, unknown> | null
+      }>
+      setExportJobs(
+        data.map((job) => ({
+          id: job.id,
+          userId: job.user_id,
+          type: job.type,
+          format: job.format,
+          scope: job.scope,
+          status: job.status,
+          createdAt: job.created_at,
+          fileSize: job.file_size ?? undefined,
+          createdBy: job.created_by,
+          fileName: job.file_name ?? undefined,
+          parameters: job.parameters ?? undefined,
+        })),
+      )
+    } catch (error) {
+      toast.error((error as Error).message || "Export-Historie konnte nicht geladen werden")
+    }
+  }
+
+  useEffect(() => {
+    void loadExportJobs()
+  }, [])
+
+  async function handleExport(format: ExportFormat) {
+    const scope = exportScopes[format]
+    setIsExporting((prev) => ({ ...prev, [format]: true }))
+    try {
+      const response = await fetch("/api/exports/datasets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ format, scope }),
+      })
+      await downloadResponseFile(response, `${scope.toLowerCase()}.${format.toLowerCase()}`)
+      await loadExportJobs()
+      toast.success(`${format}-Export erstellt`, {
+        description: `${scope} wurde erfolgreich exportiert.`,
+      })
+    } catch (error) {
+      toast.error((error as Error).message || "Export konnte nicht erstellt werden")
+    } finally {
+      setIsExporting((prev) => ({ ...prev, [format]: false }))
+    }
   }
 
   function handleImport() {
@@ -115,11 +174,11 @@ export default function ApiExportPage() {
     toast.success(enabled ? "Webhook aktiviert" : "Webhook deaktiviert")
   }
 
-  const filteredHistory = EXPORT_HISTORY.filter((job) => {
+  const filteredHistory = useMemo(() => exportJobs.filter((job) => {
     if (historyTypeFilter !== "all" && job.type !== historyTypeFilter) return false
     if (historyFormatFilter !== "all" && job.format !== historyFormatFilter) return false
     return true
-  })
+  }), [exportJobs, historyTypeFilter, historyFormatFilter])
 
   return (
     <div className="space-y-6">
@@ -168,20 +227,20 @@ export default function ApiExportPage() {
                 <CardContent className="space-y-3">
                   <Select
                     value={exportScopes[format]}
-                    onValueChange={(v) => setExportScopes((prev) => ({ ...prev, [format]: v }))}
+                    onValueChange={(v) => setExportScopes((prev) => ({ ...prev, [format]: v as ExportScope }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Bereich wählen" />
                     </SelectTrigger>
                     <SelectContent>
-                      {EXPORT_SCOPES.map((scope) => (
+                      {SUPPORTED_EXPORTS[format as ExportFormat].map((scope) => (
                         <SelectItem key={scope} value={scope}>{scope}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button className="w-full" onClick={() => handleExport(format)}>
+                  <Button className="w-full" onClick={() => void handleExport(format)} disabled={isExporting[format]}>
                     <Download className="mr-2 h-4 w-4" />
-                    Exportieren
+                    {isExporting[format] ? "Wird erstellt..." : "Exportieren"}
                   </Button>
                 </CardContent>
               </Card>

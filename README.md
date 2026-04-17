@@ -9,7 +9,7 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 - **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, protocols, and meal plans with automatic cloud sync and local fallback.
 - **Smart Food Search:** Hybrid search engine combining local fuzzy matching with server-side trigram search across 7,000+ items.
 - **AI-Assisted Entry:** NLP-assisted food entry ("Smart-Eingabe") for rapid dietary assessment and protocol management.
-- **Professional Tools:** Pediatric percentile charts, PROCAM screening, mail merge, and eGK insurance card reader integration.
+- **Professional Tools:** Pediatric percentile charts, PROCAM screening, real PDF/CSV exports for reports and patient documents, and eGK insurance card reader integration.
 
 ## 🛠 Tech Stack
 
@@ -19,6 +19,7 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 - **State Management:** React Context + Type-safe CRUD Hooks
 - **Testing:** Playwright (E2E), Custom Mathematical Validation Suite
 - **Data Source:** BLS 4.0 (Bundeslebensmittelschlüssel)
+- **Document Rendering:** `@react-pdf/renderer` for server-side PDF generation
 
 ## 📖 Documentation
 
@@ -26,6 +27,11 @@ For detailed technical implementation guides, architectural overview, and featur
 - [Feature Implementation Guide](./documentation.md)
 - [Database & ETL Guide](./docs/database-guide.md)
 - [Product Requirements](./docs/product-requirements.md)
+
+Recent platform changes:
+- Reports (`/berichte`) now generate real server-side PDF and CSV exports.
+- Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
+- `API & Export` now creates real export jobs and reads persisted history from Supabase.
 
 ## 🛠 Development
 
@@ -47,3 +53,7 @@ To verify mathematical integrity:
 ```bash
 npm run validate:nutrients
 ```
+
+### Export System
+- Apply the latest migrations before testing exports: `npx supabase db push`
+- Export metadata is persisted in `export_jobs`; binary files are generated on demand and are not stored in Supabase.

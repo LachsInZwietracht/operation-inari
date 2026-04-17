@@ -16,6 +16,7 @@
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
 - **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern. Data is synced to the cloud when authenticated but always available in `localStorage` for offline use.
+- **Export pipeline:** Real file generation lives behind server routes in `app/api/exports/*`. Client pages build typed payloads, the server renders PDF/CSV output, and export metadata is written to `export_jobs`.
 
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
@@ -69,10 +70,34 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **NLP Engine:** `lib/nlp-matching.ts` parses free-text for quantity, unit, and food name using keyword heuristics.
   - **Persistence:** Protocols use `useProtocols` for Supabase-first persistence with automatic local fallback.
 
+### 4.14 Berichte (`/berichte`)
+- **Component:** `app/(app)/berichte/berichte-client.tsx`
+  - Builds a typed `ReportExportRequest` from the currently selected plan, visible nutrient rows, active sections, and resolved placeholder notes.
+  - **Real exports:** `PDF erstellen` and `CSV/Nährstoffdaten` POST to `/api/exports/report`.
+  - **Preview:** `Druckvorschau anzeigen` requests the same PDF payload with inline disposition and opens it in a new tab.
+  - **Contract boundary:** the page owns selection and payload assembly; rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
+
+### 4.15 Patienten Mail Merge (`/patienten`)
+- **Component:** `app/(app)/patienten/page.tsx`
+  - The authoring UI for templates/placeholders is still client-side.
+  - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
+  - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.
+
+### 4.16 API & Export (`/api-export`)
+- **Component:** `app/(app)/api-export/page.tsx`
+  - Export cards now call `/api/exports/datasets` with typed `format` + `scope` combinations.
+  - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
+  - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
+
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
 - **Nutrient utilities (`@/lib/nutrients.ts`):** Mathematically validated core logic. Handles ingredient scaling and summing.
 - **Fuzzy Search (`@/lib/search/fuzzy-search.ts`):** Optimized client-side search over the food index using Trigram similarity and Cologne phonetics.
+- **Exports (`lib/exports/*`):**
+  - `constants.ts` defines allowed format/scope combinations.
+  - `pdf.tsx` contains branded PDF rendering for reports and patient documents.
+  - `report-builder.ts` creates a default report payload for generic exports.
+  - `server.ts` centralizes file responses and export job creation.
 
 ## 6. Scripts & ETL
 - **BLS Import (`scripts/etl/import-bls.ts`):** Syncs the 7,140 food items from the Excel source to Supabase.
@@ -87,5 +112,8 @@ For each feature update:
 4. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
 5. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
 6. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
+7. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
+8. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
+9. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
 
 Following this guide ensures new engineers can trace each feature from route → component → hook → data, understand persistence, and avoid breaking coupled flows.

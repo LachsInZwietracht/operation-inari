@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("API & Export", () => {
-  test("displays export cards and triggers CSV export", async ({ page }) => {
+  test("displays export cards and creates a real CSV export", async ({ page }) => {
     await page.goto("/api-export");
 
     await expect(
@@ -13,12 +13,15 @@ test.describe("API & Export", () => {
     await expect(page.getByText("JSON-Export")).toBeVisible();
     await expect(page.getByText("PDF-Export")).toBeVisible();
 
-    // Select a scope and export
+    const download = page.waitForEvent("download");
     await page.locator("[data-slot='card']", { hasText: "CSV-Export" })
       .getByRole("button", { name: "Exportieren" }).click();
+    const file = await download;
+    expect(await file.suggestedFilename()).toMatch(/lebensmittel-.*\.csv/);
 
-    // Toast confirmation
-    await expect(page.getByText("CSV-Export gestartet")).toBeVisible();
+    await page.getByRole("tab", { name: "Verlauf" }).click();
+    await expect(page.getByText(/Einträge/)).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Lebensmittel" }).first()).toBeVisible();
   });
 
   test("displays import drop zone and triggers import", async ({ page }) => {
@@ -73,20 +76,21 @@ test.describe("API & Export", () => {
     await expect(page.getByText("protocol.submitted")).toBeVisible();
   });
 
-  test("filters export/import history", async ({ page }) => {
+  test("filters real export history", async ({ page }) => {
     await page.goto("/api-export");
+
+    const download = page.waitForEvent("download");
+    await page.locator("[data-slot='card']", { hasText: "PDF-Export" })
+      .getByRole("button", { name: "Exportieren" }).click();
+    await download;
 
     // Switch to Verlauf tab
     await page.getByRole("tab", { name: "Verlauf" }).click();
 
-    // Should show history entries
-    await expect(page.getByText("7 Einträge")).toBeVisible();
+    await expect(page.getByText(/Einträge/)).toBeVisible();
 
-    // Filter by type "Import"
-    await page.getByRole("combobox").first().click();
-    await page.getByRole("option", { name: "Import" }).click();
-
-    // Should filter down
-    await expect(page.getByText("2 Einträge")).toBeVisible();
+    await page.getByRole("combobox").nth(1).click();
+    await page.getByRole("option", { name: "PDF" }).click();
+    await expect(page.getByRole("cell", { name: "Patienten" }).first()).toBeVisible();
   });
 });

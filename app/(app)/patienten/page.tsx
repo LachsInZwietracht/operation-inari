@@ -47,7 +47,8 @@ import { useMailMergeHistory } from "@/hooks/use-mail-merge"
 import { useBirthdayReminders } from "@/hooks/use-birthday-reminders"
 import { COUNSELING_SESSIONS, MAIL_MERGE_PLACEHOLDERS, MAIL_MERGE_TEMPLATES } from "@/lib/mock-data"
 import { INDICATION_OPTIONS } from "@/lib/constants"
-import type { EgkCardData, Patient } from "@/lib/types"
+import type { EgkCardData, Patient, PatientMailMergeExportRequest } from "@/lib/types"
+import { downloadResponseFile } from "@/lib/utils"
 
 const UNASSIGNED_EGK_VALUE = "__unassigned__"
 
@@ -150,26 +151,6 @@ export default function PatientenPage() {
     })
   }
 
-  const downloadMailMergeBundle = useCallback(
-    (documents: { patient: Patient; subject: string; body: string }[], fileName: string) => {
-      const content = documents
-        .map(
-          (doc) =>
-            `# ${doc.patient.lastName}, ${doc.patient.firstName}\nBetreff: ${doc.subject}\n\n${doc.body}`,
-        )
-        .join("\n\n---\n\n")
-      const blob = new Blob([content], { type: "text/plain;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = `${fileName}.txt`
-      anchor.click()
-      anchor.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    },
-    [],
-  )
-
   const matchPatientByInsurance = useCallback(
     (card: EgkCardData) =>
       patients.find(
@@ -255,7 +236,7 @@ export default function PatientenPage() {
     toast.success(`eGK ${patient.lastName} zugeordnet`)
   }
 
-  const handleGenerateMerge = () => {
+  const handleGenerateMerge = async () => {
     if (selectedRecipients.length === 0) {
       toast.error("Bitte wählen Sie mindestens einen Patienten aus")
       return
@@ -284,14 +265,35 @@ export default function PatientenPage() {
       })),
     })
 
-    downloadMailMergeBundle(documents, batch.downloadName)
-    markExported(batch.id)
-    setLastBatch({
-      timestamp: batch.createdAt,
-      count: batch.recipientCount,
-      templateName: batch.templateName,
-    })
-    toast.success(`Serienbrief für ${documents.length} Patient:innen erzeugt`)
+    const exportRequest: PatientMailMergeExportRequest = {
+      format: "PDF",
+      title: selectedTemplate?.name ?? "Serienbrief",
+      fileBaseName: batch.downloadName,
+      documents: documents.map((doc) => ({
+        patientId: doc.patient.id,
+        patientName: `${doc.patient.firstName} ${doc.patient.lastName}`,
+        subject: doc.subject,
+        body: doc.body,
+      })),
+    }
+
+    try {
+      const response = await fetch("/api/exports/mail-merge", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(exportRequest),
+      })
+      await downloadResponseFile(response, `${batch.downloadName}.pdf`)
+      markExported(batch.id)
+      setLastBatch({
+        timestamp: batch.createdAt,
+        count: batch.recipientCount,
+        templateName: batch.templateName,
+      })
+      toast.success(`Serienbrief für ${documents.length} Patient:innen erzeugt`)
+    } catch (error) {
+      toast.error((error as Error).message || "Serienbrief konnte nicht erstellt werden")
+    }
   }
 
   const selectAllRecipients = () => setSelectedRecipients(filtered.map((patient) => patient.id))

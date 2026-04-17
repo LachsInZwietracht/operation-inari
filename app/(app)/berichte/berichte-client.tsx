@@ -80,6 +80,7 @@ import type {
   NutrientValue,
   Recipe,
   ReportTemplate,
+  ReportExportRequest,
 } from "@/lib/types"
 import { toast } from "sonner"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
@@ -87,6 +88,7 @@ import { resolveReferenceForPatient, getReferenceAmount } from "@/lib/reference-
 import { createRecipeLookup } from "@/lib/recipes"
 import { useFoods } from "@/components/foods-provider"
 import { loadBrowserMealPlans } from "@/lib/data/meal-plan-browser-source"
+import { downloadResponseFile } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -406,6 +408,7 @@ export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientPro
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<ReportTemplate | null>(null)
   const [templateForm, setTemplateForm] = useState({ name: "", category: "", content: "" })
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -770,6 +773,109 @@ ${microSentence}`
     [planDateLabel, energyCoverage, totalCo2, micronutrientAlerts, planNutrients, fiberPer100, healthClaimResults],
   )
 
+  const resolvedNotes = useMemo(() => {
+    return customNotes.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, token) => {
+      const key = token.trim()
+      return placeholderValues[key as keyof typeof placeholderValues] ?? match
+    })
+  }, [customNotes, placeholderValues])
+
+  const reportPayload = useMemo<ReportExportRequest | null>(() => {
+    if (!selectedPlan) return null
+
+    return {
+      format: "PDF",
+      title: "Operation Prodi Bericht",
+      fileBaseName: `prodi-bericht-${selectedPlan.date}`,
+      planDateLabel,
+      reportLength,
+      selectedSections,
+      activeSectionLabels: previewSections.map((section) => section.label),
+      summaryMetrics: [
+        {
+          label: "Energieabdeckung",
+          value: `${formatNumber(energieValue, 0)} ${energieDef.unit}`,
+          reference: `${formatNumber(energieRef, 0)} ${energieDef.unit}`,
+          coverage: formatPercent(energyCoverage),
+        },
+        ...macroHighlights.map((highlight) => ({
+          label: highlight.name,
+          value: `${formatNumber(highlight.value, 1)} ${highlight.unit}`,
+          reference: undefined,
+          coverage: formatPercent(highlight.percent),
+        })),
+      ],
+      nutrientRows: displayedNutrientIds.map((id) => {
+        const def = NUTRIENT_DEFINITIONS.find((d) => d.id === id)!
+        const val = getNutrientValue(planNutrients, id)
+        const ref = getReferenceAmount(refConfig, id)
+        return {
+          label: def.name,
+          value: `${formatNumber(val, 1)} ${def.unit}`,
+          reference: `${formatNumber(ref, 1)} ${def.unit}`,
+          coverage: formatPercent(percentOfReference(val, ref)),
+        }
+      }),
+      vitaminRows: vitaminDefs.map((def) => {
+        const val = getNutrientValue(planNutrients, def.id)
+        const ref = getReferenceAmount(refConfig, def.id)
+        return {
+          label: def.name,
+          value: `${formatNumber(val, 1)} ${def.unit}`,
+          reference: `${formatNumber(ref, 1)} ${def.unit}`,
+          coverage: formatPercent(percentOfReference(val, ref)),
+        }
+      }),
+      mineralRows: mineralDefs.map((def) => {
+        const val = getNutrientValue(planNutrients, def.id)
+        const ref = getReferenceAmount(refConfig, def.id)
+        return {
+          label: def.name,
+          value: `${formatNumber(val, 1)} ${def.unit}`,
+          reference: `${formatNumber(ref, 1)} ${def.unit}`,
+          coverage: formatPercent(percentOfReference(val, ref)),
+        }
+      }),
+      mealRows: planPreviewRows,
+      notes: resolvedNotes,
+      narrative: analysisNarrative,
+      badges: [
+        `Plan ${planDateLabel}`,
+        reportLength === "short" ? "Kurzbericht" : "Vollversion",
+        `${selectedSectionCount} Abschnitte`,
+      ],
+      specialNotes: [
+        `CO₂ gesamt: ${formatNumber(totalCo2, 1)} kg`,
+        `PRODIscore: ${prodiScoreValue} (${prodiLabel})`,
+        `Health Claims: ${healthClaimResults.filter((claim) => claim.met).length}/${healthClaimResults.length}`,
+      ],
+    }
+  }, [
+    selectedPlan,
+    planDateLabel,
+    reportLength,
+    selectedSections,
+    previewSections,
+    energieValue,
+    energieDef.unit,
+    energieRef,
+    energyCoverage,
+    macroHighlights,
+    displayedNutrientIds,
+    planNutrients,
+    refConfig,
+    vitaminDefs,
+    mineralDefs,
+    planPreviewRows,
+    resolvedNotes,
+    analysisNarrative,
+    selectedSectionCount,
+    totalCo2,
+    prodiScoreValue,
+    prodiLabel,
+    healthClaimResults,
+  ])
+
   const handleSectionToggle = (sectionId: ReportSectionId) => {
     setSelectedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }))
   }
@@ -778,32 +884,52 @@ ${microSentence}`
     setReportLength(length)
   }
 
-  const handleExport = (format: "pdf" | "csv") => {
-    if (typeof window === "undefined") return
-    const activeSections = REPORT_SECTIONS.filter((section) => selectedSections[section.id])
-      .map((section) => section.label)
-      .join(", ")
-    const content = `Operation Prodi Bericht (${format.toUpperCase()})\nPlan: ${planDateLabel}\nLänge: ${reportLength === "short" ? "Kurzbericht" : "Vollversion"}\nAbschnitte: ${activeSections}\nNotizen: ${customNotes || "(keine)"}`
-    const blob = new Blob([content], {
-      type: format === "pdf" ? "application/pdf" : "text/csv;charset=utf-8",
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `prodi-bericht-${planDateLabel || "plan"}.${format === "pdf" ? "pdf" : "csv"}`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    toast.success(`Bericht als ${format.toUpperCase()} exportiert (Mock)`, {
-      description: "Der Download enthält Platzhalterdaten.",
-    })
+  const handleExport = async (format: "pdf" | "csv") => {
+    if (!reportPayload) return
+    setIsExporting(true)
+    try {
+      const response = await fetch("/api/exports/report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...reportPayload,
+          format: format.toUpperCase(),
+        }),
+      })
+      await downloadResponseFile(response, `${reportPayload.fileBaseName}.${format}`)
+      toast.success(`Bericht als ${format.toUpperCase()} exportiert`)
+    } catch (error) {
+      toast.error((error as Error).message || "Bericht konnte nicht exportiert werden")
+    } finally {
+      setIsExporting(false)
+    }
   }
 
-  const handleMockPrint = () => {
-    toast.message("Druckansicht (Mock)", {
-      description: "Die finale PDF-Generierung folgt im Backend.",
-    })
+  const handlePreview = async () => {
+    if (!reportPayload || typeof window === "undefined") return
+    setIsExporting(true)
+    try {
+      const response = await fetch("/api/exports/report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...reportPayload,
+          format: "PDF",
+          disposition: "inline",
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, "_blank", "noopener,noreferrer")
+      setTimeout(() => URL.revokeObjectURL(url), 1000 * 60)
+    } catch (error) {
+      toast.error((error as Error).message || "Druckvorschau konnte nicht geöffnet werden")
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleAdoptNarrative = () => {
@@ -1368,9 +1494,9 @@ ${microSentence}`
 
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-base">Druckvorschau (Mock)</CardTitle>
+              <CardTitle className="text-base">Druckvorschau</CardTitle>
               <p className="text-muted-foreground text-sm">
-                Zusammenfassung der ausgewählten Elemente – fertiger Export folgt später serverseitig.
+                Zusammenfassung der ausgewählten Elemente für den PDF-Export.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1471,7 +1597,7 @@ ${microSentence}`
                       <div className="space-y-2">
                         <p className="font-semibold">Beratungshinweise</p>
                         <p className="whitespace-pre-wrap text-xs text-muted-foreground">
-                          {customNotes || "Noch keine individuellen Hinweise ergänzt."}
+                          {resolvedNotes || "Noch keine individuellen Hinweise ergänzt."}
                         </p>
                       </div>
                     )}
@@ -1624,15 +1750,17 @@ ${microSentence}`
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Export & Druck (Mock)</CardTitle>
-            <p className="text-muted-foreground text-sm">Erzeugt lokale Platzhalter-Dateien ohne Backend.</p>
+            <CardTitle className="text-base">Export & Druck</CardTitle>
+            <p className="text-muted-foreground text-sm">Erzeugt echte PDF- und CSV-Dateien über den Server.</p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Button onClick={() => handleExport("pdf")}>PDF erstellen</Button>
-            <Button variant="secondary" onClick={() => handleExport("csv")}>
+            <Button onClick={() => void handleExport("pdf")} disabled={isExporting}>
+              {isExporting ? "Wird erstellt..." : "PDF erstellen"}
+            </Button>
+            <Button variant="secondary" onClick={() => void handleExport("csv")} disabled={isExporting}>
               CSV/Nährstoffdaten
             </Button>
-            <Button variant="outline" onClick={handleMockPrint}>
+            <Button variant="outline" onClick={() => void handlePreview()} disabled={isExporting}>
               Druckvorschau anzeigen
             </Button>
           </CardContent>
@@ -1820,7 +1948,7 @@ ${microSentence}`
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <p>• LMIV-Export enthält alle Allergene inklusive Platzhaltertexte.</p>
-                <p>• CO₂-Report in Vorbereitung – Download als CSV folgt serverseitig.</p>
+                <p>• Der Berichtsexport nutzt den aktuell ausgewählten Ernährungsplan.</p>
                 <p>• Health-Claim Checkliste wird automatisch zum PDF hinzugefügt.</p>
               </CardContent>
             </Card>

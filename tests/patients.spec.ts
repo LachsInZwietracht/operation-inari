@@ -116,4 +116,19 @@ test.describe("Patient Management", () => {
     // The new weight value should appear in the table
     await expect(page.getByRole("cell", { name: "84,0" })).toBeVisible();
   });
+
+  test("creates mail merge PDF for selected patients", async ({ page }) => {
+    await page.goto("/patienten/neu");
+    await page.getByPlaceholder("Vorname").fill("Export");
+    await page.getByPlaceholder("Nachname").fill("Patient");
+    await page.locator('input[type="date"]').first().fill("1992-03-10");
+    await page.getByRole("button", { name: "Patient erstellen" }).click();
+    await expect(page).toHaveURL(/\/patienten/);
+    await page.getByRole("button", { name: "Alle" }).click();
+
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: /Dokumente erzeugen/i }).click();
+    const file = await download;
+    expect(await file.suggestedFilename()).toMatch(/Serienbrief-.*\.pdf/);
+  });
 });

@@ -22,4 +22,19 @@ test.describe("Berichte", () => {
     await page.getByRole("tab", { name: /Mineralstoffe/i }).click();
     await expect(page.getByText(/Calcium/i).or(page.getByText(/Eisen/i)).first()).toBeVisible();
   });
+
+  test("exports reports as PDF and CSV", async ({ page }) => {
+    await page.goto("/berichte");
+    await expect(page.getByRole("heading", { name: "Berichte" })).toBeVisible();
+
+    const pdfDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "PDF erstellen" }).click();
+    const pdf = await pdfDownload;
+    expect(await pdf.suggestedFilename()).toMatch(/prodi-bericht-.*\.pdf/);
+
+    const csvDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "CSV/Nährstoffdaten" }).click();
+    const csv = await csvDownload;
+    expect(await csv.suggestedFilename()).toMatch(/prodi-bericht-.*\.csv/);
+  });
 });

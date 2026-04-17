@@ -267,6 +267,80 @@ export interface ExportJob {
   createdBy: string;
 }
 
+export type ExportFormat = "CSV" | "JSON" | "PDF";
+
+export type ExportScope =
+  | "Lebensmittel"
+  | "Rezepte"
+  | "Patienten"
+  | "Ernährungspläne"
+  | "Berichte";
+
+export interface ExportJobRecord extends ExportJob {
+  userId?: ID;
+  fileName?: string;
+  parameters?: Record<string, unknown>;
+}
+
+export interface ReportExportSectionState {
+  summary: boolean;
+  table: boolean;
+  charts: boolean;
+  meals: boolean;
+  notes: boolean;
+}
+
+export interface ReportExportMetric {
+  label: string;
+  value: string;
+  reference?: string;
+  coverage?: string;
+}
+
+export interface ReportExportMealRow {
+  slot: string;
+  summary: string;
+}
+
+export interface ReportExportRequest {
+  format: "CSV" | "PDF";
+  title: string;
+  fileBaseName: string;
+  disposition?: "attachment" | "inline";
+  planDateLabel: string;
+  reportLength: "short" | "full";
+  selectedSections: ReportExportSectionState;
+  activeSectionLabels: string[];
+  summaryMetrics: ReportExportMetric[];
+  nutrientRows: ReportExportMetric[];
+  vitaminRows: ReportExportMetric[];
+  mineralRows: ReportExportMetric[];
+  mealRows: ReportExportMealRow[];
+  notes: string;
+  narrative?: string;
+  badges?: string[];
+  specialNotes?: string[];
+}
+
+export interface PatientMailMergeDocumentRequest {
+  patientId: ID;
+  patientName: string;
+  subject: string;
+  body: string;
+}
+
+export interface PatientMailMergeExportRequest {
+  format: "PDF";
+  title: string;
+  fileBaseName: string;
+  documents: PatientMailMergeDocumentRequest[];
+}
+
+export interface GenericExportRequest {
+  format: ExportFormat;
+  scope: ExportScope;
+}
+
 // --- Performance types ---
 
 export interface PerformanceMetric {

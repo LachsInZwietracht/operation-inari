@@ -36,6 +36,7 @@ Single source of truth for Operation Prodi's nutrition database layer: schema de
 >   - Protocol detail pages now use `fetchFoodsForProtocols()` instead of `fetchAllFoods()`, and paginated `fetchAllFoods*` loaders skip expensive `COUNT(*)` queries to reduce statement timeouts under test/dev load.
 > - **Institution tooling:** `useInstitutionMenu` now derives shopping categories/costs directly from the Supabase foods (via `categoryId`). If you add new categories, update both `FOOD_CATEGORIES` and the cost table in the hook. The food detail route now queries Supabase lazily with `fetchFoodById`, so you no longer need to preload every food just to show a single detail page.
 > - **Reference standards:** Sync DGE/ÖGE/SGE/RDA matrices with `npm run etl:reference-values` (filter with `--standard=dge`). The script consumes `lib/mock-data/reference-standards.ts` so the app + database stay in lockstep, and the `reference_values` table now stores fractional age ranges plus trimester-specific life stages.
+> - **Export system:** Reports, patient mail-merge, and `API & Export` now create real files server-side. Export metadata is persisted in `export_jobs`; binaries are generated on demand and are not stored in the database.
 
 ### Data Model (TypeScript Types)
 
@@ -217,6 +218,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260412000005_rls_policies.sql` | Row Level Security: public foods readable by all, custom foods/recipes/meal plans private per user, OFF staging admin-only. Reference tables (data_sources, nutrient_definitions, reference_values) are SELECT-only — writes require `service_role` key |
 | `20260412000006_search_function.sql` | `search_foods()` Postgres function with trigram similarity, filtering, and pagination. **Must** receive `auth.uid()` as `requesting_user_id` or custom foods will be silently excluded |
 | `20260427000014_invoices.sql` | `invoices` table with RLS, indexes on `user_id`/`status`/`due_date`, and auto-update trigger |
+| `20260428000015_export_jobs.sql` | `export_jobs` table for persisted export/import history with user-scoped RLS |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0), 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -239,6 +241,20 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `meal_entries` | Items in a meal slot | `meal_plan_id`, `slot_type`, `entry_type` (food/recipe), `reference_id` (polymorphic) |
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
+| `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
+
+### Export Job Notes
+
+- `export_jobs` stores **metadata only**. The generated PDF/CSV/JSON binaries are returned directly by `app/api/exports/*` and are not persisted in Supabase storage in v1.
+- RLS is user-scoped:
+  - users can read their own export rows
+  - users can insert their own export rows
+- Current export producers:
+  - `/api/exports/report`
+  - `/api/exports/mail-merge`
+  - `/api/exports/datasets`
+- Current history consumer:
+  - `/api/export-jobs`
 
 ### Why Normalized `food_nutrients` Instead of a JSON Array?
 

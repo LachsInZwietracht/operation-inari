@@ -103,10 +103,17 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 ## 5. Patient/Client Management
 
 ### 5.1 Patient Records
-**Status:** Implemented (mock data, eGK workflow, mail merge).
+**Status:** Implemented (Supabase-backed patient records, eGK workflow, PDF mail merge).
 - **eGK Card Reader Support:** Read German insurance cards directly via Web Serial API or WebSocket companion app.
 - **Serial letter / mail merge** — Generate personalized PDFs using tokens (e.g., `{{patient.name}}`).
 - **Birthday list** — dashboard widget for upcoming patient birthdays.
+
+### 5.3 Reports & Exports
+**Status:** Partially implemented (real PDF/CSV generation for reports, patient documents, and export jobs; broader document/storage workflows still open).
+- **Clinical report export** — `/berichte` generates real server-side PDF and CSV files from the selected meal plan analysis.
+- **Patient document export** — `/patienten` mail merge creates branded PDF bundles with placeholder substitution.
+- **Export journal** — `/api-export` persists real export history in Supabase via `export_jobs`.
+- **Deferred scope:** binary file retention, scheduled exports, and advanced backend print pipelines are still future work.
 
 ### 5.2 Anthropometric Data & Weight Analysis
 **Status:** Implemented (mock data).
