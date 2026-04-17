@@ -1,9 +1,10 @@
 import { Suspense } from "react"
-import { fetchFoodsViaRpc } from "@/lib/data/foods"
+import { fetchFoodsViaRpc, fetchFoodSearchIndex } from "@/lib/data/foods"
 import { fetchRecipes } from "@/lib/data/recipes"
 import { fetchMealPlans } from "@/lib/data/meal-plans"
 import { FoodsProvider } from "@/components/foods-provider"
-import { DashboardPageClient } from "./dashboard-client"
+import { DashboardMetricsClient } from "./dashboard-metrics-client"
+import { DashboardNutritionClient } from "./dashboard-nutrition-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { DailyMealPlan, Recipe } from "@/lib/types"
 
@@ -35,53 +36,80 @@ function extractFoodIds(recipes: Recipe[], mealPlans: DailyMealPlan[]): string[]
   return Array.from(ids)
 }
 
-function DashboardSkeleton() {
+function MetricsSkeleton() {
   return (
-    <div className="space-y-6">
+    <>
       <div className="flex items-center justify-between">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-10 w-32" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Skeleton className="h-32 w-full" />
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3">
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Skeleton className="col-span-4 h-[400px] w-full" />
-        <Skeleton className="col-span-3 h-[400px] w-full" />
+      <div className="flex flex-wrap gap-3">
+        <Skeleton className="h-10 w-36" />
+        <Skeleton className="h-10 w-40" />
+        <Skeleton className="h-10 w-48" />
       </div>
+    </>
+  )
+}
+
+function NutritionSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Skeleton className="h-[350px] w-full" />
+      <Skeleton className="h-[350px] w-full" />
     </div>
   )
 }
 
-async function DashboardContent() {
-  // Step 1: Fetch recipes + meal plans (both cached)
+async function DashboardMetrics() {
+  const [recipes, mealPlans, searchIndex] = await Promise.all([
+    fetchRecipes(),
+    fetchMealPlans({ limit: 5 }),
+    fetchFoodSearchIndex(),
+  ])
+
+  return (
+    <DashboardMetricsClient
+      foodCount={searchIndex.length}
+      recipeCount={recipes.length}
+      todayPlan={mealPlans[0] ?? null}
+    />
+  )
+}
+
+async function DashboardNutritionSection() {
   const [recipes, mealPlans] = await Promise.all([
     fetchRecipes(),
     fetchMealPlans({ limit: 5 }),
   ])
 
-  // Step 2: Extract only referenced food IDs
   const foodIds = extractFoodIds(recipes, mealPlans)
 
-  // Step 3: Fetch only those foods
   const foods = foodIds.length > 0
     ? await fetchFoodsViaRpc({ foodIds, nutrientIds: DASHBOARD_NUTRIENT_IDS })
     : []
 
   return (
     <FoodsProvider foods={foods}>
-      <DashboardPageClient recipes={recipes} mealPlans={mealPlans} />
+      <DashboardNutritionClient recipes={recipes} mealPlans={mealPlans} />
     </FoodsProvider>
   )
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <DashboardContent />
-    </Suspense>
+    <div className="space-y-6">
+      <Suspense fallback={<MetricsSkeleton />}>
+        <DashboardMetrics />
+      </Suspense>
+      <Suspense fallback={<NutritionSkeleton />}>
+        <DashboardNutritionSection />
+      </Suspense>
+    </div>
   )
 }

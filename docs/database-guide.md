@@ -132,7 +132,7 @@ The app uses a two-tier data delivery pattern to balance payload size vs. functi
 **Key files:**
 | File | Role |
 |---|---|
-| `lib/data/foods.ts` | All Supabase queries: `fetchFoods()`, `fetchFoodById()`, `fetchAllFoods()`, `fetchAllFoodsForList()`, `fetchFoodSearchIndex()` |
+| `lib/data/foods.ts` | All Supabase queries: `fetchFoods()`, `fetchFoodById()`, `fetchFoodsViaRpc()`, `fetchFoodsChunked()`, `fetchAllFoods()`, `fetchAllFoodsForList()`, `fetchFoodSearchIndex()` |
 | `components/foods-provider.tsx` | Two React contexts: `FoodsProvider` (full data) + `FoodSearchProvider` (search index) |
 | `app/(app)/layout.tsx` | Fetches search index, wraps app in `FoodSearchProvider` |
 | Individual `page.tsx` files | Pages needing nutrients fetch via `fetchAllFoodsForList()` or `fetchAllFoods()` and wrap client in `FoodsProvider` |
@@ -676,6 +676,34 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 - Food detail pages use `fetchFoodById()` for single-record queries (efficient)
 - React `cache()` deduplicates fetches within a single server request
 - The `nutrientIds` filter on `fetchFoods()` uses PostgREST embedded resource filtering — it does NOT use `!inner`, so foods missing a particular nutrient are still returned (with an empty nutrients array for that nutrient)
+
+**RPC-based food fetching:**
+- Bulk food loading uses `fetchFoodsViaRpc()` which calls the `get_foods_with_nutrients` Postgres function
+- Returns foods with pre-aggregated nutrients in a single round-trip (vs. PostgREST's separate joins)
+- Supports `nutrient_filter`, `food_id_filter`, `page_limit`, and `page_offset` parameters
+- Falls back to `fetchFoods()` with matching `limit`/`offset` if the RPC call fails
+
+**Chunked caching (`fetchFoodsChunked`):**
+- Next.js `unstable_cache` has a **2 MB per-entry limit** — entries exceeding this are silently dropped
+- With ~7,140 foods, even the lightest variant (13 nutrients) serializes to ~21 MB — far above the limit
+- `fetchFoodsChunked()` in `lib/data/foods.ts` solves this by splitting fetches into pages that each stay under 2 MB:
+  1. Dynamically computes a safe chunk size based on nutrient count (`~1.5 MB target / estimated bytes per food`)
+  2. Fetches each chunk via `fetchFoodsViaRpc()` with `limit`/`offset`
+  3. Caches each chunk independently via `unstable_cache` with its own key (e.g., `foods-list-chunk-0`, `foods-list-chunk-1`)
+  4. Reassembles all chunks into a single `Food[]`
+- All 6 cached wrappers (`fetchAllFoods`, `fetchAllFoodsForList`, `fetchFoodsForMealPlans`, `fetchFoodsForReports`, `fetchFoodsForProtocols`, `fetchFoodsForInstitution`) use `fetchFoodsChunked`
+- Dynamic chunk sizes by variant:
+
+| Wrapper | Nutrients | ~Chunk size | ~Chunks |
+|---|---|---|---|
+| `fetchAllFoodsForList` | 13 | 1,935 | 4 |
+| `fetchFoodsForMealPlans` | 16 | 1,666 | 5 |
+| `fetchFoodsForReports` | 16 | 1,666 | 5 |
+| `fetchFoodsForProtocols` | 28 | 1,304 | 6 |
+| `fetchFoodsForInstitution` | 265 | 197 | 37 |
+| `fetchAllFoods` | 265 | 197 | 37 |
+
+- `fetchFoodSearchIndex` is **not** chunked — it fetches only 5 columns with no nutrients, well under 2 MB
 
 **When to revisit (triggers for remaining Phase 6 work):**
 - Total food count exceeds ~15k (e.g., after OFF integration) — search index grows past ~300 KB

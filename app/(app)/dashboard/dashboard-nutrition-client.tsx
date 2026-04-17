@@ -1,15 +1,12 @@
 "use client"
 
 import { useMemo } from "react"
-import Link from "next/link"
-import { Apple, ChefHat, Flame, CalendarDays, Plus, Pencil, Search } from "lucide-react"
-import { PageHeader } from "@/components/page-header"
+import { Flame } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { MacroRingChart } from "@/components/macro-ring-chart"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import { formatDate, formatNumber } from "@/lib/format"
+import { formatNumber } from "@/lib/format"
 import {
   calculateRecipeNutrients,
   calculatePerServing,
@@ -30,12 +27,12 @@ import { createRecipeLookup } from "@/lib/recipes"
 
 const SLOT_TYPES = Object.keys(MEAL_SLOT_LABELS) as MealSlotType[]
 
-interface DashboardPageClientProps {
+interface DashboardNutritionClientProps {
   recipes: Recipe[]
   mealPlans: DailyMealPlan[]
 }
 
-export function DashboardPageClient({ recipes, mealPlans }: DashboardPageClientProps) {
+export function DashboardNutritionClient({ recipes, mealPlans }: DashboardNutritionClientProps) {
   const foods = useFoods()
   const foodMap = useMemo(() => new Map(foods.map((f) => [f.id, f])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
@@ -81,62 +78,20 @@ export function DashboardPageClient({ recipes, mealPlans }: DashboardPageClientP
 
   const allSlotNutrients = planSlots.map(calculateSlotNutrients)
   const totalNutrients = sumNutrients(allSlotNutrients)
-
   const totalKcal = getNutrientValue(totalNutrients, "energie")
 
-  const metrics = [
-    {
-      title: "Lebensmittel",
-      value: formatNumber(foods.length),
-      description: "in der Datenbank",
-      icon: Apple,
-    },
-    {
-      title: "Rezepte",
-      value: formatNumber(recipes.length),
-      description: "verfügbar",
-      icon: ChefHat,
-    },
-    {
-      title: "Heutige Kalorien",
-      value: `${formatNumber(totalKcal, 0)} kcal`,
-      description: "geplante Aufnahme",
-      icon: Flame,
-    },
-    {
-      title: "Aktiver Plan",
-      value: todayPlan ? formatDate(todayPlan.date) : "kein Plan",
-      description: todayPlan ? "aktueller Ernährungsplan" : "kein Plan aktiv",
-      icon: CalendarDays,
-    },
-  ]
-
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Dashboard"
-        description="Übersicht über Ihre Ernährungsdaten"
-        helpText="Ihr persönliches Dashboard zeigt die wichtigsten Kennzahlen zu Patienten, Terminen und Ernährungsplänen auf einen Blick. Nutzen Sie die Kacheln als Schnelleinstieg in die jeweiligen Bereiche."
-      />
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {metrics.map((metric) => (
-          <Card key={metric.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                {metric.title}
-              </CardTitle>
-              <metric.icon className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metric.value}</div>
-              <p className="text-muted-foreground text-xs">
-                {metric.description}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">Heutige Kalorien</CardTitle>
+          <Flame className="text-muted-foreground h-4 w-4" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{formatNumber(totalKcal, 0)} kcal</div>
+          <p className="text-muted-foreground text-xs">geplante Aufnahme</p>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -184,27 +139,6 @@ export function DashboardPageClient({ recipes, mealPlans }: DashboardPageClientP
           </CardContent>
         </Card>
       </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Button asChild>
-          <Link href="/rezepte/neu">
-            <Plus className="mr-2 h-4 w-4" />
-            Neues Rezept
-          </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/ernaehrungsplan">
-            <Pencil className="mr-2 h-4 w-4" />
-            Plan bearbeiten
-          </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/lebensmittel">
-            <Search className="mr-2 h-4 w-4" />
-            Lebensmittel suchen
-          </Link>
-        </Button>
-      </div>
-    </div>
+    </>
   )
 }

@@ -34,9 +34,11 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.1 Dashboard (`/dashboard`)
 - **Implementation:**
-  - `app/(app)/dashboard/page.tsx` uses **Server-Side Streaming** with `<Suspense>` and `DashboardSkeleton`.
-  - Data is fetched via `DashboardContent` component.
-  - BLS data used for highlights is served from the edge cache for instant response.
+  - `app/(app)/dashboard/page.tsx` uses **two independent `<Suspense>` boundaries** to optimize LCP:
+    1. **`DashboardMetrics`** (renders instantly) — fetches only recipes, meal plans, and the lightweight search index in parallel. Renders `DashboardMetricsClient` with the page header, 3 metric cards (food count, recipe count, active plan), and quick action buttons.
+    2. **`DashboardNutritionSection`** (streams in after food fetch) — fetches recipes + meal plans (deduped by React `cache()`), extracts referenced food IDs, then fetches only those foods via `fetchFoodsViaRpc`. Renders `DashboardNutritionClient` with the kcal card, macro ring chart, and meal plan detail.
+  - This split avoids blocking the visible header/metrics on the sequential food fetch chain (recipes → extract IDs → foods RPC).
+  - **Components:** `dashboard-metrics-client.tsx` (top), `dashboard-nutrition-client.tsx` (bottom).
 
 ### 4.2 Lebensmittel (Foods) (`/lebensmittel`)
 - **Listing + search:** `app/(app)/lebensmittel/page.tsx`

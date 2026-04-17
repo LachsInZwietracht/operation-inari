@@ -68,32 +68,6 @@ export interface FoodQueryResult {
   count: number | null;
 }
 
-async function fetchFoodsPaginated(
-  options: FoodQueryOptions,
-  batchSize = 2000,
-  isAdmin = false
-): Promise<Food[]> {
-  const { offset, ...rest } = options;
-  let currentOffset = offset ?? 0;
-  const aggregated: Food[] = [];
-
-  while (true) {
-    const { foods: page } = await fetchFoods({
-      ...rest,
-      limit: batchSize,
-      offset: currentOffset,
-      withCount: false,
-    }, isAdmin);
-    aggregated.push(...page);
-
-    if (page.length < batchSize) {
-      break;
-    }
-    currentOffset += batchSize;
-  }
-
-  return aggregated;
-}
 
 export async function fetchFoods(options: FoodQueryOptions = {}, isAdmin = false): Promise<FoodQueryResult> {
   try {
@@ -536,43 +510,75 @@ export async function fetchFoodsViaRpc(options: FetchFoodsViaRpcOptions = {}): P
 
     return ((data ?? []) as RpcFoodRow[]).map(mapRpcFoodRow);
   } catch (error) {
-    console.error("fetchFoodsViaRpc error, falling back to paginated:", error);
-    // Fall back to the existing batch approach
-    return fetchFoodsPaginated(
+    console.error("fetchFoodsViaRpc error, falling back to direct fetch:", error);
+    const { foods } = await fetchFoods(
       {
         includeNutrients: true,
         nutrientIds: options.nutrientIds,
         includePortions: false,
+        limit: options.limit ?? 10000,
+        offset: options.offset ?? 0,
+        withCount: false,
       },
-      2500,
       true,
     );
+    return foods;
   }
+}
+
+/* ─── Chunked caching (keeps each unstable_cache entry under 2 MB) ─── */
+
+interface ChunkedFetchOptions {
+  cacheKeyPrefix: string;
+  nutrientIds?: string[];
+  chunkSize?: number;
+  revalidate?: number;
+  tags?: string[];
+}
+
+async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> {
+  const nutrientCount = options.nutrientIds?.length ?? 265;
+  const estimatedBytesPerFood = 400 + nutrientCount * 25;
+  const chunkSize =
+    options.chunkSize ?? Math.max(100, Math.floor(1_500_000 / estimatedBytesPerFood));
+  const revalidate = options.revalidate ?? 3600;
+  const tags = options.tags ?? ["foods", "bls"];
+
+  const allFoods: Food[] = [];
+  let chunkIndex = 0;
+
+  while (true) {
+    const idx = chunkIndex;
+    const chunkFoods = await unstable_cache(
+      async () => {
+        try {
+          return await fetchFoodsViaRpc({
+            nutrientIds: options.nutrientIds,
+            limit: chunkSize,
+            offset: idx * chunkSize,
+          });
+        } catch (error) {
+          console.error(`${options.cacheKeyPrefix} chunk ${idx} error:`, error);
+          return [];
+        }
+      },
+      [`${options.cacheKeyPrefix}-chunk-${idx}`],
+      { revalidate, tags },
+    )();
+
+    allFoods.push(...chunkFoods);
+    if (chunkFoods.length < chunkSize) break;
+    chunkIndex++;
+  }
+
+  return allFoods;
 }
 
 /**
  * Cached helper that fetches the complete foods catalog (including nutrients)
  */
 export const fetchAllFoods = cache(async () => {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchFoodsPaginated(
-          {
-            includeNutrients: true,
-            includePortions: true,
-          },
-          2000,
-          true
-        );
-      } catch (error) {
-        console.error("fetchAllFoods error:", error);
-        return [];
-      }
-    },
-    ["all-foods-full"],
-    { revalidate: 3600, tags: ["foods", "bls"] }
-  )();
+  return fetchFoodsChunked({ cacheKeyPrefix: "foods-full" });
 });
 
 /**
@@ -622,78 +628,23 @@ const PROTOCOL_NUTRIENT_IDS = NUTRIENT_DEFINITIONS.map((definition) => definitio
  * Lightweight variant of fetchAllFoods for list views.
  */
 export const fetchAllFoodsForList = cache(async () => {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchFoodsViaRpc({ nutrientIds: LIST_NUTRIENT_IDS });
-      } catch (error) {
-        console.error("fetchAllFoodsForList error:", error);
-        return [];
-      }
-    },
-    ["all-foods-list"],
-    { revalidate: 3600, tags: ["foods", "bls"] }
-  )();
+  return fetchFoodsChunked({ cacheKeyPrefix: "foods-list", nutrientIds: LIST_NUTRIENT_IDS });
 });
 
 export const fetchFoodsForMealPlans = cache(async () => {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchFoodsViaRpc({ nutrientIds: MEAL_PLAN_NUTRIENT_IDS });
-      } catch (error) {
-        console.error("fetchFoodsForMealPlans error:", error);
-        return [];
-      }
-    },
-    ["foods-meal-plans"],
-    { revalidate: 3600, tags: ["foods", "bls"] }
-  )();
+  return fetchFoodsChunked({ cacheKeyPrefix: "foods-meal-plans", nutrientIds: MEAL_PLAN_NUTRIENT_IDS });
 });
 
 export const fetchFoodsForReports = cache(async () => {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchFoodsViaRpc({ nutrientIds: REPORT_NUTRIENT_IDS });
-      } catch (error) {
-        console.error("fetchFoodsForReports error:", error);
-        return [];
-      }
-    },
-    ["foods-reports"],
-    { revalidate: 3600, tags: ["foods", "bls"] }
-  )();
+  return fetchFoodsChunked({ cacheKeyPrefix: "foods-reports", nutrientIds: REPORT_NUTRIENT_IDS });
 });
 
 export const fetchFoodsForProtocols = cache(async () => {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchFoodsViaRpc({ nutrientIds: PROTOCOL_NUTRIENT_IDS });
-      } catch (error) {
-        console.error("fetchFoodsForProtocols error:", error);
-        return [];
-      }
-    },
-    ["foods-protocols"],
-    { revalidate: 3600, tags: ["foods", "bls"] }
-  )();
+  return fetchFoodsChunked({ cacheKeyPrefix: "foods-protocols", nutrientIds: PROTOCOL_NUTRIENT_IDS });
 });
 
 export const fetchFoodsForInstitution = cache(async () => {
-  return unstable_cache(
-    async () => {
-      try {
-        return await fetchFoodsViaRpc({});
-      } catch (error) {
-        console.error("fetchFoodsForInstitution error:", error);
-        return [];
-      }
-    },
-    ["foods-institution"],
-    { revalidate: 3600, tags: ["foods", "bls"] }
-  )();
+  return fetchFoodsChunked({ cacheKeyPrefix: "foods-institution" });
 });
 
 export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> => {
