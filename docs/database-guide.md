@@ -216,6 +216,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260412000004_indexes.sql` | GIN trigram indexes for search, B-tree indexes for all common query patterns |
 | `20260412000005_rls_policies.sql` | Row Level Security: public foods readable by all, custom foods/recipes/meal plans private per user, OFF staging admin-only. Reference tables (data_sources, nutrient_definitions, reference_values) are SELECT-only — writes require `service_role` key |
 | `20260412000006_search_function.sql` | `search_foods()` Postgres function with trigram similarity, filtering, and pagination. **Must** receive `auth.uid()` as `requesting_user_id` or custom foods will be silently excluded |
+| `20260427000014_invoices.sql` | `invoices` table with RLS, indexes on `user_id`/`status`/`due_date`, and auto-update trigger |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0), 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -237,6 +238,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `daily_meal_plans` | One plan per user per day | `user_id`, `date` (unique together) |
 | `meal_entries` | Items in a meal slot | `meal_plan_id`, `slot_type`, `entry_type` (food/recipe), `reference_id` (polymorphic) |
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
+| `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 
 ### Why Normalized `food_nutrients` Instead of a JSON Array?
 

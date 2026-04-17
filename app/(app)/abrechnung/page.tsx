@@ -181,6 +181,8 @@ export default function AbrechnungPage() {
       dueDate: formState.dueDate,
       insurance: formState.insurance || undefined,
       status: formState.status,
+      notes: formState.notes || undefined,
+      appointmentId: formState.appointmentId || undefined,
     })
 
     toast.success("Rechnung erstellt")

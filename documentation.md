@@ -19,7 +19,7 @@
 
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
-  - **Patients, Recipes, Meal Plans, Protocols:** All have full backend persistence.
+  - **Patients, Recipes, Meal Plans, Protocols, Invoices:** All have full backend persistence.
   - **Auto-Migration:** Hooks automatically detect "dirty" local data on login and migrate it to the Supabase cloud.
   - **Robustness:** All database calls use `withTimeout` and `try-catch` to ensure the UI stays responsive even if the backend is slow.
 - **Foods & Search:**
@@ -86,6 +86,6 @@ For each feature update:
 3. **Smart-Eingabe:** Enter "1 Glas Milch" in a protocol. It should resolve the ID, amount, and unit correctly.
 4. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
 5. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
-6. **Backend Sync:** Log in with a new account. Confirm that local recipes and patients are automatically pushed to Supabase.
+6. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
 
 Following this guide ensures new engineers can trace each feature from route → component → hook → data, understand persistence, and avoid breaking coupled flows.

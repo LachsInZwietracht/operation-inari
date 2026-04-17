@@ -50,12 +50,17 @@ export interface PracticeAppointment {
 
 export interface InvoiceEntry {
   id: ID;
+  legacyId?: string;
   patientId: ID;
+  appointmentId?: string;
   service: string;
   amount: number;
   status: "offen" | "bezahlt" | "mahnung";
   dueDate: string;
   insurance?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PracticeKpi {

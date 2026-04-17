@@ -1,8 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { InvoiceEntry, PracticeAppointment } from "@/lib/types"
 import { PRACTICE_APPOINTMENTS, PRACTICE_INVOICES } from "@/lib/mock-data"
+import { deleteInvoiceClient, fetchInvoicesClient, persistInvoice } from "@/lib/data/invoices-client"
+import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEYS = {
   appointments: "prodi_practice_appointments",
@@ -99,38 +101,155 @@ export function usePracticeAppointments() {
 }
 
 export function usePracticeInvoices() {
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [invoices, setInvoices] = useState<InvoiceEntry[]>(() => {
     const stored = loadFromStorage<InvoiceEntry>(STORAGE_KEYS.invoices)
     return sortInvoices(stored && stored.length ? stored : PRACTICE_INVOICES)
   })
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false)
+  const migrationDone = useRef(false)
 
+  // Sync to local storage for offline/fallback
   useEffect(() => {
-    persistToStorage(STORAGE_KEYS.invoices, invoices)
+    try {
+      const custom = invoices.filter(
+        (inv) => !PRACTICE_INVOICES.find((m) => m.id === inv.id),
+      )
+      localStorage.setItem(STORAGE_KEYS.invoices, JSON.stringify(custom))
+    } catch {
+      // Ignore quota errors
+    }
   }, [invoices])
 
-  const addInvoice = useCallback((payload: Omit<InvoiceEntry, "id">) => {
-    const invoice: InvoiceEntry = {
-      ...payload,
-      id: `inv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    }
-    setInvoices((prev) => sortInvoices([...prev, invoice]))
-    return invoice
-  }, [])
+  // Load from Supabase when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return
 
-  const updateInvoice = useCallback((id: string, updates: Partial<InvoiceEntry>) => {
-    setInvoices((prev) =>
-      sortInvoices(
-        prev.map((invoice) =>
-          invoice.id === id
-            ? {
-                ...invoice,
-                ...updates,
-              }
-            : invoice,
-        ),
-      ),
-    )
-  }, [])
+    let cancelled = false
+    setIsLoadingRemote(true)
+
+    async function syncInvoices() {
+      try {
+        const remoteInvoices = await fetchInvoicesClient()
+        if (cancelled) return
+
+        setInvoices((prev) => {
+          const localOnly = prev.filter(
+            (inv) => !PRACTICE_INVOICES.find((m) => m.id === inv.id),
+          )
+          const merged = [...remoteInvoices]
+
+          for (const local of localOnly) {
+            const existsRemote = remoteInvoices.some(
+              (r) => r.id === local.id || r.legacyId === local.id,
+            )
+            if (!existsRemote) {
+              merged.push(local)
+            }
+          }
+
+          return sortInvoices(merged)
+        })
+
+        // Migrate local-only invoices to Supabase
+        if (!migrationDone.current) {
+          migrationDone.current = true
+          const localOnly = invoices.filter(
+            (inv) =>
+              !PRACTICE_INVOICES.find((m) => m.id === inv.id) &&
+              !remoteInvoices.some(
+                (r) => r.id === inv.id || r.legacyId === inv.id,
+              ),
+          )
+
+          for (const inv of localOnly) {
+            void persistInvoice(inv as Parameters<typeof persistInvoice>[0]).catch(
+              (err) => {
+                console.error(`Failed to migrate invoice ${inv.id}:`, err)
+              },
+            )
+          }
+        }
+      } catch (error) {
+        console.error("Failed to sync invoices from Supabase:", error)
+      } finally {
+        if (!cancelled) setIsLoadingRemote(false)
+      }
+    }
+
+    void syncInvoices()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, authLoading])
+
+  const addInvoice = useCallback(
+    (payload: Omit<InvoiceEntry, "id">) => {
+      const now = new Date().toISOString()
+      const tempId = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const invoice: InvoiceEntry = {
+        ...payload,
+        id: tempId,
+        createdAt: now,
+        updatedAt: now,
+      }
+      setInvoices((prev) => sortInvoices([...prev, invoice]))
+
+      if (isAuthenticated) {
+        void persistInvoice(invoice as Parameters<typeof persistInvoice>[0])
+          .then((persisted) => {
+            setInvoices((prev) =>
+              prev.map((inv) => (inv.id === tempId ? persisted : inv)),
+            )
+          })
+          .catch((err) => {
+            console.error("Failed to persist invoice:", err)
+          })
+      }
+
+      return invoice
+    },
+    [isAuthenticated],
+  )
+
+  const updateInvoice = useCallback(
+    (id: string, updates: Partial<InvoiceEntry>) => {
+      setInvoices((prev) => {
+        const next = sortInvoices(
+          prev.map((invoice) =>
+            invoice.id === id || (invoice.legacyId && invoice.legacyId === id)
+              ? { ...invoice, ...updates, updatedAt: new Date().toISOString() }
+              : invoice,
+          ),
+        )
+
+        const updated = next.find(
+          (inv) => inv.id === id || (inv.legacyId && inv.legacyId === id),
+        )
+        if (updated && isAuthenticated) {
+          void persistInvoice(
+            updated as Parameters<typeof persistInvoice>[0],
+          )
+            .then((persisted) => {
+              setInvoices((prev2) =>
+                prev2.map((inv) =>
+                  inv.id === persisted.id || inv.id === persisted.legacyId
+                    ? persisted
+                    : inv,
+                ),
+              )
+            })
+            .catch((err) => {
+              console.error("Failed to update invoice in Supabase:", err)
+            })
+        }
+
+        return next
+      })
+    },
+    [isAuthenticated],
+  )
 
   const markInvoiceStatus = useCallback(
     (id: string, status: InvoiceEntry["status"]) => {
@@ -139,10 +258,26 @@ export function usePracticeInvoices() {
     [updateInvoice],
   )
 
+  const deleteInvoice = useCallback(
+    (id: string) => {
+      setInvoices((prev) =>
+        prev.filter((inv) => inv.id !== id && inv.legacyId !== id),
+      )
+      if (isAuthenticated) {
+        void deleteInvoiceClient(id).catch((err) => {
+          console.error("Failed to delete invoice in Supabase:", err)
+        })
+      }
+    },
+    [isAuthenticated],
+  )
+
   return {
     invoices,
     addInvoice,
     updateInvoice,
     markInvoiceStatus,
+    deleteInvoice,
+    isLoadingRemote,
   }
 }
