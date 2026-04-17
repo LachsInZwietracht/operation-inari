@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header"
 import { PatientTabs } from "@/components/patient-tabs"
 import { Button } from "@/components/ui/button"
 import { usePatients } from "@/hooks/use-patients"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function PatientDetailPage({
   params,
@@ -14,8 +15,20 @@ export default function PatientDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
-  const { getPatient } = usePatients()
+  const { getPatient, isLoadingRemote } = usePatients()
+  const { loading: authLoading, isAuthenticated } = useAuth()
   const patient = getPatient(id)
+
+  if (!patient && (authLoading || (isAuthenticated && isLoadingRemote))) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Patient wird geladen" />
+        <p className="text-sm text-muted-foreground">
+          Die Patientendaten werden aus der Cloud synchronisiert.
+        </p>
+      </div>
+    )
+  }
 
   if (!patient) {
     return (

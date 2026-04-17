@@ -28,18 +28,33 @@ function buildInitialPatients(): Patient[] {
   )
 }
 
+function isMockPatient(patient: Patient) {
+  return PATIENTS.some((mockPatient) => mockPatient.id === patient.id)
+}
+
+function sortPatients(items: Patient[]) {
+  return [...items].sort((a, b) => a.lastName.localeCompare(b.lastName, "de"))
+}
+
+function getLocalOnlyPatients(items: Patient[]) {
+  return items.filter((patient) => !isMockPatient(patient))
+}
+
 export function usePatients() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [patients, setPatients] = useState<Patient[]>(buildInitialPatients)
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
+  const patientsRef = useRef<Patient[]>(patients)
+
+  useEffect(() => {
+    patientsRef.current = patients
+  }, [patients])
 
   // Sync to local storage for offline/fallback
   useEffect(() => {
     try {
-      const custom = patients.filter(
-        (p) => !PATIENTS.find((m) => m.id === p.id),
-      )
+      const custom = getLocalOnlyPatients(patients)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(custom))
     } catch {
       // Ignore quota errors
@@ -58,34 +73,34 @@ export function usePatients() {
         const remotePatients = await fetchPatientsClient()
         if (cancelled) return
 
-        setPatients((prev) => {
-          const localOnly = prev.filter(p => !PATIENTS.find(m => m.id === p.id))
-          const merged = [...remotePatients]
-          
-          // Add local patients that are not yet in remote
-          for (const local of localOnly) {
-            const existsRemote = remotePatients.some(
-              r => r.id === local.id || r.legacyId === local.id
-            )
-            if (!existsRemote) {
-              merged.push(local)
-            }
+        const localOnly = getLocalOnlyPatients(patientsRef.current)
+        const merged = [...remotePatients]
+
+        for (const local of localOnly) {
+          const existsRemote = remotePatients.some(
+            (remotePatient) => remotePatient.id === local.id || remotePatient.legacyId === local.id,
+          )
+          if (!existsRemote) {
+            merged.push(local)
           }
+        }
 
-          return merged.sort((a, b) => a.lastName.localeCompare(b.lastName, "de"))
-        })
+        setPatients(sortPatients(merged))
 
-        // Trigger migration of local-only patients
         if (!migrationDone.current) {
           migrationDone.current = true
-          const localOnly = patients.filter(p => 
-            !PATIENTS.find(m => m.id === p.id) && 
-            !remotePatients.some(r => r.id === p.id || r.legacyId === p.id)
+
+          // Add local patients that are not yet in remote
+          const pendingMigration = localOnly.filter((localPatient) =>
+            !remotePatients.some(
+              (remotePatient) =>
+                remotePatient.id === localPatient.id || remotePatient.legacyId === localPatient.id,
+            ),
           )
-          
-          for (const p of localOnly) {
-            void persistPatient(p as any).catch(err => {
-              console.error(`Failed to migrate patient ${p.firstName} ${p.lastName}:`, err)
+
+          for (const patient of pendingMigration) {
+            void persistPatient(patient as any).catch((err) => {
+              console.error(`Failed to migrate patient ${patient.firstName} ${patient.lastName}:`, err)
             })
           }
         }
@@ -109,7 +124,7 @@ export function usePatients() {
     [patients],
   )
 
-  const addPatient = useCallback((patient: Omit<Patient, "id" | "createdAt" | "updatedAt">) => {
+  const addPatient = useCallback(async (patient: Omit<Patient, "id" | "createdAt" | "updatedAt">) => {
     const now = new Date().toISOString()
     const tempId = `patient_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
     const newPatient: Patient = {
@@ -118,22 +133,23 @@ export function usePatients() {
       createdAt: now,
       updatedAt: now,
     }
-    
+
     setPatients((prev) =>
-      [...prev, newPatient].sort((a, b) =>
-        a.lastName.localeCompare(b.lastName, "de"),
-      ),
+      sortPatients([...prev, newPatient]),
     )
     
     // Background sync - if authenticated, this will return a canonical UUID
     if (isAuthenticated) {
-      void persistPatient(newPatient as any).then((persisted) => {
-        setPatients((prev) => 
-          prev.map(p => p.id === tempId ? persisted : p)
+      try {
+        const persisted = await persistPatient(newPatient as any)
+        setPatients((prev) =>
+          sortPatients(prev.map((p) => (p.id === tempId ? persisted : p))),
         )
-      }).catch((err) => {
+        return persisted
+      } catch (err) {
         console.error("Failed to persist patient:", err)
-      })
+        throw err
+      }
     }
     
     return newPatient
@@ -147,9 +163,9 @@ export function usePatients() {
             ? { ...p, ...updates, updatedAt: new Date().toISOString() }
             : p,
         )
-        .sort((a, b) => a.lastName.localeCompare(b.lastName, "de"))
+      const sortedNext = sortPatients(next)
       
-      const updated = next.find(p => p.id === id || (p.legacyId && p.legacyId === id))
+      const updated = sortedNext.find(p => p.id === id || (p.legacyId && p.legacyId === id))
       if (updated && isAuthenticated) {
         void persistPatient(updated as any).then((persisted) => {
            setPatients((prev) => prev.map(p => p.id === persisted.id || p.id === persisted.legacyId ? persisted : p))
@@ -158,7 +174,7 @@ export function usePatients() {
         })
       }
       
-      return next
+      return sortedNext
     })
   }, [isAuthenticated])
 

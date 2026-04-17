@@ -60,7 +60,7 @@ const GENDER_LABELS: Record<Gender, string> = {
 
 interface PatientFormProps {
   patient?: Patient
-  onSubmit: (values: Omit<Patient, "id" | "createdAt" | "updatedAt">) => void
+  onSubmit: (values: Omit<Patient, "id" | "createdAt" | "updatedAt">) => void | Promise<unknown>
   isEditing?: boolean
 }
 
@@ -137,25 +137,32 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
     error: "Fehler",
   }
 
-  function handleSubmit(values: PatientFormValues) {
-    onSubmit({
-      firstName: values.firstName,
-      lastName: values.lastName,
-      dateOfBirth: values.dateOfBirth,
-      gender: values.gender,
-      email: values.email || undefined,
-      phone: values.phone || undefined,
-      street: values.street || undefined,
-      zip: values.zip || undefined,
-      city: values.city || undefined,
-      insuranceProvider: values.insuranceProvider || undefined,
-      insuranceNumber: values.insuranceNumber || undefined,
-      indication: values.indication || undefined,
-      notes: values.notes || undefined,
-      amputations: values.amputations && values.amputations.length > 0 ? values.amputations : undefined,
-    })
-    toast.success(isEditing ? "Patient aktualisiert!" : "Patient erstellt!")
-    router.push("/patienten")
+  async function handleSubmit(values: PatientFormValues) {
+    try {
+      await Promise.resolve(
+        onSubmit({
+          firstName: values.firstName,
+          lastName: values.lastName,
+          dateOfBirth: values.dateOfBirth,
+          gender: values.gender,
+          email: values.email || undefined,
+          phone: values.phone || undefined,
+          street: values.street || undefined,
+          zip: values.zip || undefined,
+          city: values.city || undefined,
+          insuranceProvider: values.insuranceProvider || undefined,
+          insuranceNumber: values.insuranceNumber || undefined,
+          indication: values.indication || undefined,
+          notes: values.notes || undefined,
+          amputations: values.amputations && values.amputations.length > 0 ? values.amputations : undefined,
+        }),
+      )
+      toast.success(isEditing ? "Patient aktualisiert!" : "Patient erstellt!")
+      router.push("/patienten")
+    } catch (error) {
+      console.error("Failed to submit patient form:", error)
+      toast.error("Patient konnte nicht gespeichert werden")
+    }
   }
 
   return (
@@ -487,8 +494,14 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
         </Card>
 
         <div className="flex gap-3">
-          <Button type="submit">
-            {isEditing ? "Patient aktualisieren" : "Patient erstellen"}
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting
+              ? isEditing
+                ? "Speichert..."
+                : "Erstellt..."
+              : isEditing
+                ? "Patient aktualisieren"
+                : "Patient erstellen"}
           </Button>
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Abbrechen
