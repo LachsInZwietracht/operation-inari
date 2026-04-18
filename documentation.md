@@ -21,8 +21,8 @@
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
   - **Patients, Recipes, Meal Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
-  - **Patient clinical record core:** Anthropometrics, diagnoses, medications, screenings, and lab values are also persisted in Supabase with automatic local fallback and login-time migration.
-  - **Still local-only in the patient workspace:** Activities, therapy settings/integrations, PROCAM, and digital protocol links have not been moved to backend persistence yet.
+  - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
+  - **Still local-only in the patient workspace:** Demo analytics panels and assistant cards remain client-side only unless otherwise noted.
   - **Auto-Migration:** Hooks automatically detect "dirty" local data on login and migrate it to the Supabase cloud.
   - **Robustness:** All database calls use `withTimeout` and `try-catch` to ensure the UI stays responsive even if the backend is slow.
 - **Foods & Search:**
@@ -68,7 +68,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.13 Patient Detail (`/patienten/[id]` + nested tabs)
 - **Clinical record core:**
-  - Anthropometrie, Diagnosen, Medikamente, Screening history, and Laborwerte now use Supabase-first persistence with offline `localStorage` fallback.
+  - Anthropometrie, Diagnosen, Medikamente, Screening history, Laborwerte, Aktivität, Therapiemodule/-integrationen, PROCAM, and digitale Protokoll-Links now use Supabase-first persistence with offline `localStorage` fallback.
   - The patient-detail tabs show sync-aware empty states while remote data is loading after authentication.
 - **Digital Protocols:**
   - **Smart-Eingabe (NLP Lite):** The `ProtocolForm` includes an AI-assisted input that allows entering food like "1 Glas Apfelsaft" or "2 Scheiben Brot".
@@ -145,7 +145,7 @@ For each feature update:
 4. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
 5. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
 6. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
-7. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, and lab value; reload and confirm each persists.
+7. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, lab value, activity, therapy module, integration sync event, PROCAM result, and digital protocol link; reload and confirm each persists.
 8. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
 9. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
 10. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.

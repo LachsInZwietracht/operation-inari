@@ -129,12 +129,15 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **SGA (Subjective Global Assessment)** — structured assessment based on physical signs and history.
 
 ### 5.4 Clinical Record Detail
-**Status:** Partially implemented (Supabase-backed diagnoses, medications, screenings, and lab values; other therapy tabs still local-only).
+**Status:** Implemented (Supabase-backed clinical workspace with offline fallback and login-time migration).
 - **Diagnoses** — patient diagnoses with ICD codes now persist in Supabase with offline fallback and login-time migration.
 - **Medications** — patient medication lists now persist in Supabase with offline fallback and login-time migration.
 - **Screenings** — MUST, NRS-2002, MNA, and SGA results now persist in Supabase with offline fallback and login-time migration.
 - **Lab values** — patient laboratory measurements now persist in Supabase with offline fallback and login-time migration.
-- **Deferred scope:** activities, therapy settings/integrations, PROCAM, and digital protocol links are still future backend-persistence work.
+- **Activities** — activity and energy entries now persist in Supabase with offline fallback and login-time migration.
+- **Therapy settings/integrations** — module states, target payloads, and device sync metadata now persist in Supabase with offline fallback and login-time migration.
+- **PROCAM** — cardiovascular risk assessments now persist in Supabase with offline fallback and login-time migration.
+- **Digital protocol links** — generated protocol links and status updates now persist in Supabase with offline fallback and login-time migration.
 
 ---
 

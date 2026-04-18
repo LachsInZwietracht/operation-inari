@@ -409,6 +409,193 @@ test.describe("Patient Management", () => {
     }
   });
 
+  test("persists activities across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Activity", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Aktivität & Energie" }).click();
+      const activityTab = page.locator('[role="tabpanel"][data-state="active"]').first();
+
+      await activityTab.getByPlaceholder("Spaziergang").fill("Nordic Walking");
+      await activityTab.locator('input[type="number"]').first().fill("50");
+      await activityTab.locator('input[type="date"]').first().fill("2026-04-18");
+      await page.getByRole("button", { name: "Aktivität speichern" }).click();
+
+      await expect(page.getByText(/Nordic Walking/i)).toBeVisible();
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ type: string; duration_minutes: string }>(
+            "patient_activities",
+            patient.id,
+          );
+          return rows.some((row) => row.type === "Nordic Walking" && Number(row.duration_minutes) === 50);
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Aktivität & Energie" }).click();
+      await expect(page.getByText(/Nordic Walking/i)).toBeVisible();
+    } finally {
+      await deleteClinicalRows("patient_activities", patient.id).catch(() => {});
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists therapy modules and status changes across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Therapy", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Therapien" }).click();
+
+      await page.getByRole("button", { name: "Modul hinzufügen" }).click();
+      await expect(page.getByText("Diabetes-Modul")).toBeVisible();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ module: string; status: string }>(
+            "patient_therapy_settings",
+            patient.id,
+          );
+          return rows.some((row) => row.module === "diabetes" && row.status === "active");
+        })
+        .toBe(true);
+
+      await page.getByRole("switch").first().click();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ module: string; status: string }>(
+            "patient_therapy_settings",
+            patient.id,
+          );
+          return rows.some((row) => row.module === "diabetes" && row.status === "paused");
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Therapien" }).click();
+      await expect(page.getByText("Diabetes-Modul")).toBeVisible();
+      await expect(page.getByText("Pausiert")).toBeVisible();
+    } finally {
+      await deleteClinicalRows("patient_therapy_settings", patient.id).catch(() => {});
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists therapy integrations and sync updates across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Integration", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Therapien" }).click();
+
+      await page.getByRole("button", { name: "CGM koppeln" }).click();
+      await expect(page.getByText(/^LibreLink$/).first()).toBeVisible();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ vendor: string; status: string }>(
+            "patient_therapy_integrations",
+            patient.id,
+          );
+          return rows.some((row) => row.vendor === "LibreLink" && row.status === "pending");
+        })
+        .toBe(true);
+
+      await page.getByRole("button", { name: "Sync anstoßen" }).click();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ vendor: string; status: string; last_sync: string | null }>(
+            "patient_therapy_integrations",
+            patient.id,
+          );
+          return rows.some(
+            (row) => row.vendor === "LibreLink" && row.status === "connected" && Boolean(row.last_sync),
+          );
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Therapien" }).click();
+      await expect(page.getByText("LibreLink")).toBeVisible();
+      await expect(page.getByText("Verbunden")).toBeVisible();
+    } finally {
+      await deleteClinicalRows("patient_therapy_integrations", patient.id).catch(() => {});
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists PROCAM results across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Procam", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Therapien" }).click();
+
+      await page.getByRole("button", { name: "PROCAM speichern" }).click();
+      await expect(page.getByRole("table")).toBeVisible();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ score: string }>("patient_procam_results", patient.id);
+          return rows.length > 0 && Number(rows[0].score) > 0;
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Therapien" }).click();
+      await expect(page.getByRole("table")).toContainText(/low|moderate|high/i);
+    } finally {
+      await deleteClinicalRows("patient_procam_results", patient.id).catch(() => {});
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists digital protocol links and status updates across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Digital", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Protokolle" }).click();
+
+      await page.getByRole("button", { name: "Link erstellen" }).click();
+      await expect(page.getByText("Digitales 24h Recall", { exact: true }).last()).toBeVisible();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ method: string; status: string }>(
+            "patient_digital_protocol_links",
+            patient.id,
+          );
+          return rows.some((row) => row.method === "Digitales 24h Recall" && row.status === "pending");
+        })
+        .toBe(true);
+
+      await page.getByRole("button", { name: "Status toggeln" }).click();
+
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ method: string; status: string }>(
+            "patient_digital_protocol_links",
+            patient.id,
+          );
+          return rows.some((row) => row.method === "Digitales 24h Recall" && row.status === "received");
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Protokolle" }).click();
+      await expect(page.getByText("Digitales 24h Recall", { exact: true }).last()).toBeVisible();
+      await expect(page.getByText("eingetroffen")).toBeVisible();
+    } finally {
+      await deleteClinicalRows("patient_digital_protocol_links", patient.id).catch(() => {});
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("creates mail merge PDF for selected patients", async ({ page }) => {
     const patient = await createPatientFixture({ firstName: "Export", lastName: "Patient", indication: "Adipositas" });
 

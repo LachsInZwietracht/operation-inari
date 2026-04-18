@@ -205,20 +205,38 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     addEntry: addLabValue,
     isLoadingRemote: isLoadingLabValues,
   } = useLabValues()
-  const { getForPatient: getActivitiesForPatient, addEntry: addActivity } = useActivities()
-  const { getForPatient: getTherapiesForPatient, upsertSetting } = useTherapySettings()
+  const {
+    getForPatient: getActivitiesForPatient,
+    addEntry: addActivity,
+    isLoadingRemote: isLoadingActivities,
+  } = useActivities()
+  const {
+    getForPatient: getTherapiesForPatient,
+    upsertSetting,
+    isLoadingRemote: isLoadingTherapies,
+  } = useTherapySettings()
   const {
     getForPatient: getIntegrationsForPatient,
     addIntegration,
     updateIntegration,
+    isLoadingRemote: isLoadingIntegrations,
   } = useTherapyIntegrations()
   const {
     getForPatient: getScreeningsForPatient,
     addEntry: addScreening,
     isLoadingRemote: isLoadingScreenings,
   } = useScreenings()
-  const { getForPatient: getProcamForPatient, addResult: addProcam } = useProcam()
-  const { getForPatient: getDigitalLinksForPatient, generateLink, updateStatus } = useDigitalProtocols()
+  const {
+    getForPatient: getProcamForPatient,
+    addResult: addProcam,
+    isLoadingRemote: isLoadingProcam,
+  } = useProcam()
+  const {
+    getForPatient: getDigitalLinksForPatient,
+    generateLink,
+    updateStatus,
+    isLoadingRemote: isLoadingDigitalProtocols,
+  } = useDigitalProtocols()
   const { getForPatient: getProtocolsForPatient } = useProtocols()
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
@@ -279,6 +297,11 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const screeningsPending = isLoadingScreenings && screenings.length === 0
   const procamResults = getProcamForPatient(patient.id)
   const digitalLinks = getDigitalLinksForPatient(patient.id)
+  const activitiesPending = isLoadingActivities && activities.length === 0
+  const therapiesPending = isLoadingTherapies && therapies.length === 0
+  const integrationsPending = isLoadingIntegrations && deviceIntegrations.length === 0
+  const procamPending = isLoadingProcam && procamResults.length === 0
+  const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
 
   const latestAnthro = anthroEntries.length > 0 ? anthroEntries[anthroEntries.length - 1] : null
   const creatinineClearanceParam = LAB_PARAMETERS.find((param) => param.id === "lab_creatinine_clearance")
@@ -1540,6 +1563,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                       </span>
                     </Badge>
                   ))
+                ) : activitiesPending ? (
+                  <p className="text-sm text-muted-foreground">Aktivitäten werden synchronisiert.</p>
                 ) : (
                   <p className="text-sm text-muted-foreground">Keine Aktivitäten erfasst.</p>
                 )}
@@ -1606,6 +1631,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   </div>
                 </div>
               ))
+            ) : therapiesPending ? (
+              <p className="text-sm text-muted-foreground">Therapiemodule werden synchronisiert.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Noch keine Therapieparameter gepflegt.</p>
             )}
@@ -1667,6 +1694,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   </div>
                 </div>
               ))
+            ) : integrationsPending ? (
+              <p className="text-sm text-muted-foreground">Integrationen werden synchronisiert.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Keine Integrationen hinterlegt.</p>
             )}
@@ -1941,7 +1970,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 <Button type="submit">PROCAM speichern</Button>
               </div>
             </form>
-            {procamResults.length > 0 && (
+            {procamResults.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1960,7 +1989,9 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   ))}
                 </TableBody>
               </Table>
-            )}
+            ) : procamPending ? (
+              <p className="text-sm text-muted-foreground">PROCAM-Verlauf wird synchronisiert.</p>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -2091,6 +2122,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   </div>
                 </div>
               ))
+            ) : digitalLinksPending ? (
+              <p className="text-sm text-muted-foreground">Digitale Protokolle werden synchronisiert.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Noch keine digitalen Protokolle generiert.</p>
             )}

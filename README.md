@@ -32,7 +32,7 @@ Recent platform changes:
 - Reports (`/berichte`) now generate real server-side PDF and CSV exports.
 - Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
-- Anthropometrics, diagnoses, medications, screenings, and lab values on `/patienten/[id]` now persist to Supabase and survive full reloads.
+- The full patient workspace on `/patienten/[id]` now persists to Supabase, including anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM results, and digital protocol links.
 
 ## 🛠 Development
 
