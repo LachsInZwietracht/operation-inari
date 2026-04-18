@@ -6,6 +6,8 @@ import { PwaStatus } from "@/components/pwa-status"
 import { FoodSearchProvider } from "@/components/foods-provider"
 import { AuthProvider } from "@/components/auth-provider"
 
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>

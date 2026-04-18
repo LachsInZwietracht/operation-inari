@@ -3,6 +3,8 @@ import { RezeptePageClient } from "./rezepte-client";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { Skeleton } from "@/components/ui/skeleton"
 
+export const dynamic = "force-dynamic";
+
 function RezepteSkeleton() {
   return (
     <div className="space-y-6">

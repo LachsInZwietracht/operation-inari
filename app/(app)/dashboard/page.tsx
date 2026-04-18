@@ -8,6 +8,8 @@ import { DashboardNutritionClient } from "./dashboard-nutrition-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { DailyMealPlan, Recipe } from "@/lib/types"
 
+export const dynamic = "force-dynamic"
+
 const DASHBOARD_NUTRIENT_IDS = [
   "energie", "eiweiss", "fett", "kohlenhydrate", "ballaststoffe",
   "gesaettigte_fettsaeuren", "ungesaettigte_fettsaeuren", "zucker",

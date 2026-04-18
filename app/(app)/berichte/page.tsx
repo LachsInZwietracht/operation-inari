@@ -7,6 +7,8 @@ import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { FoodsProvider } from "@/components/foods-provider";
 import { PageHeader } from "@/components/page-header";
 
+export const dynamic = "force-dynamic";
+
 const REPORTS_HEADER = {
   title: "Berichte",
   description: "Nährstoffanalyse und Auswertungen",
