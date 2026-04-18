@@ -6,7 +6,7 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 
 - **Enterprise-Grade Performance:** Next.js 15 Server-Side Streaming with edge caching (Vercel Data Cache) for instant-feel navigation.
 - **Scientific Integrity:** Full BLS 4.0 (Bundeslebensmittelschlüssel) integration with calculations mathematically validated against official DGE/Hohenheim standards.
-- **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, protocols, and meal plans with automatic cloud sync and local fallback.
+- **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, protocols, meal plans, and the core patient clinical record with automatic cloud sync and local fallback.
 - **Smart Food Search:** Hybrid search engine combining local fuzzy matching with server-side trigram search across 7,000+ items.
 - **AI-Assisted Entry:** NLP-assisted food entry ("Smart-Eingabe") for rapid dietary assessment and protocol management.
 - **Professional Tools:** Pediatric percentile charts, PROCAM screening, real PDF/CSV exports for reports and patient documents, and eGK insurance card reader integration.
@@ -32,6 +32,7 @@ Recent platform changes:
 - Reports (`/berichte`) now generate real server-side PDF and CSV exports.
 - Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
+- Anthropometrics, diagnoses, medications, screenings, and lab values on `/patienten/[id]` now persist to Supabase and survive full reloads.
 
 ## 🛠 Development
 

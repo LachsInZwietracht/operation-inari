@@ -185,10 +185,26 @@ interface PatientTabsProps {
 }
 
 export function PatientTabs({ patient }: PatientTabsProps) {
-  const { getForPatient: getAnthroForPatient, addEntry: addAnthroEntry } = useAnthropometric()
-  const { getForPatient: getDiagnosesForPatient, addEntry: addDiagnosis } = useDiagnoses()
-  const { getForPatient: getMedicationsForPatient, addEntry: addMedication } = useMedications()
-  const { getForPatient: getLabValuesForPatient, addEntry: addLabValue } = useLabValues()
+  const {
+    getForPatient: getAnthroForPatient,
+    addEntry: addAnthroEntry,
+    isLoadingRemote: isLoadingAnthropometric,
+  } = useAnthropometric()
+  const {
+    getForPatient: getDiagnosesForPatient,
+    addEntry: addDiagnosis,
+    isLoadingRemote: isLoadingDiagnoses,
+  } = useDiagnoses()
+  const {
+    getForPatient: getMedicationsForPatient,
+    addEntry: addMedication,
+    isLoadingRemote: isLoadingMedications,
+  } = useMedications()
+  const {
+    getForPatient: getLabValuesForPatient,
+    addEntry: addLabValue,
+    isLoadingRemote: isLoadingLabValues,
+  } = useLabValues()
   const { getForPatient: getActivitiesForPatient, addEntry: addActivity } = useActivities()
   const { getForPatient: getTherapiesForPatient, upsertSetting } = useTherapySettings()
   const {
@@ -196,7 +212,11 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     addIntegration,
     updateIntegration,
   } = useTherapyIntegrations()
-  const { getForPatient: getScreeningsForPatient, addEntry: addScreening } = useScreenings()
+  const {
+    getForPatient: getScreeningsForPatient,
+    addEntry: addScreening,
+    isLoadingRemote: isLoadingScreenings,
+  } = useScreenings()
   const { getForPatient: getProcamForPatient, addResult: addProcam } = useProcam()
   const { getForPatient: getDigitalLinksForPatient, generateLink, updateStatus } = useDigitalProtocols()
   const { getForPatient: getProtocolsForPatient } = useProtocols()
@@ -250,12 +270,17 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const therapies = getTherapiesForPatient(patient.id)
   const deviceIntegrations = getIntegrationsForPatient(patient.id)
   const screenings = getScreeningsForPatient(patient.id)
+  const selectedLabParameter = LAB_PARAMETERS.find((param) => param.id === labParameterId)
+  const entriesForSelectedLab = labEntries.filter((entry) => entry.parameterId === labParameterId)
+  const anthropometricPending = isLoadingAnthropometric && anthroEntries.length === 0
+  const diagnosesPending = isLoadingDiagnoses && diagnoses.length === 0
+  const medicationsPending = isLoadingMedications && medications.length === 0
+  const labValuesPending = isLoadingLabValues && entriesForSelectedLab.length === 0
+  const screeningsPending = isLoadingScreenings && screenings.length === 0
   const procamResults = getProcamForPatient(patient.id)
   const digitalLinks = getDigitalLinksForPatient(patient.id)
 
   const latestAnthro = anthroEntries.length > 0 ? anthroEntries[anthroEntries.length - 1] : null
-  const selectedLabParameter = LAB_PARAMETERS.find((param) => param.id === labParameterId)
-  const entriesForSelectedLab = labEntries.filter((entry) => entry.parameterId === labParameterId)
   const creatinineClearanceParam = LAB_PARAMETERS.find((param) => param.id === "lab_creatinine_clearance")
   const ageYears = differenceInYears(new Date(), parseISO(patient.dateOfBirth))
   const weight = latestAnthro?.weight ?? 70
@@ -977,6 +1002,10 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   ))}
                 </TableBody>
               </Table>
+            ) : anthropometricPending ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Messwerte werden synchronisiert.
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-4">
                 Noch keine Messwerte vorhanden.
@@ -1069,6 +1098,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   ))}
                 </TableBody>
               </Table>
+            ) : diagnosesPending ? (
+              <p className="text-sm text-muted-foreground">Diagnosen werden synchronisiert.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Noch keine Diagnosen hinterlegt.</p>
             )}
@@ -1168,6 +1199,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   ))}
                 </TableBody>
               </Table>
+            ) : medicationsPending ? (
+              <p className="text-sm text-muted-foreground">Medikationen werden synchronisiert.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Keine Medikamente dokumentiert.</p>
             )}
@@ -1380,6 +1413,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                   ))}
                 </TableBody>
               </Table>
+            ) : labValuesPending ? (
+              <p className="text-sm text-muted-foreground">Laborwerte werden synchronisiert.</p>
             ) : (
               <p className="text-sm text-muted-foreground">Noch keine Werte dokumentiert.</p>
             )}
@@ -1701,6 +1736,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                       <span className="text-[11px] text-muted-foreground">{formatDate(result.updatedAt)}</span>
                     </Badge>
                   ))
+                ) : screeningsPending ? (
+                  <span className="text-sm text-muted-foreground">Screenings werden synchronisiert.</span>
                 ) : (
                   <span className="text-sm text-muted-foreground">Noch keine Einträge.</span>
                 )}

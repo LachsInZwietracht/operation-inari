@@ -116,17 +116,25 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **Deferred scope:** binary file retention, scheduled exports, and advanced backend print pipelines are still future work.
 
 ### 5.2 Anthropometric Data & Weight Analysis
-**Status:** Implemented (mock data).
+**Status:** Implemented (Supabase-backed anthropometric history; adjacent patient analytics still mixed persistence).
 - **BMI amputation correction** — adjust BMI formula using clinical correction factors (e.g., lower leg = 6.0%).
 - **Target weight projection** — "what-if" calculator using current weight trends.
 - **Percentile curves** — Overlay WHO/RKI P3-P97 curves for children (Requires age-in-months calculation).
 - **Bedside Mode:** UI optimized for iPad/Tablet use in clinical wards with high-contrast, touch-friendly charts.
 
 ### 5.5 Medical Calculations
-**Status:** Implemented (mock data, MUST/NRS-2002/PROCAM/MNA/SGA wizards).
+**Status:** Partially implemented (screenings and lab values persisted; some calculators remain local-only).
 - **Creatinine clearance calculation** — Cockcroft-Gault formula; critical for renal diet planning.
 - **MNA (Mini Nutritional Assessment)** — guided 18-item questionnaire for elderly patients.
 - **SGA (Subjective Global Assessment)** — structured assessment based on physical signs and history.
+
+### 5.4 Clinical Record Detail
+**Status:** Partially implemented (Supabase-backed diagnoses, medications, screenings, and lab values; other therapy tabs still local-only).
+- **Diagnoses** — patient diagnoses with ICD codes now persist in Supabase with offline fallback and login-time migration.
+- **Medications** — patient medication lists now persist in Supabase with offline fallback and login-time migration.
+- **Screenings** — MUST, NRS-2002, MNA, and SGA results now persist in Supabase with offline fallback and login-time migration.
+- **Lab values** — patient laboratory measurements now persist in Supabase with offline fallback and login-time migration.
+- **Deferred scope:** activities, therapy settings/integrations, PROCAM, and digital protocol links are still future backend-persistence work.
 
 ---
 

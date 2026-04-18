@@ -1,10 +1,21 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import type { LabValueEntry } from "@/lib/types"
 import { LAB_VALUES } from "@/lib/mock-data"
+import {
+  deleteLabValueClient,
+  fetchLabValuesClient,
+  persistLabValue,
+} from "@/lib/data/patient-lab-values-client"
+import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEY = "prodi_lab_values"
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isUuid(value: string): boolean {
+  return UUID_REGEX.test(value)
+}
 
 function loadFromStorage(): LabValueEntry[] {
   if (typeof window === "undefined") return []
@@ -21,63 +32,150 @@ function buildInitial(): LabValueEntry[] {
   const stored = loadFromStorage()
   const storedIds = new Set(stored.map((e) => e.id))
   const mockOnly = LAB_VALUES.filter((e) => !storedIds.has(e.id))
-  return [...mockOnly, ...stored].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  )
+  return sortEntries([...mockOnly, ...stored])
+}
+
+function sortEntries(items: LabValueEntry[]) {
+  return [...items].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+}
+
+function isMockEntry(entry: LabValueEntry) {
+  return LAB_VALUES.some((mockEntry) => mockEntry.id === entry.id)
+}
+
+function getLocalOnlyEntries(items: LabValueEntry[]) {
+  return items.filter((entry) => !isMockEntry(entry))
 }
 
 export function useLabValues() {
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [entries, setEntries] = useState<LabValueEntry[]>(buildInitial)
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false)
+  const migrationDone = useRef(false)
+  const entriesRef = useRef(entries)
+
+  useEffect(() => {
+    entriesRef.current = entries
+  }, [entries])
 
   useEffect(() => {
     try {
-      const custom = entries.filter(
-        (e) => !LAB_VALUES.find((m) => m.id === e.id),
-      )
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(getLocalOnlyEntries(entries)))
     } catch {
       // Ignore quota errors
     }
   }, [entries])
 
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return
+
+    let cancelled = false
+    setIsLoadingRemote(true)
+
+    async function syncEntries() {
+      try {
+        const remoteEntries = await fetchLabValuesClient()
+        if (cancelled) return
+
+        const localOnly = getLocalOnlyEntries(entriesRef.current)
+        const merged = [...remoteEntries]
+
+        for (const local of localOnly) {
+          const existsRemote = remoteEntries.some((remoteEntry) => remoteEntry.id === local.id)
+          if (!existsRemote) {
+            merged.push(local)
+          }
+        }
+
+        setEntries(sortEntries(merged))
+
+        if (!migrationDone.current) {
+          migrationDone.current = true
+          const pendingMigration = localOnly.filter(
+            (localEntry) => !remoteEntries.some((remoteEntry) => remoteEntry.id === localEntry.id),
+          )
+
+          for (const entry of pendingMigration) {
+            void persistLabValue(entry)
+              .then((persisted) => {
+                setEntries((prev) =>
+                  sortEntries(prev.map((item) => (item.id === entry.id ? persisted : item))),
+                )
+              })
+              .catch((err) => {
+                console.error(`Failed to migrate lab value entry ${entry.id}:`, err)
+              })
+          }
+        }
+      } catch (error) {
+        console.error("Failed to sync lab values from Supabase:", error)
+      } finally {
+        if (!cancelled) setIsLoadingRemote(false)
+      }
+    }
+
+    void syncEntries()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, authLoading])
+
   const getForPatient = useCallback(
     (patientId: string): LabValueEntry[] =>
-      entries
-        .filter((e) => e.patientId === patientId)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+      sortEntries(entries.filter((e) => e.patientId === patientId)),
     [entries],
   )
 
   const getForPatientAndParameter = useCallback(
     (patientId: string, parameterId: string): LabValueEntry[] =>
-      entries
-        .filter((e) => e.patientId === patientId && e.parameterId === parameterId)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+      sortEntries(
+        entries.filter((e) => e.patientId === patientId && e.parameterId === parameterId),
+      ),
     [entries],
   )
 
   const addEntry = useCallback(
     (entry: Omit<LabValueEntry, "id" | "createdAt" | "updatedAt">) => {
       const now = new Date().toISOString()
+      const tempId = `lv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
       const newEntry: LabValueEntry = {
         ...entry,
-        id: `lv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        id: tempId,
         createdAt: now,
         updatedAt: now,
       }
-      setEntries((prev) =>
-        [...prev, newEntry].sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-        ),
-      )
+      setEntries((prev) => sortEntries([...prev, newEntry]))
+
+      if (isAuthenticated) {
+        void persistLabValue(newEntry)
+          .then((persisted) => {
+            setEntries((prev) =>
+              sortEntries(prev.map((item) => (item.id === tempId ? persisted : item))),
+            )
+          })
+          .catch((err) => {
+            console.error("Failed to persist lab value entry:", err)
+          })
+      }
+
       return newEntry
     },
-    [],
+    [isAuthenticated],
   )
 
-  const deleteEntry = useCallback((id: string) => {
-    setEntries((prev) => prev.filter((e) => e.id !== id))
-  }, [])
+  const deleteEntry = useCallback(
+    (id: string) => {
+      setEntries((prev) => prev.filter((e) => e.id !== id))
+
+      if (isAuthenticated && isUuid(id)) {
+        void deleteLabValueClient(id).catch((err) => {
+          console.error("Failed to delete lab value in Supabase:", err)
+        })
+      }
+    },
+    [isAuthenticated],
+  )
 
   return {
     entries,
@@ -85,5 +183,6 @@ export function useLabValues() {
     getForPatientAndParameter,
     addEntry,
     deleteEntry,
+    isLoadingRemote,
   }
 }

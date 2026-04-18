@@ -76,6 +76,24 @@ async function deletePatientFixture(patientId: string) {
   }
 }
 
+async function deleteClinicalRows(table: string, patientId: string) {
+  const { error } = await admin.from(table).delete().eq("patient_id", patientId);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function fetchClinicalRows<T extends Record<string, unknown>>(
+  table: string,
+  patientId: string,
+): Promise<T[]> {
+  const { data, error } = await admin.from(table).select("*").eq("patient_id", patientId);
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data ?? []) as T[];
+}
+
 function patientLabel(patient: CreatedPatient) {
   return `${patient.lastName}, ${patient.firstName}`;
 }
@@ -227,7 +245,166 @@ test.describe("Patient Management", () => {
       await page.getByRole("button", { name: "Messung speichern" }).click();
 
       await expect(page.getByRole("cell", { name: "84,0" })).toBeVisible();
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ weight: string }>("patient_anthropometrics", patient.id);
+          return rows.some((row) => Number(row.weight) === 84);
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Anthropometrie" }).click();
+      await expect(page.getByRole("cell", { name: "84,0" })).toBeVisible();
     } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists diagnoses across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Diagnosis", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+
+      await page.getByRole("button", { name: "Diagnose erfassen" }).click();
+      await page.locator("#diagnosis-name").fill("Diabetes mellitus Typ 2");
+      await page.getByLabel("ICD-Code").fill("E11.9");
+      await page.getByRole("button", { name: "Speichern" }).click();
+
+      await expect(page.getByRole("cell", { name: "Diabetes mellitus Typ 2" })).toBeVisible();
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ diagnosis: string }>("patient_diagnoses", patient.id);
+          return rows.some((row) => row.diagnosis === "Diabetes mellitus Typ 2");
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+      await expect(page.getByRole("cell", { name: "Diabetes mellitus Typ 2" })).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists medications across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Medication", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+
+      await page.getByRole("button", { name: "Medikation erfassen" }).click();
+      await page.getByLabel("Name").fill("Metformin");
+      await page.getByLabel("Dosierung").fill("1000 mg");
+      await page.getByLabel("Schema").fill("2× täglich");
+      await page.getByRole("button", { name: "Speichern" }).click();
+
+      await expect(page.getByRole("cell", { name: "Metformin" })).toBeVisible();
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ name: string }>("patient_medications", patient.id);
+          return rows.some((row) => row.name === "Metformin");
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+      await expect(page.getByRole("cell", { name: "Metformin" })).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("persists screenings across reload", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Screening", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Therapien" }).click();
+
+      const mustCard = page.locator("div.rounded-lg.border.p-3").filter({ hasText: "MUST" }).first();
+      await mustCard.getByRole("button", { name: "Ergebnis speichern" }).click();
+
+      await expect(page.getByText(/MUST · Score/i)).toBeVisible();
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ tool: string }>("patient_screenings", patient.id);
+          return rows.some((row) => row.tool === "MUST");
+        })
+        .toBe(true);
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Therapien" }).click();
+      await expect(page.getByText(/MUST · Score/i)).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("creates lab values via UI and persists to Supabase", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "Lab", lastName: "Persist" });
+
+    try {
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Laborwerte" }).click();
+
+      await page.getByPlaceholder("z. B. 5.6").fill("6.4");
+      await page.locator('input[type="date"]').fill("2026-04-18");
+      await page.getByPlaceholder("z. B. nüchtern, Labor Praxis X").fill("nüchtern");
+      await page.getByRole("button", { name: "Messung speichern" }).click();
+
+      await expect(page.getByRole("cell", { name: /6.4 %/i })).toBeVisible();
+      await expect
+        .poll(async () => {
+          const rows = await fetchClinicalRows<{ parameter_id: string; value: string }>(
+            "patient_lab_values",
+            patient.id,
+          );
+          return rows.some((row) => row.parameter_id === "lab_hba1c" && Number(row.value) === 6.4);
+        })
+        .toBe(true);
+    } finally {
+      await deleteClinicalRows("patient_lab_values", patient.id).catch(() => {});
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("renders remote lab values from Supabase", async ({ page }) => {
+    const patient = await createPatientFixture({ firstName: "LabRemote", lastName: "Viewer" });
+    const userId = await getTestUserId();
+
+    try {
+      const { error } = await admin.from("patient_lab_values").insert({
+        user_id: userId,
+        patient_id: patient.id,
+        parameter_id: "lab_glucose",
+        date: "2026-04-10",
+        value: 98,
+        notes: "Praxislabor",
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      await openPatientDetail(page, patient);
+      await page.getByRole("tab", { name: "Laborwerte" }).click();
+
+      await page.getByRole("combobox").first().click();
+      await page.getByRole("option", { name: "Nüchternglucose" }).click();
+
+      await expect(page.getByRole("cell", { name: /98 mg\/dl/i })).toBeVisible();
+      await expect(page.getByText("Praxislabor")).toBeVisible();
+
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: "Laborwerte" }).click();
+      await page.getByRole("combobox").first().click();
+      await page.getByRole("option", { name: "Nüchternglucose" }).click();
+      await expect(page.getByRole("cell", { name: /98 mg\/dl/i })).toBeVisible();
+    } finally {
+      await deleteClinicalRows("patient_lab_values", patient.id).catch(() => {});
       await deletePatientFixture(patient.id);
     }
   });
