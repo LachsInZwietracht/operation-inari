@@ -1,4 +1,4 @@
-import type { PracticeAppointment, InvoiceEntry, PracticeKpi } from "@/lib/types";
+import type { PracticeAppointment, InvoiceEntry } from "@/lib/types";
 
 export const PRACTICE_APPOINTMENTS: PracticeAppointment[] = [
   {
@@ -62,11 +62,4 @@ export const PRACTICE_INVOICES: InvoiceEntry[] = [
     dueDate: "2026-02-05",
     insurance: "Barmer",
   },
-];
-
-export const PRACTICE_KPIS: PracticeKpi[] = [
-  { id: "patients_active", label: "Aktive Patienten", value: "128", trend: "up" },
-  { id: "sessions_month", label: "Sitzungen (Monat)", value: "86", trend: "up" },
-  { id: "avg_duration", label: "Ø Sitzungsdauer", value: "52 min", trend: "flat" },
-  { id: "revenue", label: "Umsatz (Monat)", value: "18.420 €", trend: "up" },
 ];

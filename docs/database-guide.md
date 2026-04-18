@@ -219,6 +219,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260412000006_search_function.sql` | `search_foods()` Postgres function with trigram similarity, filtering, and pagination. **Must** receive `auth.uid()` as `requesting_user_id` or custom foods will be silently excluded |
 | `20260427000014_invoices.sql` | `invoices` table with RLS, indexes on `user_id`/`status`/`due_date`, and auto-update trigger |
 | `20260428000015_export_jobs.sql` | `export_jobs` table for persisted export/import history with user-scoped RLS |
+| `20260429000016_appointments.sql` | `appointments` table with RLS, indexes on `user_id`/`date`/`type`/`patient_id`, and auto-update trigger |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0), 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -242,6 +243,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 | `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
+| `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
 
 ### Export Job Notes
 

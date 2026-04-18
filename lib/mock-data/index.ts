@@ -52,7 +52,6 @@ export {
 export {
   PRACTICE_APPOINTMENTS,
   PRACTICE_INVOICES,
-  PRACTICE_KPIS,
 } from "./practice";
 export {
   ADMIN_USERS,

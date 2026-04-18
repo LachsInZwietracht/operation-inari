@@ -15,12 +15,14 @@
 - **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The 1.5MB search index is **lazy-loaded** via `/api/foods/search-index` only when the search is first opened.
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
-- **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern. Data is synced to the cloud when authenticated but always available in `localStorage` for offline use.
+- **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern where implemented. Data is synced to the cloud when authenticated but remains available in `localStorage` for offline use.
 - **Export pipeline:** Real file generation lives behind server routes in `app/api/exports/*`. Client pages build typed payloads, the server renders PDF/CSV output, and export metadata is written to `export_jobs`.
 
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
-  - **Patients, Recipes, Meal Plans, Protocols, Invoices:** All have full backend persistence.
+  - **Patients, Recipes, Meal Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
+  - **Patient clinical record core:** Anthropometrics, diagnoses, medications, screenings, and lab values are also persisted in Supabase with automatic local fallback and login-time migration.
+  - **Still local-only in the patient workspace:** Activities, therapy settings/integrations, PROCAM, and digital protocol links have not been moved to backend persistence yet.
   - **Auto-Migration:** Hooks automatically detect "dirty" local data on login and migrate it to the Supabase cloud.
   - **Robustness:** All database calls use `withTimeout` and `try-catch` to ensure the UI stays responsive even if the backend is slow.
 - **Foods & Search:**
@@ -65,6 +67,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Nutrient Caching:** Automatically calculates and persists calorie/macro totals into the `recipes` table for performant list rendering.
 
 ### 4.13 Patient Detail (`/patienten/[id]` + nested tabs)
+- **Clinical record core:**
+  - Anthropometrie, Diagnosen, Medikamente, Screening history, and Laborwerte now use Supabase-first persistence with offline `localStorage` fallback.
+  - The patient-detail tabs show sync-aware empty states while remote data is loading after authentication.
 - **Digital Protocols:**
   - **Smart-Eingabe (NLP Lite):** The `ProtocolForm` includes an AI-assisted input that allows entering food like "1 Glas Apfelsaft" or "2 Scheiben Brot".
   - **NLP Engine:** `lib/nlp-matching.ts` parses free-text for quantity, unit, and food name using keyword heuristics.
@@ -89,6 +94,34 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
 
+### 4.17 Praxis-Statistiken (`/praxis-statistiken`)
+- **Component:** `app/(app)/praxis-statistiken/page.tsx` (client component)
+- **Data sources:** All KPIs and charts are dynamically computed from real data via `usePatients`, `usePracticeAppointments`, and `usePracticeInvoices`. There are no hardcoded mock KPIs.
+- **Dynamic KPIs (top row, 4 cards):**
+  - **Aktive Patienten** — total patient count with new-patient trend.
+  - **Sitzungen (Monat)** — current month appointment count vs. previous month.
+  - **Ø Sitzungsdauer** — average duration in minutes, compared to previous month.
+  - **Umsatz (Monat)** — current month invoice total, compared to previous month.
+  - Each KPI shows a trend indicator (TrendingUp / TrendingDown / Minus) comparing the current month against the previous month, using a 2 % threshold in `getTrend()`.
+- **Time-range filter:** A `<Tabs>` strip below the KPIs filters appointments, invoices, and demographic charts by range:
+  - Dieser Monat | Letzte 3 Monate | Dieses Jahr | Gesamt.
+  - KPIs always compare current vs. previous month regardless of the selected range.
+- **Charts (Recharts):**
+  - **Timeline Terminvolumen** — `LineChart` showing daily appointment and patient-slot counts.
+  - **Mix der Termine** — `BarChart` with appointment type breakdown (Beratung, Follow-up, Team, Workshop).
+  - **Monatlicher Umsatz** — stacked `BarChart` (Bezahlt vs. Offen/Mahnung) aggregated by month.
+- **Patient Demographics (3-column grid):**
+  - **Geschlechterverteilung** — donut `PieChart` (Männlich / Weiblich / Divers).
+  - **Top Indikationen** — horizontal `BarChart` showing the 5 most common patient indications.
+  - **Neuzugänge** — `BarChart` of new patients per month within the selected time range.
+- **Additional analytics:**
+  - **Leistungsauslastung** — progress bars for slot utilization (current week vs. 20-slot capacity), payment rate, and recurring appointment share.
+  - **Statistische Kennzahlen** — table with mean/min/max/std for appointment duration, invoice amount, and active patient count.
+  - **Umsatz & Risiken** — summary cards for total revenue, outstanding amount, average ticket, and overdue invoice count.
+  - **Warnungen** — list of overdue invoices with destructive badges.
+- **Utilities:** `calculateDurationMinutes()` derives session length from start/end times; `computeStats()` calculates descriptive statistics; `getTrend()` classifies month-over-month change.
+- **Extension notes:** To add new KPIs, append to the `dynamicKpis` array in the main `useMemo`. New chart sections can be added to the grid layout. The time-range filter automatically propagates via `rangeStart` to any `useMemo` that depends on `filteredAppointments` or `filteredInvoices`.
+
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
 - **Nutrient utilities (`@/lib/nutrients.ts`):** Mathematically validated core logic. Handles ingredient scaling and summing.
@@ -112,8 +145,9 @@ For each feature update:
 4. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
 5. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
 6. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
-7. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
-8. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
-9. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
+7. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, and lab value; reload and confirm each persists.
+8. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
+9. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
+10. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
 
 Following this guide ensures new engineers can trace each feature from route → component → hook → data, understand persistence, and avoid breaking coupled flows.

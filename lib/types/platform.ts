@@ -37,6 +37,7 @@ export interface HospitalOrderBoardEntry {
 
 export interface PracticeAppointment {
   id: ID;
+  legacyId?: string;
   title: string;
   date: string;
   startTime: string;
@@ -46,6 +47,8 @@ export interface PracticeAppointment {
   type: "beratung" | "kontrolle" | "team" | "webinar";
   recurring?: string;
   reminder?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InvoiceEntry {
@@ -61,14 +64,6 @@ export interface InvoiceEntry {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface PracticeKpi {
-  id: ID;
-  label: string;
-  value: string;
-  trend: "up" | "down" | "flat";
-  helper?: string;
 }
 
 export interface AdminUser {

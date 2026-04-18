@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { InvoiceEntry, PracticeAppointment } from "@/lib/types"
 import { PRACTICE_APPOINTMENTS, PRACTICE_INVOICES } from "@/lib/mock-data"
 import { deleteInvoiceClient, fetchInvoicesClient, persistInvoice } from "@/lib/data/invoices-client"
+import { deleteAppointmentClient, fetchAppointmentsClient, persistAppointment } from "@/lib/data/appointments-client"
 import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEYS = {
@@ -48,40 +49,169 @@ function persistToStorage<T>(key: string, value: T[]) {
 }
 
 export function usePracticeAppointments() {
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [appointments, setAppointments] = useState<PracticeAppointment[]>(() => {
     const stored = loadFromStorage<PracticeAppointment>(STORAGE_KEYS.appointments)
     return sortAppointments(stored && stored.length ? stored : PRACTICE_APPOINTMENTS)
   })
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false)
+  const migrationDone = useRef(false)
 
+  // Sync to local storage for offline/fallback
   useEffect(() => {
-    persistToStorage(STORAGE_KEYS.appointments, appointments)
+    try {
+      const custom = appointments.filter(
+        (appt) => !PRACTICE_APPOINTMENTS.find((m) => m.id === appt.id),
+      )
+      localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(custom))
+    } catch {
+      // Ignore quota errors
+    }
   }, [appointments])
+
+  // Load from Supabase when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return
+
+    let cancelled = false
+    setIsLoadingRemote(true)
+
+    async function syncAppointments() {
+      try {
+        const remoteAppointments = await fetchAppointmentsClient()
+        if (cancelled) return
+
+        setAppointments((prev) => {
+          const localOnly = prev.filter(
+            (appt) => !PRACTICE_APPOINTMENTS.find((m) => m.id === appt.id),
+          )
+          const merged = [...remoteAppointments]
+
+          for (const local of localOnly) {
+            const existsRemote = remoteAppointments.some(
+              (r) => r.id === local.id || r.legacyId === local.id,
+            )
+            if (!existsRemote) {
+              merged.push(local)
+            }
+          }
+
+          return sortAppointments(merged)
+        })
+
+        // Migrate local-only appointments to Supabase
+        if (!migrationDone.current) {
+          migrationDone.current = true
+          const localOnly = appointments.filter(
+            (appt) =>
+              !PRACTICE_APPOINTMENTS.find((m) => m.id === appt.id) &&
+              !remoteAppointments.some(
+                (r) => r.id === appt.id || r.legacyId === appt.id,
+              ),
+          )
+
+          for (const appt of localOnly) {
+            void persistAppointment(appt as Parameters<typeof persistAppointment>[0]).catch(
+              (err) => {
+                console.error(`Failed to migrate appointment ${appt.id}:`, err)
+              },
+            )
+          }
+        }
+      } catch (error) {
+        console.error("Failed to sync appointments from Supabase:", error)
+      } finally {
+        if (!cancelled) setIsLoadingRemote(false)
+      }
+    }
+
+    void syncAppointments()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, authLoading])
 
   const addAppointment = useCallback(
     (payload: Omit<PracticeAppointment, "id">) => {
+      const now = new Date().toISOString()
+      const tempId = `appt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
       const newAppointment: PracticeAppointment = {
         ...payload,
-        id: `appt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: tempId,
+        createdAt: now,
+        updatedAt: now,
       }
       setAppointments((prev) => sortAppointments([...prev, newAppointment]))
+
+      if (isAuthenticated) {
+        void persistAppointment(newAppointment as Parameters<typeof persistAppointment>[0])
+          .then((persisted) => {
+            setAppointments((prev) =>
+              prev.map((appt) => (appt.id === tempId ? persisted : appt)),
+            )
+          })
+          .catch((err) => {
+            console.error("Failed to persist appointment:", err)
+          })
+      }
+
       return newAppointment
     },
-    [],
+    [isAuthenticated],
   )
 
-  const updateAppointment = useCallback((id: string, updates: Partial<PracticeAppointment>) => {
-    setAppointments((prev) =>
-      sortAppointments(
-        prev.map((appointment) =>
-          appointment.id === id ? { ...appointment, ...updates } : appointment,
-        ),
-      ),
-    )
-  }, [])
+  const updateAppointment = useCallback(
+    (id: string, updates: Partial<PracticeAppointment>) => {
+      setAppointments((prev) => {
+        const next = sortAppointments(
+          prev.map((appointment) =>
+            appointment.id === id || (appointment.legacyId && appointment.legacyId === id)
+              ? { ...appointment, ...updates, updatedAt: new Date().toISOString() }
+              : appointment,
+          ),
+        )
 
-  const deleteAppointment = useCallback((id: string) => {
-    setAppointments((prev) => prev.filter((appointment) => appointment.id !== id))
-  }, [])
+        const updated = next.find(
+          (appt) => appt.id === id || (appt.legacyId && appt.legacyId === id),
+        )
+        if (updated && isAuthenticated) {
+          void persistAppointment(
+            updated as Parameters<typeof persistAppointment>[0],
+          )
+            .then((persisted) => {
+              setAppointments((prev2) =>
+                prev2.map((appt) =>
+                  appt.id === persisted.id || appt.id === persisted.legacyId
+                    ? persisted
+                    : appt,
+                ),
+              )
+            })
+            .catch((err) => {
+              console.error("Failed to update appointment in Supabase:", err)
+            })
+        }
+
+        return next
+      })
+    },
+    [isAuthenticated],
+  )
+
+  const deleteAppointment = useCallback(
+    (id: string) => {
+      setAppointments((prev) =>
+        prev.filter((appt) => appt.id !== id && appt.legacyId !== id),
+      )
+      if (isAuthenticated) {
+        void deleteAppointmentClient(id).catch((err) => {
+          console.error("Failed to delete appointment in Supabase:", err)
+        })
+      }
+    },
+    [isAuthenticated],
+  )
 
   const upcomingAppointments = useMemo(() => {
     const now = new Date().getTime()
@@ -97,6 +227,7 @@ export function usePracticeAppointments() {
     addAppointment,
     updateAppointment,
     deleteAppointment,
+    isLoadingRemote,
   }
 }
 
