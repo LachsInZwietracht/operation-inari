@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
@@ -747,6 +747,15 @@ export async function fetchFoodsBrowserPage(
 
 /* ─── Chunked caching (keeps each unstable_cache entry under 2 MB) ─── */
 
+/**
+ * Tag constants for revalidation
+ */
+export const CACHE_TAGS = {
+  FOODS: "foods",
+  BLS: "bls",
+  SEARCH: "search-index",
+};
+
 interface ChunkedFetchOptions {
   cacheKeyPrefix: string;
   nutrientIds?: string[];
@@ -761,7 +770,7 @@ async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> 
   const chunkSize =
     options.chunkSize ?? Math.max(100, Math.floor(1_500_000 / estimatedBytesPerFood));
   const revalidate = options.revalidate ?? 3600;
-  const tags = options.tags ?? ["foods", "bls"];
+  const tags = options.tags ?? [CACHE_TAGS.FOODS, CACHE_TAGS.BLS];
 
   const allFoods: Food[] = [];
   let chunkIndex = 0;
@@ -778,19 +787,32 @@ async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> 
           });
         } catch (error) {
           console.error(`${options.cacheKeyPrefix} chunk ${idx} error:`, error);
-          return [];
+          // Instead of returning [], we throw to avoid caching a partial/empty result
+          throw error;
         }
       },
       [`${options.cacheKeyPrefix}-chunk-${idx}`],
-      { revalidate, tags },
+      { revalidate, tags: [...tags, `${options.cacheKeyPrefix}-chunk-${idx}`] },
     )();
 
+    if (!chunkFoods || chunkFoods.length === 0) break;
+    
     allFoods.push(...chunkFoods);
     if (chunkFoods.length < chunkSize) break;
     chunkIndex++;
   }
 
   return allFoods;
+}
+
+/**
+ * Purges all food-related caches.
+ * Call this after ETL imports or custom food changes.
+ */
+export async function revalidateAllFoods() {
+  revalidateTag(CACHE_TAGS.FOODS);
+  revalidateTag(CACHE_TAGS.BLS);
+  revalidateTag(CACHE_TAGS.SEARCH);
 }
 
 /**
@@ -902,10 +924,10 @@ export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> =>
         }));
       } catch (error) {
         console.error("fetchFoodSearchIndex error:", error);
-        return [];
+        throw error;
       }
     },
     ["food-search-index"],
-    { revalidate: 3600, tags: ["foods", "bls", "search-index"] }
+    { revalidate: 3600, tags: [CACHE_TAGS.FOODS, CACHE_TAGS.BLS, CACHE_TAGS.SEARCH] }
   )();
 });

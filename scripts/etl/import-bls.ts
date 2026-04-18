@@ -29,6 +29,7 @@ import {
   NUTRIENT_MAP,
   parseNutrientValue,
 } from "./bls-shared";
+import { revalidateAllFoods } from "../../lib/data/foods";
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -440,6 +441,14 @@ async function main() {
     `  Avg nutrients/food: ${totalFoods > 0 ? Math.round(totalNutrients / totalFoods) : 0}`
   );
   console.log(`  Skipped:   ${skippedFoods}`);
+
+  console.log("\nPurging server cache...");
+  try {
+    await revalidateAllFoods();
+    console.log("✅ Cache purged successfully");
+  } catch (error) {
+    console.warn("⚠️  Could not purge cache (expected if running outside Next.js context):", error instanceof Error ? error.message : String(error));
+  }
 }
 
 main().catch((err) => {
