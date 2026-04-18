@@ -42,19 +42,13 @@ export async function createServiceClient() {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    // If we're in a build environment (CI/Vercel build), we might want to fail gracefully
-    // to allow the build to complete, but logging a loud warning.
-    const isBuild = process.env.NODE_ENV === "production" && process.env.NEXT_PHASE === "phase-production-build";
+    console.error("❌ ERROR: Missing Supabase Service Role configuration for server-side cache. This will result in empty data states.");
     
-    if (isBuild) {
-      console.warn("⚠️  SUPABASE_SERVICE_ROLE_KEY is missing during build. This may cause issues if pages are pre-rendered.");
-      // Return a placeholder client that will fail at runtime if actually used
-      return createServerClient(supabaseUrl || "https://placeholder.supabase.co", "placeholder", {
-        cookies: { getAll() { return [] }, setAll() { } },
-      });
-    }
-    
-    throw new Error("Missing Supabase Service Role configuration for server-side cache.");
+    // Return a placeholder client that will fail gracefully if actually used, 
+    // rather than throwing immediately and crashing the whole page/request.
+    return createServerClient(supabaseUrl || "https://placeholder.supabase.co", "placeholder", {
+      cookies: { getAll() { return [] }, setAll() { } },
+    });
   }
 
   return createServerClient(supabaseUrl, supabaseServiceKey, {

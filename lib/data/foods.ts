@@ -787,8 +787,9 @@ async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> 
           });
         } catch (error) {
           console.error(`${options.cacheKeyPrefix} chunk ${idx} error:`, error);
-          // Instead of returning [], we throw to avoid caching a partial/empty result
-          throw error;
+          // Return [] to avoid crashing the entire page. 
+          // Stale-while-revalidate will try again later.
+          return [];
         }
       },
       [`${options.cacheKeyPrefix}-chunk-${idx}`],
@@ -924,7 +925,7 @@ export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> =>
         }));
       } catch (error) {
         console.error("fetchFoodSearchIndex error:", error);
-        throw error;
+        return [];
       }
     },
     ["food-search-index"],
