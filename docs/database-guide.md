@@ -429,27 +429,39 @@ ETL Pipeline:
 
 ### 5.2 Open Food Facts ETL
 
-**Input:** Nightly JSONL dump or delta CSV from https://world.openfoodfacts.org/data
+**Current script:** `scripts/etl/import-off.ts`
+**Supported inputs:**
+- `OFF_SOURCE_FILE=/abs/path/file.json` for a local JSON payload
+- `OFF_SOURCE_URL=https://...` for a remote JSON payload
+- no OFF source env vars for a live sample fetch from Open Food Facts
+
 **Output:** Rows in `off_staging` → validated rows promoted to `foods` + `food_nutrients`
+
+**Run it:**
+```bash
+npm run etl:off
+```
 
 ```
 ETL Pipeline:
-1. Download German products dump (filter: countries_tags contains 'en:germany')
-2. Parse JSONL, for each product:
+1. Load products from OFF_SOURCE_FILE, OFF_SOURCE_URL, or the live sample endpoint
+2. Parse each product:
    a. Extract barcode → source_food_id
    b. Extract product_name_de or product_name → name
    c. Extract brands → manufacturer
-   d. Extract nutriments object → raw JSONB into off_staging
+   d. Normalize nutriments to per-100g values where possible
+   e. Store normalized nutriments as JSONB in off_staging
 3. Validation pass (on off_staging):
    a. REJECT if no energy value
    b. REJECT if no product name
-   c. WARN if macros don't approximately sum to energy (±20%)
-   d. WARN if any nutrient value is implausibly high (e.g., >1000g protein per 100g)
-   e. Score data quality 0-1 based on completeness + consistency
+   c. REJECT if macros exceed plausible 100g bounds
+   d. WARN if the payload reports serving-based data only
+   e. Score data quality 0-100 based on mapped nutrient completeness
 4. Promotion pass:
-   a. For quality_score > 0.7: insert into foods + food_nutrients
-   b. Set is_branded = TRUE
-   c. Map OFF nutrient keys to our nutrient_ids:
+   a. Promote validated rows into foods + food_nutrients
+   b. Set data_source_id = 'off' and is_branded = TRUE
+   c. Persist data_quality_score on foods
+   d. Map OFF nutrient keys to our nutrient_ids:
       - energy_kcal_100g → energie
       - proteins_100g → eiweiss
       - fat_100g → fett
@@ -457,7 +469,8 @@ ETL Pipeline:
       - fiber_100g → ballaststoffe
       - sugars_100g → zucker
       - saturated-fat_100g → gesaettigte_fettsaeuren
-      - etc.
+      - sodium_100g → natrium (stored in mg)
+   e. Mark staging rows as promoted
 ```
 
 **Watch out for:**
@@ -465,6 +478,7 @@ ETL Pipeline:
 - Many products are duplicates or have incomplete data
 - Product names are inconsistent (brand sometimes in name, sometimes not)
 - ODbL license requires attribution in the app (e.g., "Product data from Open Food Facts")
+- The app now surfaces OFF attribution and `dataQualityScore` on detail pages for promoted OFF foods
 
 ### 5.3 Swiss Food Composition Database ETL
 
@@ -580,10 +594,13 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - New persisted records must write canonical Supabase food IDs only.
 - Once old mock/local records are migrated, delete `lib/legacy-food-map.ts`.
 
-### Phase 4: Search Migration — IN PROGRESS
+### Phase 4: Search Migration — PARTIALLY COMPLETE
 
 - ✅ Cmd+K command palette calls `search_foods()` via Supabase RPC (passing `auth.uid()` when available), with `shouldFilter={false}` so cmdk doesn't re-filter results. ILIKE substring fallback ensures short/partial queries return results even below the 0.3 trigram threshold. Local fuzzy search shows instantly while the RPC loads; remote results replace them when available.
-- ⏳ `/lebensmittel` table filters still use the local fuzzy search helpers. When OFF/Swiss data lands, replace `useFoodSearch()` with server-backed queries (or pagination) so the page scales as well as the palette.
+- ✅ `/lebensmittel` now uses a paginated server-backed browser API at `/api/foods/browser` instead of hydrating the full catalog into the client.
+- ✅ Name-mode foods search prefers the `search_foods_with_total()` RPC so the UI can paginate ranked fuzzy matches and display an accurate total count.
+- ✅ The browser falls back to `search_foods()` if `search_foods_with_total()` is not present yet, which keeps older environments usable during rollout.
+- ⏳ Cologne phonetics still only run client-side for the command palette fallback; they have not been ported into Postgres yet.
 
 ### Phase 5: localStorage → Supabase (Remaining User Data) — NOT STARTED
 
@@ -614,18 +631,20 @@ Document this behavior in the release notes so testers know their custom entries
 
 ## 7. Search Architecture
 
-### Current: Client-Side Fuzzy Search (operating on 7,140 BLS foods)
+### Current: Hybrid Search Architecture
 - Layout loads a lightweight search index (`FoodSearchItem[]` — id, name, categoryId only, ~100 KB) via `fetchFoodSearchIndex()`
 - Cmd+K palette calls the `search_foods()` Postgres RPC for typed queries; falls back to the lightweight `FoodSearchProvider` list while idle
-- `/lebensmittel` table still uses client-side `fuzzySearchFoods()` for filtering
+- `/lebensmittel` calls `/api/foods/browser`, which uses paginated server queries and only merges local custom foods into page 1 on the client
 - Cologne phonetics for German sound matching ("Karotte" ↔ "Garotte")
 - Trigram similarity scoring
 - Synonym lookup via `useFoodSynonyms()` hook
-- Works acceptably for 7,140 foods but will degrade with OFF/Swiss additions (10k+ items)
+- The list view now scales to larger catalogs without pushing the full foods table into the browser
 
 ### Deployed: Postgres Trigram + ILIKE Search
 
 The `search_foods()` Postgres function combines trigram similarity (`%` operator) with ILIKE substring fallback for short queries. See `supabase/migrations/20260412000006_search_function.sql` for the full implementation.
+
+The paginated foods browser adds `search_foods_with_total()` in `supabase/migrations/20260503000019_search_foods_with_total.sql`. It preserves the same matching behavior but includes `COUNT(*) OVER ()` so `/lebensmittel` can render total counts and page navigation for ranked search results.
 
 **Key details:**
 - `shouldFilter={false}` on the cmdk `Command` component — prevents cmdk from re-filtering our server-ranked results
@@ -633,6 +652,8 @@ The `search_foods()` Postgres function combines trigram similarity (`%` operator
 - **Must** pass `auth.uid()` as `requesting_user_id` or custom foods will be silently excluded
 
 **Troubleshooting empty search results:** Check (1) PostgREST `max_rows` in `config.toml`, (2) auth token being passed correctly, (3) RLS policies allowing `authenticated` role to read `foods`.
+
+**Important rollout note:** apply `20260503000019_search_foods_with_total.sql` before expecting accurate paginated totals in `/lebensmittel`. Without it, the UI falls back to `search_foods()` and still works, but total counts are approximate.
 
 **Future:** Port Cologne phonetics to a Postgres function for server-side German sound matching.
 

@@ -3,8 +3,15 @@ import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
+import { getFoodGroupDescendants } from "@/lib/data/food-groups";
 import { BRANDED_FOODS } from "@/lib/mock-data/branded-foods";
-import type { Food, FoodSearchItem, FoodSourceId } from "@/lib/types/food";
+import type {
+  Food,
+  FoodBrowserQuery,
+  FoodBrowserResult,
+  FoodSearchItem,
+  FoodSourceId,
+} from "@/lib/types/food";
 import type { NutrientValue } from "@/lib/types/nutrients";
 import { createClient as createServerSupabaseClient, createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
@@ -66,6 +73,18 @@ export interface FoodQueryOptions {
 export interface FoodQueryResult {
   foods: Food[];
   count: number | null;
+}
+
+interface SearchFoodsRpcRow {
+  food_id: string;
+  food_name: string;
+  similarity_score: number;
+  data_source_id: string;
+  bls_code: string | null;
+  category_id: string | null;
+  food_group_id: string | null;
+  is_branded: boolean;
+  total_count?: number | null;
 }
 
 
@@ -365,6 +384,7 @@ function mapFoodRow(row: FoodRowWithRelations): Food {
     co2PerPortion: row.co2_per_portion ?? undefined,
     sustainabilityScore: row.sustainability_score ?? undefined,
     prodScore: row.prod_score ?? undefined,
+    dataQualityScore: row.data_quality_score ?? undefined,
     isBranded: row.is_branded,
     isCustom: row.is_custom,
     isRecipeDerived: row.is_recipe_derived,
@@ -382,6 +402,8 @@ function formatSource(row: FoodRow): string {
       return version ? `BLS ${version}` : "BLS";
     case "custom":
       return "Eigene Eingabe";
+    case "off":
+      return "Open Food Facts";
     case "hersteller":
       return "Hersteller";
     default:
@@ -457,6 +479,7 @@ function mapRpcFoodRow(row: RpcFoodRow): Food {
     co2PerPortion: row.co2_per_portion ?? undefined,
     sustainabilityScore: row.sustainability_score ?? undefined,
     prodScore: row.prod_score ?? undefined,
+    dataQualityScore: row.data_quality_score ?? undefined,
     isBranded: row.is_branded,
     isCustom: row.is_custom,
     isRecipeDerived: row.is_recipe_derived,
@@ -474,6 +497,8 @@ function formatSourceFromRpc(row: RpcFoodRow): string {
       return version ? `BLS ${version}` : "BLS";
     case "custom":
       return "Eigene Eingabe";
+    case "off":
+      return "Open Food Facts";
     case "hersteller":
       return "Hersteller";
     default:
@@ -524,6 +549,200 @@ export async function fetchFoodsViaRpc(options: FetchFoodsViaRpcOptions = {}): P
     );
     return foods;
   }
+}
+
+function clampPage(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return 1;
+  return Math.floor(value);
+}
+
+function clampPageSize(value: number | undefined) {
+  if (!value || Number.isNaN(value)) return 50;
+  return Math.min(100, Math.max(10, Math.floor(value)));
+}
+
+function normalizeFoodBrowserQuery(query: FoodBrowserQuery) {
+  const page = clampPage(query.page);
+  const pageSize = clampPageSize(query.pageSize);
+  return {
+    q: query.q?.trim() ?? "",
+    mode: query.mode ?? "name",
+    categoryId: query.categoryId ?? null,
+    dataSourceId:
+      query.dataSourceId && query.dataSourceId !== "all" ? query.dataSourceId : null,
+    groupId: query.groupId ?? null,
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize,
+  };
+}
+
+async function fetchFoodsBrowserPageByName(
+  query: ReturnType<typeof normalizeFoodBrowserQuery>,
+  client: SupabaseClient,
+): Promise<FoodBrowserResult> {
+  const params = {
+    search_query: query.q,
+    source_filter: query.dataSourceId,
+    category_filter: query.categoryId,
+    group_filter: query.groupId,
+    branded_only: query.dataSourceId === "off" ? true : null,
+    requesting_user_id: null,
+    result_limit: query.pageSize,
+    result_offset: query.offset,
+  };
+
+  let rows: SearchFoodsRpcRow[] = [];
+  let totalCount = 0;
+
+  const { data, error } = await withTimeout(
+    client.rpc("search_foods_with_total", params),
+    10000,
+    "Supabase search_foods_with_total request timed out",
+  );
+
+  if (error) {
+    const fallback = await withTimeout(
+      client.rpc("search_foods", params),
+      10000,
+      "Supabase search_foods request timed out",
+    );
+
+    if (fallback.error) {
+      throw new Error(`Food browser name search failed: ${fallback.error.message}`);
+    }
+
+    rows = ((fallback.data ?? []) as SearchFoodsRpcRow[]).map((row) => ({
+      ...row,
+      total_count: null,
+    }));
+    totalCount = rows.length + query.offset;
+  } else {
+    rows = (data ?? []) as SearchFoodsRpcRow[];
+    totalCount = rows[0]?.total_count ? Number(rows[0].total_count) : 0;
+  }
+
+  if (rows.length === 0) {
+    return {
+      foods: [],
+      totalCount,
+      page: query.page,
+      pageSize: query.pageSize,
+      hasMore: false,
+    };
+  }
+
+  const foods = await fetchFoodsByIds(
+    rows.map((row) => row.food_id),
+    client,
+  );
+  const byId = new Map(foods.map((food) => [food.id, food]));
+  const orderedFoods = rows
+    .map((row) => byId.get(row.food_id))
+    .filter((food): food is Food => Boolean(food));
+
+  return {
+    foods: orderedFoods,
+    totalCount,
+    page: query.page,
+    pageSize: query.pageSize,
+    hasMore: query.offset + orderedFoods.length < totalCount,
+  };
+}
+
+async function fetchFoodsBrowserPageByQuery(
+  query: ReturnType<typeof normalizeFoodBrowserQuery>,
+  client: SupabaseClient,
+): Promise<FoodBrowserResult> {
+  const withCount = true;
+  let builder = client
+    .from("foods")
+    .select(
+      [
+        "id",
+        "name",
+        "data_source_id",
+        "source_food_id",
+        "source_version",
+        "bls_code",
+        "food_group_id",
+        "category_id",
+        "manufacturer",
+        "allergens",
+        "additives",
+        "tags",
+        "is_branded",
+        "is_custom",
+        "is_recipe_derived",
+        "co2_per_portion",
+        "sustainability_score",
+        "prod_score",
+        "data_quality_score",
+        "imported_at",
+        "created_at",
+        "updated_at",
+        "food_nutrients(nutrient_id,amount,per_amount)",
+      ].join(","),
+      { count: withCount ? "exact" : undefined },
+    )
+    .order(query.mode === "code" ? "bls_code" : "name", { ascending: true });
+
+  if (query.dataSourceId) {
+    builder = builder.eq("data_source_id", query.dataSourceId);
+  }
+  if (query.categoryId) {
+    builder = builder.eq("category_id", query.categoryId);
+  }
+  if (query.groupId) {
+    builder = builder.in("food_group_id", getFoodGroupDescendants(query.groupId));
+  }
+  if (query.dataSourceId === "off") {
+    builder = builder.eq("is_branded", true);
+  }
+  if (query.mode === "code" && query.q) {
+    const escaped = escapeForILike(query.q);
+    builder = builder.or(`bls_code.ilike.%${escaped}%,source_food_id.ilike.%${escaped}%`);
+  } else if (query.mode !== "browse" && query.q) {
+    const escaped = escapeForILike(query.q);
+    builder = builder.ilike("name", `%${escaped}%`);
+  }
+
+  builder = builder.range(query.offset, query.offset + query.pageSize - 1);
+
+  const { data, error, count } = await withTimeout(
+    builder,
+    10000,
+    "Supabase food browser request timed out",
+  );
+
+  if (error) {
+    throw new Error(`Food browser query failed: ${error.message}`);
+  }
+
+  const foods = ((data ?? []) as unknown as FoodRowWithRelations[]).map(mapFoodRow);
+  const totalCount = count ?? foods.length;
+
+  return {
+    foods,
+    totalCount,
+    page: query.page,
+    pageSize: query.pageSize,
+    hasMore: query.offset + foods.length < totalCount,
+  };
+}
+
+export async function fetchFoodsBrowserPage(
+  query: FoodBrowserQuery,
+  supabase?: SupabaseClient,
+): Promise<FoodBrowserResult> {
+  const normalized = normalizeFoodBrowserQuery(query);
+  const client = await resolveClient(supabase);
+
+  if (normalized.mode === "name" && normalized.q) {
+    return fetchFoodsBrowserPageByName(normalized, client);
+  }
+
+  return fetchFoodsBrowserPageByQuery(normalized, client);
 }
 
 /* ─── Chunked caching (keeps each unstable_cache entry under 2 MB) ─── */

@@ -34,6 +34,14 @@ export const FOOD_SOURCES: FoodSourceDefinition[] = [
     coverage: "5.200 Lebensmittel / 210 Nährstoffe",
   },
   {
+    id: "off",
+    name: "Open Food Facts",
+    version: "LIVE",
+    updatedAt: "2026-04-18",
+    description: "Community-getragene Produktdatenbank fuer verpackte Lebensmittel mit klinischer Quarantaene-Pruefung vor Freigabe.",
+    coverage: "Live-Sync fuer Markenprodukte / variierende Naehrstofftiefe",
+  },
+  {
     id: "hersteller",
     name: "Herstellerdaten",
     version: "2026-03",

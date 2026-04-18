@@ -33,6 +33,8 @@ Recent platform changes:
 - Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
 - The full patient workspace on `/patienten/[id]` now persists to Supabase, including anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM results, and digital protocol links.
+- `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.
+- Open Food Facts is now a first-class food source with validated product promotion, attribution, and detail-page quality indicators.
 
 ## 🛠 Development
 
@@ -47,6 +49,21 @@ Recent platform changes:
 To populate the food database (7,140 items):
 ```bash
 npm run etl:bls
+```
+
+To stage and promote Open Food Facts products:
+```bash
+npm run etl:off
+```
+
+`scripts/etl/import-off.ts` supports three input modes via env vars:
+- `OFF_SOURCE_FILE` for a local JSON file
+- `OFF_SOURCE_URL` for a remote JSON payload
+- no OFF source env vars to fetch a live sample from Open Food Facts
+
+Apply the latest migrations before using the paginated foods browser or OFF search:
+```bash
+npx supabase db push
 ```
 
 ### Validation

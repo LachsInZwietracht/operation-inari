@@ -68,6 +68,7 @@ export interface Food extends Timestamped {
   co2PerPortion?: number;
   sustainabilityScore?: number;
   prodScore?: number;
+  dataQualityScore?: number;
   isBranded?: boolean;
   isCustom?: boolean;
   isRecipeDerived?: boolean;
@@ -96,4 +97,22 @@ export interface FoodSearchItem {
   categoryId: ID;
   sourceId?: FoodSourceId;
   isCustom?: boolean;
+}
+
+export interface FoodBrowserQuery {
+  q?: string;
+  mode?: "name" | "code" | "group" | "browse";
+  categoryId?: string | null;
+  dataSourceId?: FoodSourceId | "all" | null;
+  groupId?: string | null;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface FoodBrowserResult {
+  foods: Food[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }

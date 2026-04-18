@@ -142,6 +142,7 @@ export function FoodDetailContent({ food }: { food: Food }) {
         <Badge variant="secondary">{categoryName}</Badge>
         {food.isCustom && <Badge variant="outline">Custom</Badge>}
         {food.isRecipeDerived && <Badge variant="outline">Aus Rezept</Badge>}
+        {food.sourceId === "off" && <Badge variant="outline">Open Food Facts</Badge>}
       </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -162,6 +163,12 @@ export function FoodDetailContent({ food }: { food: Food }) {
               <div className="rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
                 <p className="font-medium text-foreground">{sourceMeta.name}</p>
                 <p>{sourceMeta.description}</p>
+              </div>
+            )}
+            {food.sourceId === "off" && (
+              <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">Produktdaten von Open Food Facts</p>
+                <p>Nur validierte und in den Hauptkatalog uebernommene Produkte werden angezeigt.</p>
               </div>
             )}
           </CardContent>
@@ -237,6 +244,17 @@ export function FoodDetailContent({ food }: { food: Food }) {
                 </p>
               )}
             </div>
+            {food.dataQualityScore !== undefined && (
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Datenqualitaet</p>
+                <p className="text-lg font-semibold">{formatNumber(food.dataQualityScore, 0)} / 100</p>
+                <p className="text-muted-foreground text-xs">
+                  {food.dataQualityScore >= 80
+                    ? "Vollstaendig genug fuer den Hauptkatalog."
+                    : "Naehrstoffbild ist sichtbar, kann aber unvollstaendig sein."}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

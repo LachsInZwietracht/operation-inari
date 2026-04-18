@@ -27,6 +27,7 @@
   - **Robustness:** All database calls use `withTimeout` and `try-catch` to ensure the UI stays responsive even if the backend is slow.
 - **Foods & Search:**
   - **Search-on-Demand:** Instead of pre-fetching 7,000 foods, the app uses a lightweight search index. Full food details are fetched only when an item is selected.
+  - **Server-backed foods browser:** `/lebensmittel` no longer hydrates the full list view into the client. The route loads an initial paginated server result and the client fetches subsequent pages through `/api/foods/browser`.
   - **Client-safe fetchers:** `lib/data/foods-client.ts` provides optimized browser-side Supabase queries.
 - **Scientific Integrity:** 
   - All nutrient calculations are mathematically validated against the BLS 4.0 ground truth via `scripts/validate-nutrient-math.ts`.
@@ -45,10 +46,15 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.2 Lebensmittel (Foods) (`/lebensmittel`)
 - **Listing + search:** `app/(app)/lebensmittel/page.tsx`
-  - Hooks: `useFoodSearch`, `useCustomFoods`, `useFoodSynonyms`.
-  - UI: Search mode buttons, filters (source, categories), results table.
-  - Data: `FOODS`, `FOOD_CATEGORIES`, `FOOD_SOURCES`, `FOOD_GROUPS`.
+  - Server page calls `fetchFoodsBrowserPage()` for the initial result set and the initial OFF-branded tab payload.
+  - Client page (`lebensmittel-client.tsx`) keeps the existing search modes and filters, but fetches page changes through `/api/foods/browser`.
+  - Hooks: `useCustomFoods`, `useFoodSynonyms`.
+  - UI: Search mode buttons, filters (source, categories), paginated results table, OFF-branded products tab.
+  - Data: `FOOD_CATEGORIES`, `FOOD_SOURCES`, `FOOD_GROUPS`, `fetchFoodsBrowserPage()`, `/api/foods/browser`.
 - **Group navigation:** `FoodGroupTree` uses `FOOD_GROUPS`; ensure new groups update `getFoodGroupDescendants`.
+- **Search contract:** name-mode search prefers the `search_foods_with_total` RPC and falls back to `search_foods()` if the new migration has not been applied yet. Code/group/browse modes use direct paginated Supabase queries.
+- **Custom foods:** Local custom foods are still merged into page 1 so offline/unauthenticated entries remain visible without reintroducing full-catalog hydration.
+- **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
 
 ### 4.6 Rezepte Overview (`/rezepte`)
 - **Component:** `app/(app)/rezepte/page.tsx`
@@ -134,20 +140,22 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ## 6. Scripts & ETL
 - **BLS Import (`scripts/etl/import-bls.ts`):** Syncs the 7,140 food items from the Excel source to Supabase.
-- **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Stages, validates, and promotes foods.
+- **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Supports local-file, remote-URL, or live-sample inputs, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`.
 - **Scientific Validation (`scripts/validate-nutrient-math.ts`):** Running `npm run validate:nutrients` performs 113+ mathematical assertions to ensure calculation parity with official standards.
 
 ## 7. Testing & Verification Checklist
 For each feature update:
 1. **Performance:** Hard-refresh a page. The layout should appear in < 300ms. Heavy data should shimmer-load.
 2. **Search:** Open global search (Cmd+K). Initial load should show a spinner once, then be instant.
-3. **Smart-Eingabe:** Enter "1 Glas Milch" in a protocol. It should resolve the ID, amount, and unit correctly.
-4. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
-5. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
-6. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
-7. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, lab value, activity, therapy module, integration sync event, PROCAM result, and digital protocol link; reload and confirm each persists.
-8. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
-9. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
-10. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
+3. **Foods browser:** On `/lebensmittel`, verify page 1 renders immediately, page navigation works, source/category filters round-trip through `/api/foods/browser`, and fuzzy name search still finds typo variants.
+4. **Smart-Eingabe:** Enter "1 Glas Milch" in a protocol. It should resolve the ID, amount, and unit correctly.
+5. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
+6. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
+7. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
+8. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, lab value, activity, therapy module, integration sync event, PROCAM result, and digital protocol link; reload and confirm each persists.
+9. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
+10. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
+11. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
+12. **OFF catalog:** Run `npm run etl:off`, confirm validated OFF products appear under `/lebensmittel` source filter `Open Food Facts`, and verify detail pages show attribution plus quality score.
 
 Following this guide ensures new engineers can trace each feature from route → component → hook → data, understand persistence, and avoid breaking coupled flows.

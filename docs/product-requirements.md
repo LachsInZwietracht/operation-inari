@@ -26,7 +26,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **Multilingual food names** — Implement as a `food_translations` table linked to each food item; UI language selector determines which name is shown.
 
 ### 1.2 Manufacturer Product Database (The "Data Moat")
-**Status:** Partially implemented (small mock manufacturer catalog + custom food builder).
+**Status:** Partially implemented (Open Food Facts validation/promotion pipeline is live; direct clinical manufacturer feeds and broader catalog depth remain open).
 - **29,000+ branded products** from major food manufacturers.
 - **Live API Integration (Market Leader Feature):** Move beyond PRODI's static updates by integrating with **Open Food Facts (OFF)** and direct clinical manufacturer feeds (Fresenius Kabi, Nutricia, Abbott).
 - Ability to add and manage custom food entries with nutrient values, portions, and allergens.
@@ -37,7 +37,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - Reference values adjustable by age, gender, pregnancy, lactation.
 
 ### 1.4 Advanced Food Search
-**Status:** Implemented (Kölner Phonetik, trigram search, synonym management).
+**Status:** Implemented (Kölner Phonetik, trigram search, synonym management, and paginated server-backed `/lebensmittel` browsing).
 - **Phonetic / fuzzy search (Kölner Phonetik)** — tolerate typos and umlaut variations. Implement using phonetic indexing (e.g., pg_trgm trigram index in PostgreSQL) to generate codes at food-insert time. This is a primary competitive advantage over international SaaS.
 - **Multiple search modes** — food name, database code (BLS code), food group hierarchy, and full browse.
 - **Food synonym management** — `food_synonyms` table linking user-defined names to food IDs; synonyms replace original names in search and printouts.

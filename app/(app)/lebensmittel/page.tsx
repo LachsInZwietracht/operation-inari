@@ -1,12 +1,16 @@
 import { LebensmittelPageClient } from "./lebensmittel-client";
-import { fetchAllFoodsForList } from "@/lib/data/foods";
-import { FoodsProvider } from "@/components/foods-provider";
+import { fetchFoodsBrowserPage } from "@/lib/data/foods";
 
 export default async function LebensmittelPage() {
-  const foods = await fetchAllFoodsForList();
+  const [initialResult, initialBrandedResult] = await Promise.all([
+    fetchFoodsBrowserPage({ mode: "name", page: 1, pageSize: 50 }),
+    fetchFoodsBrowserPage({ mode: "browse", dataSourceId: "off", page: 1, pageSize: 12 }),
+  ]);
+
   return (
-    <FoodsProvider foods={foods}>
-      <LebensmittelPageClient />
-    </FoodsProvider>
+    <LebensmittelPageClient
+      initialResult={initialResult}
+      initialBrandedResult={initialBrandedResult}
+    />
   );
 }
