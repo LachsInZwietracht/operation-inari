@@ -581,154 +581,190 @@ async function fetchFoodsBrowserPageByName(
   query: ReturnType<typeof normalizeFoodBrowserQuery>,
   client: SupabaseClient,
 ): Promise<FoodBrowserResult> {
-  const params = {
-    search_query: query.q,
-    source_filter: query.dataSourceId,
-    category_filter: query.categoryId,
-    group_filter: query.groupId,
-    branded_only: query.dataSourceId === "off" ? true : null,
-    requesting_user_id: null,
-    result_limit: query.pageSize,
-    result_offset: query.offset,
-  };
+  try {
+    const params = {
+      search_query: query.q,
+      source_filter: query.dataSourceId,
+      category_filter: query.categoryId,
+      group_filter: query.groupId,
+      branded_only: query.dataSourceId === "off" ? true : null,
+      requesting_user_id: null,
+      result_limit: query.pageSize,
+      result_offset: query.offset,
+    };
 
-  let rows: SearchFoodsRpcRow[] = [];
-  let totalCount = 0;
+    let rows: SearchFoodsRpcRow[] = [];
+    let totalCount = 0;
 
-  const { data, error } = await withTimeout(
-    client.rpc("search_foods_with_total", params),
-    10000,
-    "Supabase search_foods_with_total request timed out",
-  );
-
-  if (error) {
-    const fallback = await withTimeout(
-      client.rpc("search_foods", params),
+    const { data, error } = await withTimeout(
+      client.rpc("search_foods_with_total", params),
       10000,
-      "Supabase search_foods request timed out",
+      "Supabase search_foods_with_total request timed out",
     );
 
-    if (fallback.error) {
-      throw new Error(`Food browser name search failed: ${fallback.error.message}`);
+    if (error) {
+      const fallback = await withTimeout(
+        client.rpc("search_foods", params),
+        10000,
+        "Supabase search_foods request timed out",
+      );
+
+      if (fallback.error) {
+        console.error(`Food browser name search failed: ${fallback.error.message}`);
+        return {
+          foods: [],
+          totalCount: 0,
+          page: query.page,
+          pageSize: query.pageSize,
+          hasMore: false,
+        };
+      }
+
+      rows = ((fallback.data ?? []) as SearchFoodsRpcRow[]).map((row) => ({
+        ...row,
+        total_count: null,
+      }));
+      totalCount = rows.length + query.offset;
+    } else {
+      rows = (data ?? []) as SearchFoodsRpcRow[];
+      totalCount = rows[0]?.total_count ? Number(rows[0].total_count) : 0;
     }
 
-    rows = ((fallback.data ?? []) as SearchFoodsRpcRow[]).map((row) => ({
-      ...row,
-      total_count: null,
-    }));
-    totalCount = rows.length + query.offset;
-  } else {
-    rows = (data ?? []) as SearchFoodsRpcRow[];
-    totalCount = rows[0]?.total_count ? Number(rows[0].total_count) : 0;
-  }
+    if (rows.length === 0) {
+      return {
+        foods: [],
+        totalCount,
+        page: query.page,
+        pageSize: query.pageSize,
+        hasMore: false,
+      };
+    }
 
-  if (rows.length === 0) {
+    const foods = await fetchFoodsByIds(
+      rows.map((row) => row.food_id),
+      client,
+    );
+    const byId = new Map(foods.map((food) => [food.id, food]));
+    const orderedFoods = rows
+      .map((row) => byId.get(row.food_id))
+      .filter((food): food is Food => Boolean(food));
+
+    return {
+      foods: orderedFoods,
+      totalCount,
+      page: query.page,
+      pageSize: query.pageSize,
+      hasMore: query.offset + orderedFoods.length < totalCount,
+    };
+  } catch (error) {
+    console.error("fetchFoodsBrowserPageByName error:", error);
     return {
       foods: [],
-      totalCount,
+      totalCount: 0,
       page: query.page,
       pageSize: query.pageSize,
       hasMore: false,
     };
   }
-
-  const foods = await fetchFoodsByIds(
-    rows.map((row) => row.food_id),
-    client,
-  );
-  const byId = new Map(foods.map((food) => [food.id, food]));
-  const orderedFoods = rows
-    .map((row) => byId.get(row.food_id))
-    .filter((food): food is Food => Boolean(food));
-
-  return {
-    foods: orderedFoods,
-    totalCount,
-    page: query.page,
-    pageSize: query.pageSize,
-    hasMore: query.offset + orderedFoods.length < totalCount,
-  };
 }
 
 async function fetchFoodsBrowserPageByQuery(
   query: ReturnType<typeof normalizeFoodBrowserQuery>,
   client: SupabaseClient,
 ): Promise<FoodBrowserResult> {
-  const withCount = true;
-  let builder = client
-    .from("foods")
-    .select(
-      [
-        "id",
-        "name",
-        "data_source_id",
-        "source_food_id",
-        "source_version",
-        "bls_code",
-        "food_group_id",
-        "category_id",
-        "manufacturer",
-        "allergens",
-        "additives",
-        "tags",
-        "is_branded",
-        "is_custom",
-        "is_recipe_derived",
-        "co2_per_portion",
-        "sustainability_score",
-        "prod_score",
-        "data_quality_score",
-        "imported_at",
-        "created_at",
-        "updated_at",
-        "food_nutrients(nutrient_id,amount,per_amount)",
-      ].join(","),
-      { count: withCount ? "exact" : undefined },
-    )
-    .order(query.mode === "code" ? "bls_code" : "name", { ascending: true });
+  try {
+    const withCount = true;
+    let builder = client
+      .from("foods")
+      .select(
+        [
+          "id",
+          "name",
+          "data_source_id",
+          "source_food_id",
+          "source_version",
+          "bls_code",
+          "food_group_id",
+          "category_id",
+          "manufacturer",
+          "allergens",
+          "additives",
+          "tags",
+          "is_branded",
+          "is_custom",
+          "is_recipe_derived",
+          "co2_per_portion",
+          "sustainability_score",
+          "prod_score",
+          "data_quality_score",
+          "imported_at",
+          "created_at",
+          "updated_at",
+          "food_nutrients(nutrient_id,amount,per_amount)",
+        ].join(","),
+        { count: withCount ? "exact" : undefined },
+      )
+      .order(query.mode === "code" ? "bls_code" : "name", { ascending: true });
 
-  if (query.dataSourceId) {
-    builder = builder.eq("data_source_id", query.dataSourceId);
-  }
-  if (query.categoryId) {
-    builder = builder.eq("category_id", query.categoryId);
-  }
-  if (query.groupId) {
-    builder = builder.in("food_group_id", getFoodGroupDescendants(query.groupId));
-  }
-  if (query.dataSourceId === "off") {
-    builder = builder.eq("is_branded", true);
-  }
-  if (query.mode === "code" && query.q) {
-    const escaped = escapeForILike(query.q);
-    builder = builder.or(`bls_code.ilike.%${escaped}%,source_food_id.ilike.%${escaped}%`);
-  } else if (query.mode !== "browse" && query.q) {
-    const escaped = escapeForILike(query.q);
-    builder = builder.ilike("name", `%${escaped}%`);
-  }
+    if (query.dataSourceId) {
+      builder = builder.eq("data_source_id", query.dataSourceId);
+    }
+    if (query.categoryId) {
+      builder = builder.eq("category_id", query.categoryId);
+    }
+    if (query.groupId) {
+      builder = builder.in("food_group_id", getFoodGroupDescendants(query.groupId));
+    }
+    if (query.dataSourceId === "off") {
+      builder = builder.eq("is_branded", true);
+    }
+    if (query.mode === "code" && query.q) {
+      const escaped = escapeForILike(query.q);
+      builder = builder.or(`bls_code.ilike.%${escaped}%,source_food_id.ilike.%${escaped}%`);
+    } else if (query.mode !== "browse" && query.q) {
+      const escaped = escapeForILike(query.q);
+      builder = builder.ilike("name", `%${escaped}%`);
+    }
 
-  builder = builder.range(query.offset, query.offset + query.pageSize - 1);
+    builder = builder.range(query.offset, query.offset + query.pageSize - 1);
 
-  const { data, error, count } = await withTimeout(
-    builder,
-    10000,
-    "Supabase food browser request timed out",
-  );
+    const { data, error, count } = await withTimeout(
+      builder,
+      10000,
+      "Supabase food browser request timed out",
+    );
 
-  if (error) {
-    throw new Error(`Food browser query failed: ${error.message}`);
+    if (error) {
+      console.error(`Food browser query failed: ${error.message}`);
+      return {
+        foods: [],
+        totalCount: 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        hasMore: false,
+      };
+    }
+
+    const foods = ((data ?? []) as unknown as FoodRowWithRelations[]).map(mapFoodRow);
+    const totalCount = count ?? foods.length;
+
+    return {
+      foods,
+      totalCount,
+      page: query.page,
+      pageSize: query.pageSize,
+      hasMore: query.offset + foods.length < totalCount,
+    };
+  } catch (error) {
+    console.error("fetchFoodsBrowserPageByQuery error:", error);
+    return {
+      foods: [],
+      totalCount: 0,
+      page: query.page,
+      pageSize: query.pageSize,
+      hasMore: false,
+    };
   }
-
-  const foods = ((data ?? []) as unknown as FoodRowWithRelations[]).map(mapFoodRow);
-  const totalCount = count ?? foods.length;
-
-  return {
-    foods,
-    totalCount,
-    page: query.page,
-    pageSize: query.pageSize,
-    hasMore: query.offset + foods.length < totalCount,
-  };
 }
 
 export async function fetchFoodsBrowserPage(
