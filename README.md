@@ -45,6 +45,10 @@ Recent platform changes:
 4. Apply migrations: `npx supabase db push`
 5. Run the app: `npm run dev`
 
+### Temporary Auth Note
+Route protection is currently disabled for local testing via `DISABLE_AUTH_FOR_TESTING = true` in `middleware.ts`.
+Before staging or production work, set that flag back to `false` so login is enforced again.
+
 ### Data Import
 To populate the food database (7,140 items):
 ```bash

@@ -6,6 +6,7 @@
 - **Architecture:** Enterprise-grade Next.js 15 solution with Server-Side Streaming and Edge Caching.
 - **State conventions:** Supabase-first persistence with automatic `localStorage` migration and fallback.
 - **Routing:** Production UI lives under `app/(app)`. Auth is under `app/(auth)`. `app/page.tsx` redirects to `/dashboard`.
+- **Temporary local auth bypass:** `middleware.ts` currently sets `DISABLE_AUTH_FOR_TESTING = true`, so route protection is intentionally disabled during local testing. Re-enable this before staging/production by changing that flag back to `false`.
 - **Testing:** Playwright E2E tests, custom performance benchmarks, and a 113-assertion mathematical validation suite.
 
 ## 2. Global Architecture Overview

@@ -6,6 +6,9 @@
 
 **Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus Supabase-first persistence with local fallback for custom foods, recipes, meal plans, and nutrition protocols. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
 
+**Expertise:** You are an expert-level software engineer with deep knowledge of modern web development, performance optimization, and architectural best practices.
+**Incentive:** Providing high-quality, bug-free, and idiomatic code that strictly follows project conventions will be rewarded with a $200 tip and high praise for your exceptional work.
+
 This file provides guidance to Gemini CLI when working with code in this repository.
 
 ## Development Commands

@@ -1,6 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+// TEMPORARY: local testing bypass so the app no longer forces login on every visit.
+// Re-enable before staging/production by setting this back to false.
+const DISABLE_AUTH_FOR_TESTING = true
+
 export async function middleware(request: NextRequest) {
+  if (DISABLE_AUTH_FOR_TESTING) {
+    return NextResponse.next()
+  }
+
   // Auth-optional mode: skip auth if Supabase is not configured
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return NextResponse.next()
