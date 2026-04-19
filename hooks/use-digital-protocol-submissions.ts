@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { DigitalProtocolSubmission } from "@/lib/types";
 import {
+  completeSubmissionConversionClient,
+  fetchSubmissionByIdClient,
   fetchSubmissionsForPatientClient,
   updateSubmissionStatusClient,
 } from "@/lib/data/digital-protocol-submissions-client";
@@ -65,5 +67,35 @@ export function useDigitalProtocolSubmissions(patientId: string) {
     }
   }, [patientId, isAuthenticated]);
 
-  return { submissions, isLoading, updateStatus, refresh };
+  const getSubmission = useCallback(
+    (submissionId: string) =>
+      submissions.find((submission) => submission.id === submissionId),
+    [submissions]
+  );
+
+  const loadSubmission = useCallback(
+    async (submissionId: string) => {
+      if (!isAuthenticated) return null;
+      try {
+        return await fetchSubmissionByIdClient(submissionId);
+      } catch (error) {
+        console.error("Failed to load protocol submission:", error);
+        return null;
+      }
+    },
+    [isAuthenticated]
+  );
+
+  const markConverted = useCallback(
+    async (submissionId: string, protocolId: string) => {
+      const updated = await completeSubmissionConversionClient(submissionId, protocolId);
+      setSubmissions((prev) =>
+        prev.map((submission) => (submission.id === submissionId ? updated : submission))
+      );
+      return updated;
+    },
+    []
+  );
+
+  return { submissions, isLoading, updateStatus, refresh, getSubmission, loadSubmission, markConverted };
 }

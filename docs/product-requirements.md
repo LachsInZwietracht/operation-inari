@@ -95,8 +95,9 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **Freiburger Ernährungsprotokoll template** — standardized Freiburg protocol matching official DIN A4 layout.
 
 ### 4.3 Digital Client Protocol (Remote Entry)
-**Status:** Implemented (mock data).
-- Web-based entry for patients via smartphone; real-time sync to practitioner's dashboard.
+**Status:** Implemented (public entry, practitioner review inbox, and draft conversion workflow).
+- Web-based entry for patients via smartphone; submissions sync into the practitioner's dashboard.
+- Practitioners can review incoming submissions and convert them into prefilled internal nutrition protocols for final clinical cleanup and save.
 
 ---
 

@@ -59,6 +59,32 @@ export async function fetchSubmissionsForPatientClient(
   return ((data ?? []) as unknown as SubmissionRow[]).map(mapRow);
 }
 
+export async function fetchSubmissionByIdClient(
+  submissionId: string,
+  supabase?: SupabaseClient
+): Promise<DigitalProtocolSubmission | null> {
+  const client = resolveBrowserClient(supabase);
+  const { data, error } = await withTimeout(
+    client
+      .from("digital_protocol_submissions")
+      .select("*")
+      .eq("id", submissionId)
+      .maybeSingle(),
+    5000,
+    "Supabase submission lookup timed out"
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return mapRow(data as unknown as SubmissionRow);
+}
+
 export async function updateSubmissionStatusClient(
   submissionId: string,
   status: DigitalProtocolSubmission["status"],
@@ -73,4 +99,30 @@ export async function updateSubmissionStatusClient(
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function completeSubmissionConversionClient(
+  submissionId: string,
+  protocolId: string
+): Promise<DigitalProtocolSubmission> {
+  const response = await fetch("/api/digital-protocol-submissions/convert", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      submissionId,
+      protocolId,
+    }),
+  });
+
+  const body = (await response.json().catch(() => null)) as
+    | { error?: string; submission?: SubmissionRow }
+    | null;
+
+  if (!response.ok || !body?.submission) {
+    throw new Error(body?.error ?? `Fehler beim Uebernehmen der Einreichung (${response.status})`);
+  }
+
+  return mapRow(body.submission);
 }

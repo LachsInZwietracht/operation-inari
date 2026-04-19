@@ -23,6 +23,7 @@
 - **Supabase-First Persistence:** 
   - **Patients, Recipes, Meal Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
   - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
+  - **Digital protocol submissions:** Public patient diary submissions are persisted in `digital_protocol_submissions` and can be marked `new`, `reviewed`, or `converted` with an attached `converted_protocol_id`.
   - **Still local-only in the patient workspace:** Demo analytics panels and assistant cards remain client-side only unless otherwise noted.
   - **Auto-Migration:** Hooks automatically detect "dirty" local data on login and migrate it to the Supabase cloud.
   - **Robustness:** All database calls use `withTimeout` and `try-catch` to ensure the UI stays responsive even if the backend is slow.
@@ -78,9 +79,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Anthropometrie, Diagnosen, Medikamente, Screening history, Laborwerte, Aktivität, Therapiemodule/-integrationen, PROCAM, and digitale Protokoll-Links now use Supabase-first persistence with offline `localStorage` fallback.
   - The patient-detail tabs show sync-aware empty states while remote data is loading after authentication.
 - **Digital Protocols:**
-  - **Smart-Eingabe (NLP Lite):** The `ProtocolForm` includes an AI-assisted input that allows entering food like "1 Glas Apfelsaft" or "2 Scheiben Brot".
-  - **NLP Engine:** `lib/nlp-matching.ts` parses free-text for quantity, unit, and food name using keyword heuristics.
-  - **Persistence:** Protocols use `useProtocols` for Supabase-first persistence with automatic local fallback.
+  - Practitioners create public protocol links in the `Protokolle` tab and can review incoming submissions directly in the patient workspace.
+  - `app/protokoll/[linkId]` hosts the public patient-facing form. Submissions post to `/api/protokoll/submit`, which validates the link, stores the submission, and moves the link to `received`.
+  - Submitted diaries can be opened as a prefilled draft via `/patienten/[id]/protokolle/neu?digitalSubmission=<id>`.
+  - Draft generation uses `lib/digital-protocol-conversion.ts`: confident food matches are prefilled as protocol rows, unmatched free text is preserved in notes, and the resulting protocol metadata records the submission source.
+  - Final conversion is completed server-side through `/api/digital-protocol-submissions/convert`, which sets the submission status to `converted` and stores the created protocol ID.
+- **Smart-Eingabe (NLP Lite):** The `ProtocolForm` includes an AI-assisted input that allows entering food like "1 Glas Apfelsaft" or "2 Scheiben Brot".
+- **NLP Engine:** `lib/nlp-matching.ts` parses free-text for quantity, unit, and food name using keyword heuristics.
+- **Persistence:** Protocols use `useProtocols` for Supabase-first persistence with automatic local fallback.
 
 ### 4.14 Berichte (`/berichte`)
 - **Component:** `app/(app)/berichte/berichte-client.tsx`
@@ -154,9 +160,10 @@ For each feature update:
 6. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
 7. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
 8. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, lab value, activity, therapy module, integration sync event, PROCAM result, and digital protocol link; reload and confirm each persists.
-9. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
-10. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
-11. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
-12. **OFF catalog:** Run `npm run etl:off`, confirm validated OFF products appear under `/lebensmittel` source filter `Open Food Facts`, and verify detail pages show attribution plus quality score.
+9. **Digital Protocol Conversion:** Create or open a received digital submission, convert it into a draft from the patient `Protokolle` tab, save the resulting protocol, and confirm the submission can be marked/seen as converted with a linked internal protocol.
+10. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
+11. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
+12. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
+13. **OFF catalog:** Run `npm run etl:off`, confirm validated OFF products appear under `/lebensmittel` source filter `Open Food Facts`, and verify detail pages show attribution plus quality score.
 
 Following this guide ensures new engineers can trace each feature from route → component → hook → data, understand persistence, and avoid breaking coupled flows.

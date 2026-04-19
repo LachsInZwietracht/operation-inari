@@ -33,6 +33,7 @@ Recent platform changes:
 - Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
 - The full patient workspace on `/patienten/[id]` now persists to Supabase, including anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM results, and digital protocol links.
+- Digital protocol submissions now support the full practitioner workflow: public patient entry, dashboard review, conversion into a prefilled internal protocol draft, and server-tracked converted state.
 - `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.
 - Open Food Facts is now a first-class food source with validated product promotion, attribution, and detail-page quality indicators.
 

@@ -57,6 +57,31 @@ export interface ProtocolMetadata {
   participantGender?: Gender;
   templateId?: string;
   householdModeEnabled?: boolean;
+  source?: "digital_protocol_submission";
+  sourceSubmissionId?: ID;
+}
+
+export interface ProtocolDraftEntryInput {
+  foodId: ID;
+  amount: number;
+  mealSlot: MealSlotType;
+  time: string;
+  measurementMode: "grams" | "household";
+  householdUnit?: string;
+  householdQuantity?: number;
+}
+
+export interface ProtocolDraftDayInput {
+  date: string;
+  entries: ProtocolDraftEntryInput[];
+}
+
+export interface ProtocolDraftPrefill {
+  title: string;
+  type: ProtocolType;
+  notes: string;
+  days: ProtocolDraftDayInput[];
+  metadata: ProtocolMetadata;
 }
 
 export interface ProtocolEntry {

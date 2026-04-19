@@ -2178,15 +2178,35 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                               : "übernommen"}
                         </Badge>
                       </CollapsibleTrigger>
-                      {submission.status === "new" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void updateSubmissionStatus(submission.id, "reviewed")}
-                        >
-                          Als geprüft markieren
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {(submission.status === "new" || submission.status === "reviewed") && (
+                          <Button size="sm" variant="secondary" asChild>
+                            <Link
+                              href={`/patienten/${patient.id}/protokolle/neu?digitalSubmission=${submission.id}`}
+                            >
+                              In Entwurf uebernehmen
+                            </Link>
+                          </Button>
+                        )}
+                        {submission.status === "new" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void updateSubmissionStatus(submission.id, "reviewed")}
+                          >
+                            Als geprüft markieren
+                          </Button>
+                        )}
+                        {submission.status === "converted" && submission.convertedProtocolId && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link
+                              href={`/patienten/${patient.id}/protokolle/${submission.convertedProtocolId}`}
+                            >
+                              Protokoll oeffnen
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <CollapsibleContent className="mt-1 space-y-2 px-3 pb-2">
                       {submission.days.map((day, dayIdx) => (

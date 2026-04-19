@@ -60,6 +60,7 @@ import { getNutrientValue } from "@/lib/nutrients"
 import {
   type AssessmentMethod,
   type MealSlotType,
+  type ProtocolDraftPrefill,
   type NutritionProtocol,
   type ProtocolType,
 } from "@/lib/types"
@@ -80,27 +81,42 @@ const entrySchema = z.object({
 
 const daySchema = z.object({
   date: z.string().min(1, "Datum ist erforderlich"),
-  entries: z.array(entrySchema).min(1, "Mindestens ein Eintrag pro Tag"),
+  entries: z.array(entrySchema),
 })
 
-const protocolSchema = z.object({
-  title: z.string().min(1, "Titel ist erforderlich"),
-  type: z.string().min(1, "Typ ist erforderlich"),
-  notes: z.string(),
-  days: z.array(daySchema).min(1, "Mindestens ein Tag erforderlich"),
-  metadata: z.object({
-    participantAge: z.coerce.number().min(0).optional(),
-    participantGender: z.enum(["m", "w", "d"]).optional(),
-    documentedDays: z.coerce.number().min(1).optional(),
-    assessmentMethod: z.string().optional(),
-  }),
-})
+const protocolSchema = z
+  .object({
+    title: z.string().min(1, "Titel ist erforderlich"),
+    type: z.string().min(1, "Typ ist erforderlich"),
+    notes: z.string(),
+    days: z.array(daySchema).min(1, "Mindestens ein Tag erforderlich"),
+    metadata: z.object({
+      participantAge: z.coerce.number().min(0).optional(),
+      participantGender: z.enum(["m", "w", "d"]).optional(),
+      documentedDays: z.coerce.number().min(1).optional(),
+      assessmentMethod: z.string().optional(),
+      source: z.literal("digital_protocol_submission").optional(),
+      sourceSubmissionId: z.string().optional(),
+    }),
+  })
+  .superRefine((values, ctx) => {
+    const totalEntries = values.days.reduce((sum, day) => sum + day.entries.length, 0)
+    if (totalEntries === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Mindestens ein Eintrag im gesamten Protokoll ist erforderlich",
+        path: ["days"],
+      })
+    }
+  })
 
 type ProtocolFormValues = z.input<typeof protocolSchema>
 
 interface ProtocolFormProps {
   patientId: string
   templateId?: string
+  initialValues?: ProtocolDraftPrefill
+  getSuccessRedirectPath?: (protocol: NutritionProtocol) => string
   onSubmit: (protocol: Omit<NutritionProtocol, "id" | "createdAt" | "updatedAt">) => Promise<NutritionProtocol> | NutritionProtocol
 }
 
@@ -116,7 +132,13 @@ const ASSESSMENT_METHOD_OPTIONS = Object.entries(
   ASSESSMENT_METHOD_LABELS,
 ) as [AssessmentMethod, string][]
 
-export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormProps) {
+export function ProtocolForm({
+  patientId,
+  templateId,
+  initialValues,
+  getSuccessRedirectPath,
+  onSubmit,
+}: ProtocolFormProps) {
   const router = useRouter()
   const foods = useFoods()
   const { getPatient } = usePatients()
@@ -138,6 +160,34 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
   }, [patient])
 
   const defaultValues = useMemo<ProtocolFormValues>(() => {
+    if (initialValues) {
+      return {
+        title: initialValues.title,
+        type: initialValues.type,
+        notes: initialValues.notes,
+        days: initialValues.days.map((day) => ({
+          date: day.date,
+          entries: day.entries.map((entry) => ({
+            foodId: entry.foodId,
+            amount: entry.amount,
+            mealSlot: entry.mealSlot,
+            time: entry.time,
+            measurementMode: entry.measurementMode,
+            householdUnit: entry.householdUnit,
+            householdQuantity: entry.householdQuantity,
+          })),
+        })),
+        metadata: {
+          participantAge: initialValues.metadata.participantAge,
+          participantGender: initialValues.metadata.participantGender,
+          documentedDays: initialValues.metadata.documentedDays,
+          assessmentMethod: initialValues.metadata.assessmentMethod,
+          source: initialValues.metadata.source,
+          sourceSubmissionId: initialValues.metadata.sourceSubmissionId,
+        },
+      }
+    }
+
     const dayCount = Math.max(1, selectedTemplate?.recommendedDays ?? 1)
     return {
       title: selectedTemplate ? `${selectedTemplate.title}` : "",
@@ -149,9 +199,11 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
         participantGender: patient?.gender,
         documentedDays: dayCount,
         assessmentMethod: selectedTemplate?.method ?? "diet_diary",
+        source: undefined,
+        sourceSubmissionId: undefined,
       },
     }
-  }, [patient?.gender, patientAge, selectedTemplate])
+  }, [initialValues, patient?.gender, patientAge, selectedTemplate])
 
   const form = useForm<ProtocolFormValues>({
     resolver: zodResolver(protocolSchema),
@@ -279,7 +331,7 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
     const dates = values.days.map((d) => d.date).sort()
 
     try {
-      await onSubmit({
+      const createdProtocol = await onSubmit({
         patientId,
         title: values.title,
         type: values.type as ProtocolType,
@@ -312,11 +364,15 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
           participantGender: values.metadata.participantGender || undefined,
           templateId: selectedTemplate?.id,
           householdModeEnabled,
+          source: values.metadata.source,
+          sourceSubmissionId: values.metadata.sourceSubmissionId,
         },
       })
 
       toast.success("Protokoll erstellt!")
-      router.push(`/patienten/${patientId}`)
+      router.push(
+        getSuccessRedirectPath?.(createdProtocol) ?? `/patienten/${patientId}`,
+      )
       router.refresh()
     } finally {
       setSaving(false)
@@ -596,6 +652,12 @@ export function ProtocolForm({ patientId, templateId, onSubmit }: ProtocolFormPr
               />
             </CardContent>
           </Card>
+
+          {form.formState.errors.days?.message && (
+            <p className="text-sm text-destructive">
+              {form.formState.errors.days.message}
+            </p>
+          )}
 
           {dayFields.map((dayField, dayIndex) => (
             <Card key={dayField.id}>

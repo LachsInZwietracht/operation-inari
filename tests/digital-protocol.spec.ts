@@ -69,6 +69,13 @@ test.describe("Digital Protocol Public Entry", () => {
     expect([404, 500]).toContain(response.status());
   });
 
+  test("conversion API rejects invalid body", async ({ request }) => {
+    const response = await request.post("/api/digital-protocol-submissions/convert", {
+      data: { invalid: true },
+    });
+    expect(response.status()).toBe(400);
+  });
+
   test("mobile viewport renders correctly", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/protokoll/00000000-0000-0000-0000-000000000000", {
