@@ -472,6 +472,19 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     return Array.from(new Set(result))
   }, [patient.indication])
 
+  const latestCreatinineLab = useMemo(() => {
+    const kreatinines = labEntries
+      .filter(e => e.parameterId === "lab_kreatinin")
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return kreatinines.length > 0 ? kreatinines[0] : null
+  }, [labEntries])
+
+  useEffect(() => {
+    if (latestCreatinineLab && creatinineInput === "1.0") {
+      setCreatinineInput(latestCreatinineLab.value.toString())
+    }
+  }, [latestCreatinineLab, creatinineInput])
+
   const creatinineClearance = useMemo(() => {
     if (!latestAnthro) return null
     const serum = parseFloat(creatinineInput)
@@ -599,7 +612,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   }
 
   const handleSaveClearance = () => {
-    if (!creatinineClearance || !creatinineClearanceParam) {
+    if (!creatinineClearance || !creatinineClearanceParam || !creatinineSerumMgDl) {
       toast.error("Bitte Clearance berechnen")
       return
     }
@@ -608,7 +621,24 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       parameterId: creatinineClearanceParam.id,
       value: creatinineClearance,
       date: new Date().toISOString().slice(0, 10),
-      notes: "Cockcroft-Gault Rechner",
+      notes: `Cockcroft-Gault · ${creatinineWeightContext.basis}`,
+      metadata: {
+        formula: "Cockcroft-Gault",
+        serumCreatinine: {
+          originalValue: parseFloat(creatinineInput),
+          originalUnit: creatinineUnit,
+          mgDlValue: Math.round(creatinineSerumMgDl * 100) / 100,
+        },
+        ageYears,
+        gender: patient.gender,
+        weightBasis: creatinineWeightContext.basis,
+        weightKg: creatinineWeightContext.weight,
+        actualWeightKg: creatinineWeightContext.actualWeight,
+        idealWeightKg: creatinineWeightContext.idealWeight,
+        adjustedWeightKg: creatinineWeightContext.adjustedWeight,
+        clearanceMlMin: creatinineClearance,
+        stage: creatinineStage,
+      },
     })
     toast.success("Clearance im Laborpanel gespeichert")
   }
@@ -661,8 +691,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   }
 
   const handleSaveMna = () => {
-    if (!mnaScore) {
-      toast.error("Bitte alle relevanten Fragen beantworten")
+    if (!mnaCompleted) {
+      toast.error("Bitte alle 18 MNA-Items beantworten")
       return
     }
     addScreening({
@@ -679,7 +709,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   }
 
   const handleSaveSga = () => {
-    if (!Object.keys(sgaInputs).length) {
+    if (!sgaCompleted) {
       toast.error("Bitte alle SGA-Kriterien erfassen")
       return
     }
@@ -1809,11 +1839,19 @@ export function PatientTabs({ patient }: PatientTabsProps) {
               <TabsContent value="creatinine" className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <Label htmlFor="creatinine-value">Serum-Kreatinin (mg/dl)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="creatinine-value">Serum-Kreatinin (mg/dl)</Label>
+                      {latestCreatinineLab && creatinineInput === latestCreatinineLab.value.toString() && (
+                        <span className="text-[11px] text-muted-foreground">
+                          Zuletzt gemessen am {formatDate(latestCreatinineLab.date)}
+                        </span>
+                      )}
+                    </div>
                     <Input
                       id="creatinine-value"
                       type="number"
                       step="0.1"
+                      className="mt-2"
                       value={creatinineInput}
                       onChange={(event) => setCreatinineInput(event.target.value)}
                     />
@@ -1821,17 +1859,24 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                       Cockcroft-Gault-Formel: ((140 - Alter) × Gewicht) / (72 × Kreatinin)
                     </p>
                   </div>
-                  <div className="rounded-lg border bg-muted/40 p-4">
+                  <div className="rounded-lg border bg-muted/40 p-4 flex flex-col justify-center">
                     <p className="text-xs uppercase text-muted-foreground">Kreatinin-Clearance</p>
                     <p className="text-3xl font-semibold">
                       {creatinineClearance ? `${creatinineClearance} ml/min` : "–"}
                     </p>
-                    {creatinineStage && (
-                      <Badge className="mt-2 w-fit" variant="secondary">
-                        Stadium {creatinineStage}
-                      </Badge>
-                    )}
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      {creatinineStage && (
+                        <Badge className="w-fit" variant="secondary">
+                          Stadium {creatinineStage}
+                        </Badge>
+                      )}
+                      {creatinineClearance !== null && creatinineClearance < 60 && (
+                        <Badge className="w-fit" variant="destructive">
+                          Nierendiät empfohlen
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Referenzgewicht: {formatNumber((correctedWeight ?? latestAnthro?.weight) ?? 0, 1)} kg
                     </p>
                   </div>
