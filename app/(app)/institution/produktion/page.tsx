@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ProduktionPageClient } from "./produktion-client";
 import { fetchFoodsForInstitution } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
+import { fetchMenuPlans } from "@/lib/data/menu-plans";
 import { FoodsProvider } from "@/components/foods-provider";
 import { PageHeader } from "@/components/page-header";
 
@@ -14,13 +15,14 @@ const PRODUCTION_HEADER = {
 };
 
 async function ProductionContent() {
-  const [foods, recipes] = await Promise.all([
+  const [foods, recipes, menus] = await Promise.all([
     fetchFoodsForInstitution(),
     fetchRecipes(),
+    fetchMenuPlans(),
   ]);
   return (
     <FoodsProvider foods={foods}>
-      <ProduktionPageClient recipes={recipes} />
+      <ProduktionPageClient recipes={recipes} initialMenus={menus} />
     </FoodsProvider>
   );
 }

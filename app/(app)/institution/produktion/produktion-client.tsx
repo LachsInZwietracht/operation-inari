@@ -17,7 +17,7 @@ import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { PageHeader } from "@/components/page-header";
 import { formatNumber } from "@/lib/format";
 import { useInstitutionMenu } from "@/hooks/use-institution-menu";
-import type { MealSlotType, ProductionItem, ShoppingItem, Recipe } from "@/lib/types";
+import type { MealSlotType, ProductionItem, ShoppingItem, Recipe, InstitutionMenu } from "@/lib/types";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -88,12 +88,13 @@ const MEAL_SLOT_ORDER: MealSlotType[] = [
 // ---------------------------------------------------------------------------
 
 interface ProduktionPageClientProps {
-  recipes: Recipe[]
+  recipes: Recipe[];
+  initialMenus?: InstitutionMenu[];
 }
 
-export function ProduktionPageClient({ recipes }: ProduktionPageClientProps) {
+export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageClientProps) {
   const { activeMenu, generateProductionList, generateShoppingList } =
-    useInstitutionMenu(recipes);
+    useInstitutionMenu(initialMenus, recipes);
 
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [selectedDay, setSelectedDay] = useState(0);

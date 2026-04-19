@@ -74,11 +74,11 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 ## 3. Meal Planning
 
 ### 3.1 Daily Meal Plans
-**Status:** Implemented (mock data, drag & drop).
+**Status:** Implemented (Supabase-backed persistence with offline fallback, drag & drop).
 - Automatic nutritional calculation for entire day across breakfast, snack, lunch, etc.
 
 ### 3.2 Menu Plans
-**Status:** Implemented (mock data, week/4-week cycle planners).
+**Status:** Implemented (Supabase-backed persistence with offline fallback, week/4-week cycle planners).
 - Support for multi-day cycles and Teaching kitchen plans (Lehrkuechenplan).
 
 ### 3.3 Exchange Tables

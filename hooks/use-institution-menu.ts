@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
-import { INSTITUTION_MENUS } from "@/lib/mock-data";
 import type {
   InstitutionMenu,
   InstitutionMealSlot,
@@ -11,10 +10,11 @@ import type {
   ShoppingItem,
 } from "@/lib/types/institution";
 import type { MealSlotType } from "@/lib/types/meal-plan";
-import type { Food } from "@/lib/types";
 import type { Recipe } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
 import { createRecipeLookup } from "@/lib/recipes";
+import { persistMenuPlan, fetchMenuPlansClient } from "@/lib/data/menu-plans-client";
+import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "institution-menus";
 
@@ -44,18 +44,32 @@ const CATEGORY_COST_PER_KG: Record<string, number> = {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function loadFromStorage(): InstitutionMenu[] {
-  if (typeof window === "undefined") return INSTITUTION_MENUS;
+function loadFromStorage(initial: InstitutionMenu[]): InstitutionMenu[] {
+  if (typeof window === "undefined") return initial;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as InstitutionMenu[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Merge strategy: Local wins for now, this could be more sophisticated
+        const merged = [...initial];
+        for (const localMenu of parsed) {
+          const existingIdx = merged.findIndex(m => m.id === localMenu.id);
+          if (existingIdx >= 0) {
+            if (new Date(localMenu.updatedAt ?? 0) > new Date(merged[existingIdx].updatedAt ?? 0)) {
+              merged[existingIdx] = localMenu;
+            }
+          } else {
+            merged.push(localMenu);
+          }
+        }
+        return merged;
+      }
     }
   } catch {
-    // Corrupted data – fall back to defaults
+    // Corrupted data – fall back to initial
   }
-  return INSTITUTION_MENUS;
+  return initial;
 }
 
 function persistToStorage(menus: InstitutionMenu[]): void {
@@ -76,9 +90,13 @@ function getCostPerKg(categoryId: string): number {
 
 // ── Hook ──────────────────────────────────────────────────────────
 
-export function useInstitutionMenu(recipes: Recipe[] = []) {
+export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes: Recipe[] = []) {
   const foods = useFoods();
-  const [menus, setMenus] = useState<InstitutionMenu[]>(loadFromStorage);
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const [menus, setMenus] = useState<InstitutionMenu[]>(() => loadFromStorage(initialMenus));
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false);
+  const migrationDone = useRef(false);
+
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes]);
   const categoryNameMap = useMemo(
@@ -95,13 +113,81 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
     };
   }
 
+  // Load from Supabase when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+
+    let cancelled = false;
+    setIsLoadingRemote(true);
+
+    async function loadPersistedMenus() {
+      try {
+        const persistedMenus = await fetchMenuPlansClient();
+        if (cancelled) return;
+
+        setMenus((prev) => {
+          const next = [...prev];
+          for (const pMenu of persistedMenus) {
+            const existingIdx = next.findIndex(m => m.id === pMenu.id);
+            if (existingIdx >= 0) {
+              if (new Date(pMenu.updatedAt ?? 0) > new Date(next[existingIdx].updatedAt ?? 0)) {
+                next[existingIdx] = pMenu;
+              }
+            } else {
+              next.push(pMenu);
+            }
+          }
+          return next;
+        });
+
+        // Migration of local-only menus
+        if (!migrationDone.current) {
+          migrationDone.current = true;
+          const remoteIds = new Set(persistedMenus.map((m) => m.id));
+          const menusToMigrate = menus.filter((m) => !remoteIds.has(m.id));
+
+          for (const menu of menusToMigrate) {
+            // Only migrate if they look like real UUIDs or need to be recreated?
+            // Since mock data used "menu_kw15" we should ideally create a new UUID for them.
+            // But we will just try to persist it, Supabase will fail if it's not a UUID.
+            // Actually, we should just let new menus be created.
+            if (menu.id.length === 36 || menu.id.length === 32) { // rudimentary UUID check
+               void persistMenuPlan(menu).catch(err => {
+                 console.error(`Failed to migrate menu plan for ${menu.id}:`, err);
+               });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load menu plans from Supabase:", error);
+      } finally {
+        if (!cancelled) setIsLoadingRemote(false);
+      }
+    }
+
+    void loadPersistedMenus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, authLoading, menus]);
+
+
   // Persist whenever menus change
   useEffect(() => {
     persistToStorage(menus);
   }, [menus]);
 
+  const syncMenuToSupabase = useCallback((menu: InstitutionMenu) => {
+    if (isAuthenticated) {
+      void persistMenuPlan(menu).catch(err => {
+        console.error(`Failed to sync menu plan ${menu.id}:`, err);
+      });
+    }
+  }, [isAuthenticated]);
+
   const activeMenu = useMemo(
-    () => menus.find((m) => m.status === "active"),
+    () => menus.find((m) => m.status === "active") || menus[0],
     [menus],
   );
 
@@ -117,8 +203,9 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
       recipeId: string,
       portionCount: number,
     ) => {
-      setMenus((prev) =>
-        prev.map((menu) => {
+      setMenus((prev) => {
+        let updatedMenu: InstitutionMenu | null = null;
+        const newMenus = prev.map((menu) => {
           if (menu.id !== menuId) return menu;
 
           const weeks = menu.weeks.map((week) => {
@@ -175,11 +262,17 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
             return { ...week, days };
           });
 
-          return { ...menu, weeks, updatedAt: now() };
-        }),
-      );
+          updatedMenu = { ...menu, weeks, updatedAt: now() };
+          return updatedMenu;
+        });
+
+        if (updatedMenu) {
+           syncMenuToSupabase(updatedMenu);
+        }
+        return newMenus;
+      });
     },
-    [],
+    [syncMenuToSupabase],
   );
 
   const removeRecipe = useCallback(
@@ -190,8 +283,9 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
       dietFormId: string,
       slotType: MealSlotType,
     ) => {
-      setMenus((prev) =>
-        prev.map((menu) => {
+      setMenus((prev) => {
+        let updatedMenu: InstitutionMenu | null = null;
+        const newMenus = prev.map((menu) => {
           if (menu.id !== menuId) return menu;
 
           const weeks = menu.weeks.map((week) => {
@@ -214,11 +308,17 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
             return { ...week, days };
           });
 
-          return { ...menu, weeks, updatedAt: now() };
-        }),
-      );
+          updatedMenu = { ...menu, weeks, updatedAt: now() };
+          return updatedMenu;
+        });
+
+        if (updatedMenu) {
+           syncMenuToSupabase(updatedMenu);
+        }
+        return newMenus;
+      });
     },
-    [],
+    [syncMenuToSupabase],
   );
 
   const updatePortionCount = useCallback(
@@ -230,8 +330,9 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
       slotType: MealSlotType,
       portionCount: number,
     ) => {
-      setMenus((prev) =>
-        prev.map((menu) => {
+      setMenus((prev) => {
+         let updatedMenu: InstitutionMenu | null = null;
+         const newMenus = prev.map((menu) => {
           if (menu.id !== menuId) return menu;
 
           const weeks = menu.weeks.map((week) => {
@@ -256,11 +357,17 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
             return { ...week, days };
           });
 
-          return { ...menu, weeks, updatedAt: now() };
-        }),
-      );
+          updatedMenu = { ...menu, weeks, updatedAt: now() };
+          return updatedMenu;
+        });
+
+        if (updatedMenu) {
+           syncMenuToSupabase(updatedMenu);
+        }
+        return newMenus;
+      });
     },
-    [],
+    [syncMenuToSupabase],
   );
 
   // ── Production list ───────────────────────────────────────────
@@ -395,5 +502,6 @@ export function useInstitutionMenu(recipes: Recipe[] = []) {
     updatePortionCount,
     generateProductionList,
     generateShoppingList,
+    isLoadingRemote,
   };
 }

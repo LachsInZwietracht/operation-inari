@@ -581,10 +581,11 @@ function PortionDialog({
 // ─── Main Page ──────────────────────────────���────────────────────────────────
 
 interface MenueplaenePageClientProps {
-  recipes: Recipe[]
+  recipes: Recipe[];
+  initialMenus?: InstitutionMenu[];
 }
 
-export function MenueplaenePageClient({ recipes }: MenueplaenePageClientProps) {
+export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePageClientProps) {
   const {
     menus,
     activeMenu,
@@ -593,7 +594,7 @@ export function MenueplaenePageClient({ recipes }: MenueplaenePageClientProps) {
     updatePortionCount,
     generateProductionList,
     generateShoppingList,
-  } = useInstitutionMenu(recipes);
+  } = useInstitutionMenu(initialMenus, recipes);
 
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [productionDay, setProductionDay] = useState(0);
