@@ -45,6 +45,7 @@ export async function updateSession(request: NextRequest) {
     pathname !== "/registrieren" &&
     !pathname.startsWith("/_next") &&
     !pathname.startsWith("/api") &&
+    !pathname.startsWith("/protokoll") &&
     !pathname.includes(".")
   ) {
     const url = request.nextUrl.clone()

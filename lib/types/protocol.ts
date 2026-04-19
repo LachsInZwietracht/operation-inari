@@ -2,6 +2,30 @@ import { ID, Timestamped } from "./common";
 import { MealSlotType } from "./meal-plan";
 import type { Gender } from "./patient";
 
+// Digital protocol patient submissions
+
+export interface SubmissionEntry {
+  mealSlot: string;
+  freeText: string;
+  time?: string;
+}
+
+export interface SubmissionDay {
+  date: string; // ISO date YYYY-MM-DD
+  entries: SubmissionEntry[];
+}
+
+export interface DigitalProtocolSubmission extends Timestamped {
+  id: ID;
+  linkId: ID;
+  patientId: ID;
+  submittedAt: string;
+  days: SubmissionDay[];
+  notes?: string;
+  status: "new" | "reviewed" | "converted";
+  convertedProtocolId?: ID;
+}
+
 export type ProtocolType =
   | "ernaehrungsprotokoll"
   | "24h_recall"

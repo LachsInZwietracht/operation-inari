@@ -10,6 +10,7 @@ import {
   persistDigitalProtocolLink,
 } from "@/lib/data/patient-digital-protocol-links-client";
 import { useAuth } from "@/hooks/use-auth";
+import { generateQrDataUrl } from "@/lib/qr";
 
 const STORAGE_KEY = "prodi_digital_protocols";
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -128,14 +129,22 @@ export function useDigitalProtocols() {
   );
 
   const generateLink = useCallback(
-    (payload: Omit<DigitalProtocolLink, "id" | "createdAt" | "updatedAt" | "qrCode" | "url">) => {
+    async (payload: Omit<DigitalProtocolLink, "id" | "createdAt" | "updatedAt" | "qrCode" | "url">) => {
       const now = new Date().toISOString();
       const tempId = `dpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const tempUrl = `${origin}/protokoll/${tempId}`;
+      let qrCode: string;
+      try {
+        qrCode = await generateQrDataUrl(tempUrl);
+      } catch {
+        qrCode = "";
+      }
       const newLink: DigitalProtocolLink = {
         ...payload,
         id: tempId,
-        url: `https://operation-prodi.app/protokoll/${tempId}`,
-        qrCode: `QR-${tempId}`,
+        url: tempUrl,
+        qrCode,
         createdAt: now,
         updatedAt: now,
       };
@@ -143,9 +152,20 @@ export function useDigitalProtocols() {
 
       if (isAuthenticated) {
         void persistDigitalProtocolLink(newLink)
-          .then((persisted) => {
+          .then(async (persisted) => {
+            // Re-generate QR with the real UUID-based URL
+            const realUrl = `${origin}/protokoll/${persisted.id}`;
+            let realQr: string;
+            try {
+              realQr = await generateQrDataUrl(realUrl);
+            } catch {
+              realQr = persisted.qrCode;
+            }
+            const updated = { ...persisted, url: realUrl, qrCode: realQr };
+            // Persist the updated URL/QR back to Supabase
+            void persistDigitalProtocolLink(updated).catch(() => {});
             setLinks((prev) =>
-              sortEntries(prev.map((item) => (item.id === tempId ? persisted : item))),
+              sortEntries(prev.map((item) => (item.id === tempId || item.id === persisted.id ? updated : item))),
             );
           })
           .catch((err) => {

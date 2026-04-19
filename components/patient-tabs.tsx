@@ -5,6 +5,8 @@ import Link from "next/link"
 import {
   Activity as ActivityIcon,
   CheckCircle2,
+  ChevronDown,
+  Copy,
   FlaskConical,
   HeartPulse,
   Pill,
@@ -28,6 +30,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Progress } from "@/components/ui/progress"
 import {
   Table,
@@ -66,8 +79,9 @@ import { useTherapyIntegrations } from "@/hooks/use-therapy-integrations"
 import { useScreenings } from "@/hooks/use-screenings"
 import { useProcam } from "@/hooks/use-procam"
 import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
+import { useDigitalProtocolSubmissions } from "@/hooks/use-digital-protocol-submissions"
 import { useProtocols } from "@/hooks/use-protocols"
-import type { Patient, AnthropometricEntry } from "@/lib/types"
+import type { Patient, AnthropometricEntry, DigitalProtocolLink } from "@/lib/types"
 import { toast } from "sonner"
 
 function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
@@ -234,12 +248,17 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const {
     getForPatient: getDigitalLinksForPatient,
     generateLink,
-    updateStatus,
     isLoadingRemote: isLoadingDigitalProtocols,
   } = useDigitalProtocols()
   const { getForPatient: getProtocolsForPatient } = useProtocols()
+  const {
+    submissions: digitalSubmissions,
+    isLoading: isLoadingSubmissions,
+    updateStatus: updateSubmissionStatus,
+  } = useDigitalProtocolSubmissions(patient.id)
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
+  const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false)
   const [showMedicationForm, setShowMedicationForm] = useState(false)
   const [diagnosisForm, setDiagnosisForm] = useState({ diagnosis: "", icdCode: "", startDate: "", notes: "" })
@@ -2068,7 +2087,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
               </Select>
               <Button
                 onClick={() =>
-                  generateLink({
+                  void generateLink({
                     patientId: patient.id,
                     method: digitalMethod,
                     status: "pending",
@@ -2089,7 +2108,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 >
                   <div>
                     <p className="font-medium">{link.method}</p>
-                    <p className="text-muted-foreground text-xs">{link.url}</p>
+                    <p className="text-muted-foreground text-xs truncate max-w-[250px]">{link.url}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge
@@ -2110,12 +2129,16 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                     </Badge>
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => updateStatus(link.id, link.status === "received" ? "pending" : "received")}
+                      variant="ghost"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(link.url)
+                        toast.success("Link kopiert")
+                      }}
                     >
-                      Status toggeln
+                      <Copy className="h-4 w-4" />
+                      <span className="sr-only">Link kopieren</span>
                     </Button>
-                    <Button size="icon" variant="ghost">
+                    <Button size="icon" variant="ghost" onClick={() => setQrDialogLink(link)}>
                       <QrCode className="h-4 w-4" />
                       <span className="sr-only">QR anzeigen</span>
                     </Button>
@@ -2127,8 +2150,113 @@ export function PatientTabs({ patient }: PatientTabsProps) {
             ) : (
               <p className="text-sm text-muted-foreground">Noch keine digitalen Protokolle generiert.</p>
             )}
+
+            {/* Submissions section */}
+            {digitalSubmissions.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="text-sm font-medium">Eingereichte Protokolle</h4>
+                {digitalSubmissions.map((submission) => (
+                  <Collapsible key={submission.id}>
+                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                      <CollapsibleTrigger className="flex items-center gap-2 text-sm">
+                        <ChevronDown className="h-4 w-4" />
+                        <span>{new Date(submission.submittedAt).toLocaleDateString("de-DE")}</span>
+                        <Badge
+                          variant="outline"
+                          className={
+                            submission.status === "new"
+                              ? "border-blue-200 text-blue-700"
+                              : submission.status === "reviewed"
+                                ? "border-emerald-200 text-emerald-700"
+                                : "border-purple-200 text-purple-700"
+                          }
+                        >
+                          {submission.status === "new"
+                            ? "neu"
+                            : submission.status === "reviewed"
+                              ? "geprüft"
+                              : "übernommen"}
+                        </Badge>
+                      </CollapsibleTrigger>
+                      {submission.status === "new" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void updateSubmissionStatus(submission.id, "reviewed")}
+                        >
+                          Als geprüft markieren
+                        </Button>
+                      )}
+                    </div>
+                    <CollapsibleContent className="mt-1 space-y-2 px-3 pb-2">
+                      {submission.days.map((day, dayIdx) => (
+                        <div key={dayIdx} className="rounded border p-2 text-sm">
+                          <p className="font-medium">{day.date}</p>
+                          {day.entries.map((entry, entryIdx) => (
+                            <div key={entryIdx} className="mt-1 ml-2">
+                              <span className="text-muted-foreground">{entry.mealSlot}:</span>{" "}
+                              {entry.freeText}
+                              {entry.time && (
+                                <span className="text-muted-foreground ml-1">({entry.time})</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      {submission.notes && (
+                        <p className="text-sm text-muted-foreground">
+                          Anmerkungen: {submission.notes}
+                        </p>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
+            )}
+            {isLoadingSubmissions && digitalSubmissions.length === 0 && (
+              <p className="text-sm text-muted-foreground">Einreichungen werden geladen.</p>
+            )}
           </CardContent>
         </Card>
+
+        {/* QR Code Dialog */}
+        <Dialog open={!!qrDialogLink} onOpenChange={(open) => !open && setQrDialogLink(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>QR-Code — {qrDialogLink?.method}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center gap-4">
+              {qrDialogLink?.qrCode && qrDialogLink.qrCode.startsWith("data:") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={qrDialogLink.qrCode}
+                  alt="QR-Code"
+                  className="h-64 w-64"
+                />
+              ) : (
+                <div className="flex h-64 w-64 items-center justify-center rounded border text-sm text-muted-foreground">
+                  QR-Code wird generiert…
+                </div>
+              )}
+              <p className="text-center text-xs text-muted-foreground break-all">
+                {qrDialogLink?.url}
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  if (qrDialogLink) {
+                    void navigator.clipboard.writeText(qrDialogLink.url)
+                    toast.success("Link kopiert")
+                  }
+                }}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Link kopieren
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Card>
           <CardHeader>
