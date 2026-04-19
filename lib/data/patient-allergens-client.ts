@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { DigitalProtocolLink } from "@/lib/types";
+import type { PatientAllergenEntry } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
 
@@ -10,15 +10,15 @@ function isUuid(value: string): boolean {
   return UUID_REGEX.test(value);
 }
 
-interface DigitalProtocolLinkRow {
+interface AllergenRow {
   id: string;
   user_id: string;
   patient_id: string;
-  method: string;
-  status: DigitalProtocolLink["status"];
-  url: string;
-  qr_code: string;
-  expires_at: string | null;
+  allergen_id: string;
+  type: string;
+  severity: string;
+  diagnosed_date: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,57 +33,49 @@ async function getAuthenticatedUserId(client: SupabaseClient) {
   if (error) {
     throw new Error(error.message);
   }
-
   return data.user?.id ?? null;
 }
 
-function mapDigitalProtocolLinkRow(row: DigitalProtocolLinkRow): DigitalProtocolLink {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+function mapAllergenRow(row: AllergenRow): PatientAllergenEntry {
   return {
     id: row.id,
     patientId: row.patient_id,
-    method: row.method,
-    status: row.status,
-    url: origin ? `${origin}/protokoll/${row.id}` : row.url,
-    qrCode: row.qr_code,
-    expiresAt: row.expires_at ?? undefined,
+    allergenId: row.allergen_id,
+    type: row.type as PatientAllergenEntry["type"],
+    severity: row.severity as PatientAllergenEntry["severity"],
+    diagnosedDate: row.diagnosed_date ?? undefined,
+    notes: row.notes ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-export async function fetchDigitalProtocolLinksClient(
+export async function fetchPatientAllergensClient(
   supabase?: SupabaseClient,
-): Promise<DigitalProtocolLink[]> {
+): Promise<PatientAllergenEntry[]> {
   const client = resolveBrowserClient(supabase);
   const { data, error } = await withTimeout(
-    client
-      .from("patient_digital_protocol_links")
-      .select("*")
-      .order("updated_at", { ascending: false }),
+    client.from("patient_allergens").select("*").order("created_at", { ascending: false }),
     5000,
-    "Supabase digital protocol links request timed out",
+    "Supabase allergens request timed out",
   );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as unknown as DigitalProtocolLinkRow[]).map((row) =>
-    mapDigitalProtocolLinkRow(row),
-  );
+  return ((data ?? []) as unknown as AllergenRow[]).map((row) => mapAllergenRow(row));
 }
 
-export async function persistDigitalProtocolLink(
-  entry: Partial<DigitalProtocolLink> & {
+export async function persistPatientAllergen(
+  entry: Partial<PatientAllergenEntry> & {
     patientId: string;
-    method: string;
-    status: DigitalProtocolLink["status"];
-    url: string;
-    qrCode: string;
+    allergenId: string;
+    type: PatientAllergenEntry["type"];
+    severity: PatientAllergenEntry["severity"];
   },
   supabase?: SupabaseClient,
-): Promise<DigitalProtocolLink> {
+): Promise<PatientAllergenEntry> {
   const client = resolveBrowserClient(supabase);
   const userId = await getAuthenticatedUserId(client);
 
@@ -94,17 +86,17 @@ export async function persistDigitalProtocolLink(
   const canonicalId = entry.id && isUuid(entry.id) ? entry.id : null;
 
   const { data: persistedEntry, error } = await client
-    .from("patient_digital_protocol_links")
+    .from("patient_allergens")
     .upsert(
       {
         ...(canonicalId ? { id: canonicalId } : {}),
         user_id: userId,
         patient_id: entry.patientId,
-        method: entry.method,
-        status: entry.status,
-        url: entry.url,
-        qr_code: entry.qrCode,
-        expires_at: entry.expiresAt ?? null,
+        allergen_id: entry.allergenId,
+        type: entry.type,
+        severity: entry.severity,
+        diagnosed_date: entry.diagnosedDate ?? null,
+        notes: entry.notes ?? null,
         updated_at: new Date().toISOString(),
       },
       canonicalId ? { onConflict: "id" } : undefined,
@@ -116,20 +108,17 @@ export async function persistDigitalProtocolLink(
     throw new Error(error.message);
   }
 
-  return mapDigitalProtocolLinkRow(persistedEntry as unknown as DigitalProtocolLinkRow);
+  return mapAllergenRow(persistedEntry as unknown as AllergenRow);
 }
 
-export async function deleteDigitalProtocolLinkClient(
+export async function deletePatientAllergenClient(
   entryId: string,
   supabase?: SupabaseClient,
 ): Promise<void> {
   if (!isUuid(entryId)) return;
 
   const client = resolveBrowserClient(supabase);
-  const { error } = await client
-    .from("patient_digital_protocol_links")
-    .delete()
-    .eq("id", entryId);
+  const { error } = await client.from("patient_allergens").delete().eq("id", entryId);
 
   if (error) {
     throw new Error(error.message);

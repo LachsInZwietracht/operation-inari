@@ -17,7 +17,6 @@ import {
   getNutrientValue,
 } from "@/lib/nutrients"
 import {
-  resolveReferenceForPatient,
   getReferenceAmount,
 } from "@/lib/reference-values"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
@@ -50,7 +49,7 @@ const MEAL_SLOTS: MealSlotType[] = [
 
 export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: ProtocolAnalysisProps) {
   const foods = useFoods()
-  const { standardId, lifeStage } = useReferenceProfiles()
+  const { getResolvedConfig } = useReferenceProfiles()
   const foodMap = useMemo(() => new Map(foods.map((f) => [f.id, f])), [foods])
   const method = protocol.metadata?.assessmentMethod
   const methodLabel = method
@@ -67,13 +66,12 @@ export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: Protoc
   }, [dateOfBirth, protocol.metadata?.participantAge])
 
   const refConfig = useMemo<ResolvedReferenceConfig>(() => {
-    return resolveReferenceForPatient({
-      standardId,
+    return getResolvedConfig({
+      patientId: protocol.patientId,
       dateOfBirth: derivedDateOfBirth ?? "1990-01-01",
       gender: derivedGender,
-      lifeStage,
     })
-  }, [derivedDateOfBirth, derivedGender, lifeStage, standardId])
+  }, [derivedDateOfBirth, derivedGender, getResolvedConfig, protocol.patientId])
 
   const averageNutrients = useMemo(() => {
     if (protocol.days.length === 0) return []
@@ -354,6 +352,7 @@ export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: Protoc
               Durchschnittliche Nährstoffzufuhr ({protocol.days.length} Tage)
             </CardTitle>
             <ReferenceProfileSelector
+              patientId={protocol.patientId}
               dateOfBirth={derivedDateOfBirth}
               gender={derivedGender}
               compact

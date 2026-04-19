@@ -7,6 +7,12 @@ import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { fetchPatients } from "@/lib/data/patients";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { buildDefaultReportExportRequest } from "@/lib/exports/report-builder";
+import {
+  fetchOfficialReferenceValues,
+  fetchReferenceProfiles,
+  fetchUserReferencePreference,
+} from "@/lib/data/reference-values-client";
+import { resolveReferenceForPatient } from "@/lib/reference-values";
 import { isSupportedExport } from "@/lib/exports/constants";
 import { toCsv } from "@/lib/exports/csv";
 import { renderMailMergePdfBuffer, renderReportPdfBuffer } from "@/lib/exports/pdf";
@@ -174,7 +180,19 @@ export async function POST(request: Request) {
         contentType = "text/csv;charset=utf-8";
       }
     } else {
-      const reportRequest = buildDefaultReportExportRequest(latestPlan, recipes, foods);
+      const [officialRows, customProfiles, userPreference] = await Promise.all([
+        fetchOfficialReferenceValues(supabase),
+        fetchReferenceProfiles(supabase),
+        fetchUserReferencePreference(supabase),
+      ]);
+      const refConfig = resolveReferenceForPatient({
+        dateOfBirth: "1990-01-01",
+        gender: "w",
+        officialRows,
+        customProfiles,
+        userPreference,
+      });
+      const reportRequest = buildDefaultReportExportRequest(latestPlan, recipes, foods, refConfig);
       if (body.format === "PDF") {
         payload = await renderReportPdfBuffer(reportRequest);
         contentType = "application/pdf";

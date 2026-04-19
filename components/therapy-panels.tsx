@@ -18,6 +18,12 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
+import type { PatientAllergenEntry } from "@/lib/types"
+import {
+  ALLERGEN_MAP,
+  ALLERGEN_TYPE_LABELS,
+  ALLERGEN_SEVERITY_LABELS,
+} from "@/lib/allergen-constants"
 
 const GLUCOSE_DAY = [
   { time: "06:00", glucose: 95 },
@@ -29,14 +35,6 @@ const GLUCOSE_DAY = [
   { time: "18:00", glucose: 175 },
   { time: "20:00", glucose: 156 },
   { time: "22:00", glucose: 118 },
-]
-
-const ALLERGEN_OPTIONS = [
-  { id: "gluten", label: "Gluten" },
-  { id: "lactose", label: "Laktose" },
-  { id: "nuts", label: "Schalenfrüchte" },
-  { id: "soy", label: "Soja" },
-  { id: "histamine", label: "Histamin" },
 ]
 
 const DIET_TEMPLATES = [
@@ -184,60 +182,37 @@ export function KetogenicPlannerCard() {
 }
 
 interface AllergenAutomationCardProps {
-  initialAllergens?: string[]
+  patientAllergens?: PatientAllergenEntry[]
 }
 
-export function AllergenAutomationCard({ initialAllergens = [] }: AllergenAutomationCardProps) {
-  const [active, setActive] = useState<string[]>(initialAllergens)
-
-  const warnings = useMemo(() => {
-    const exposures = [
-      { id: "meal1", label: "Vollkornbrot · Gluten" },
-      { id: "meal2", label: "Latte Macchiato · Laktose" },
-      { id: "meal3", label: "Pad Thai · Soja/Nüsse" },
-    ]
-    return exposures.filter((exposure) => active.some((token) => exposure.label.toLowerCase().includes(token.toLowerCase())))
-  }, [active])
-
+export function AllergenAutomationCard({ patientAllergens = [] }: AllergenAutomationCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Allergen-Automation</CardTitle>
-        <CardDescription>Warnhinweise für Rezepte, Pläne und Therapie toggeln.</CardDescription>
+        <CardTitle>Allergen-Profil</CardTitle>
+        <CardDescription>Aktive Allergene und Intoleranzen. Bearbeitung im Diagnosen-Tab.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-3">
-          {ALLERGEN_OPTIONS.map((option) => (
-            <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-sm">
-              <Checkbox
-                checked={active.includes(option.id)}
-                onCheckedChange={(checked) =>
-                  setActive((prev) =>
-                    checked ? Array.from(new Set([...prev, option.id])) : prev.filter((value) => value !== option.id),
-                  )
-                }
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-        <div>
-          <p className="text-xs uppercase text-muted-foreground">Automatische Warnungen</p>
-          {warnings.length > 0 ? (
-            <ul className="mt-2 space-y-1 text-sm">
-              {warnings.map((warning) => (
-                <li key={warning.id} className="flex items-center gap-2">
-                  <Badge variant="destructive" className="h-5 text-xs">
-                    {warning.label.split("·")[1]}
-                  </Badge>
-                  {warning.label}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-muted-foreground">Keine Risiken innerhalb der aktiven Planungen.</p>
-          )}
-        </div>
+        {patientAllergens.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {patientAllergens.map((entry) => {
+              const def = ALLERGEN_MAP.get(entry.allergenId)
+              const label = def?.label ?? entry.allergenId
+              const variant = entry.type === "allergy" ? "destructive" as const : entry.type === "intolerance" ? "default" as const : "secondary" as const
+              return (
+                <Badge
+                  key={entry.id}
+                  variant={variant}
+                  className={entry.type === "intolerance" ? "bg-orange-100 text-orange-900 dark:bg-orange-900 dark:text-orange-100" : ""}
+                >
+                  {label} · {ALLERGEN_TYPE_LABELS[entry.type]} · {ALLERGEN_SEVERITY_LABELS[entry.severity]}
+                </Badge>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Keine Allergene oder Intoleranzen hinterlegt. Im Diagnosen-Tab pflegen.</p>
+        )}
       </CardContent>
     </Card>
   )

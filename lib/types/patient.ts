@@ -159,6 +159,16 @@ export interface ProcamResult extends Timestamped {
   smoker: boolean;
 }
 
+export interface PatientAllergenEntry extends Timestamped {
+  id: ID;
+  patientId: ID;
+  allergenId: string;
+  type: "allergy" | "intolerance" | "preference";
+  severity: "mild" | "moderate" | "severe";
+  diagnosedDate?: string;
+  notes?: string;
+}
+
 export interface DigitalProtocolLink extends Timestamped {
   id: ID;
   patientId: ID;

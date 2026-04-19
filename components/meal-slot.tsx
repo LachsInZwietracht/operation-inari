@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState, type DragEvent } from "react"
-import { X, Plus } from "lucide-react"
+import { X, Plus, AlertTriangle } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +34,7 @@ interface MealSlotProps {
   onOpenExchange?: (slotType: MealSlotType) => void
   foods: Food[]
   recipes: Recipe[]
+  allergenWarnings?: Map<string, string[]>
 }
 
 function getEntryName(
@@ -84,6 +85,7 @@ export function MealSlotCard({
   onOpenExchange,
   foods,
   recipes,
+  allergenWarnings,
 }: MealSlotProps) {
   const foodMap = useMemo(() => new Map(foods.map((f) => [f.id, f])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
@@ -185,10 +187,16 @@ export function MealSlotCard({
         {slot.entries.map((entry) => {
           const kcal = getEntryKcal(entry, foodMap, recipeMap, foods)
           const unitLabel = entry.type === "food" ? "g" : entry.amount === 1 ? "Portion" : "Portionen"
+          const entryWarnings = allergenWarnings?.get(entry.id)
 
           return (
             <div key={entry.id}>
               <div className="flex items-center gap-2">
+                {entryWarnings && entryWarnings.length > 0 && (
+                  <span title={entryWarnings.join(", ")}>
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500" />
+                  </span>
+                )}
                 <span className="flex-1 truncate text-sm font-medium">
                   {getEntryName(entry, foodMap, recipeMap)}
                 </span>

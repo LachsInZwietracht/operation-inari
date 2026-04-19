@@ -61,6 +61,7 @@ import {
   KetogenicPlannerCard,
 } from "@/components/therapy-panels"
 import { GuidedProtocolAssistant } from "@/components/guided-protocol-assistant"
+import { ReferenceProfileSelector } from "@/components/reference-profile-selector"
 import { formatDate, formatNumber } from "@/lib/format"
 import { downloadCsv } from "@/lib/utils"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
@@ -83,6 +84,16 @@ import { useDigitalProtocolSubmissions } from "@/hooks/use-digital-protocol-subm
 import { useProtocols } from "@/hooks/use-protocols"
 import type { Patient, AnthropometricEntry, DigitalProtocolLink } from "@/lib/types"
 import { toast } from "sonner"
+import { usePatientAllergens } from "@/hooks/use-patient-allergens"
+import {
+  ALLERGEN_DEFINITIONS,
+  ALLERGEN_MAP,
+  ALLERGEN_TYPE_LABELS,
+  ALLERGEN_SEVERITY_LABELS,
+  type AllergenType,
+  type AllergenSeverity,
+} from "@/lib/allergen-constants"
+import { AlertTriangle, Trash2 } from "lucide-react"
 
 function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
   if (typeof min === "number" && value < min) return "low"
@@ -248,6 +259,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const {
     getForPatient: getDigitalLinksForPatient,
     generateLink,
+    updateStatus: updateDigitalLinkStatus,
     isLoadingRemote: isLoadingDigitalProtocols,
   } = useDigitalProtocols()
   const { getForPatient: getProtocolsForPatient } = useProtocols()
@@ -256,6 +268,12 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     isLoading: isLoadingSubmissions,
     updateStatus: updateSubmissionStatus,
   } = useDigitalProtocolSubmissions(patient.id)
+  const {
+    getForPatient: getAllergensForPatient,
+    addEntry: addAllergen,
+    deleteEntry: deleteAllergen,
+    isLoadingRemote: isLoadingAllergens,
+  } = usePatientAllergens()
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)
@@ -294,8 +312,19 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const [calorieDeficitInput, setCalorieDeficitInput] = useState("500")
   const [calculatorTab, setCalculatorTab] = useState("creatinine")
   const [creatinineInput, setCreatinineInput] = useState("1.0")
+  const [creatinineUnit, setCreatinineUnit] = useState<"mg/dL" | "µmol/L">("mg/dL")
+  const [creatinineWeightBasis, setCreatinineWeightBasis] =
+    useState<"auto" | "actual" | "ideal" | "adjusted">("auto")
   const [mnaInputs, setMnaInputs] = useState<Record<string, number>>({})
   const [sgaInputs, setSgaInputs] = useState<Record<string, string>>({})
+  const [showAllergenForm, setShowAllergenForm] = useState(false)
+  const [allergenForm, setAllergenForm] = useState({
+    allergenId: "",
+    type: "allergy" as AllergenType,
+    severity: "moderate" as AllergenSeverity,
+    diagnosedDate: "",
+    notes: "",
+  })
 
   const anthroEntries = getAnthroForPatient(patient.id)
   const sessions = COUNSELING_SESSIONS.filter((s) => s.patientId === patient.id)
@@ -321,6 +350,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const integrationsPending = isLoadingIntegrations && deviceIntegrations.length === 0
   const procamPending = isLoadingProcam && procamResults.length === 0
   const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
+  const patientAllergens = getAllergensForPatient(patient.id)
+  const allergensPending = isLoadingAllergens && patientAllergens.length === 0
 
   const latestAnthro = anthroEntries.length > 0 ? anthroEntries[anthroEntries.length - 1] : null
   const creatinineClearanceParam = LAB_PARAMETERS.find((param) => param.id === "lab_creatinine_clearance")
@@ -463,14 +494,21 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       refAgeYears: reference.ageMonths / 12,
     }
   }, [isPediatric, latestAnthro, patient.dateOfBirth, patient.gender])
-  const derivedAllergens = useMemo(() => {
-    const result: string[] = []
-    const indication = patient.indication?.toLowerCase() ?? ""
-    if (indication.includes("zöliakie") || indication.includes("gluten")) result.push("gluten")
-    if (indication.includes("laktose")) result.push("lactose")
-    if (indication.includes("allerg")) result.push("nuts")
-    return Array.from(new Set(result))
-  }, [patient.indication])
+  const handleAllergenSubmit = useCallback((e: FormEvent) => {
+    e.preventDefault()
+    if (!allergenForm.allergenId) return
+    addAllergen({
+      patientId: patient.id,
+      allergenId: allergenForm.allergenId,
+      type: allergenForm.type,
+      severity: allergenForm.severity,
+      diagnosedDate: allergenForm.diagnosedDate || undefined,
+      notes: allergenForm.notes || undefined,
+    })
+    setAllergenForm({ allergenId: "", type: "allergy", severity: "moderate", diagnosedDate: "", notes: "" })
+    setShowAllergenForm(false)
+    toast.success("Allergen gespeichert")
+  }, [addAllergen, allergenForm, patient.id])
 
   const latestCreatinineLab = useMemo(() => {
     const kreatinines = labEntries
@@ -485,15 +523,48 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     }
   }, [latestCreatinineLab, creatinineInput])
 
-  const creatinineClearance = useMemo(() => {
-    if (!latestAnthro) return null
+  const heightInInches = height / 2.54
+  const baseIdealWeight =
+    patient.gender === "m"
+      ? 50 + Math.max(0, heightInInches - 60) * 2.3
+      : 45.5 + Math.max(0, heightInInches - 60) * 2.3
+  const actualWeight = latestAnthro?.weight ?? 70
+  const adjustedBodyWeight = baseIdealWeight + 0.4 * Math.max(0, actualWeight - baseIdealWeight)
+  const bmiForWeightBasis = latestAnthro?.bmi ?? 0
+
+  const creatinineSerumMgDl = useMemo(() => {
     const serum = parseFloat(creatinineInput)
     if (Number.isNaN(serum) || serum <= 0) return null
-    const referenceWeight = correctedWeight ?? latestAnthro.weight
-    let clearance = ((140 - ageYears) * referenceWeight) / (72 * serum)
+    return creatinineUnit === "mg/dL" ? serum : serum / 88.4
+  }, [creatinineInput, creatinineUnit])
+
+  const creatinineWeightContext = useMemo(() => {
+    const basis =
+      creatinineWeightBasis === "auto"
+        ? bmiForWeightBasis >= 30
+          ? "adjusted"
+          : "actual"
+        : creatinineWeightBasis
+
+    const weightValue =
+      basis === "ideal" ? baseIdealWeight : basis === "adjusted" ? adjustedBodyWeight : actualWeight
+
+    return {
+      basis,
+      weight: Math.round(weightValue * 10) / 10,
+      actualWeight: Math.round(actualWeight * 10) / 10,
+      idealWeight: Math.round(baseIdealWeight * 10) / 10,
+      adjustedWeight: Math.round(adjustedBodyWeight * 10) / 10,
+    }
+  }, [actualWeight, adjustedBodyWeight, baseIdealWeight, bmiForWeightBasis, creatinineWeightBasis])
+
+  const creatinineClearance = useMemo(() => {
+    if (!latestAnthro) return null
+    if (!creatinineSerumMgDl) return null
+    let clearance = ((140 - ageYears) * creatinineWeightContext.weight) / (72 * creatinineSerumMgDl)
     if (patient.gender === "w") clearance *= 0.85
     return Math.round(clearance)
-  }, [ageYears, correctedWeight, creatinineInput, latestAnthro, patient.gender])
+  }, [ageYears, creatinineSerumMgDl, creatinineWeightContext.weight, latestAnthro, patient.gender])
 
   const creatinineStage = useMemo(() => {
     if (!creatinineClearance) return null
@@ -531,6 +602,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     () => Object.values(mnaInputs).reduce((sum, value) => sum + value, 0),
     [mnaInputs],
   )
+  const mnaCompleted = MNA_QUESTIONS.every((question) => typeof mnaInputs[question.id] === "number")
   const mnaClassification = mnaScore >= 24 ? "Normal" : mnaScore >= 17 ? "Risiko" : "Mangelernährt"
   const mnaRiskLevel: "low" | "medium" | "high" =
     mnaClassification === "Normal" ? "low" : mnaClassification === "Risiko" ? "medium" : "high"
@@ -542,8 +614,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
       return sum + (option?.score ?? 0)
     }, 0)
   }, [sgaInputs])
-
-  const sgaClassification = sgaScore <= 3 ? "A" : sgaScore <= 6 ? "B" : "C"
+  const sgaCompleted = SGA_QUESTIONS.every((question) => Boolean(sgaInputs[question.id]))
+  const sgaClassification = sgaScore <= 4 ? "A" : sgaScore <= 10 ? "B" : "C"
   const sgaRiskLevel: "low" | "medium" | "high" =
     sgaClassification === "A" ? "low" : sgaClassification === "B" ? "medium" : "high"
 
@@ -1295,6 +1367,134 @@ export function PatientTabs({ patient }: PatientTabsProps) {
             )}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" /> Allergien & Intoleranzen
+              </CardTitle>
+              <CardDescription>Allergenprofile für Warnhinweise in Rezepten und Ernährungsplänen.</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowAllergenForm((prev) => !prev)}>
+              {showAllergenForm ? "Abbrechen" : "Allergen erfassen"}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {showAllergenForm && (
+              <form className="grid gap-3 md:grid-cols-2" onSubmit={handleAllergenSubmit}>
+                <div>
+                  <Label htmlFor="allergen-select">Allergen</Label>
+                  <Select
+                    value={allergenForm.allergenId}
+                    onValueChange={(v) => setAllergenForm((prev) => ({ ...prev, allergenId: v }))}
+                  >
+                    <SelectTrigger id="allergen-select">
+                      <SelectValue placeholder="Allergen wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ALLERGEN_DEFINITIONS.filter(
+                        (def) => !patientAllergens.some((pa) => pa.allergenId === def.id),
+                      ).map((def) => (
+                        <SelectItem key={def.id} value={def.id}>
+                          {def.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="allergen-type">Typ</Label>
+                  <Select
+                    value={allergenForm.type}
+                    onValueChange={(v) => setAllergenForm((prev) => ({ ...prev, type: v as AllergenType }))}
+                  >
+                    <SelectTrigger id="allergen-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="allergy">Allergie</SelectItem>
+                      <SelectItem value="intolerance">Intoleranz</SelectItem>
+                      <SelectItem value="preference">Präferenz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="allergen-severity">Schweregrad</Label>
+                  <Select
+                    value={allergenForm.severity}
+                    onValueChange={(v) => setAllergenForm((prev) => ({ ...prev, severity: v as AllergenSeverity }))}
+                  >
+                    <SelectTrigger id="allergen-severity">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mild">Leicht</SelectItem>
+                      <SelectItem value="moderate">Mittel</SelectItem>
+                      <SelectItem value="severe">Schwer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="allergen-date">Diagnosedatum</Label>
+                  <Input
+                    type="date"
+                    id="allergen-date"
+                    value={allergenForm.diagnosedDate}
+                    onChange={(e) => setAllergenForm((prev) => ({ ...prev, diagnosedDate: e.target.value }))}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="allergen-notes">Notizen</Label>
+                  <Textarea
+                    id="allergen-notes"
+                    rows={2}
+                    value={allergenForm.notes}
+                    onChange={(e) => setAllergenForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+                <div className="md:col-span-2 flex items-center justify-end gap-2">
+                  <Button type="button" variant="ghost" onClick={() => setShowAllergenForm(false)}>
+                    Abbrechen
+                  </Button>
+                  <Button type="submit" disabled={!allergenForm.allergenId}>Speichern</Button>
+                </div>
+              </form>
+            )}
+            {patientAllergens.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {patientAllergens.map((entry) => {
+                  const def = ALLERGEN_MAP.get(entry.allergenId)
+                  const label = def?.label ?? entry.allergenId
+                  const variant = entry.type === "allergy" ? "destructive" as const : entry.type === "intolerance" ? "default" as const : "secondary" as const
+                  return (
+                    <Badge
+                      key={entry.id}
+                      variant={variant}
+                      className={`gap-1 ${entry.type === "intolerance" ? "bg-orange-100 text-orange-900 hover:bg-orange-200 dark:bg-orange-900 dark:text-orange-100" : ""}`}
+                    >
+                      {label} · {ALLERGEN_TYPE_LABELS[entry.type]} · {ALLERGEN_SEVERITY_LABELS[entry.severity]}
+                      <button
+                        type="button"
+                        className="ml-1 rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10"
+                        onClick={() => {
+                          deleteAllergen(entry.id)
+                          toast.success(`${label} entfernt`)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )
+                })}
+              </div>
+            ) : allergensPending ? (
+              <p className="text-sm text-muted-foreground">Allergene werden synchronisiert.</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Noch keine Allergene oder Intoleranzen hinterlegt.</p>
+            )}
+          </CardContent>
+        </Card>
       </TabsContent>
 
       <TabsContent value="laborwerte" className="space-y-4">
@@ -1828,6 +2028,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
           <CardHeader>
             <CardTitle>Medizinische Rechner</CardTitle>
             <CardDescription>Creatinin-Clearance, MNA und SGA im Schnellzugriff.</CardDescription>
+            <ReferenceProfileSelector patientId={patient.id} dateOfBirth={patient.dateOfBirth} gender={patient.gender} />
           </CardHeader>
           <CardContent>
             <Tabs value={calculatorTab} onValueChange={setCalculatorTab}>
@@ -1840,21 +2041,45 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="creatinine-value">Serum-Kreatinin (mg/dl)</Label>
+                      <Label htmlFor="creatinine-value">Serum-Kreatinin</Label>
                       {latestCreatinineLab && creatinineInput === latestCreatinineLab.value.toString() && (
                         <span className="text-[11px] text-muted-foreground">
                           Zuletzt gemessen am {formatDate(latestCreatinineLab.date)}
                         </span>
                       )}
                     </div>
-                    <Input
-                      id="creatinine-value"
-                      type="number"
-                      step="0.1"
-                      className="mt-2"
-                      value={creatinineInput}
-                      onChange={(event) => setCreatinineInput(event.target.value)}
-                    />
+                    <div className="mt-2 grid gap-3 md:grid-cols-2">
+                      <Input
+                        id="creatinine-value"
+                        type="number"
+                        step="0.1"
+                        value={creatinineInput}
+                        onChange={(event) => setCreatinineInput(event.target.value)}
+                      />
+                      <Select value={creatinineUnit} onValueChange={(value) => setCreatinineUnit(value as "mg/dL" | "µmol/L")}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mg/dL">mg/dL</SelectItem>
+                          <SelectItem value="µmol/L">µmol/L</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="mt-3">
+                      <Label>Gewichtsbasis</Label>
+                      <Select value={creatinineWeightBasis} onValueChange={(value) => setCreatinineWeightBasis(value as "auto" | "actual" | "ideal" | "adjusted")}>
+                        <SelectTrigger className="mt-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Automatisch</SelectItem>
+                          <SelectItem value="actual">Aktuelles Gewicht</SelectItem>
+                          <SelectItem value="ideal">Idealgewicht</SelectItem>
+                          <SelectItem value="adjusted">Adjustiertes Gewicht</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <p className="mt-2 text-xs text-muted-foreground">
                       Cockcroft-Gault-Formel: ((140 - Alter) × Gewicht) / (72 × Kreatinin)
                     </p>
@@ -1876,9 +2101,11 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Referenzgewicht: {formatNumber((correctedWeight ?? latestAnthro?.weight) ?? 0, 1)} kg
-                    </p>
+                    <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      <p>Normierter Kreatininwert: {creatinineSerumMgDl ? `${formatNumber(creatinineSerumMgDl, 2)} mg/dL` : "–"}</p>
+                      <p>Gewichtsbasis: {creatinineWeightContext.basis} · {formatNumber(creatinineWeightContext.weight, 1)} kg</p>
+                      <p>Ist / Ideal / Adjustiert: {formatNumber(creatinineWeightContext.actualWeight, 1)} / {formatNumber(creatinineWeightContext.idealWeight, 1)} / {formatNumber(creatinineWeightContext.adjustedWeight, 1)} kg</p>
+                    </div>
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -1915,8 +2142,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase text-muted-foreground">Gesamtpunktzahl</p>
-                    <p className="text-2xl font-semibold">{mnaScore}</p>
-                    <p className="text-sm text-muted-foreground">{mnaClassification}</p>
+                    <p className="text-2xl font-semibold">{formatNumber(mnaScore, 1)}</p>
+                    <p className="text-sm text-muted-foreground">{mnaClassification} · {mnaCompleted ? "vollständig" : "unvollständig"}</p>
                   </div>
                   <Button type="button" onClick={handleSaveMna}>
                     MNA speichern
@@ -2061,7 +2288,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
 
         <DiabetesAnalyticsCard patientName={`${patient.firstName} ${patient.lastName}`} />
         <KetogenicPlannerCard />
-        <AllergenAutomationCard initialAllergens={derivedAllergens} />
+        <AllergenAutomationCard patientAllergens={patientAllergens} />
         <DietCatalogCard />
       </TabsContent>
 
@@ -2186,6 +2413,22 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                     <Button size="icon" variant="ghost" onClick={() => setQrDialogLink(link)}>
                       <QrCode className="h-4 w-4" />
                       <span className="sr-only">QR anzeigen</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        updateDigitalLinkStatus(
+                          link.id,
+                          link.status === "pending"
+                            ? "received"
+                            : link.status === "received"
+                              ? "expired"
+                              : "pending",
+                        )
+                      }
+                    >
+                      Status toggeln
                     </Button>
                   </div>
                 </div>

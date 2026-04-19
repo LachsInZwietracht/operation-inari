@@ -34,7 +34,12 @@ function extractFoodIds(recipes: Recipe[], mealPlans: DailyMealPlan[]): string[]
   return Array.from(ids);
 }
 
-export default async function ErnaehrungsplanPage() {
+export default async function ErnaehrungsplanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ patientId?: string }>;
+}) {
+  const { patientId } = await searchParams;
   // Step 1: Fetch recipes + meal plans first (both cached)
   const [recipes, mealPlans] = await Promise.all([
     fetchRecipes(),
@@ -51,7 +56,7 @@ export default async function ErnaehrungsplanPage() {
 
   return (
     <FoodsProvider foods={foods}>
-      <ErnaehrungsplanPageClient recipes={recipes} initialPlans={mealPlans} />
+      <ErnaehrungsplanPageClient recipes={recipes} initialPlans={mealPlans} patientId={patientId} />
     </FoodsProvider>
   );
 }

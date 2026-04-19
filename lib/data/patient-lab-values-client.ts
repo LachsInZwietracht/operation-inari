@@ -18,6 +18,7 @@ interface LabValueRow {
   date: string;
   value: string;
   notes: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +45,7 @@ function mapLabValueRow(row: LabValueRow): LabValueEntry {
     date: row.date,
     value: Number(row.value),
     notes: row.notes ?? undefined,
+    metadata: row.metadata ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -84,23 +86,45 @@ export async function persistLabValue(
 
   const canonicalId = entry.id && isUuid(entry.id) ? entry.id : null;
 
-  const { data: persistedEntry, error } = await client
+  const payload = {
+    ...(canonicalId ? { id: canonicalId } : {}),
+    user_id: userId,
+    patient_id: entry.patientId,
+    parameter_id: entry.parameterId,
+    date: entry.date,
+    value: entry.value,
+    notes: entry.notes ?? null,
+    metadata: entry.metadata ?? {},
+    updated_at: new Date().toISOString(),
+  };
+
+  let { data: persistedEntry, error } = await client
     .from("patient_lab_values")
-    .upsert(
-      {
-        ...(canonicalId ? { id: canonicalId } : {}),
-        user_id: userId,
-        patient_id: entry.patientId,
-        parameter_id: entry.parameterId,
-        date: entry.date,
-        value: entry.value,
-        notes: entry.notes ?? null,
-        updated_at: new Date().toISOString(),
-      },
-      canonicalId ? { onConflict: "id" } : undefined,
-    )
+    .upsert(payload, canonicalId ? { onConflict: "id" } : undefined)
     .select("*")
     .single();
+
+  if (error && error.message.includes("metadata")) {
+    const retry = await client
+      .from("patient_lab_values")
+      .upsert(
+        {
+          ...(canonicalId ? { id: canonicalId } : {}),
+          user_id: userId,
+          patient_id: entry.patientId,
+          parameter_id: entry.parameterId,
+          date: entry.date,
+          value: entry.value,
+          notes: entry.notes ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        canonicalId ? { onConflict: "id" } : undefined,
+      )
+      .select("*")
+      .single();
+    persistedEntry = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     throw new Error(error.message);

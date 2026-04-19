@@ -1,4 +1,5 @@
 import { ID, Timestamped } from "./common";
+import type { Gender } from "./patient";
 
 /**
  * Identifier for a reference standard organisation.
@@ -50,6 +51,20 @@ export interface ReferenceNutrientValue {
   amount: number;
 }
 
+export interface OfficialReferenceValueRow extends Timestamped {
+  id: ID;
+  standardId: Exclude<ReferenceStandardId, "custom">;
+  nutrientId: string;
+  amount: number;
+  gender: "m" | "w";
+  ageGroupId: string;
+  ageMin?: number | null;
+  ageMax?: number | null;
+  lifeStage: LifeStage;
+  source: string;
+  label: string;
+}
+
 /**
  * A complete set of reference values for a specific demographic bracket.
  */
@@ -91,6 +106,29 @@ export interface CustomReferenceProfile extends Timestamped {
   lifeStage: LifeStage;
   /** Overridden nutrient values — only contains values that differ from the base */
   overrides: ReferenceNutrientValue[];
+}
+
+export interface UserReferencePreference extends Timestamped {
+  userId: ID;
+  standardId?: Exclude<ReferenceStandardId, "custom">;
+  profileId?: ID;
+  ageGroupId: string;
+  gender: "m" | "w";
+  lifeStage: LifeStage;
+}
+
+export interface PatientReferenceAssignment extends Timestamped {
+  patientId: ID;
+  userId: ID;
+  standardId?: Exclude<ReferenceStandardId, "custom">;
+  profileId?: ID;
+  lifeStage: LifeStage;
+}
+
+export interface ReferenceDemographicContext {
+  dateOfBirth?: string;
+  gender: Gender;
+  patientId?: ID;
 }
 
 /**

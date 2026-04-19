@@ -32,10 +32,13 @@ import {
   scaleNutrients,
 } from "@/lib/nutrients";
 import { formatNumber, formatNutrient } from "@/lib/format";
-import type { Recipe, Food } from "@/lib/types";
+import type { Recipe, Food, PatientAllergenEntry } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
 import { fetchFoodsByIds } from "@/lib/data/foods-client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { checkAllergenConflicts } from "@/lib/allergen-warnings";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 function getScoreBadge(score: number | undefined) {
   if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
@@ -46,11 +49,21 @@ function getScoreBadge(score: number | undefined) {
   return { label: "E", color: "bg-red-100 text-red-900" };
 }
 
-export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
+interface RecipeDetailContentProps {
+  recipe: Recipe;
+  patientAllergens?: PatientAllergenEntry[];
+}
+
+export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailContentProps) {
   const foods = useFoods();
   const [availableFoods, setAvailableFoods] = useState<Food[]>(foods);
   const { convertRecipeToFood } = useCustomFoods(availableFoods);
   const { getDisplayName } = useFoodSynonyms();
+
+  const allergenWarnings = useMemo(() => {
+    if (!patientAllergens?.length || !recipe.allergens?.length) return [];
+    return checkAllergenConflicts(recipe.allergens, patientAllergens);
+  }, [recipe.allergens, patientAllergens]);
 
   useEffect(() => {
     // If we only have some (or no) foods, fetch the ones specifically for this recipe
@@ -163,6 +176,15 @@ export function RecipeDetailContent({ recipe }: { recipe: Recipe }) {
                   {formatNumber(totalKcal, 0)} kcal gesamt
                 </span>
               </div>
+              {allergenWarnings.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Allergenwarnung</AlertTitle>
+                  <AlertDescription>
+                    Dieses Rezept enthält: {allergenWarnings.map((w) => w.allergenLabel).join(", ")}
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="flex flex-wrap gap-2">
                 {recipe.allergens?.map((allergen) => (
                   <Badge key={allergen} variant="destructive" className="text-xs">

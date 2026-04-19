@@ -32,7 +32,9 @@ Recent platform changes:
 - Reports (`/berichte`) now generate real server-side PDF and CSV exports.
 - Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
+- `/referenzwerte` now resolves DGE/ÖGE/SGE/RDA values from Supabase, supports persisted custom profiles, and stores user defaults plus patient-specific assignments.
 - The full patient workspace on `/patienten/[id]` now persists to Supabase, including anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM results, and digital protocol links.
+- Patient medical calculators now include unit-aware Cockcroft-Gault clearance plus full MNA and expanded SGA documentation, with structured persistence in screenings/lab values.
 - Digital protocol submissions now support the full practitioner workflow: public patient entry, dashboard review, conversion into a prefilled internal protocol draft, and server-tracked converted state.
 - `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.
 - Open Food Facts is now a first-class food source with validated product promotion, attribution, and detail-page quality indicators.
@@ -69,6 +71,11 @@ npm run etl:off
 Apply the latest migrations before using the paginated foods browser or OFF search:
 ```bash
 npx supabase db push
+```
+
+Reference standards and custom profile persistence also require the latest migrations plus:
+```bash
+npm run etl:reference-values
 ```
 
 ### Validation

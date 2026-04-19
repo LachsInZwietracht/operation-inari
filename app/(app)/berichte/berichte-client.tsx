@@ -84,7 +84,7 @@ import type {
 } from "@/lib/types"
 import { toast } from "sonner"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
-import { resolveReferenceForPatient, getReferenceAmount } from "@/lib/reference-values"
+import { getReferenceAmount } from "@/lib/reference-values"
 import { createRecipeLookup } from "@/lib/recipes"
 import { useFoods } from "@/components/foods-provider"
 import { loadBrowserMealPlans } from "@/lib/data/meal-plan-browser-source"
@@ -457,17 +457,13 @@ export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientPro
     [planEntries],
   )
 
-  const gender: "m" | "w" = "m"
-
-  const { standardId, lifeStage } = useReferenceProfiles()
+  const { getResolvedConfig } = useReferenceProfiles()
   const refConfig = useMemo(() => {
-    return resolveReferenceForPatient({
-      standardId,
+    return getResolvedConfig({
       dateOfBirth: "1990-01-01",
-      gender,
-      lifeStage,
+      gender: "w",
     })
-  }, [standardId, gender, lifeStage])
+  }, [getResolvedConfig])
 
   // ---- Macro data --------------------------------------------------------
 

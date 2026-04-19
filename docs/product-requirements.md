@@ -32,7 +32,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - Ability to add and manage custom food entries with nutrient values, portions, and allergens.
 
 ### 1.3 Reference Values
-**Status:** Implemented (mock data, localStorage persistence).
+**Status:** Implemented (Supabase-backed official standards, persisted custom profiles, patient-level assignment).
 - DGE (German), OeGE (Austrian), SGE (Swiss), and RDA values.
 - Reference values adjustable by age, gender, pregnancy, lactation.
 
@@ -127,10 +127,10 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **Bedside Mode:** UI optimized for iPad/Tablet use in clinical wards with high-contrast, touch-friendly charts.
 
 ### 5.5 Medical Calculations
-**Status:** Implemented (screenings and lab values persisted; calculators integrated directly with patient record).
-- **Creatinine clearance calculation** — Cockcroft-Gault formula prefilled from recent lab values; critical for renal diet planning.
-- **MNA (Mini Nutritional Assessment)** — guided 18-item questionnaire for elderly patients.
-- **SGA (Subjective Global Assessment)** — structured assessment based on physical signs and history.
+**Status:** Implemented (screenings/lab values persisted; calculators integrated directly with patient record).
+- **Creatinine clearance calculation** — Cockcroft-Gault formula with unit conversion, weight-basis handling, and structured persistence in lab values.
+- **MNA (Mini Nutritional Assessment)** — guided 18-item questionnaire for elderly patients with stored answer detail.
+- **SGA (Subjective Global Assessment)** — structured assessment based on history and physical signs with persisted answer detail.
 
 ### 5.4 Clinical Record Detail
 **Status:** Implemented (Supabase-backed clinical workspace with offline fallback and login-time migration).

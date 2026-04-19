@@ -17,4 +17,5 @@ export interface LabValueEntry extends Timestamped {
   date: string; // ISO date YYYY-MM-DD
   value: number;
   notes?: string;
+  metadata?: Record<string, unknown>;
 }

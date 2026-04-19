@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useRecipes } from "@/hooks/use-recipes";
+import { parseMealMaster, type ParsedMealMasterRecipe } from "@/lib/meal-master-parser";
+import { RecipeImportReviewDialog } from "@/components/recipe-import-review-dialog";
 
 const RECIPE_CATEGORIES = [
   "Alle",
@@ -55,16 +57,22 @@ interface RezeptePageClientProps {
 }
 
 export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClientProps) {
-  // Note: allRecipes might contain food references that are not yet loaded
-  // This is okay for the list view since it mainly shows recipe metadata
   const { allRecipes, addRecipe } = useRecipes(initialRecipes, []);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Alle");
   const [libraryFilter, setLibraryFilter] = useState<"all" | "personal" | "community">("all");
+  
+  // Import states
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [importFormat, setImportFormat] = useState<"json" | "csv">("json");
+  const [importFormat, setImportFormat] = useState<"json" | "csv" | "mmf">("json");
   const [importPayload, setImportPayload] = useState(SAMPLE_IMPORT_PAYLOAD);
+  
+  // MMF Review states
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [mmfRecipes, setMmfRecipes] = useState<ParsedMealMasterRecipe[]>([]);
+
+  // Export states
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"json" | "csv">("json");
 
   const filtered = useMemo(() => {
@@ -121,6 +129,18 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
 
   async function handleImportSubmit() {
     try {
+      if (importFormat === "mmf") {
+        const parsed = parseMealMaster(importPayload);
+        if (parsed.length === 0) {
+          toast.error("Keine gültigen Meal-Master Rezepte gefunden");
+          return;
+        }
+        setMmfRecipes(parsed);
+        setImportDialogOpen(false);
+        setReviewDialogOpen(true);
+        return;
+      }
+
       if (importFormat === "json") {
         const parsed = JSON.parse(importPayload) as Partial<Recipe>[];
         for (const item of parsed) {
@@ -142,7 +162,7 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
           };
           await addRecipe(recipe);
         }
-      } else {
+      } else if (importFormat === "csv") {
         const rows = importPayload.trim().split(/\n+/).slice(1);
         for (const row of rows) {
           const [name, category, servings, prep, cook] = row.split(",");
@@ -170,6 +190,49 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
     } catch (error) {
       console.error(error);
       toast.error("Import fehlgeschlagen");
+    }
+  }
+
+  async function handleReviewComplete(importedRecipes: Partial<Recipe>[]) {
+    try {
+      for (const item of importedRecipes) {
+        if (!item.name) continue;
+        const now = new Date().toISOString();
+        const recipe: Recipe = {
+          id: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          name: item.name,
+          description: item.description ?? "Importiertes Rezept",
+          category: item.category ?? "Community",
+          servings: item.servings ?? 2,
+          prepTime: item.prepTime ?? 10,
+          cookTime: item.cookTime ?? 20,
+          ingredients: item.ingredients ?? [],
+          instructions: item.instructions ?? ["Bitte Angaben ergänzen"],
+          createdAt: now,
+          updatedAt: now,
+          sourceType: "personal",
+        };
+        await addRecipe(recipe);
+      }
+      toast.success(`${importedRecipes.length} Rezepte erfolgreich importiert`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Speichern der Rezepte fehlgeschlagen");
+    } finally {
+      setReviewDialogOpen(false);
+      setMmfRecipes([]);
+    }
+  }
+
+  // Helper to prefill payload based on format change if it's the default
+  function handleFormatChange(v: "json" | "csv" | "mmf") {
+    setImportFormat(v);
+    if (importPayload === SAMPLE_IMPORT_PAYLOAD && v === "csv") {
+        setImportPayload("name,category,servings,prepTime,cookTime\nMediterraner Eintopf,Eintöpfe,4,15,35");
+    } else if (v === "mmf") {
+        setImportPayload("MMMMM----- Meal-Master Recipe\n\n      Title: Classic Apple Pie\n Categories: Desserts, Pies\n      Yield: 8 Servings\n\n      6 ea Large granny smith apples\n    3/4 c  Sugar\n\n  Preheat oven to 425 degrees F.\nMMMMM");
+    } else if (v === "json" && importPayload.startsWith("name,") || importPayload.startsWith("MMMMM")) {
+        setImportPayload(SAMPLE_IMPORT_PAYLOAD);
     }
   }
 
@@ -257,26 +320,36 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
           <DialogHeader>
             <DialogTitle>Rezepte importieren</DialogTitle>
             <DialogDescription>
-              Fügen Sie JSON oder CSV ein, um mehrere Rezepte zu übernehmen. Zutaten können später ergänzt werden.
+              Fügen Sie JSON, CSV oder Meal-Master (.mmf/.txt) Formate ein, um Rezepte zu übernehmen.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <Select value={importFormat} onValueChange={(v) => setImportFormat(v as "json" | "csv")}>
+            <Select value={importFormat} onValueChange={(v) => handleFormatChange(v as "json" | "csv" | "mmf")}>
               <SelectTrigger>
                 <SelectValue placeholder="Format" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="json">JSON</SelectItem>
                 <SelectItem value="csv">CSV</SelectItem>
+                <SelectItem value="mmf">Meal-Master (.mmf)</SelectItem>
               </SelectContent>
             </Select>
             <Textarea rows={8} value={importPayload} onChange={(e) => setImportPayload(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button onClick={handleImportSubmit}>Import starten</Button>
+            <Button onClick={handleImportSubmit}>
+                {importFormat === "mmf" ? "Zutaten zuordnen" : "Import starten"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RecipeImportReviewDialog
+        open={reviewDialogOpen}
+        onOpenChange={setReviewDialogOpen}
+        recipes={mmfRecipes}
+        onComplete={handleReviewComplete}
+      />
 
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
         <DialogContent>

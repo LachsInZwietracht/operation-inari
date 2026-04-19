@@ -22,17 +22,17 @@ import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
 import { getNutrientValue } from "@/lib/nutrients";
-import {
-  resolveReferenceForPatient,
-  getReferenceAmount,
-} from "@/lib/reference-values";
+import { getReferenceAmount } from "@/lib/reference-values";
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import { NUTRIENT_GROUP_LABELS } from "@/lib/constants";
-import type { Food, NutrientGroup, ResolvedReferenceConfig } from "@/lib/types";
+import type { Food, NutrientGroup, PatientAllergenEntry, ResolvedReferenceConfig } from "@/lib/types";
 import { calculateProdScore } from "@/lib/prodi-score";
 import { Progress } from "@/components/ui/progress";
 import { estimateFoodCo2 } from "@/lib/sustainability";
+import { checkAllergenConflicts } from "@/lib/allergen-warnings";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 const categoryMap = new Map(FOOD_CATEGORIES.map((c) => [c.id, c.name]));
 
@@ -97,16 +97,19 @@ function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentP
   );
 }
 
-export function FoodDetailContent({ food }: { food: Food }) {
-  const { standardId, lifeStage } = useReferenceProfiles();
+interface FoodDetailContentProps {
+  food: Food;
+  patientAllergens?: PatientAllergenEntry[];
+}
+
+export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentProps) {
+  const { getResolvedConfig } = useReferenceProfiles();
   const refConfig = useMemo(() => {
-    return resolveReferenceForPatient({
-      standardId,
+    return getResolvedConfig({
       dateOfBirth: "1990-01-01", // Default adult context for food detail view
-      gender: "m",
-      lifeStage,
+      gender: "w",
     });
-  }, [standardId, lifeStage]);
+  }, [getResolvedConfig]);
 
   const categoryName = categoryMap.get(food.categoryId) ?? food.categoryId;
   const sourceMeta = food.sourceId ? FOOD_SOURCES.find((s) => s.id === food.sourceId) : null;
@@ -125,6 +128,11 @@ export function FoodDetailContent({ food }: { food: Food }) {
     if (referencePortion) return estimateFoodCo2(food, referencePortion.amount);
     return null;
   }, [food, referencePortion]);
+
+  const allergenWarnings = useMemo(() => {
+    if (!patientAllergens?.length || !food.allergens?.length) return [];
+    return checkAllergenConflicts(food.allergens, patientAllergens);
+  }, [food.allergens, patientAllergens]);
 
   return (
     <div className="space-y-6">
@@ -196,6 +204,15 @@ export function FoodDetailContent({ food }: { food: Food }) {
                   </Badge>
                 ))}
               </div>
+            )}
+            {allergenWarnings.length > 0 && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Allergenwarnung</AlertTitle>
+                <AlertDescription>
+                  Dieses Lebensmittel enthält: {allergenWarnings.map((w) => w.allergenLabel).join(", ")}
+                </AlertDescription>
+              </Alert>
             )}
             {(food.allergens?.length || 0) > 0 && (
               <div className="flex flex-wrap gap-1">

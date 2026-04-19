@@ -54,15 +54,9 @@ const UNIQUE_CATEGORIES = [
   "Eintöpfe"
 ];
 
-const RECIPE_ALLERGENS = [
-  "Gluten",
-  "Milch",
-  "Ei",
-  "Soja",
-  "Schalenfrüchte",
-  "Sellerie",
-  "Fisch",
-];
+import { ALLERGEN_DEFINITIONS } from "@/lib/allergen-constants";
+
+const RECIPE_ALLERGENS = ALLERGEN_DEFINITIONS.filter((a) => a.category === "eu14").map((a) => a.label);
 
 const recipeSchema = z.object({
   name: z.string().min(1, "Name ist erforderlich"),

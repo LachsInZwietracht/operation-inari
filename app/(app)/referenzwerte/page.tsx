@@ -44,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { REFERENCE_STANDARDS, AGE_GROUPS } from "@/lib/mock-data/reference-standards";
+import { REFERENCE_STANDARDS, AGE_GROUPS } from "@/lib/reference-metadata";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { resolveReferenceValues } from "@/lib/reference-values";
@@ -67,7 +67,8 @@ const FLAG_EMOJI: Record<string, string> = {
 };
 
 function ComparisonView() {
-  const [selectedStandards, setSelectedStandards] = useState<ReferenceStandardId[]>(["dge", "rda"]);
+  const { officialRows } = useReferenceProfiles();
+  const [selectedStandards, setSelectedStandards] = useState<Exclude<ReferenceStandardId, "custom">[]>(["dge", "rda"]);
   const [ageGroupId, setAgeGroupId] = useState("25-51");
   const [gender, setGender] = useState<"m" | "w">("w");
   const [nutrientGroup, setNutrientGroup] = useState<NutrientGroup>("makronaehrstoffe");
@@ -76,9 +77,9 @@ function ComparisonView() {
     return selectedStandards.map((sid) => ({
       standardId: sid,
       standard: REFERENCE_STANDARDS.find((s) => s.id === sid)!,
-      values: resolveReferenceValues(sid, ageGroupId, gender),
+      values: resolveReferenceValues(sid, ageGroupId, gender, "none", officialRows),
     }));
-  }, [selectedStandards, ageGroupId, gender]);
+  }, [selectedStandards, ageGroupId, gender, officialRows]);
 
   const nutrients = useMemo(
     () =>
@@ -88,7 +89,7 @@ function ComparisonView() {
     [nutrientGroup],
   );
 
-  const toggleStandard = (sid: ReferenceStandardId) => {
+  const toggleStandard = (sid: Exclude<ReferenceStandardId, "custom">) => {
     setSelectedStandards((prev) =>
       prev.includes(sid) ? prev.filter((s) => s !== sid) : [...prev, sid],
     );
@@ -222,12 +223,12 @@ function ComparisonView() {
 }
 
 function CustomProfileEditor() {
-  const { customProfiles, saveCustomProfile, deleteCustomProfile } =
+  const { customProfiles, saveCustomProfile, deleteCustomProfile, officialRows } =
     useReferenceProfiles();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newBaseStandard, setNewBaseStandard] = useState<ReferenceStandardId>("dge");
+  const [newBaseStandard, setNewBaseStandard] = useState<Exclude<ReferenceStandardId, "custom">>("dge");
   const [newAgeGroup, setNewAgeGroup] = useState("25-51");
   const [newGender, setNewGender] = useState<"m" | "w">("w");
   const [newLifeStage, setNewLifeStage] = useState<LifeStage>("none");
@@ -241,6 +242,7 @@ function CustomProfileEditor() {
       newAgeGroup,
       newGender,
       newLifeStage,
+      officialRows,
     );
 
     const overrides: ReferenceNutrientValue[] = [];
@@ -252,7 +254,7 @@ function CustomProfileEditor() {
     }
 
     const profile: CustomReferenceProfile = {
-      id: `custom-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: newName.trim(),
       basedOn: newBaseStandard,
       ageGroupId: newAgeGroup,
@@ -281,10 +283,11 @@ function CustomProfileEditor() {
 
   const handleSaveEdit = (profile: CustomReferenceProfile) => {
     const baseValues = resolveReferenceValues(
-      profile.basedOn ?? "dge",
+      (profile.basedOn ?? "dge") as Exclude<ReferenceStandardId, "custom">,
       profile.ageGroupId,
       profile.gender,
       profile.lifeStage,
+      officialRows,
     );
 
     const overrides: ReferenceNutrientValue[] = [];
@@ -308,7 +311,7 @@ function CustomProfileEditor() {
   const handleDuplicate = (profile: CustomReferenceProfile) => {
     const dup: CustomReferenceProfile = {
       ...profile,
-      id: `custom-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: `${profile.name} (Kopie)`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -319,21 +322,22 @@ function CustomProfileEditor() {
 
   const baseValues = useMemo(() => {
     if (showCreate) {
-      return resolveReferenceValues(newBaseStandard, newAgeGroup, newGender, newLifeStage);
+      return resolveReferenceValues(newBaseStandard, newAgeGroup, newGender, newLifeStage, officialRows);
     }
     if (editingId) {
       const profile = customProfiles.find((p) => p.id === editingId);
       if (profile) {
         return resolveReferenceValues(
-          profile.basedOn ?? "dge",
+          (profile.basedOn ?? "dge") as Exclude<ReferenceStandardId, "custom">,
           profile.ageGroupId,
           profile.gender,
           profile.lifeStage,
+          officialRows,
         );
       }
     }
     return [];
-  }, [showCreate, editingId, newBaseStandard, newAgeGroup, newGender, newLifeStage, customProfiles]);
+  }, [showCreate, editingId, newBaseStandard, newAgeGroup, newGender, newLifeStage, customProfiles, officialRows]);
 
   return (
     <div className="space-y-4">
@@ -477,7 +481,7 @@ function CustomProfileEditor() {
             </div>
             <div className="space-y-1.5">
               <Label>Basiert auf</Label>
-              <Select value={newBaseStandard} onValueChange={(v) => setNewBaseStandard(v as ReferenceStandardId)}>
+              <Select value={newBaseStandard} onValueChange={(v) => setNewBaseStandard(v as Exclude<ReferenceStandardId, "custom">)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -763,7 +767,7 @@ export default function ReferenzwertePage() {
                   Edition {s.edition}
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  {s.brackets.filter((br) => br.lifeStage === "none").length} Altersgruppen
+                  {AGE_GROUPS.filter((group) => group.minAge >= 1).length} Altersgruppen
                 </Badge>
               </div>
               {standardId !== s.id && (

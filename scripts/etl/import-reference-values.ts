@@ -1,9 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  AGE_GROUPS,
   REFERENCE_STANDARDS,
 } from "@/lib/mock-data/reference-standards";
+import { AGE_GROUPS } from "@/lib/reference-metadata";
 
 interface ArgvOptions {
   standards: Set<string> | null;
@@ -13,6 +13,8 @@ interface ReferenceValueInsert {
   nutrient_id: string;
   amount: number;
   gender: "m" | "w";
+  standard_id: "dge" | "oege" | "sge" | "rda";
+  age_group_id: string;
   age_min: number | null;
   age_max: number | null;
   life_stage: string | null;
@@ -156,6 +158,8 @@ async function main() {
           nutrient_id: value.nutrientId,
           amount: value.amount,
           gender: bracket.gender,
+          standard_id: standard.id as "dge" | "oege" | "sge" | "rda",
+          age_group_id: ageGroup.id,
           age_min: ageMin,
           age_max: ageMax,
           life_stage: lifeStage,

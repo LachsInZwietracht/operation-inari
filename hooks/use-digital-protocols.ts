@@ -153,6 +153,13 @@ export function useDigitalProtocols() {
       if (isAuthenticated) {
         void persistDigitalProtocolLink(newLink)
           .then(async (persisted) => {
+            setLinks((prev) =>
+              sortEntries(
+                prev.map((item) =>
+                  item.id === tempId ? { ...persisted, url: `${origin}/protokoll/${persisted.id}` } : item,
+                ),
+              ),
+            );
             // Re-generate QR with the real UUID-based URL
             const realUrl = `${origin}/protokoll/${persisted.id}`;
             let realQr: string;
@@ -161,9 +168,14 @@ export function useDigitalProtocols() {
             } catch {
               realQr = persisted.qrCode;
             }
-            const updated = { ...persisted, url: realUrl, qrCode: realQr };
-            // Persist the updated URL/QR back to Supabase
-            void persistDigitalProtocolLink(updated).catch(() => {});
+            const latestKnown =
+              entriesRef.current.find((item) => item.id === persisted.id || item.id === tempId) ?? persisted;
+            const updated = {
+              ...persisted,
+              status: latestKnown.status,
+              url: realUrl,
+              qrCode: realQr,
+            };
             setLinks((prev) =>
               sortEntries(prev.map((item) => (item.id === tempId || item.id === persisted.id ? updated : item))),
             );
@@ -180,23 +192,41 @@ export function useDigitalProtocols() {
 
   const updateStatus = useCallback(
     (id: string, status: DigitalProtocolLink["status"]) => {
-      let nextLink: DigitalProtocolLink | null = null;
+      const currentLink = entriesRef.current.find((link) => link.id === id) ?? null;
+      const nextLink = currentLink
+        ? { ...currentLink, status, updatedAt: new Date().toISOString() }
+        : null;
 
       setLinks((prev) =>
         sortEntries(
-          prev.map((link) => {
-            if (link.id !== id) return link;
-            nextLink = { ...link, status, updatedAt: new Date().toISOString() };
-            return nextLink;
-          }),
+          prev.map((link) => (link.id === id && nextLink ? nextLink : link)),
         ),
       );
 
       if (isAuthenticated && nextLink) {
-        void persistDigitalProtocolLink(nextLink)
-          .then((persisted) => {
+        const linkToPersist = nextLink
+        const persistPromise = UUID_REGEX.test(linkToPersist.id)
+          ? persistDigitalProtocolLink(linkToPersist)
+          : fetchDigitalProtocolLinksClient().then((remoteEntries) => {
+              const matchedRemote = remoteEntries.find(
+                (entry) =>
+                  entry.patientId === linkToPersist.patientId &&
+                  entry.method === linkToPersist.method &&
+                  entry.status !== "expired",
+              );
+              return persistDigitalProtocolLink({
+                ...(matchedRemote ?? linkToPersist),
+                status,
+              });
+            });
+
+        void persistPromise.then((persisted) => {
             setLinks((prev) =>
-              sortEntries(prev.map((item) => (item.id === id ? persisted : item))),
+              sortEntries(
+                prev
+                  .filter((item) => item.id !== id)
+                  .concat(persisted),
+              ),
             );
           })
           .catch((err) => {

@@ -17,6 +17,7 @@
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
 - **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern where implemented. Data is synced to the cloud when authenticated but remains available in `localStorage` for offline use.
+- **Reference values:** Official DGE/ÖGE/SGE/RDA rows now load from Supabase. Custom profiles, user defaults, and patient-specific assignments persist remotely with bundled fallback data for pre-migration environments.
 - **Export pipeline:** Real file generation lives behind server routes in `app/api/exports/*`. Client pages build typed payloads, the server renders PDF/CSV output, and export metadata is written to `export_jobs`.
 
 ## 3. Data & State Layers
@@ -62,6 +63,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/rezepte/page.tsx`
   - Uses `<Suspense>` for the recipe list.
   - **Cached Rendering:** Recipe cards display kcal/macros instantly using cached values from the `recipes` table, avoiding heavy ingredient loading for the entire list.
+  - **Meal-Master Import:** Supports uploading legacy `.mmf` or `.txt` recipe formats. Parses the file structure and uses NLP to intelligently match string ingredients against the BLS database. If an ingredient cannot be perfectly matched, an interactive `RecipeImportReviewDialog` is presented allowing the user to manually search and resolve the ingredient before saving.
 
 ### 4.7 Recipe Detail (`/rezepte/[id]`)
 - **Routing:** `app/(app)/rezepte/[id]/page.tsx` fetches the recipe from Supabase.
@@ -78,7 +80,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Clinical record core:**
   - Anthropometrie, Diagnosen, Medikamente, Screening history, Laborwerte, Aktivität, Therapiemodule/-integrationen, PROCAM, and digitale Protokoll-Links now use Supabase-first persistence with offline `localStorage` fallback.
   - The patient-detail tabs show sync-aware empty states while remote data is loading after authentication.
-  - Medical calculators (Creatinine Clearance, MNA, SGA) are fully integrated. The Creatinine Clearance calculator automatically pulls the latest serum creatinine from the patient's lab history and recommends renal diet planning for Stage G3+ (<60 ml/min).
+  - Medical calculators (Creatinine Clearance, MNA, SGA) are fully integrated. Cockcroft-Gault now supports `mg/dL` and `µmol/L`, stores structured calculation metadata in the lab record, and shows the applied weight basis. MNA covers the full 18-item form, and SGA stores the expanded history/physical assessment answers in `patient_screenings`.
+  - The patient workspace now exposes a patient-bound `ReferenceProfileSelector`, so protocol analysis and related comparisons use the same persisted reference assignment for that patient.
 - **Digital Protocols:**
   - Practitioners create public protocol links in the `Protokolle` tab and can review incoming submissions directly in the patient workspace.
   - `app/protokoll/[linkId]` hosts the public patient-facing form. Submissions post to `/api/protokoll/submit`, which validates the link, stores the submission, and moves the link to `received`.
@@ -92,6 +95,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.14 Berichte (`/berichte`)
 - **Component:** `app/(app)/berichte/berichte-client.tsx`
   - Builds a typed `ReportExportRequest` from the currently selected plan, visible nutrient rows, active sections, and resolved placeholder notes.
+  - Generic report comparisons now use the persisted user default reference preference instead of a hardcoded DGE adult baseline.
   - **Real exports:** `PDF erstellen` and `CSV/Nährstoffdaten` POST to `/api/exports/report`.
   - **Preview:** `Druckvorschau anzeigen` requests the same PDF payload with inline disposition and opens it in a new tab.
   - **Contract boundary:** the page owns selection and payload assembly; rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
@@ -105,6 +109,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.16 API & Export (`/api-export`)
 - **Component:** `app/(app)/api-export/page.tsx`
   - Export cards now call `/api/exports/datasets` with typed `format` + `scope` combinations.
+  - The default report export builder resolves references via the same user preference pipeline used in the interactive UI.
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
 
@@ -153,6 +158,18 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Production tab:** Day-selectable production list with expandable ingredient details.
   - **Shopping tab:** Category-grouped shopping list with portion scaling and CSV export.
 - **Extension notes:** To add new meal slots, extend `VISIBLE_MEAL_SLOTS` and ensure `MEAL_SLOT_LABELS` has a matching entry. To add new diet form categories, extend `DIET_FORMS` in `lib/mock-data/institution.ts`. Shopping cost estimates use `CATEGORY_COST_PER_KG` in the hook — update when adding new food categories.
+
+### 4.19 Allergen & Intolerance Management
+
+- **Files:** `lib/allergen-constants.ts`, `lib/allergen-warnings.ts`, `lib/data/patient-allergens-client.ts`, `hooks/use-patient-allergens.ts`
+- **DB:** `patient_allergens` table (migration `20260507000023`)
+- **Constants:** `ALLERGEN_DEFINITIONS` — EU 14 mandatory allergens + histamine, fructose, sorbit intolerances. Each entry has `foodMatchTokens` for matching against free-text allergen strings on foods/recipes.
+- **Patient UI:** In the Diagnosen tab (`components/patient-tabs.tsx`), a dedicated "Allergien & Intoleranzen" card lets counselors add/remove allergen entries with type (allergy/intolerance/preference) and severity (mild/moderate/severe). Entries display as color-coded badges.
+- **Therapy tab:** `AllergenAutomationCard` (`components/therapy-panels.tsx`) shows a read-only view of the patient's allergen profile.
+- **Meal plan warnings:** When a `patientId` query param is provided on `/ernaehrungsplan`, adding a food or recipe with matching allergens triggers a non-blocking toast warning. Conflicting entries show a warning icon.
+- **Food/Recipe detail:** `FoodDetailContent` and `RecipeDetailContent` accept optional `patientAllergens` prop. When conflicts are detected, a destructive Alert is shown above allergen badges.
+- **Recipe form:** `RECIPE_ALLERGENS` sourced from `ALLERGEN_DEFINITIONS` (EU 14 only).
+- **Warning engine:** `checkAllergenConflicts()` in `lib/allergen-warnings.ts` — pure function matching item allergen strings against patient allergen entries via `foodMatchTokens`.
 
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.

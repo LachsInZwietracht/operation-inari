@@ -35,7 +35,7 @@ Single source of truth for Operation Prodi's nutrition database layer: schema de
 > - **Food delivery:** The layout now loads only a lightweight search index (`FoodSearchProvider`). Pages that actually compute nutrients wrap their client component in `FoodsProvider` *inside* the route and call `fetchAllFoods()` there. That keeps the default payload below ~200 KB while still giving dashboards/forms full data when needed.
 >   - Protocol detail pages now use `fetchFoodsForProtocols()` instead of `fetchAllFoods()`, and paginated `fetchAllFoods*` loaders skip expensive `COUNT(*)` queries to reduce statement timeouts under test/dev load.
 > - **Institution tooling:** `useInstitutionMenu` now derives shopping categories/costs directly from the Supabase foods (via `categoryId`). If you add new categories, update both `FOOD_CATEGORIES` and the cost table in the hook. The food detail route now queries Supabase lazily with `fetchFoodById`, so you no longer need to preload every food just to show a single detail page.
-> - **Reference standards:** Sync DGE/ÖGE/SGE/RDA matrices with `npm run etl:reference-values` (filter with `--standard=dge`). The script consumes `lib/mock-data/reference-standards.ts` so the app + database stay in lockstep, and the `reference_values` table now stores fractional age ranges plus trimester-specific life stages.
+> - **Reference standards:** Sync DGE/ÖGE/SGE/RDA matrices with `npm run etl:reference-values` (filter with `--standard=dge`). The script still consumes `lib/mock-data/reference-standards.ts` as ETL input, but the runtime app now reads `reference_values` plus persisted `reference_profiles`, `reference_profile_values`, `user_reference_preferences`, and `patient_reference_assignments`.
 > - **Export system:** Reports, patient mail-merge, and `API & Export` now create real files server-side. Export metadata is persisted in `export_jobs`; binaries are generated on demand and are not stored in the database.
 
 ### Data Model (TypeScript Types)
@@ -220,6 +220,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260427000014_invoices.sql` | `invoices` table with RLS, indexes on `user_id`/`status`/`due_date`, and auto-update trigger |
 | `20260428000015_export_jobs.sql` | `export_jobs` table for persisted export/import history with user-scoped RLS |
 | `20260429000016_appointments.sql` | `appointments` table with RLS, indexes on `user_id`/`date`/`type`/`patient_id`, and auto-update trigger |
+| `20260506000022_reference_profiles_and_lab_metadata.sql` | Runtime reference-value lookup columns, custom profile tables, user/patient preference tables, and `patient_lab_values.metadata` |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0), 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -234,7 +235,11 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `food_portions` | Portion size definitions | `food_id`, `label` ("Stück"), `amount_grams` |
 | `food_synonyms` | Multilingual search aliases | `food_id`, `name`, `locale`, `source` (system/user) |
 | `food_source_mappings` | Cross-source crosswalk | `food_id`, `external_source`, `external_id`, `confidence` |
-| `reference_values` | DGE daily intake targets | `nutrient_id`, `amount`, `gender`, `age_min`, `age_max`, `life_phase` |
+| `reference_values` | Official daily intake targets across DGE/ÖGE/SGE/RDA | `standard_id`, `age_group_id`, `nutrient_id`, `amount`, `gender`, `age_min`, `age_max`, `life_stage` |
+| `reference_profiles` | User-defined nutrient reference templates | `user_id`, `name`, `based_on_standard_id`, `age_group_id`, `gender`, `life_stage` |
+| `reference_profile_values` | Nutrient overrides per custom profile | `profile_id`, `nutrient_id`, `amount` |
+| `user_reference_preferences` | Default reference selection for generic app views | `user_id`, `standard_id`, `profile_id`, `age_group_id`, `gender`, `life_stage` |
+| `patient_reference_assignments` | Patient-specific reference overrides | `patient_id`, `user_id`, `standard_id`, `profile_id`, `life_stage` |
 | `off_staging` | Open Food Facts quarantine | `barcode`, `nutriments` (JSONB), `validated`, `promoted` |
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |

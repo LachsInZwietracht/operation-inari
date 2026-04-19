@@ -87,11 +87,13 @@ import type {
 import { calculateProdScore } from "@/lib/prodi-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
-import { resolveReferenceForPatient } from "@/lib/reference-values"
 import { useFoods, useFoodSearch } from "@/components/foods-provider"
 import { createRecipeLookup } from "@/lib/recipes"
 import { useNutrientValues } from "@/hooks/use-nutrient-values"
 import type { FoodSearchItem } from "@/lib/types"
+import { usePatientAllergens } from "@/hooks/use-patient-allergens"
+import { checkAllergenConflicts } from "@/lib/allergen-warnings"
+import { toast } from "sonner"
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -150,11 +152,17 @@ function complianceBadge(value: number, min?: number, max?: number): "ok" | "low
 interface ErnaehrungsplanPageClientProps {
   recipes: Recipe[]
   initialPlans: DailyMealPlan[]
+  patientId?: string
 }
 
-export function ErnaehrungsplanPageClient({ recipes, initialPlans }: ErnaehrungsplanPageClientProps) {
+export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: ErnaehrungsplanPageClientProps) {
   const foods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
+  const { getForPatient: getAllergensForPatient } = usePatientAllergens()
+  const patientAllergens = useMemo(
+    () => (patientId ? getAllergensForPatient(patientId) : []),
+    [patientId, getAllergensForPatient],
+  )
   const {
     currentDate,
     currentPlan,
@@ -190,6 +198,25 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
 
+  const entryAllergenWarnings = useMemo(() => {
+    if (patientAllergens.length === 0) return new Map<string, string[]>()
+    const map = new Map<string, string[]>()
+    for (const slot of currentPlan.slots) {
+      for (const entry of slot.entries) {
+        const allergens = entry.type === "food"
+          ? foodMap.get(entry.referenceId)?.allergens
+          : recipeMap.get(entry.referenceId)?.allergens
+        if (allergens?.length) {
+          const warnings = checkAllergenConflicts(allergens, patientAllergens)
+          if (warnings.length > 0) {
+            map.set(entry.id, warnings.map((w) => w.allergenLabel))
+          }
+        }
+      }
+    }
+    return map
+  }, [currentPlan, foodMap, recipeMap, patientAllergens])
+
   const aggregatePlanNutrients = useCallback(
     (plan: DailyMealPlan): NutrientValue[] =>
       sumNutrients(
@@ -211,11 +238,31 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
   const handleSelectFood = (foodId: string) => {
     addEntry(activeSlot, { type: "food", referenceId: foodId, amount: 100 })
     setCommandOpen(false)
+
+    if (patientAllergens.length > 0) {
+      const food = foodMap.get(foodId)
+      if (food?.allergens?.length) {
+        const warnings = checkAllergenConflicts(food.allergens, patientAllergens)
+        for (const w of warnings) {
+          toast.warning(`Allergenwarnung: ${food.name} enthält ${w.allergenLabel}`)
+        }
+      }
+    }
   }
 
   const handleSelectRecipe = (recipeId: string) => {
     addEntry(activeSlot, { type: "recipe", referenceId: recipeId, amount: 1 })
     setCommandOpen(false)
+
+    if (patientAllergens.length > 0) {
+      const recipe = recipeMap.get(recipeId)
+      if (recipe?.allergens?.length) {
+        const warnings = checkAllergenConflicts(recipe.allergens, patientAllergens)
+        for (const w of warnings) {
+          toast.warning(`Allergenwarnung: ${recipe.name} enthält ${w.allergenLabel}`)
+        }
+      }
+    }
   }
 
   const handleDateSelect = (date: Date | undefined) => {
@@ -290,15 +337,13 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
     [currentPlan, foods, recipes],
   )
 
-  const { standardId, lifeStage } = useReferenceProfiles()
+  const { getResolvedConfig } = useReferenceProfiles()
   const refConfig = useMemo(() => {
-    return resolveReferenceForPatient({
-      standardId,
+    return getResolvedConfig({
       dateOfBirth: "1990-01-01",
-      gender: "m",
-      lifeStage,
+      gender: "w",
     })
-  }, [standardId, lifeStage])
+  }, [getResolvedConfig])
 
   const referenceMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -608,6 +653,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans }: Ernaehrungs
                   onOpenExchange={handleOpenExchange}
                   foods={foods}
                   recipes={recipes}
+                  allergenWarnings={entryAllergenWarnings}
                 />
               ))}
             </div>

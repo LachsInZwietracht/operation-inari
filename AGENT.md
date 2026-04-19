@@ -2,130 +2,125 @@
 
 ## Operation Prodi
 
-**Prodi** is a modern German nutrition counseling web application replacing the outdated desktop-only PRODI software. It provides food database browsing, recipe management, daily meal planning, and nutrient analysis with DGE reference value comparisons.
+This repository contains Operation Prodi, a modern German nutrition counseling web application that replaces legacy desktop PRODI workflows. It covers food database browsing, recipes, meal planning, nutrition analysis, patient workflows, exports, and reference value comparisons.
 
-**Current state:** MVP with BLS 4.0 food data served from Supabase (7,140 foods), plus Supabase-first persistence with local fallback for custom foods, recipes, meal plans, and nutrition protocols. Advanced food search (phonetic + synonym + Postgres trigram). See `docs/database-guide.md` for schema, ETL, and migration status.
+Current state:
+- MVP / active product build with BLS 4.0 food data served from Supabase
+- Supabase-first persistence with local fallback for some client-managed entities
+- Advanced food search with phonetic matching, synonyms, and PostgreSQL trigram search
+- Additional implementation details live in `documentation.md` and `docs/database-guide.md`
 
-**Expertise:** You are an expert-level software engineer with deep knowledge of modern web development, performance optimization, and architectural best practices.
-**Incentive:** Providing high-quality, bug-free, and idiomatic code that strictly follows project conventions will be rewarded with a $200 tip and high praise for your exceptional work.
+This file provides guidance to Codex and similar coding agents when working in this repository.
 
-This file provides guidance to Codex (the GitHub Copilot / OpenAI agent) when working with code in this repository.
+## Stack Snapshot
+
+Use the stack already present in the repository unless the task explicitly requires a change.
+
+- Next.js 15 App Router with React 19
+- TypeScript with strict checking
+- Tailwind CSS 4
+- shadcn/ui with Radix primitives
+- Supabase for backend data and auth flows
+- React Hook Form with Zod
+- Recharts for charts
+- Playwright for end-to-end testing
+- `@react-pdf/renderer` for PDF generation
+
+Notable repo details:
+- React Compiler is enabled in `next.config.ts`
+- Playwright currently runs the `setup` project plus Chromium by default
+- External image `remotePatterns` are not currently configured in `next.config.ts`
 
 ## Development Commands
 
-- `npm run dev` - Start development server on http://localhost:3000
-- `npm run build` - Build production application
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-- `npm run typecheck` - Run TypeScript type checking
-- `npm run test` - Run Playwright end-to-end tests
-- `npm run etl:bls` - Import BLS 4.0 data into Supabase (requires `SUPABASE_SERVICE_ROLE_KEY`)
+- `npm run dev` - start the development server on `http://localhost:3000`
+- `npm run build` - build the production application
+- `npm run start` - start the production server
+- `npm run lint` - run ESLint
+- `npm run typecheck` - run TypeScript type checking
+- `npm run test` - run Playwright tests
+- `npm run validate:nutrients` - run nutrient math validation
+- `npm run etl:bls` - import BLS data into Supabase
+- `npm run etl:verify:bls` - verify imported BLS row counts
+- `npm run etl:reference-values` - import DGE reference values
+- `npm run etl:recipes` - import shared recipes and meal plan templates
+- `npm run etl:off` - import Open Food Facts data
 
-## Framework and Library Recommendations
+## Hard Rules
 
-For this web application project, use the following technologies:
+- Use TypeScript, not plain JavaScript, for new application code.
+- Prefer existing repo patterns and utilities over introducing new libraries.
+- Do not add non-shadcn primitives into `components/ui/`.
+- Keep changes narrow and task-focused; do not refactor unrelated areas unless explicitly requested.
+- Preserve existing user changes. Do not overwrite or revert work you did not make.
+- Do not expose secrets through `NEXT_PUBLIC_` variables.
+- If a task requires schema, migration, auth, or shared contract changes, inspect the relevant implementation and docs first.
 
-- Next.js - React framework with App Router
-- Tailwind CSS - Utility-first styling framework
-- shadcn/ui - Component library (using shadcn@latest CLI)
-- Supabase - Backend and authentication
-- Zod - Input validation
-- React Hook Form - Form handling
-- React Query - Data fetching and caching
-- polar.sh - Payment processing (see https://docs.polar.sh/integrate/sdk/adapters/nextjs for setup)
-- Playwright - End-to-end testing
+## Change Discipline
 
-**ALWAYS** use TypeScript with strict type checking over JavaScript.
-**NEVER** create projects from scratch - always use framework CLIs to scaffold projects.
+Before editing:
+- Read the surrounding file and nearby patterns first.
+- Check whether the same problem is already solved elsewhere in the codebase.
+- Prefer extending an existing abstraction over creating a parallel pattern.
 
-## Architecture
+While editing:
+- Make the smallest change that fully solves the task.
+- Avoid broad renames, formatting churn, and opportunistic cleanups.
+- Keep naming, file layout, and component structure consistent with adjacent code.
+- Call out tradeoffs if the requirement is ambiguous or would force a larger architectural choice.
 
-This is a Next.js 15 application using the App Router with:
+## Validation
 
-- Framework: Next.js 15 with React 19
-- Styling: Tailwind CSS 4 with custom CSS variables
-- UI Components: shadcn/ui components in "new-york" style with Radix primitives
-- Testing: Playwright for end-to-end testing
-- Fonts: Geist Sans and Geist Mono from Google Fonts
-- Charts: Recharts for data visualization
-- Theme: next-themes for dark/light mode support
-- Notifications: Sonner for toast notifications
-- Backend: Supabase integration for food data, recipes, meal plans, protocols, and auth
-- Forms: React Hook Form with Zod validation
-- Additional Libraries: Embla Carousel, Command Menu (cmdk), Date handling (date-fns)
+Validate in proportion to the size and risk of the change.
 
-### Project Structure
+For small copy or local UI changes:
+- Run the cheapest relevant check, usually `npm run lint` or a targeted manual inspection
 
-- `app/` - Next.js App Router pages and layouts
-- `components/ui/` - Complete shadcn/ui component library including accordion, alert-dialog, avatar, badge, breadcrumb, button, calendar, card, carousel, checkbox, collapsible, command, context-menu, dialog, drawer, dropdown-menu, form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, toggle, tooltip, and more
-- `hooks/` - Custom React hooks (e.g., `use-patients.ts`, `use-meal-plan.ts`, `use-protocols.ts`)
-- `lib/data/` - Client-side data repositories (e.g., `recipes-client.ts`, `protocols-client.ts`)
+For logic, data flow, or TypeScript changes:
+- Run `npm run typecheck`
+- Run targeted tests when they cover the changed behavior
+
+For routing, auth, exports, data persistence, shared hooks, or cross-cutting UI changes:
+- Run `npm run lint`
+- Run `npm run typecheck`
+- Run relevant Playwright tests
+- Run `npm run build` when the change is broad enough to justify it
+
+Use the smallest reliable test layer:
+- prefer direct logic validation for pure transformations
+- prefer integration-style verification for data and state flow
+- use Playwright for real user workflows and regressions
+
+If a check is too expensive, blocked by environment, or unavailable, say so explicitly in the final handoff.
+
+If unrelated tests fail, stop and report the failure instead of “fixing” unrelated breakage unless asked.
+
+## Project Map
+
+- `app/` - App Router routes, layouts, and server/client entry points
+- `components/` - feature components
+- `components/ui/` - shadcn/ui primitives and wrappers
+- `hooks/` - reusable React hooks
+- `lib/data/` - data access and client-side repository helpers
 - `lib/supabase/` - Supabase client, server, and middleware utilities
-- `lib/utils.ts` - Utility functions including Tailwind class merging
-- `supabase/` - Supabase configuration, migrations, and seed data
-- `supabase/migrations/` - Database schema migrations (run in order)
-- `scripts/etl/` - ETL scripts for importing external nutrition databases
-- `data/` - Raw data files (BLS, OFF, etc.) — gitignored, not committed
-- `docs/` - Project documentation including `database-guide.md`
-- `tests/` - Playwright test files
-- `public/` - Static assets
-
-### shadcn/ui Configuration
-
-Components are configured with:
-- Style: "new-york"
-- Base color: neutral
-- CSS variables enabled
-- Icon library: lucide-react
-- Path aliases: `@/components`, `@/lib/utils`, etc.
-
-### Playwright Configuration
-- Tests run against all major browsers (Chrome, Firefox, Safari)
-- Base URL: http://localhost:3000
-- Auto-starts dev server if not running, reuses existing server if available
-- 2-minute timeout for server startup
+- `lib/types/` - shared domain types
+- `lib/mock-data/` - mock and seed-like local data sources
+- `lib/exports/` - PDF, CSV, and export job logic
+- `lib/search/` - search implementation details
+- `supabase/` - config, seed data, and migrations
+- `scripts/etl/` - ETL and import scripts
+- `tests/` - Playwright tests
+- `docs/` - product and database documentation
 
 ## Environment Variables
 
-When working with environment variables in Next.js:
+- Server-only variables should not use the `NEXT_PUBLIC_` prefix.
+- Client-visible variables must use `NEXT_PUBLIC_`.
+- Store local development variables in `.env.local`.
+- Document required variables in `.env.example` when applicable.
 
-- **Server-side only**: Use standard naming (e.g., `DATABASE_URL`, `API_SECRET`)
-- **Client-side access**: **MUST** prefix with `NEXT_PUBLIC_` (e.g., `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`)
-- Environment variables without the `NEXT_PUBLIC_` prefix are **NOT** available in the browser
-- **NEVER** expose sensitive data (API keys, secrets) with `NEXT_PUBLIC_` prefix
-- Store environment variables in `.env.local` for local development
-- Use `.env.example` to document required environment variables
+## Reference Docs
 
-## Validation Strategy
-
-**ALWAYS** work iteratively and validate your work after finishing each task by following these steps in order:
-
-### Quick Validation Steps (run for each task)
-1. **Linting**: `npm run lint` - Check for syntax and style issues
-2. **Type checking**: `npm run typecheck` - Ensure TypeScript correctness    
-3. **Specific tests**: Run only relevant Playwright tests for changed functionality. If you implemented new functionality, write tests for it and run them.
-
-### Complete Validation (run only after all tasks are complete)
-4. **Build**: `npm run build` - Full production build verification
-5. **Complete test suite**: `npm run test` - All Playwright end-to-end tests
-
-### Testing Guidelines
-- **ALWAYS** write tests for new functionality - this is required for validation
-- Write realistic e2e tests from a user perspective focusing on actual interactions
-- **NEVER** write trivial tests that only assert component visibility
-- Focus on meaningful user workflows and business logic
-- If existing tests fail that are not part of the current task, **STOP** and ask for guidance
-- Do NOT auto-fix unrelated test failures
-- If tests fail without a clear reason, use playwright mcp to debug the test in a real browser
-
-## Feature Documentation
-
-For a comprehensive feature-by-feature guide covering routes, components, hooks, data flows, and extension notes, see [`documentation.md`](./documentation.md). Consult it when working on unfamiliar areas or tracing data through the app.
-
-## Database & Nutrition Data
-
-For everything related to the nutrition database layer — schema design, available datasets, ETL pipelines, nutrient ID mappings, migration strategy, and search architecture — see [`docs/database-guide.md`](./docs/database-guide.md). Consult it when working on Supabase tables, food data imports, or the mock-to-real-data migration.
-
-# General
-- Don't add any components that are not part of the shadcn library to components/ui
-- If you add images from the internet, make sure that the domain is allowed in remotePatterns in next.config.ts
+- Read `documentation.md` for route, feature, and data-flow context.
+- Read `docs/database-guide.md` before changing Supabase schema, nutrition data flows, ETL logic, or reference value handling.
+- Read `README.md` for current product capabilities and setup notes.

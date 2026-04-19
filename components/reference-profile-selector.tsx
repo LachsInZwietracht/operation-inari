@@ -18,19 +18,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { REFERENCE_STANDARDS, AGE_GROUPS } from "@/lib/mock-data/reference-standards";
+import { REFERENCE_STANDARDS, AGE_GROUPS } from "@/lib/reference-metadata";
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { LIFE_STAGE_LABELS } from "@/lib/types/reference-values";
 import type {
-  Gender,
-  LifeStage,
-  ReferenceStandardId,
-  ResolvedReferenceConfig,
+  Gender, ResolvedReferenceConfig,
 } from "@/lib/types";
 import {
   getAgeFromDateOfBirth,
   getAgeGroup,
-  resolveReferenceForPatient,
 } from "@/lib/reference-values";
 
 interface ReferenceProfileSelectorProps {
@@ -38,6 +34,8 @@ interface ReferenceProfileSelectorProps {
   dateOfBirth?: string;
   /** Patient gender */
   gender?: Gender;
+  /** Patient context to persist assignment */
+  patientId?: string;
   /** Callback when the resolved config changes */
   onChange?: (config: ResolvedReferenceConfig) => void;
   /** Compact mode: only shows standard selector and badge */
@@ -47,18 +45,32 @@ interface ReferenceProfileSelectorProps {
 export function ReferenceProfileSelector({
   dateOfBirth,
   gender = "w",
+  patientId,
   onChange,
   compact = false,
 }: ReferenceProfileSelectorProps) {
   const {
     standardId,
+    selectedProfileId,
     lifeStage,
     customProfiles,
     setStandard,
+    setProfile,
     setLifeStage,
+    getResolvedConfig,
+    getPatientAssignment,
   } = useReferenceProfiles();
 
   const resolvedGender: "m" | "w" = gender === "d" ? "w" : gender;
+  const patientAssignment = patientId ? getPatientAssignment(patientId) : null;
+  const activeSelection = patientAssignment?.profileId
+    ? `custom:${patientAssignment.profileId}`
+    : patientAssignment?.standardId
+      ? patientAssignment.standardId
+      : selectedProfileId
+        ? `custom:${selectedProfileId}`
+        : standardId;
+  const activeLifeStage = patientAssignment?.lifeStage ?? lifeStage;
 
   const ageGroup = useMemo(() => {
     if (!dateOfBirth) return AGE_GROUPS.find((g) => g.id === "25-51")!;
@@ -66,35 +78,27 @@ export function ReferenceProfileSelector({
     return getAgeGroup(age);
   }, [dateOfBirth]);
 
-  const handleStandardChange = (value: string) => {
-    setStandard(value as ReferenceStandardId);
-    // Resolve new config with the updated standard
-    const config = resolveReferenceForPatient({
-      standardId: value as ReferenceStandardId,
-      dateOfBirth: dateOfBirth ?? "1990-01-01",
-      gender,
-      lifeStage,
-    });
-    onChange?.(config);
+  const handleSelectionChange = async (value: string) => {
+    if (value.startsWith("custom:")) {
+      await setProfile(value.slice("custom:".length), patientId, gender, dateOfBirth);
+    } else {
+      await setStandard(value as "dge" | "oege" | "sge" | "rda", patientId, gender, dateOfBirth);
+    }
+    onChange?.(getResolvedConfig({ patientId, dateOfBirth, gender }));
   };
 
-  const handleLifeStageChange = (value: string) => {
-    setLifeStage(value as LifeStage);
-    const config = resolveReferenceForPatient({
-      standardId,
-      dateOfBirth: dateOfBirth ?? "1990-01-01",
-      gender,
-      lifeStage: value as LifeStage,
-    });
-    onChange?.(config);
+  const handleLifeStageChange = async (value: string) => {
+    await setLifeStage(value as typeof lifeStage, patientId, gender, dateOfBirth);
+    onChange?.(getResolvedConfig({ patientId, dateOfBirth, gender }));
   };
 
-  const standard = REFERENCE_STANDARDS.find((s) => s.id === standardId);
+  const standard = REFERENCE_STANDARDS.find((s) => s.id === (patientAssignment?.standardId ?? standardId));
+  const filteredProfiles = customProfiles.filter((profile) => !patientId || profile.gender === resolvedGender);
 
   if (compact) {
     return (
       <div className="flex items-center gap-2">
-        <Select value={standardId} onValueChange={handleStandardChange}>
+        <Select value={activeSelection} onValueChange={(value) => void handleSelectionChange(value)}>
           <SelectTrigger className="h-7 w-auto gap-1 text-xs px-2">
             <SelectValue />
           </SelectTrigger>
@@ -104,9 +108,9 @@ export function ReferenceProfileSelector({
                 {s.shortName}
               </SelectItem>
             ))}
-            {customProfiles.length > 0 && (
+            {filteredProfiles.length > 0 && (
               <>
-                {customProfiles.map((p) => (
+                {filteredProfiles.map((p) => (
                   <SelectItem key={p.id} value={`custom:${p.id}`}>
                     {p.name}
                   </SelectItem>
@@ -117,7 +121,7 @@ export function ReferenceProfileSelector({
         </Select>
         <Badge variant="outline" className="text-xs font-normal">
           {ageGroup.label} · {resolvedGender === "m" ? "♂" : "♀"}
-          {lifeStage !== "none" && ` · ${LIFE_STAGE_LABELS[lifeStage]}`}
+          {activeLifeStage !== "none" && ` · ${LIFE_STAGE_LABELS[activeLifeStage]}`}
         </Badge>
       </div>
     );
@@ -154,7 +158,7 @@ export function ReferenceProfileSelector({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-xs text-muted-foreground">Standard</label>
-          <Select value={standardId} onValueChange={handleStandardChange}>
+          <Select value={activeSelection} onValueChange={(value) => void handleSelectionChange(value)}>
             <SelectTrigger className="h-8">
               <SelectValue />
             </SelectTrigger>
@@ -169,6 +173,15 @@ export function ReferenceProfileSelector({
                   </span>
                 </SelectItem>
               ))}
+              {filteredProfiles.length > 0 && (
+                <>
+                  {filteredProfiles.map((profile) => (
+                    <SelectItem key={profile.id} value={`custom:${profile.id}`}>
+                      <span className="font-medium">{profile.name}</span>
+                    </SelectItem>
+                  ))}
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -176,7 +189,7 @@ export function ReferenceProfileSelector({
         {resolvedGender === "w" && (
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Lebensphase</label>
-            <Select value={lifeStage} onValueChange={handleLifeStageChange}>
+            <Select value={activeLifeStage} onValueChange={(value) => void handleLifeStageChange(value)}>
               <SelectTrigger className="h-8">
                 <SelectValue />
               </SelectTrigger>
@@ -202,9 +215,9 @@ export function ReferenceProfileSelector({
         <Badge variant="outline" className="text-xs">
           {resolvedGender === "m" ? "Männlich" : "Weiblich"}
         </Badge>
-        {lifeStage !== "none" && (
+        {activeLifeStage !== "none" && (
           <Badge variant="outline" className="text-xs">
-            {LIFE_STAGE_LABELS[lifeStage]}
+            {LIFE_STAGE_LABELS[activeLifeStage]}
           </Badge>
         )}
       </div>

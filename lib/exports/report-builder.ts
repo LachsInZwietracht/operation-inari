@@ -1,4 +1,4 @@
-import type { DailyMealPlan, Food, ReportExportRequest, Recipe } from "@/lib/types";
+import type { DailyMealPlan, Food, ReportExportRequest, Recipe, ResolvedReferenceConfig } from "@/lib/types";
 import {
   calculatePerServing,
   calculateRecipeNutrients,
@@ -11,7 +11,7 @@ import { formatDate, formatNumber, formatPercent } from "@/lib/format";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { createRecipeLookup } from "@/lib/recipes";
-import { resolveReferenceForPatient, getReferenceAmount } from "@/lib/reference-values";
+import { getReferenceAmount, resolveReferenceForPatient } from "@/lib/reference-values";
 
 const DEFAULT_NUTRIENT_IDS = [
   "energie",
@@ -47,6 +47,7 @@ export function buildDefaultReportExportRequest(
   plan: DailyMealPlan,
   recipes: Recipe[],
   foods: Food[],
+  refConfig?: ResolvedReferenceConfig,
 ): ReportExportRequest {
   const foodMap = new Map(foods.map((food) => [food.id, food]));
   const recipeMap = createRecipeLookup(recipes);
@@ -54,17 +55,17 @@ export function buildDefaultReportExportRequest(
     slot.entries.map((entry) => getEntryNutrients(entry, foodMap, recipeMap, foods)),
   );
   const planNutrients = sumNutrients(nutrientArrays.filter((values) => values.length > 0));
-  const refConfig = resolveReferenceForPatient({
-    standardId: "dge",
-    dateOfBirth: "1990-01-01",
-    gender: "m",
-    lifeStage: "none",
-  });
+  const effectiveRefConfig =
+    refConfig ??
+    resolveReferenceForPatient({
+      dateOfBirth: "1990-01-01",
+      gender: "w",
+    });
 
   const nutrientRows = DEFAULT_NUTRIENT_IDS.map((id) => {
     const def = NUTRIENT_DEFINITIONS.find((item) => item.id === id)!;
     const value = getNutrientValue(planNutrients, id);
-    const reference = getReferenceAmount(refConfig, id);
+    const reference = getReferenceAmount(effectiveRefConfig, id);
     return {
       label: def.name,
       value: `${formatNumber(value, 1)} ${def.unit}`,
@@ -77,7 +78,7 @@ export function buildDefaultReportExportRequest(
     .slice(0, 6)
     .map((def) => {
       const value = getNutrientValue(planNutrients, def.id);
-      const reference = getReferenceAmount(refConfig, def.id);
+      const reference = getReferenceAmount(effectiveRefConfig, def.id);
       return {
         label: def.name,
         value: `${formatNumber(value, 1)} ${def.unit}`,
@@ -90,7 +91,7 @@ export function buildDefaultReportExportRequest(
     .slice(0, 6)
     .map((def) => {
       const value = getNutrientValue(planNutrients, def.id);
-      const reference = getReferenceAmount(refConfig, def.id);
+      const reference = getReferenceAmount(effectiveRefConfig, def.id);
       return {
         label: def.name,
         value: `${formatNumber(value, 1)} ${def.unit}`,
@@ -100,7 +101,7 @@ export function buildDefaultReportExportRequest(
     });
 
   const energyValue = getNutrientValue(planNutrients, "energie");
-  const energyReference = getReferenceAmount(refConfig, "energie");
+  const energyReference = getReferenceAmount(effectiveRefConfig, "energie");
   const mealRows = plan.slots.map((slot) => ({
     slot: MEAL_SLOT_LABELS[slot.type],
     summary: slot.entries
@@ -148,8 +149,8 @@ export function buildDefaultReportExportRequest(
       {
         label: "Ballaststoffe",
         value: `${formatNumber(fiber, 1)} g`,
-        reference: `${formatNumber(getReferenceAmount(refConfig, "ballaststoffe"), 1)} g`,
-        coverage: formatPercent(percentOfReference(fiber, getReferenceAmount(refConfig, "ballaststoffe"))),
+        reference: `${formatNumber(getReferenceAmount(effectiveRefConfig, "ballaststoffe"), 1)} g`,
+        coverage: formatPercent(percentOfReference(fiber, getReferenceAmount(effectiveRefConfig, "ballaststoffe"))),
       },
       {
         label: "Plangewicht",
