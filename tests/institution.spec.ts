@@ -172,4 +172,77 @@ test.describe("Institution Features", () => {
     await page.getByRole("tab", { name: "Kosten" }).click();
     await expect(page.getByText(/Wochenkosten/).first()).toBeVisible();
   });
+
+  test("creates a new menu plan", async ({ page }) => {
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
+
+    // Click "Neuer Menüplan" button
+    await page.getByRole("button", { name: /Neuer Menüplan/i }).click();
+
+    // Fill form
+    await page.getByLabel("Name").fill("Testplan Woche 42");
+    await page.getByLabel("Zykluslänge").click();
+    await page.getByRole("option", { name: "2 Wochen" }).click();
+
+    // Submit
+    await page.getByRole("button", { name: "Erstellen" }).click();
+
+    // Assert card appears
+    await expect(page.getByText("Testplan Woche 42")).toBeVisible();
+    await expect(page.getByText("2-Wochen-Zyklus").first()).toBeVisible();
+  });
+
+  test("deletes a menu plan", async ({ page }) => {
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
+
+    // Count initial menu cards
+    const initialCards = await page.locator("[data-slot='card']").count();
+    expect(initialCards).toBeGreaterThan(1);
+
+    // Find the draft menu card ("Entwurf") and click its delete button
+    const draftCard = page.locator("[data-slot='card']").filter({ hasText: "Entwurf" }).first();
+    await draftCard.getByRole("button").filter({ has: page.locator("svg") }).last().click();
+
+    // Confirm deletion in alert dialog
+    await page.getByRole("button", { name: "Löschen" }).click();
+
+    // Assert card count decreased
+    const afterCards = await page.locator("[data-slot='card']").count();
+    // The main tab card is also a Card, so just check the draft text is gone
+    await expect(page.getByText("4-Wochen-Zyklus Q2/2026")).not.toBeVisible();
+  });
+
+  test("removes recipe from slot", async ({ page }) => {
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
+
+    // Find a filled slot (e.g. "Kartoffelsuppe" in the Vollkost tab)
+    const slotCell = page.getByText("Kartoffelsuppe").first();
+    await expect(slotCell).toBeVisible();
+
+    // Hover to reveal the remove button
+    await slotCell.hover();
+    const removeBtn = page.getByRole("button", { name: "Entfernen" }).first();
+    await removeBtn.click();
+
+    // Wait for the slot to show drop zone instead
+    await expect(page.getByText("Rezept hierher ziehen").first()).toBeVisible();
+  });
+
+  test("updates portion count", async ({ page }) => {
+    await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
+
+    // Find a portion input in the Vollkost tab (first filled slot)
+    const portionInput = page.locator('input[type="number"]').first();
+    await expect(portionInput).toBeVisible();
+
+    // Change portion count
+    await portionInput.fill("99");
+
+    // Switch to another tab and back to verify persistence
+    await page.getByRole("tab", { name: "Diabeteskost" }).click();
+    await page.getByRole("tab", { name: "Vollkost", exact: true }).click();
+
+    // The value should persist
+    await expect(page.locator('input[type="number"]').first()).toHaveValue("99");
+  });
 });

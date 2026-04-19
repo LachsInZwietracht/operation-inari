@@ -5,6 +5,7 @@ import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import type {
   InstitutionMenu,
   InstitutionMealSlot,
+  MenuCycleLength,
   ProductionItem,
   ProductionIngredient,
   ShoppingItem,
@@ -13,7 +14,8 @@ import type { MealSlotType } from "@/lib/types/meal-plan";
 import type { Recipe } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
 import { createRecipeLookup } from "@/lib/recipes";
-import { persistMenuPlan, fetchMenuPlansClient } from "@/lib/data/menu-plans-client";
+import { persistMenuPlan, fetchMenuPlansClient, deleteMenuPlanClient } from "@/lib/data/menu-plans-client";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "institution-menus";
@@ -144,19 +146,18 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
         if (!migrationDone.current) {
           migrationDone.current = true;
           const remoteIds = new Set(persistedMenus.map((m) => m.id));
-          const menusToMigrate = menus.filter((m) => !remoteIds.has(m.id));
 
-          for (const menu of menusToMigrate) {
-            // Only migrate if they look like real UUIDs or need to be recreated?
-            // Since mock data used "menu_kw15" we should ideally create a new UUID for them.
-            // But we will just try to persist it, Supabase will fail if it's not a UUID.
-            // Actually, we should just let new menus be created.
-            if (menu.id.length === 36 || menu.id.length === 32) { // rudimentary UUID check
-               void persistMenuPlan(menu).catch(err => {
-                 console.error(`Failed to migrate menu plan for ${menu.id}:`, err);
-               });
+          setMenus((prev) => {
+            const menusToMigrate = prev.filter((m) => !remoteIds.has(m.id));
+            for (const menu of menusToMigrate) {
+              if (menu.id.length === 36 || menu.id.length === 32) {
+                void persistMenuPlan(menu).catch(err => {
+                  console.error(`Failed to migrate menu plan for ${menu.id}:`, err);
+                });
+              }
             }
-          }
+            return prev;
+          });
         }
       } catch (error) {
         console.error("Failed to load menu plans from Supabase:", error);
@@ -170,7 +171,7 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, authLoading, menus]);
+  }, [isAuthenticated, authLoading]);
 
 
   // Persist whenever menus change
@@ -182,6 +183,7 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
     if (isAuthenticated) {
       void persistMenuPlan(menu).catch(err => {
         console.error(`Failed to sync menu plan ${menu.id}:`, err);
+        toast.error("Menüplan konnte nicht gespeichert werden");
       });
     }
   }, [isAuthenticated]);
@@ -370,6 +372,66 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
     [syncMenuToSupabase],
   );
 
+  // ── CRUD ─────────────────────────────────────────────────────
+
+  const createMenu = useCallback(
+    (params: {
+      name: string;
+      cycleLength: MenuCycleLength;
+      startDate: string;
+      dietFormIds: string[];
+    }) => {
+      const newMenu: InstitutionMenu = {
+        id: crypto.randomUUID(),
+        name: params.name,
+        cycleLength: params.cycleLength,
+        startDate: params.startDate,
+        dietFormIds: params.dietFormIds,
+        status: "draft",
+        createdAt: now(),
+        updatedAt: now(),
+        weeks: Array.from({ length: params.cycleLength }, (_, i) => ({
+          weekNumber: i + 1,
+          days: [],
+        })),
+      };
+
+      setMenus((prev) => [...prev, newMenu]);
+      syncMenuToSupabase(newMenu);
+      return newMenu;
+    },
+    [syncMenuToSupabase],
+  );
+
+  const deleteMenu = useCallback(
+    (menuId: string) => {
+      setMenus((prev) => prev.filter((m) => m.id !== menuId));
+      if (isAuthenticated) {
+        void deleteMenuPlanClient(menuId).catch((err) => {
+          console.error(`Failed to delete menu plan ${menuId}:`, err);
+          toast.error("Menüplan konnte nicht gelöscht werden");
+        });
+      }
+    },
+    [isAuthenticated],
+  );
+
+  const setMenuStatus = useCallback(
+    (menuId: string, status: InstitutionMenu["status"]) => {
+      setMenus((prev) => {
+        let updatedMenu: InstitutionMenu | null = null;
+        const next = prev.map((m) => {
+          if (m.id !== menuId) return m;
+          updatedMenu = { ...m, status, updatedAt: now() };
+          return updatedMenu;
+        });
+        if (updatedMenu) syncMenuToSupabase(updatedMenu);
+        return next;
+      });
+    },
+    [syncMenuToSupabase],
+  );
+
   // ── Production list ───────────────────────────────────────────
 
   const generateProductionList = useCallback(
@@ -497,6 +559,9 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
   return {
     menus,
     activeMenu,
+    createMenu,
+    deleteMenu,
+    setMenuStatus,
     assignRecipe,
     removeRecipe,
     updatePortionCount,

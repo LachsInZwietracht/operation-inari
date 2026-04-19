@@ -79,6 +79,9 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 
 ### 3.2 Menu Plans
 **Status:** Implemented (Supabase-backed persistence with offline fallback, week/4-week cycle planners).
+- Full CRUD: create menu plans (name, cycle length 1/2/4 weeks, start date, diet forms), delete with confirmation, status toggle (Aktiv/Entwurf/Archiviert).
+- Drag-and-drop recipe assignment with portion count dialog.
+- Auto-generated production lists (per day) and shopping lists (per week) with category-based cost estimates and CSV export.
 - Support for multi-day cycles and Teaching kitchen plans (Lehrkuechenplan).
 
 ### 3.3 Exchange Tables
@@ -124,8 +127,8 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **Bedside Mode:** UI optimized for iPad/Tablet use in clinical wards with high-contrast, touch-friendly charts.
 
 ### 5.5 Medical Calculations
-**Status:** Partially implemented (screenings and lab values persisted; some calculators remain local-only).
-- **Creatinine clearance calculation** — Cockcroft-Gault formula; critical for renal diet planning.
+**Status:** Implemented (screenings and lab values persisted; calculators integrated directly with patient record).
+- **Creatinine clearance calculation** — Cockcroft-Gault formula prefilled from recent lab values; critical for renal diet planning.
 - **MNA (Mini Nutritional Assessment)** — guided 18-item questionnaire for elderly patients.
 - **SGA (Subjective Global Assessment)** — structured assessment based on physical signs and history.
 

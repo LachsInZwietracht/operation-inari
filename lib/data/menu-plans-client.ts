@@ -95,6 +95,21 @@ export async function fetchMenuPlansClient(
   });
 }
 
+export async function deleteMenuPlanClient(
+  menuId: string,
+  supabase?: SupabaseClient,
+): Promise<void> {
+  const client = resolveBrowserClient(supabase);
+  const { error } = await client
+    .from("institution_menus")
+    .delete()
+    .eq("id", menuId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function persistMenuPlan(
   menu: InstitutionMenu,
   options: PersistMenuPlanOptions = {},

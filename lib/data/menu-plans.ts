@@ -5,6 +5,7 @@ import type { InstitutionMenu, MenuCycleLength } from "@/lib/types/institution";
 import type { MealSlotType } from "@/lib/types";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
+import { INSTITUTION_MENUS } from "@/lib/mock-data";
 
 interface FetchMenuPlansOptions {
   supabase?: SupabaseClient;
@@ -47,7 +48,10 @@ export const fetchMenuPlans = cache(async (
       throw new Error(error.message);
     }
 
-    return (data ?? []).map((row: Record<string, unknown>) => {
+    const rows = data ?? [];
+    if (rows.length === 0 && !options.userId) return INSTITUTION_MENUS;
+
+    return rows.map((row: Record<string, unknown>) => {
       // Reconstruct the deep nested structure
       const menu: InstitutionMenu = {
         id: row.id as string,
@@ -96,6 +100,7 @@ export const fetchMenuPlans = cache(async (
     });
   } catch (error) {
     console.warn("Failed to fetch menu plans from Supabase:", error);
+    if (!options.userId) return INSTITUTION_MENUS;
     return [];
   }
 });

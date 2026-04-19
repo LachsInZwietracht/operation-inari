@@ -21,7 +21,7 @@
 
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
-  - **Patients, Recipes, Meal Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
+  - **Patients, Recipes, Meal Plans, Institution Menu Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
   - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
   - **Digital protocol submissions:** Public patient diary submissions are persisted in `digital_protocol_submissions` and can be marked `new`, `reviewed`, or `converted` with an attached `converted_protocol_id`.
   - **Still local-only in the patient workspace:** Demo analytics panels and assistant cards remain client-side only unless otherwise noted.
@@ -78,6 +78,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Clinical record core:**
   - Anthropometrie, Diagnosen, Medikamente, Screening history, Laborwerte, Aktivität, Therapiemodule/-integrationen, PROCAM, and digitale Protokoll-Links now use Supabase-first persistence with offline `localStorage` fallback.
   - The patient-detail tabs show sync-aware empty states while remote data is loading after authentication.
+  - Medical calculators (Creatinine Clearance, MNA, SGA) are fully integrated. The Creatinine Clearance calculator automatically pulls the latest serum creatinine from the patient's lab history and recommends renal diet planning for Stage G3+ (<60 ml/min).
 - **Digital Protocols:**
   - Practitioners create public protocol links in the `Protokolle` tab and can review incoming submissions directly in the patient workspace.
   - `app/protokoll/[linkId]` hosts the public patient-facing form. Submissions post to `/api/protokoll/submit`, which validates the link, stores the submission, and moves the link to `received`.
@@ -134,6 +135,24 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Warnungen** — list of overdue invoices with destructive badges.
 - **Utilities:** `calculateDurationMinutes()` derives session length from start/end times; `computeStats()` calculates descriptive statistics; `getTrend()` classifies month-over-month change.
 - **Extension notes:** To add new KPIs, append to the `dynamicKpis` array in the main `useMemo`. New chart sections can be added to the grid layout. The time-range filter automatically propagates via `rangeStart` to any `useMemo` that depends on `filteredAppointments` or `filteredInvoices`.
+
+### 4.18 Einrichtung – Menüplanung (`/institution/menueplaene`)
+- **Route:** `app/(app)/institution/menueplaene/page.tsx` (server) → `menueplaene-client.tsx` (client).
+- **Server data:** `fetchMenuPlans()` from `lib/data/menu-plans.ts` fetches from Supabase with mock-data fallback when no `userId` or empty result.
+- **Hook:** `useInstitutionMenu(initialMenus, recipes)` in `hooks/use-institution-menu.ts`. Follows the Supabase-first + localStorage fallback pattern.
+  - **CRUD:** `createMenu(params)` generates a UUID and persists locally + Supabase. `deleteMenu(menuId)` removes from state and calls `deleteMenuPlanClient`. `setMenuStatus(menuId, status)` toggles between `draft`/`active`/`archived`.
+  - **Editing:** `assignRecipe`, `removeRecipe`, `updatePortionCount` modify slots in the nested week→day→dietMenu→slot structure and sync to Supabase.
+  - **Derived data:** `generateProductionList(menuId, week, day)` and `generateShoppingList(menuId, week)` compute ingredient aggregations with category-based cost estimates from the food database.
+- **Client data layer:** `lib/data/menu-plans-client.ts` provides `fetchMenuPlansClient`, `persistMenuPlan`, and `deleteMenuPlanClient` for browser-side Supabase operations.
+- **UI features:**
+  - **Drag-and-drop planner:** Recipes are dragged from a Sheet sidebar (`Rezeptbibliothek`) into a 7-day × 3-meal grid per diet form tab. Drop triggers a portion count dialog.
+  - **Create dialog:** Name, cycle length (1/2/4 weeks), start date, and multi-checkbox diet form selection.
+  - **Delete:** AlertDialog confirmation, disabled when only one menu remains.
+  - **Status toggle:** DropdownMenu on the card badge to switch Aktiv/Entwurf/Archiviert.
+  - **Sync indicator:** Shows "Gespeichert" with check icon or "Synchronisiere…" with spinner.
+  - **Production tab:** Day-selectable production list with expandable ingredient details.
+  - **Shopping tab:** Category-grouped shopping list with portion scaling and CSV export.
+- **Extension notes:** To add new meal slots, extend `VISIBLE_MEAL_SLOTS` and ensure `MEAL_SLOT_LABELS` has a matching entry. To add new diet form categories, extend `DIET_FORMS` in `lib/mock-data/institution.ts`. Shopping cost estimates use `CATEGORY_COST_PER_KG` in the hook — update when adding new food categories.
 
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.

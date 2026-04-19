@@ -103,7 +103,7 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 - Food detail pages use `fetchFoodById()` for single-record queries
 
 **localStorage (still used for user data):**
-- `prodi_custom_foods`, `prodi_custom_recipes`, `prodi_meal_plans`, `institution-menus`
+- `prodi_custom_foods`, `prodi_custom_recipes`, `prodi_meal_plans`, `institution-menus` (local fallback; primary storage is Supabase `institution_menus` + `institution_menu_slots`)
 - Custom foods merge with Supabase data at runtime via `useCustomFoods(baseFoods)`
 - Will migrate to Supabase once auth is implemented (see Phase 5 below)
 
@@ -563,12 +563,12 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | `FOOD_CATEGORIES` | UI category catalog, stable |
 | `FOOD_GROUPS` | BLS hierarchy, stable |
 | `REFERENCE_VALUES` | DGE values — in Supabase seed but UI still reads mock |
-| `INSTITUTION_MENUS` | Institution menu defaults — localStorage |
+| `INSTITUTION_MENUS` | Institution menu defaults — Supabase-backed with mock fallback |
 
 **What was migrated:**
 - Zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in any page or component
 - `useCustomFoods(baseFoods)` merges localStorage custom foods with Supabase base data
-- `useInstitutionMenu(recipes?)` reads foods from context, derives categories from `food.categoryId`
+- `useInstitutionMenu(initialMenus, recipes)` reads foods from context, derives categories from `food.categoryId`. Supports full CRUD (create/delete/status) with Supabase persistence and localStorage fallback. Server fetcher `fetchMenuPlans()` falls back to `INSTITUTION_MENUS` mock data when Supabase is empty or unavailable.
 - Food detail pages use `fetchFoodById()` for single-record Supabase queries
 
 ### Legacy Food References in Existing Mock/Local Records

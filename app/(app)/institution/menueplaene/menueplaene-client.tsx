@@ -11,6 +11,10 @@ import {
   ClipboardList,
   ChevronDown,
   ChevronRight,
+  Plus,
+  Trash2,
+  Check,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,6 +65,24 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 import { DIET_FORMS, DAY_LABELS } from "@/lib/mock-data";
@@ -70,6 +92,7 @@ import { formatNumber } from "@/lib/format";
 import { createRecipeLookup } from "@/lib/recipes";
 import type {
   InstitutionMenu,
+  MenuCycleLength,
   MealSlotType,
   ProductionItem,
   ShoppingItem,
@@ -589,16 +612,30 @@ export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePage
   const {
     menus,
     activeMenu,
+    createMenu,
+    deleteMenu,
+    setMenuStatus,
     assignRecipe,
     removeRecipe,
     updatePortionCount,
     generateProductionList,
     generateShoppingList,
+    isLoadingRemote,
   } = useInstitutionMenu(initialMenus, recipes);
 
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [productionDay, setProductionDay] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("planer");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<InstitutionMenu | null>(null);
+
+  // Create form state
+  const [newName, setNewName] = useState("");
+  const [newCycleLength, setNewCycleLength] = useState<MenuCycleLength>(1);
+  const [newStartDate, setNewStartDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [newDietFormIds, setNewDietFormIds] = useState<string[]>(["diet_vollkost"]);
 
   // Pending drop state (for portion dialog)
   const [pendingDrop, setPendingDrop] = useState<{
@@ -689,6 +726,10 @@ export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePage
         description="Wöchentliche und zyklische Menüpläne für die Einrichtung"
         helpText="Ziehen Sie Rezepte aus der Seitenleiste in die Wochenübersicht. Sie können Portionen direkt in der Zelle anpassen oder Zuweisungen per Klick entfernen. Unter den Tabs Produktion und Einkauf werden Listen automatisch aus dem aktiven Plan generiert."
       >
+        <Button onClick={() => setShowCreateDialog(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Neuer Menüplan
+        </Button>
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="outline">
@@ -721,6 +762,21 @@ export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePage
         </Button>
       </PageHeader>
 
+      {/* Sync indicator */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {isLoadingRemote ? (
+          <>
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Synchronisiere…</span>
+          </>
+        ) : (
+          <>
+            <Check className="h-3 w-3" />
+            <span>Gespeichert</span>
+          </>
+        )}
+      </div>
+
       {/* Menu plan list */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {menus.map((menu) => {
@@ -737,7 +793,39 @@ export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePage
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base">{menu.name}</CardTitle>
-                  <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-6 px-2">
+                          <Badge variant={statusCfg.variant} className="cursor-pointer">
+                            {statusCfg.label}
+                          </Badge>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {(Object.entries(STATUS_CONFIG) as [InstitutionMenu["status"], typeof statusCfg][]).map(
+                          ([status, cfg]) => (
+                            <DropdownMenuItem
+                              key={status}
+                              onClick={() => setMenuStatus(menu.id, status)}
+                            >
+                              {cfg.label}
+                            </DropdownMenuItem>
+                          ),
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {menus.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteTarget(menu)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
@@ -988,6 +1076,140 @@ export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePage
           pendingDrop ? (recipeLookup.get(pendingDrop.recipeId)?.name ?? "") : ""
         }
       />
+
+      {/* Create menu dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Neuer Menüplan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="menu-name">Name</Label>
+              <Input
+                id="menu-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="z. B. Menüplan KW 20/2026"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="menu-cycle">Zykluslänge</Label>
+              <Select
+                value={newCycleLength.toString()}
+                onValueChange={(v) =>
+                  setNewCycleLength(parseInt(v, 10) as MenuCycleLength)
+                }
+              >
+                <SelectTrigger id="menu-cycle">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Woche</SelectItem>
+                  <SelectItem value="2">2 Wochen</SelectItem>
+                  <SelectItem value="4">4 Wochen</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="menu-start">Startdatum</Label>
+              <Input
+                id="menu-start"
+                type="date"
+                value={newStartDate}
+                onChange={(e) => setNewStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Kostformen</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {DIET_FORMS.filter((df) => df.isActive).map((df) => (
+                  <div key={df.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`df-${df.id}`}
+                      checked={newDietFormIds.includes(df.id)}
+                      onCheckedChange={(checked) => {
+                        setNewDietFormIds((prev) =>
+                          checked
+                            ? [...prev, df.id]
+                            : prev.filter((id) => id !== df.id),
+                        );
+                      }}
+                    />
+                    <Label
+                      htmlFor={`df-${df.id}`}
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      {df.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateDialog(false)}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              disabled={!newName.trim() || newDietFormIds.length === 0}
+              onClick={() => {
+                createMenu({
+                  name: newName.trim(),
+                  cycleLength: newCycleLength,
+                  startDate: newStartDate,
+                  dietFormIds: newDietFormIds,
+                });
+                setShowCreateDialog(false);
+                setNewName("");
+                setNewCycleLength(1);
+                setNewDietFormIds(["diet_vollkost"]);
+                toast.success("Menüplan erstellt");
+              }}
+            >
+              Erstellen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => {
+          if (!v) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Menüplan löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchten Sie den Menüplan &ldquo;{deleteTarget?.name}&rdquo;
+              wirklich löschen? Diese Aktion kann nicht rückgängig gemacht
+              werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) {
+                  deleteMenu(deleteTarget.id);
+                  toast.success("Menüplan gelöscht");
+                }
+                setDeleteTarget(null);
+              }}
+            >
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -35,6 +35,7 @@ export { EGK_CARDS, EGK_SCAN_EVENTS } from "./egk";
 export { GROWTH_PERCENTILES } from "./growth-percentiles";
 export {
   DIET_FORMS,
+  INSTITUTION_MENUS,
   HOSPITAL_BEDS,
   DIETARY_ORDERS,
   PRODUCTION_LISTS,
