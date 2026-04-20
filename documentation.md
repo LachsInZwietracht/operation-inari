@@ -1,19 +1,34 @@
-# Operation Prodi – Feature Implementation Guide
+# Operation Prodi - Feature Guide
 
 ## 1. How to Use This Document
-- **Audience:** New engineers onboarding or touching unfamiliar areas. Assume TypeScript/React/Next.js knowledge.
-- **Scope:** Every feature exposed through the sidebar or auth routes. Each section calls out routes, components, hooks, data flows, and extension notes.
-- **Architecture:** Enterprise-grade Next.js 15 solution with Server-Side Streaming and Edge Caching.
-- **State conventions:** Supabase-first persistence with automatic `localStorage` migration and fallback.
-- **Routing:** Production UI lives under `app/(app)`. Auth is under `app/(auth)`. `app/page.tsx` redirects to `/dashboard`.
-- **Temporary local auth bypass:** `middleware.ts` currently sets `DISABLE_AUTH_FOR_TESTING = true`, so route protection is intentionally disabled during local testing. Re-enable this before staging/production by changing that flag back to `false`.
-- **Testing:** Playwright E2E tests, custom performance benchmarks, and a 113-assertion mathematical validation suite.
+
+Purpose:
+- This is an implementation guide for engineers and AI agents working on unfamiliar features.
+- Use it to find the relevant route, components, hooks, data flow, and persistence model before editing.
+
+Precedence:
+- Code and migrations are the source of truth.
+- Use this guide as a map, not as permission to assume behavior without checking the implementation.
+- `docs/database-guide.md` is authoritative for nutrition-data and Supabase schema details.
+- `docs/product-requirements.md` is a roadmap and product-intent document, not an implementation spec.
+
+Working assumptions:
+- Production UI lives under `app/(app)`.
+- Auth routes live under `app/(auth)`.
+- `app/page.tsx` redirects to `/dashboard`.
+- Most stateful features use Supabase-first persistence with `localStorage` fallback where noted.
+- `middleware.ts` currently uses `DISABLE_AUTH_FOR_TESTING = true` for local development. Treat that as a temporary local convenience, not a product invariant.
+
+Validation note:
+- Prefer proportional validation. Use the lightest reliable check for the area you changed.
+- For nutrient math changes, run `npm run validate:nutrients`.
+- For workflow changes, run the most relevant Playwright coverage instead of defaulting to the full suite.
 
 ## 2. Global Architecture Overview
-- **High-Performance Rendering:** Next.js 15 with **Server-Side Streaming**. Heavy data-driven components (Dashboard, Rezepte) use `<Suspense>` with shimmering skeletons to provide an instant-feel UI.
-- **Edge Caching:** BLS food data is cached at the edge via `unstable_cache` (Vercel Data Cache). Database queries that used to take seconds now resolve in ~20ms.
+- **Rendering:** Next.js 15 with server rendering and `<Suspense>` boundaries for heavier routes.
+- **Caching:** BLS food data is cached via `unstable_cache` where applicable.
 - **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and global search. It is **non-blocking** (search index is lazy-loaded on demand).
-- **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The 1.5MB search index is **lazy-loaded** via `/api/foods/search-index` only when the search is first opened.
+- **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The search index is loaded on first use via `/api/foods/search-index`.
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
 - **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern where implemented. Data is synced to the cloud when authenticated but remains available in `localStorage` for offline use.
@@ -26,10 +41,10 @@
   - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
   - **Digital protocol submissions:** Public patient diary submissions are persisted in `digital_protocol_submissions` and can be marked `new`, `reviewed`, or `converted` with an attached `converted_protocol_id`.
   - **Still local-only in the patient workspace:** Demo analytics panels and assistant cards remain client-side only unless otherwise noted.
-  - **Auto-Migration:** Hooks automatically detect "dirty" local data on login and migrate it to the Supabase cloud.
+  - **Auto-Migration:** Hooks migrate dirty local data to Supabase on login where that behavior is implemented.
   - **Robustness:** All database calls use `withTimeout` and `try-catch` to ensure the UI stays responsive even if the backend is slow.
 - **Foods & Search:**
-  - **Search-on-Demand:** Instead of pre-fetching 7,000 foods, the app uses a lightweight search index. Full food details are fetched only when an item is selected.
+  - **Search-on-Demand:** Instead of pre-fetching the full food catalog, the app uses a lightweight search index. Full food details are fetched only when needed.
   - **Server-backed foods browser:** `/lebensmittel` no longer hydrates the full list view into the client. The route loads an initial paginated server result and the client fetches subsequent pages through `/api/foods/browser`.
   - **Client-safe fetchers:** `lib/data/foods-client.ts` provides optimized browser-side Supabase queries.
 - **Scientific Integrity:** 
@@ -186,20 +201,21 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Supports local-file, remote-URL, or live-sample inputs, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`.
 - **Scientific Validation (`scripts/validate-nutrient-math.ts`):** Running `npm run validate:nutrients` performs 113+ mathematical assertions to ensure calculation parity with official standards.
 
-## 7. Testing & Verification Checklist
-For each feature update:
-1. **Performance:** Hard-refresh a page. The layout should appear in < 300ms. Heavy data should shimmer-load.
-2. **Search:** Open global search (Cmd+K). Initial load should show a spinner once, then be instant.
-3. **Foods browser:** On `/lebensmittel`, verify page 1 renders immediately, page navigation works, source/category filters round-trip through `/api/foods/browser`, and fuzzy name search still finds typo variants.
-4. **Smart-Eingabe:** Enter "1 Glas Milch" in a protocol. It should resolve the ID, amount, and unit correctly.
-5. **Offline Resilience:** Disconnect internet, create a recipe. It should save to local storage and show a success message.
-6. **Data Integrity:** Run `npm run validate:nutrients`. All tests must pass before any change to `lib/nutrients.ts`.
-7. **Backend Sync:** Log in with a new account. Confirm that local recipes, patients, and invoices are automatically pushed to Supabase.
-8. **Patient Clinical Record:** On `/patienten/[id]`, add an anthropometric entry, diagnosis, medication, screening, lab value, activity, therapy module, integration sync event, PROCAM result, and digital protocol link; reload and confirm each persists.
-9. **Digital Protocol Conversion:** Create or open a received digital submission, convert it into a draft from the patient `Protokolle` tab, save the resulting protocol, and confirm the submission can be marked/seen as converted with a linked internal protocol.
-10. **Report Export:** On `/berichte`, verify PDF and CSV downloads complete and the preview opens a generated PDF instead of a placeholder.
-11. **Export History:** On `/api-export`, trigger a real export and confirm the `Verlauf` tab reflects a persisted `export_jobs` row.
-12. **Patient Mail Merge:** On `/patienten`, generate a document batch and verify the download is a PDF, not a text file.
-13. **OFF catalog:** Run `npm run etl:off`, confirm validated OFF products appear under `/lebensmittel` source filter `Open Food Facts`, and verify detail pages show attribution plus quality score.
+## 7. Verification Checklist
 
-Following this guide ensures new engineers can trace each feature from route → component → hook → data, understand persistence, and avoid breaking coupled flows.
+Use the relevant subset for the area you changed instead of treating this as a mandatory full regression list.
+
+- Search: open global search with `Cmd+K`; first open should load the index, later opens should be instant.
+- Foods browser: on `/lebensmittel`, verify page navigation, source/category filters, and typo-tolerant search still work.
+- Smart-Eingabe: enter a phrase like `1 Glas Milch` and verify amount, unit, and match resolution.
+- Offline resilience: create or edit a recipe while offline and verify local persistence still works.
+- Nutrient math: run `npm run validate:nutrients` before shipping changes to `lib/nutrients.ts` or closely related calculation paths.
+- Backend sync: if you touched migration or fallback logic, confirm local entities still sync to Supabase after login.
+- Patient workspace: if you touched patient detail flows, create and reload the affected records to confirm persistence.
+- Digital protocol conversion: if you touched submission or conversion code, verify draft creation and converted-state tracking.
+- Report export: if you touched `/berichte` or export rendering, verify PDF, CSV, and preview behavior.
+- Export history: if you touched export jobs, verify `/api-export` reflects persisted `export_jobs` rows.
+- Mail merge: if you touched `/patienten` exports, verify the generated download is a PDF.
+- OFF catalog: if you touched OFF ingestion or food browsing, verify promoted entries appear with attribution and quality metadata.
+
+Use this guide to trace route -> component -> hook -> data flow. Verify current code when the guide and implementation diverge.
