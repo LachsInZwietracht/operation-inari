@@ -149,6 +149,50 @@ export interface DietaryOrder extends Timestamped {
   status: OrderStatus;
 }
 
+export type InpatientStayStatus = "active" | "discharged";
+
+export interface InpatientStay extends Timestamped {
+  id: ID;
+  legacyId?: ID;
+  patientId: ID;
+  station: string;
+  room: string;
+  bed: string;
+  status: InpatientStayStatus;
+  admissionDate: string;
+  dischargeDate?: string;
+  dietFormIds: ID[];
+  notes?: string;
+}
+
+export interface MealOrder extends Timestamped {
+  id: ID;
+  legacyId?: ID;
+  inpatientStayId: ID;
+  patientId: ID;
+  patientName: string;
+  station: string;
+  room: string;
+  bed: string;
+  date: string;
+  mealSlot: MealSlotType;
+  recipeId: ID;
+  recipeName: string;
+  dietFormIdsSnapshot: ID[];
+  allergenIdsSnapshot: string[];
+  restrictionSummary: string[];
+  specialInstructions?: string;
+  status: OrderStatus;
+}
+
+export interface MealCandidate {
+  recipeId: ID;
+  recipeName: string;
+  dietFormIds: ID[];
+  blockedReasons: string[];
+  isSelectable: boolean;
+}
+
 // ──────────────────────────────────────────────
 // Nutritional compliance
 // ──────────────────────────────────────────────

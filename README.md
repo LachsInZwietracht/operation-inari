@@ -37,6 +37,7 @@ Recent platform changes:
 - Counseling sessions and counseling templates now persist to Supabase with local fallback and login-time migration from prior local-only data.
 - Patient medical calculators now include unit-aware Cockcroft-Gault clearance plus full MNA and expanded SGA documentation, with structured persistence in screenings/lab values.
 - Digital protocol submissions now support the full practitioner workflow: public patient entry, dashboard review, conversion into a prefilled internal protocol draft, and server-tracked converted state.
+- `/institution/krankenhaus` now runs a real inpatient meal workflow with persisted bed assignments, safe staff-side meal selection, kitchen aggregation, and printable tray cards.
 - `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.
 - Open Food Facts is now a first-class food source with validated product promotion, attribution, and detail-page quality indicators.
 
@@ -88,3 +89,8 @@ npm run validate:nutrients
 ### Export System
 - Apply the latest migrations before testing exports: `npx supabase db push`
 - Export metadata is persisted in `export_jobs`; binary files are generated on demand and are not stored in Supabase.
+
+### Hospital Meal Workflow
+- Apply the latest migrations before using the inpatient stay and meal-order workflow: `npx supabase db push`
+- The hospital module persists inpatient stays in `inpatient_stays` and service selections in `meal_orders`.
+- Tray cards are rendered via the in-app print route at `/institution/krankenhaus/tablettenkarten`.

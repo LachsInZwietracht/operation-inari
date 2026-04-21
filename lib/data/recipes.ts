@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Recipe } from "@/lib/types";
 import { createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
+import { RECIPES } from "@/lib/mock-data/recipes";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -152,10 +153,11 @@ export const fetchRecipes = cache(async (options: FetchRecipesOptions = {}): Pro
           );
           if (error) throw new Error(error.message);
           const rows = (data ?? []) as unknown as RecipeRowWithRelations[];
+          if (rows.length === 0) return RECIPES;
           return rows.map((row) => mapRecipeRow(row));
         } catch (error) {
           console.warn("Falling back to local recipes:", error);
-          return [];
+          return RECIPES;
         }
       },
       ["recipes-all"],
@@ -185,10 +187,13 @@ export const fetchRecipes = cache(async (options: FetchRecipesOptions = {}): Pro
     }
 
     const rows = (data ?? []) as unknown as RecipeRowWithRelations[];
+    if (rows.length === 0 && !options.sourceType && !options.limit && !options.offset) {
+      return RECIPES;
+    }
     return rows.map((row) => mapRecipeRow(row));
   } catch (error) {
     console.warn("Falling back to local recipes:", error);
-    return [];
+    return RECIPES;
   }
 });
 
@@ -213,6 +218,6 @@ export const fetchRecipeById = cache(async (
     return mapRecipeRow(data as unknown as RecipeRowWithRelations);
   } catch (error) {
     console.warn(`Falling back to local recipe ${id}:`, error);
-    return null;
+    return RECIPES.find((recipe) => recipe.id === id || recipe.legacyId === id) ?? null;
   }
 });

@@ -195,6 +195,22 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Recipe form:** `RECIPE_ALLERGENS` sourced from `ALLERGEN_DEFINITIONS` (EU 14 only).
 - **Warning engine:** `checkAllergenConflicts()` in `lib/allergen-warnings.ts` — pure function matching item allergen strings against patient allergen entries via `foodMatchTokens`.
 
+### 4.21 Krankenhaus – Inpatient Meal Workflow (`/institution/krankenhaus`)
+- **Route:** `app/(app)/institution/krankenhaus/page.tsx` (server) → `krankenhaus-client.tsx` (client).
+- **Persistence:** `inpatient_stays` and `meal_orders` (migration `20260509000025_hospital_meal_workflow.sql`).
+- **Hooks / client data:** `hooks/use-inpatient-stays.ts`, `hooks/use-meal-orders.ts`, `lib/data/inpatient-stays-client.ts`, `lib/data/meal-orders-client.ts`.
+- **Selection engine:** `lib/hospital-workflow.ts`.
+  - Resolves service candidates for a selected date and meal slot.
+  - Blocks options that violate assigned diet forms or patient allergen entries.
+  - Falls back to the bundled institutional cycle and recipe library for demo-safe operation when remote menu or recipe records are incomplete.
+- **Workflow UI:**
+  - Assign a real patient to station / room / bed with one or more diet forms.
+  - Open a staff-side selection dialog for breakfast, lunch, or dinner.
+  - Persist exactly one order per inpatient stay and service window.
+  - Update order state from `pending` to `confirmed` to `delivered`.
+- **Kitchen output:** The `Küche` tab aggregates saved service orders by recipe, patient list, and special instructions instead of relying on planned menu portions alone.
+- **Tray cards:** `/institution/krankenhaus/tablettenkarten` renders a print view from saved `meal_orders` using `date`, `mealSlot`, and `station` query params.
+
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
 - **Nutrient utilities (`@/lib/nutrients.ts`):** Mathematically validated core logic. Handles ingredient scaling and summing.
@@ -221,6 +237,7 @@ Use the relevant subset for the area you changed instead of treating this as a m
 - Nutrient math: run `npm run validate:nutrients` before shipping changes to `lib/nutrients.ts` or closely related calculation paths.
 - Backend sync: if you touched migration or fallback logic, confirm local entities still sync to Supabase after login.
 - Patient workspace: if you touched patient detail flows, create and reload the affected records to confirm persistence.
+- Hospital workflow: assign a patient to a bed, save a safe meal order, verify a blocked allergen conflict, and confirm tray-card rendering.
 - Digital protocol conversion: if you touched submission or conversion code, verify draft creation and converted-state tracking.
 - Report export: if you touched `/berichte` or export rendering, verify PDF, CSV, and preview behavior.
 - Export history: if you touched export jobs, verify `/api-export` reflects persisted `export_jobs` rows.

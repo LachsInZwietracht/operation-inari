@@ -33,11 +33,14 @@ export {
 } from "./patient-mailings";
 export { EGK_CARDS, EGK_SCAN_EVENTS } from "./egk";
 export { GROWTH_PERCENTILES } from "./growth-percentiles";
+export { PATIENT_ALLERGENS } from "./patient-allergens";
 export {
   DIET_FORMS,
   INSTITUTION_MENUS,
   HOSPITAL_BEDS,
   DIETARY_ORDERS,
+  INPATIENT_STAYS,
+  MEAL_ORDERS,
   PRODUCTION_LISTS,
   SHOPPING_LISTS,
   COMPLIANCE_DATA,

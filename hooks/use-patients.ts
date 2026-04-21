@@ -40,6 +40,16 @@ function getLocalOnlyPatients(items: Patient[]) {
   return items.filter((patient) => !isMockPatient(patient))
 }
 
+function getMockFallbackPatients(remotePatients: Patient[]) {
+  return PATIENTS.filter(
+    (mockPatient) =>
+      !remotePatients.some(
+        (remotePatient) =>
+          remotePatient.id === mockPatient.id || remotePatient.legacyId === mockPatient.id,
+      ),
+  );
+}
+
 export function usePatients() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [patients, setPatients] = useState<Patient[]>(buildInitialPatients)
@@ -74,7 +84,8 @@ export function usePatients() {
         if (cancelled) return
 
         const localOnly = getLocalOnlyPatients(patientsRef.current)
-        const merged = [...remotePatients]
+        const mockFallback = getMockFallbackPatients(remotePatients)
+        const merged = [...remotePatients, ...mockFallback]
 
         for (const local of localOnly) {
           const existsRemote = remotePatients.some(

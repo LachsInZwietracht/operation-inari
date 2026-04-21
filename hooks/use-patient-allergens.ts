@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PatientAllergenEntry } from "@/lib/types";
+import { PATIENT_ALLERGENS } from "@/lib/mock-data";
 import {
   deletePatientAllergenClient,
   fetchPatientAllergensClient,
@@ -27,6 +28,13 @@ function loadFromStorage(): PatientAllergenEntry[] {
   }
 }
 
+function buildInitialEntries(): PatientAllergenEntry[] {
+  const stored = loadFromStorage();
+  const storedIds = new Set(stored.map((entry) => entry.id));
+  const mockOnly = PATIENT_ALLERGENS.filter((entry) => !storedIds.has(entry.id));
+  return [...mockOnly, ...stored];
+}
+
 function sortEntries(items: PatientAllergenEntry[]) {
   return [...items].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -35,7 +43,7 @@ function sortEntries(items: PatientAllergenEntry[]) {
 
 export function usePatientAllergens() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<PatientAllergenEntry[]>(() => loadFromStorage());
+  const [entries, setEntries] = useState<PatientAllergenEntry[]>(buildInitialEntries);
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -46,7 +54,8 @@ export function usePatientAllergens() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      const custom = entries.filter((entry) => !PATIENT_ALLERGENS.some((mockEntry) => mockEntry.id === entry.id));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom));
     } catch {
       // ignore
     }

@@ -133,22 +133,58 @@ test.describe("Institution Features", () => {
     await expect(page.getByText("Eiweiß").first()).toBeVisible();
   });
 
-  test("shows hospital bed grid and dietary orders", async ({ page }) => {
+  test("runs the hospital meal-selection workflow", async ({ page }) => {
     await visitInstitutionPage(page, "/institution/krankenhaus", "Krankenhausverwaltung");
 
-    // Should show bed occupancy info
-    await expect(page.getByText(/Betten/).first()).toBeVisible();
+    await page.locator("#service-date").fill("2026-04-06");
 
-    // Should show patient names in bed cards
-    await expect(page.getByText("Schmidt, Hans").first()).toBeVisible();
-    await expect(page.getByText("Meier, Ingrid").first()).toBeVisible();
+    const mariaCard = page.locator("[data-slot='card']").filter({ hasText: "Maria Schneider" }).first();
+    await expect(mariaCard).toBeVisible();
+    await mariaCard.getByRole("button", { name: /Mahlzeit auswählen/i }).click();
 
-    // Switch to orders tab
-    await page.getByRole("tab", { name: /Bestellung/i }).click();
+    await expect(page.getByRole("dialog")).toContainText("Sichere Menüauswahl");
+    await expect(page.getByText("Kartoffelsuppe")).toBeVisible();
+    await expect(page.getByText("Sicher auswählbar")).toBeVisible();
 
-    // Should show dietary orders
-    await expect(page.getByText(/Ausstehend/i).first()).toBeVisible();
-    await expect(page.getByText(/Bestätigt/i).first()).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: /Kartoffelsuppe/i }).click();
+    await page.getByLabel("Besondere Hinweise").fill("Bitte ohne Petersilie anrichten");
+    await page.getByRole("button", { name: /Bestellung speichern/i }).click();
+
+    await page.getByRole("tab", { name: /Bestellungen/i }).click();
+    await expect(page.getByText("Maria Schneider")).toBeVisible();
+    await expect(page.getByText("Kartoffelsuppe")).toBeVisible();
+
+    await page.getByRole("button", { name: /Bestätigen/i }).click();
+    await expect(page.getByText("Bestätigt").first()).toBeVisible();
+  });
+
+  test("blocks unsafe hospital meal options and renders tray cards", async ({ page }) => {
+    await visitInstitutionPage(page, "/institution/krankenhaus", "Krankenhausverwaltung");
+
+    await page.locator("#service-date").fill("2026-04-06");
+
+    const annaCard = page.locator("[data-slot='card']").filter({ hasText: "Anna Müller" }).first();
+    await expect(annaCard).toBeVisible();
+    await annaCard.getByRole("button", { name: /Mahlzeit auswählen/i }).click();
+
+    await expect(page.getByText("Kartoffelsuppe")).toBeVisible();
+    await expect(page.getByText(/Allergenkonflikt: Sellerie/i)).toBeVisible();
+    await expect(page.getByText("Geblockt").first()).toBeVisible();
+    await page.getByRole("button", { name: /Abbrechen/i }).click();
+
+    const mariaCard = page.locator("[data-slot='card']").filter({ hasText: "Maria Schneider" }).first();
+    await mariaCard.getByRole("button", { name: /Mahlzeit auswählen/i }).click();
+    await page.getByRole("dialog").getByRole("button", { name: /Kartoffelsuppe/i }).click();
+    await page.getByRole("button", { name: /Bestellung speichern/i }).click();
+
+    await page.goto("/institution/krankenhaus/tablettenkarten?date=2026-04-06&mealSlot=mittagessen&station=alle", {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("heading", { name: "Tablettenkarten" })).toBeVisible();
+    await expect(page.getByText("Maria Schneider")).toBeVisible();
+    await expect(page.getByText("Kartoffelsuppe")).toBeVisible();
   });
 
   test("displays institutional statistics with charts", async ({ page }) => {
