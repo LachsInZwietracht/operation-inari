@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { COUNSELING_TEMPLATES } from "@/lib/mock-data"
+import { useCounselingTemplates } from "@/hooks/use-counseling-templates"
 
 interface CounselingTemplatePickerProps {
   open: boolean
@@ -22,6 +22,8 @@ export function CounselingTemplatePicker({
   onOpenChange,
   onSelect,
 }: CounselingTemplatePickerProps) {
+  const { templates, isLoadingRemote } = useCounselingTemplates()
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
@@ -32,7 +34,7 @@ export function CounselingTemplatePicker({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          {COUNSELING_TEMPLATES.map((template) => (
+          {templates.map((template) => (
             <Card
               key={template.id}
               className="cursor-pointer transition-colors hover:bg-muted/50"
@@ -61,6 +63,11 @@ export function CounselingTemplatePicker({
               </CardContent>
             </Card>
           ))}
+          {isLoadingRemote && templates.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Beratungsvorlagen werden synchronisiert.
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>

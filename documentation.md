@@ -38,6 +38,7 @@ Validation note:
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
   - **Patients, Recipes, Meal Plans, Institution Menu Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
+  - **Counseling workflow:** Counseling sessions and counseling templates now persist in Supabase with local fallback and login-time migration from older local-only browser data.
   - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
   - **Digital protocol submissions:** Public patient diary submissions are persisted in `digital_protocol_submissions` and can be marked `new`, `reviewed`, or `converted` with an attached `converted_protocol_id`.
   - **Still local-only in the patient workspace:** Demo analytics panels and assistant cards remain client-side only unless otherwise noted.
@@ -128,7 +129,15 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
 
-### 4.17 Praxis-Statistiken (`/praxis-statistiken`)
+### 4.17 Beratungen (Patient Counseling)
+- **New counseling session:** `app/(app)/patienten/[id]/beratungen/neu/page.tsx` uses `components/counseling-session-form.tsx`.
+- **Counseling detail:** `app/(app)/patienten/[id]/beratungen/[beratungId]/page.tsx` renders the session workspace for timeline entries, materials, and progress metrics.
+- **Persistence:** `hooks/use-counseling.ts` is Supabase-first with localStorage fallback, remote sync, and migration of legacy local-only sessions after login.
+- **Template source:** `components/counseling-template-picker.tsx` now reads live templates from `hooks/use-counseling-templates.ts` instead of importing static mock data directly.
+- **Data layer:** `lib/data/counseling-client.ts` handles `counseling_sessions` and `counseling_templates`, including legacy-id migration support and patient ID resolution against the `patients` table.
+- **Schema:** migration `20260508000024_counseling.sql` adds the counseling tables, patient foreign key, JSONB payloads for timeline/material/progress sections, and per-user RLS policies.
+
+### 4.18 Praxis-Statistiken (`/praxis-statistiken`)
 - **Component:** `app/(app)/praxis-statistiken/page.tsx` (client component)
 - **Data sources:** All KPIs and charts are dynamically computed from real data via `usePatients`, `usePracticeAppointments`, and `usePracticeInvoices`. There are no hardcoded mock KPIs.
 - **Dynamic KPIs (top row, 4 cards):**
@@ -156,7 +165,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Utilities:** `calculateDurationMinutes()` derives session length from start/end times; `computeStats()` calculates descriptive statistics; `getTrend()` classifies month-over-month change.
 - **Extension notes:** To add new KPIs, append to the `dynamicKpis` array in the main `useMemo`. New chart sections can be added to the grid layout. The time-range filter automatically propagates via `rangeStart` to any `useMemo` that depends on `filteredAppointments` or `filteredInvoices`.
 
-### 4.18 Einrichtung – Menüplanung (`/institution/menueplaene`)
+### 4.19 Einrichtung – Menüplanung (`/institution/menueplaene`)
 - **Route:** `app/(app)/institution/menueplaene/page.tsx` (server) → `menueplaene-client.tsx` (client).
 - **Server data:** `fetchMenuPlans()` from `lib/data/menu-plans.ts` fetches from Supabase with mock-data fallback when no `userId` or empty result.
 - **Hook:** `useInstitutionMenu(initialMenus, recipes)` in `hooks/use-institution-menu.ts`. Follows the Supabase-first + localStorage fallback pattern.
@@ -174,7 +183,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Shopping tab:** Category-grouped shopping list with portion scaling and CSV export.
 - **Extension notes:** To add new meal slots, extend `VISIBLE_MEAL_SLOTS` and ensure `MEAL_SLOT_LABELS` has a matching entry. To add new diet form categories, extend `DIET_FORMS` in `lib/mock-data/institution.ts`. Shopping cost estimates use `CATEGORY_COST_PER_KG` in the hook — update when adding new food categories.
 
-### 4.19 Allergen & Intolerance Management
+### 4.20 Allergen & Intolerance Management
 
 - **Files:** `lib/allergen-constants.ts`, `lib/allergen-warnings.ts`, `lib/data/patient-allergens-client.ts`, `hooks/use-patient-allergens.ts`
 - **DB:** `patient_allergens` table (migration `20260507000023`)

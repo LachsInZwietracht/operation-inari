@@ -32,6 +32,7 @@ export interface CounselingProgressMetric {
 
 export interface CounselingSession extends Timestamped {
   id: ID;
+  legacyId?: ID;
   patientId: ID;
   date: string; // ISO date YYYY-MM-DD
   duration: number; // minutes
@@ -48,6 +49,7 @@ export interface CounselingSession extends Timestamped {
 
 export interface CounselingTemplate {
   id: ID;
+  legacyId?: ID;
   name: string;
   type: string; // e.g. "Erstberatung", "Folgeberatung"
   indication: string;

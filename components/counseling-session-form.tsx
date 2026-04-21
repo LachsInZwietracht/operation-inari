@@ -49,7 +49,9 @@ type SessionFormValues = z.infer<typeof sessionSchema>
 interface CounselingSessionFormProps {
   patientId: string
   defaultIndication?: string
-  onSubmit: (session: Omit<CounselingSession, "id" | "createdAt" | "updatedAt">) => void
+  onSubmit: (
+    session: Omit<CounselingSession, "id" | "createdAt" | "updatedAt">,
+  ) => Promise<CounselingSession> | CounselingSession
 }
 
 const SESSION_TYPES = ["Erstberatung", "Folgeberatung", "Telefonberatung", "Gruppenberatung"]
@@ -81,8 +83,8 @@ export function CounselingSessionForm({
     form.setValue("content", currentContent ? `${currentContent}\n\n${content}` : content)
   }
 
-  function handleSubmit(values: SessionFormValues) {
-    onSubmit({
+  async function handleSubmit(values: SessionFormValues) {
+    const createdSession = await onSubmit({
       patientId,
       date: values.date,
       duration: values.duration,
@@ -95,7 +97,7 @@ export function CounselingSessionForm({
     })
 
     toast.success("Beratungssitzung erstellt!")
-    router.push(`/patienten/${patientId}`)
+    router.push(`/patienten/${patientId}/beratungen/${createdSession.id}`)
   }
 
   return (

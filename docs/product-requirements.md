@@ -2,16 +2,23 @@
 
 ## Overview
 
-A modern, web-based nutrition counseling and therapy management platform for clinics, practices, and pharmacies. This is a clone of **PRODI** by Nutri-Science GmbH — the market-leading German nutrition software since 1981.
+This document captures product intent, scope, and roadmap direction for Operation Prodi.
 
-**Strategic Goal:** To become the market leader by combining the scientific and clinical rigor of legacy German tools (PRODI, EBISpro) with the user experience and accessibility of modern SaaS (Nutrium).
+How to use it:
+- Treat this file as roadmap and product context, not as the implementation source of truth.
+- When this document conflicts with current code, migrations, or the feature guide, current implementation wins.
+- Status labels are directional and may lag behind the latest branch changes.
+
+Product direction:
+- Build a modern nutrition counseling and therapy platform for clinics, practices, and pharmacies.
+- Combine the scientific rigor expected from German nutrition tooling with a more usable SaaS workflow model.
 
 ---
 
 ## 1. Food & Nutrient Database
 
 ### 1.1 Food Composition Data
-**Status:** Partially implemented (mock data; BLS 4.0 imported to Supabase, see database-guide.md).
+**Status:** Partially implemented. BLS 4.0 is imported to Supabase; broader multi-dataset coverage is still roadmap.
 - Comprehensive food database with **14,000+ foods** from official sources
 - Support for multiple food composition databases:
   - **BLS** (Bundeslebensmittelschluessel) — German standard
@@ -51,7 +58,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 ## 2. Recipe Management
 
 ### 2.1 Recipe Creation & Editing
-**Status:** Implemented (mock data, localStorage).
+**Status:** Implemented with active iteration. Check current persistence and editor behavior in code before changing data contracts.
 - **Structured recipe rows** — support three types: Title (section headers), Ingredient (food ID + quantity), and Text (notes). Implement as a polymorphic `recipe_rows` table with a `row_type` enum.
 - **Preparation instructions field** — dedicated rich-text field (JSONB) rendered below the ingredient list.
 - **Water loss / cooking loss factor** — Optional `cooking_loss_percent` field on the recipe; final nutrient calculation: total nutrients / (raw weight × (1 - loss%)).
@@ -85,7 +92,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - Support for multi-day cycles and Teaching kitchen plans (Lehrkuechenplan).
 
 ### 3.3 Exchange Tables
-**Status:** Implemented (mock data).
+**Status:** Implemented with mock-backed behavior.
 - Food substitution lists based on similar nutritional profiles.
 
 ---
@@ -111,6 +118,11 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 - **eGK Card Reader Support:** Read German insurance cards directly via Web Serial API or WebSocket companion app.
 - **Serial letter / mail merge** — Generate personalized PDFs using tokens (e.g., `{{patient.name}}`).
 - **Birthday list** — dashboard widget for upcoming patient birthdays.
+
+### 5.1a Counseling Workflow
+**Status:** Implemented (Supabase-backed counseling sessions and template persistence with local fallback and login-time migration).
+- Counseling sessions persist with patient linkage, structured follow-up timeline, shared materials, and progress metrics.
+- Counseling templates persist per user and can be inserted into the session authoring flow instead of remaining browser-only.
 
 ### 5.3 Reports & Exports
 **Status:** Partially implemented (real PDF/CSV generation for reports, patient documents, and export jobs; broader document/storage workflows still open).
@@ -148,7 +160,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 ## 8. Institutional / Clinical Features
 
 ### 8.4 Hospital Management Features
-**Status:** Implemented (mock data, bed grid, dietary order board).
+**Status:** Partially implemented / exploratory. Some UI pieces exist, but hospital-grade integration scope remains roadmap.
 - **Patient self-service menu selection** — tablet/bedside terminal selection for patients, filtered by diet form and allergens.
 - **Table cards / tray cards** — auto-generate cards for meal trays showing room/bed, diet form, and selection.
 - **HIS Integration (HL7/FHIR):** Bidirectional sync with Hospital Information Systems to handle patient census data and diet orders.
@@ -158,6 +170,7 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 ## 10. User Management & Security
 
 ### 10.1 Authentication & Authorization
+- **Implementation note:** Local development may bypass auth temporarily in `middleware.ts`. Do not treat that as the intended production model.
 - **SSO (Active Directory/LDAP):** Mandatory for clinical sales to allow hospital IT to manage user access centrally.
 
 ---
@@ -171,6 +184,10 @@ A modern, web-based nutrition counseling and therapy management platform for cli
 ---
 
 ## 14. Prioritization (Market-Leader Roadmap)
+
+Roadmap notes:
+- These phases describe intended sequencing, not a strict delivery history.
+- Individual items may already be partially or fully implemented ahead of their listed phase.
 
 ### MVP (Phase 1) - Core Platform & Scientific Precision
 1. Food database with phonetic/fuzzy search (BLS + SFK).

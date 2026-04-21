@@ -34,6 +34,7 @@ Recent platform changes:
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
 - `/referenzwerte` now resolves DGE/ÖGE/SGE/RDA values from Supabase, supports persisted custom profiles, and stores user defaults plus patient-specific assignments.
 - The full patient workspace on `/patienten/[id]` now persists to Supabase, including anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM results, and digital protocol links.
+- Counseling sessions and counseling templates now persist to Supabase with local fallback and login-time migration from prior local-only data.
 - Patient medical calculators now include unit-aware Cockcroft-Gault clearance plus full MNA and expanded SGA documentation, with structured persistence in screenings/lab values.
 - Digital protocol submissions now support the full practitioner workflow: public patient entry, dashboard review, conversion into a prefilled internal protocol draft, and server-tracked converted state.
 - `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.

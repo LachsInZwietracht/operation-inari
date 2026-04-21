@@ -66,7 +66,6 @@ import { formatDate, formatNumber } from "@/lib/format"
 import { downloadCsv } from "@/lib/utils"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
 import {
-  COUNSELING_SESSIONS,
   LAB_PARAMETERS,
   GROWTH_PERCENTILES,
 } from "@/lib/mock-data"
@@ -82,6 +81,7 @@ import { useProcam } from "@/hooks/use-procam"
 import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
 import { useDigitalProtocolSubmissions } from "@/hooks/use-digital-protocol-submissions"
 import { useProtocols } from "@/hooks/use-protocols"
+import { useCounseling } from "@/hooks/use-counseling"
 import type { Patient, AnthropometricEntry, DigitalProtocolLink } from "@/lib/types"
 import { toast } from "sonner"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
@@ -274,6 +274,10 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     deleteEntry: deleteAllergen,
     isLoadingRemote: isLoadingAllergens,
   } = usePatientAllergens()
+  const {
+    sessions: counselingSessions,
+    isLoadingRemote: isLoadingCounseling,
+  } = useCounseling()
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)
@@ -327,7 +331,9 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   })
 
   const anthroEntries = getAnthroForPatient(patient.id)
-  const sessions = COUNSELING_SESSIONS.filter((s) => s.patientId === patient.id)
+  const sessions = counselingSessions.filter(
+    (session) => session.patientId === patient.id || session.patientId === patient.legacyId,
+  )
   const protocols = getProtocolsForPatient(patient.id)
   const diagnoses = getDiagnosesForPatient(patient.id)
   const medications = getMedicationsForPatient(patient.id)
@@ -343,6 +349,7 @@ export function PatientTabs({ patient }: PatientTabsProps) {
   const medicationsPending = isLoadingMedications && medications.length === 0
   const labValuesPending = isLoadingLabValues && entriesForSelectedLab.length === 0
   const screeningsPending = isLoadingScreenings && screenings.length === 0
+  const counselingPending = isLoadingCounseling && sessions.length === 0
   const procamResults = getProcamForPatient(patient.id)
   const digitalLinks = getDigitalLinksForPatient(patient.id)
   const activitiesPending = isLoadingActivities && activities.length === 0
@@ -2651,6 +2658,12 @@ export function PatientTabs({ patient }: PatientTabsProps) {
                 </Link>
               ))}
           </div>
+        ) : counselingPending ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Beratungssitzungen werden synchronisiert.
+            </CardContent>
+          </Card>
         ) : (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
