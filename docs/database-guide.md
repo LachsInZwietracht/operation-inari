@@ -1,6 +1,11 @@
 # Database Guide
 
-Single source of truth for Operation Prodi's nutrition database layer: schema design, data sources, ETL pipelines, and migration strategy. Consult this when working on anything related to food data, nutrients, Supabase tables, or data imports.
+Use this document for nutrition-data architecture: schema design, ETL pipelines, data-source strategy, and search behavior.
+
+Precedence:
+- Supabase migrations in `supabase/migrations/` are the schema source of truth.
+- Runtime behavior in `lib/data/*`, `lib/search/*`, and route handlers is the implementation source of truth.
+- This guide is intentionally descriptive and may lag behind code in smaller details. Verify before broad changes.
 
 ---
 
@@ -20,23 +25,18 @@ Single source of truth for Operation Prodi's nutrition database layer: schema de
 
 ## 1. Current State of the Codebase
 
-> **Latest dev update — April 2025**
-> - **Remote Supabase:** The project is connected to a hosted Supabase instance (project ref `fiywitnrtuewnvainyfe`). Local Supabase is no longer required for development. The CLI is linked via `supabase link`; push new migrations with `supabase db push`.
-> - **Remote setup workflow:** After linking, push migrations (`supabase db push`), then seed nutrient definitions + data sources (run `supabase/seed.sql` against the remote DB), then run all ETL scripts: `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:reference-values`, `npm run etl:recipes`. ETL scripts require `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` env vars (not the `NEXT_PUBLIC_` variants).
-> - **BLS pipeline:** Run `npm run etl:bls` then `npm run etl:verify:bls` (requires `SUPABASE_SERVICE_ROLE_KEY`). The verifier compares Supabase row counts with the Excel input and fails fast on drift.
-> - **Local dev (optional):** If you prefer local Supabase, bring up Docker (`supabase start`), run `supabase db reset` after syncing migrations, then re-run the BLS import + verifier. The seed now requires every `data_sources.version` value (e.g., the `hersteller` source uses `'varies'`).
-> - **Category mapping:** `scripts/etl/import-bls.ts` now resolves subgroup IDs (`fg_G6`, etc.) and maps them to the expanded UI categories (`cat_eier`, `cat_gewuerze`, `cat_unbekannt`). Keep those IDs in sync with `lib/mock-data/categories.ts`.
->   - Kartoffeln (`fg_K`) intentionally stay under `cat_gemuese` for now; add a dedicated category later if the UI needs potatoes separated.
-> - **Recipe + meal plan seeding:** After the BLS import succeeds, run `npm run etl:recipes` to upsert the shared recipe catalog (with normalized ingredients) and the default meal plan templates. The script resolves legacy ingredient IDs to Supabase foods via their BLS codes.
-> - **Supabase-only templates:** Recipes, meal plans, dashboards, and report pages no longer bundle mock fallbacks. If Supabase is empty you'll see blank states, so always run `npm run etl:recipes` after the BLS import when setting up a new environment.
-> - **Data access layer:** Fetch foods via `lib/data/foods.ts` (`fetchFoods`, `fetchFoodById`). Begin swapping pages and hooks away from `@/lib/mock-data/foods` so the UI can use Supabase without refactors later.
->   - All top-level loaders (`fetchAllFoods*`) now page through Supabase in 2.5k-row batches, so `npm run etl:bls` can import all 7k+ BLS foods without truncating table views—no per-call `limit` overrides required.
->   - `lib/legacy-food-map.ts` temporarily maps the old mock IDs (`food_apfel`) to their BLS codes, but compatibility is now handled at load/persist boundaries via `lib/data/food-reference-normalization.ts`. Generic runtime calculation/render paths should no longer resolve legacy IDs ad hoc.
-> - **Food delivery:** The layout now loads only a lightweight search index (`FoodSearchProvider`). Pages that actually compute nutrients wrap their client component in `FoodsProvider` *inside* the route and call `fetchAllFoods()` there. That keeps the default payload below ~200 KB while still giving dashboards/forms full data when needed.
->   - Protocol detail pages now use `fetchFoodsForProtocols()` instead of `fetchAllFoods()`, and paginated `fetchAllFoods*` loaders skip expensive `COUNT(*)` queries to reduce statement timeouts under test/dev load.
-> - **Institution tooling:** `useInstitutionMenu` now derives shopping categories/costs directly from the Supabase foods (via `categoryId`). If you add new categories, update both `FOOD_CATEGORIES` and the cost table in the hook. The food detail route now queries Supabase lazily with `fetchFoodById`, so you no longer need to preload every food just to show a single detail page.
-> - **Reference standards:** Sync DGE/ÖGE/SGE/RDA matrices with `npm run etl:reference-values` (filter with `--standard=dge`). The script still consumes `lib/mock-data/reference-standards.ts` as ETL input, but the runtime app now reads `reference_values` plus persisted `reference_profiles`, `reference_profile_values`, `user_reference_preferences`, and `patient_reference_assignments`.
-> - **Export system:** Reports, patient mail-merge, and `API & Export` now create real files server-side. Export metadata is persisted in `export_jobs`; binaries are generated on demand and are not stored in the database.
+Current operational notes:
+- The app is designed around a hosted Supabase project. Local Supabase is optional for development.
+- Push schema changes with `supabase db push`.
+- Core ETL commands are `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:reference-values`, `npm run etl:recipes`, and `npm run etl:off`.
+- ETL scripts require server-side Supabase credentials such as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Do not use `NEXT_PUBLIC_*` variables for ETL.
+- BLS import and verification are expected to run together. The verifier checks imported counts against the source workbook.
+- Category mapping in `scripts/etl/import-bls.ts` must stay aligned with UI category definitions such as `lib/mock-data/categories.ts`.
+- Shared recipes and meal plan templates are seeded separately from BLS foods through `npm run etl:recipes`.
+- Runtime compatibility for old mock food IDs is handled at load/persist boundaries, not by ad hoc mapping inside calculation code.
+- Food delivery is intentionally split by use case: lightweight search index for navigation, targeted loaders for list views, and heavier loaders only where full nutrient math is required.
+- Reference values now use Supabase tables for official rows plus persisted custom profile and preference tables.
+- Export jobs persist metadata only. Generated files are produced on demand and are not stored in the database in v1.
 
 ### Data Model (TypeScript Types)
 
@@ -102,10 +102,10 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 - BLS 4.0 imported: 7,140 foods + ~265k nutrient rows + English synonyms
 - Food detail pages use `fetchFoodById()` for single-record queries
 
-**localStorage (still used for user data):**
+**localStorage (fallback for some user data):**
 - `prodi_custom_foods`, `prodi_custom_recipes`, `prodi_meal_plans`, `institution-menus` (local fallback; primary storage is Supabase `institution_menus` + `institution_menu_slots`)
 - Custom foods merge with Supabase data at runtime via `useCustomFoods(baseFoods)`
-- Will migrate to Supabase once auth is implemented (see Phase 5 below)
+- Some features still use local fallback even though auth and Supabase persistence already exist elsewhere in the app. Verify per feature before changing that behavior.
 
 ### Data Access Architecture
 
