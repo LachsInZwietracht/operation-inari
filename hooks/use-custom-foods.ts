@@ -7,14 +7,20 @@ import {
   calculateRecipeNutrients,
 } from "@/lib/nutrients";
 import { fetchCustomFoodsClient, persistCustomFood, deleteCustomFoodClient } from "@/lib/data/custom-foods-client";
+import {
+  isLocalMigrationCandidate,
+  matchesRecordIdentity,
+  upsertByIdentity,
+} from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
-const STORAGE_KEY = "prodi_custom_foods";
+const STORAGE_KEY = "inari_custom_foods";
+const LEGACY_STORAGE_KEY = "prodi_custom_foods";
 
 function loadFromStorage(): Food[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as Food[];
   } catch {
@@ -26,6 +32,7 @@ function saveToStorage(items: Food[]) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     // ignore quota errors
   }
@@ -44,8 +51,12 @@ export function useCustomFoods(baseFoods: Food[]) {
   const [customFoods, setCustomFoods] = useState<Food[]>(() => loadFromStorage());
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
+  const customFoodsRef = useRef(customFoods);
 
-  // Load from Supabase when authenticated
+  useEffect(() => {
+    customFoodsRef.current = customFoods;
+  }, [customFoods]);
+
   useEffect(() => {
     if (!isAuthenticated || authLoading) return;
 
@@ -57,20 +68,26 @@ export function useCustomFoods(baseFoods: Food[]) {
         const persistedFoods = await fetchCustomFoodsClient();
         if (cancelled) return;
 
-        setCustomFoods((prev) => {
-          const localOnly = prev.filter(p => !persistedFoods.some(r => r.id === p.id));
-          const merged = [...persistedFoods, ...localOnly];
-          return merged;
-        });
+        const localCandidates = customFoodsRef.current.filter(isLocalMigrationCandidate);
+        const mergedFoods = [...persistedFoods];
+        for (const localFood of localCandidates) {
+          if (!mergedFoods.some((remoteFood) => matchesRecordIdentity(remoteFood, localFood))) {
+            mergedFoods.push(localFood);
+          }
+        }
 
-        // Migration of local-only foods
+        setCustomFoods(mergedFoods);
+
         if (!migrationDone.current) {
           migrationDone.current = true;
-          const localOnly = customFoods.filter(p => !persistedFoods.some(r => r.id === p.id));
-          for (const food of localOnly) {
-            void persistCustomFood(food).catch(err => {
+          for (const food of localCandidates) {
+            try {
+              const persistedFood = await persistCustomFood(food);
+              if (cancelled) return;
+              setCustomFoods((prev) => upsertByIdentity(prev, persistedFood));
+            } catch (err) {
               console.error(`Failed to migrate custom food ${food.name}:`, err);
-            });
+            }
           }
         }
       } catch (error) {
@@ -91,7 +108,7 @@ export function useCustomFoods(baseFoods: Food[]) {
   }, [isAuthenticated, authLoading]);
 
   useEffect(() => {
-    saveToStorage(customFoods);
+    saveToStorage(customFoods.filter(isLocalMigrationCandidate));
   }, [customFoods]);
 
   const allFoods = useMemo(
@@ -100,7 +117,7 @@ export function useCustomFoods(baseFoods: Food[]) {
   );
 
   const addFood = useCallback(
-    (food: Omit<Food, "id" | "createdAt" | "updatedAt">) => {
+    async (food: Omit<Food, "id" | "createdAt" | "updatedAt">) => {
       const now = new Date().toISOString();
       const newFood: Food = {
         ...food,
@@ -111,25 +128,27 @@ export function useCustomFoods(baseFoods: Food[]) {
         source: food.source ?? "Eigene Eingabe",
         isCustom: true,
       };
-      
-      setCustomFoods((prev) => [...prev, newFood]);
-      
-      // Background sync
+
+      setCustomFoods((prev) => upsertByIdentity(prev, newFood));
+
       if (isAuthenticated) {
-        void persistCustomFood(newFood).catch((error) => {
+        try {
+          const persistedFood = await persistCustomFood(newFood);
+          setCustomFoods((prev) => upsertByIdentity(prev, persistedFood));
+          return persistedFood;
+        } catch (error) {
           console.error("Failed to persist custom food:", error);
-        });
+        }
       }
-      
+
       return newFood;
     },
     [isAuthenticated],
   );
 
   const deleteFood = useCallback((id: string) => {
-    setCustomFoods((prev) => prev.filter((food) => food.id !== id));
-    
-    // Background sync
+    setCustomFoods((prev) => prev.filter((food) => !matchesRecordIdentity(food, { id })));
+
     if (isAuthenticated) {
       void deleteCustomFoodClient(id).catch((error) => {
         console.error("Failed to delete custom food:", error);
@@ -161,17 +180,16 @@ export function useCustomFoods(baseFoods: Food[]) {
         updatedAt: now,
       };
 
-      setCustomFoods((prev) => {
-        // replace existing conversion if present
-        const filtered = prev.filter((food) => food.id !== newFood.id);
-        return [...filtered, newFood];
-      });
+      setCustomFoods((prev) => upsertByIdentity(prev, newFood));
 
-      // Background sync
       if (isAuthenticated) {
-        void persistCustomFood(newFood).catch((error) => {
-          console.error("Failed to persist converted recipe food:", error);
-        });
+        void persistCustomFood(newFood)
+          .then((persistedFood) => {
+            setCustomFoods((prev) => upsertByIdentity(prev, persistedFood));
+          })
+          .catch((error) => {
+            console.error("Failed to persist converted recipe food:", error);
+          });
       }
 
       return newFood;

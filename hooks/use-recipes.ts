@@ -2,8 +2,17 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { Food, Recipe } from "@/lib/types";
-import { fetchRecipesClient, persistPersonalRecipe } from "@/lib/data/recipes-client";
+import {
+  deletePersonalRecipeClient,
+  fetchRecipesClient,
+  persistPersonalRecipe,
+} from "@/lib/data/recipes-client";
 import { getLocalRecipes, saveLocalRecipes } from "@/lib/data/local-recipes";
+import {
+  isLocalMigrationCandidate,
+  matchesRecordIdentity,
+  upsertByIdentity,
+} from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
 export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[] = []) {
@@ -11,13 +20,16 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
   const [customRecipes, setCustomRecipes] = useState<Recipe[]>(() => getLocalRecipes(foods));
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
+  const customRecipesRef = useRef(customRecipes);
 
-  // Sync to local storage
   useEffect(() => {
-    saveLocalRecipes(customRecipes, foods);
+    customRecipesRef.current = customRecipes;
+  }, [customRecipes]);
+
+  useEffect(() => {
+    saveLocalRecipes(customRecipes.filter(isLocalMigrationCandidate), foods);
   }, [customRecipes, foods]);
 
-  // Load from Supabase when authenticated
   useEffect(() => {
     if (!isAuthenticated || authLoading) return;
 
@@ -29,24 +41,26 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
         const remoteRecipes = await fetchRecipesClient({ sourceType: "personal" });
         if (cancelled) return;
 
-        setCustomRecipes((prev) => {
-          const localOnly = prev.filter(p => 
-            !remoteRecipes.some(r => r.id === p.id || r.legacyId === p.id)
-          );
-          return [...remoteRecipes, ...localOnly];
-        });
+        const localCandidates = customRecipesRef.current.filter(isLocalMigrationCandidate);
+        const mergedRecipes = [...remoteRecipes];
+        for (const localRecipe of localCandidates) {
+          if (!mergedRecipes.some((remoteRecipe) => matchesRecordIdentity(remoteRecipe, localRecipe))) {
+            mergedRecipes.push(localRecipe);
+          }
+        }
 
-        // Migration of local-only recipes
+        setCustomRecipes(mergedRecipes);
+
         if (!migrationDone.current) {
           migrationDone.current = true;
-          const localOnly = customRecipes.filter(p => 
-            !remoteRecipes.some(r => r.id === p.id || r.legacyId === p.id)
-          );
-          
-          for (const recipe of localOnly) {
-            void persistPersonalRecipe(recipe).catch(err => {
+          for (const recipe of localCandidates) {
+            try {
+              const persistedRecipe = await persistPersonalRecipe(recipe);
+              if (cancelled) return;
+              setCustomRecipes((prev) => upsertByIdentity(prev, persistedRecipe));
+            } catch (err) {
               console.error(`Failed to migrate recipe ${recipe.name}:`, err);
-            });
+            }
           }
         }
       } catch (error) {
@@ -81,13 +95,13 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
   const addRecipe = useCallback(async (recipe: Recipe) => {
     const now = new Date().toISOString();
     const newRecipe = { ...recipe, createdAt: now, updatedAt: now, sourceType: "personal" as const };
-    
-    setCustomRecipes(prev => [...prev.filter(r => r.id !== recipe.id), newRecipe]);
+
+    setCustomRecipes((prev) => upsertByIdentity(prev, newRecipe));
 
     if (isAuthenticated) {
       try {
         const persisted = await persistPersonalRecipe(newRecipe);
-        setCustomRecipes(prev => prev.map(r => r.id === newRecipe.id ? persisted : r));
+        setCustomRecipes((prev) => upsertByIdentity(prev, persisted));
         return persisted;
       } catch (error) {
         console.error("Failed to persist recipe to Supabase:", error);
@@ -97,10 +111,16 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
   }, [isAuthenticated]);
 
   const deleteRecipe = useCallback(async (id: string) => {
-     // Note: we might need a deleteRecipeClient in recipes-client.ts if it doesn't exist yet
-     setCustomRecipes(prev => prev.filter(r => r.id !== id && r.legacyId !== id));
-     // For now, only local delete as I don't see a deleteRecipeClient in the current codebase
-  }, []);
+    setCustomRecipes((prev) => prev.filter((recipe) => !matchesRecordIdentity(recipe, { id })));
+
+    if (isAuthenticated) {
+      try {
+        await deletePersonalRecipeClient(id);
+      } catch (error) {
+        console.error("Failed to delete recipe from Supabase:", error);
+      }
+    }
+  }, [isAuthenticated]);
 
   return {
     allRecipes,

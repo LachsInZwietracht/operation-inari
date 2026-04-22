@@ -27,3 +27,15 @@ export function matchesRecordIdentity(
 
   return leftIds.some((leftId) => rightIds.includes(leftId));
 }
+
+export function upsertByIdentity<T extends PersistedRecordIdentity>(
+  items: T[],
+  nextItem: T,
+): T[] {
+  const index = items.findIndex((item) => matchesRecordIdentity(item, nextItem));
+  if (index < 0) return [...items, nextItem];
+
+  const next = [...items];
+  next[index] = nextItem;
+  return next;
+}

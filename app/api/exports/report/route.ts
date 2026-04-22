@@ -170,8 +170,18 @@ export async function POST(request: Request) {
       fileName,
       disposition: body.disposition,
       headers: {
-        ...(patientReportId ? { "x-prodi-patient-report-id": patientReportId } : {}),
-        ...(patientReportVersionId ? { "x-prodi-patient-report-version-id": patientReportVersionId } : {}),
+        ...(patientReportId
+          ? {
+              "x-inari-patient-report-id": patientReportId,
+              "x-prodi-patient-report-id": patientReportId,
+            }
+          : {}),
+        ...(patientReportVersionId
+          ? {
+              "x-inari-patient-report-version-id": patientReportVersionId,
+              "x-prodi-patient-report-version-id": patientReportVersionId,
+            }
+          : {}),
       },
     });
   }
@@ -195,8 +205,18 @@ export async function POST(request: Request) {
     contentType: "text/csv;charset=utf-8",
     fileName,
     headers: {
-      ...(patientReportId ? { "x-prodi-patient-report-id": patientReportId } : {}),
-      ...(patientReportVersionId ? { "x-prodi-patient-report-version-id": patientReportVersionId } : {}),
+      ...(patientReportId
+        ? {
+            "x-inari-patient-report-id": patientReportId,
+            "x-prodi-patient-report-id": patientReportId,
+          }
+        : {}),
+      ...(patientReportVersionId
+        ? {
+            "x-inari-patient-report-version-id": patientReportVersionId,
+            "x-prodi-patient-report-version-id": patientReportVersionId,
+          }
+        : {}),
     },
   });
 }

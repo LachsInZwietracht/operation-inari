@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Food, NutrientValue, FoodSourceId } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
+import { isUuid } from "@/lib/data/local-records";
 
 const FALLBACK_CATEGORY_ID = "cat_unbekannt";
 
@@ -60,6 +61,7 @@ function mapFoodRow(row: FoodRow): Food {
 
   return {
     id: row.id,
+    legacyId: row.source_food_id,
     name: row.name,
     categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
     source: row.data_source_id,
@@ -91,12 +93,13 @@ export async function fetchFoodById(
   supabase?: SupabaseClient,
 ): Promise<Food | null> {
   const client = resolveBrowserClient(supabase);
+  const column = isUuid(id) ? "id" : "source_food_id";
   
   const { data, error } = await withTimeout(
     client
       .from("foods")
       .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
-      .eq("id", id)
+      .eq(column, id)
       .maybeSingle(),
     5000,
     "Supabase food request timed out"
@@ -114,17 +117,39 @@ export async function fetchFoodsByIds(
 ): Promise<Food[]> {
   if (ids.length === 0) return [];
   const client = resolveBrowserClient(supabase);
-  
-  const { data, error } = await withTimeout(
-    client
-      .from("foods")
-      .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
-      .in("id", ids),
-    10000,
-    "Supabase foods request timed out"
-  );
+  const uuidIds = ids.filter(isUuid);
+  const legacyIds = ids.filter((id) => !isUuid(id));
+  const rows: FoodRow[] = [];
 
-  if (error) throw new Error(error.message);
+  if (uuidIds.length > 0) {
+    const { data, error } = await withTimeout(
+      client
+        .from("foods")
+        .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
+        .in("id", uuidIds),
+      10000,
+      "Supabase foods request timed out"
+    );
 
-  return ((data ?? []) as unknown as FoodRow[]).map(mapFoodRow);
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as unknown as FoodRow[]));
+  }
+
+  if (legacyIds.length > 0) {
+    const { data, error } = await withTimeout(
+      client
+        .from("foods")
+        .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
+        .in("source_food_id", legacyIds),
+      10000,
+      "Supabase foods request timed out"
+    );
+
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as unknown as FoodRow[]));
+  }
+
+  return rows
+    .map(mapFoodRow)
+    .filter((food, index, self) => self.findIndex((item) => item.id === food.id) === index);
 }

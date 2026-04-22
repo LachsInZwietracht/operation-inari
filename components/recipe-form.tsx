@@ -39,7 +39,7 @@ import { formatNumber } from "@/lib/format";
 import type { Recipe, Ingredient, Food } from "@/lib/types";
 import { useFoodSearch } from "@/components/foods-provider";
 import { persistPersonalRecipe } from "@/lib/data/recipes-client";
-import { upsertLocalRecipe } from "@/lib/data/local-recipes";
+import { deleteLocalRecipeById, upsertLocalRecipe } from "@/lib/data/local-recipes";
 import { FoodSearchDialog } from "@/components/food-search-dialog";
 import { fetchFoodsByIds } from "@/lib/data/foods-client";
 
@@ -176,7 +176,16 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const perServingFat = getNutrientValue(perServingNutrients, "fett");
   const perServingCarbs = getNutrientValue(perServingNutrients, "kohlenhydrate");
 
-  const foodMap = useMemo(() => new Map(availableFoods.map((food) => [food.id, food])), [availableFoods]);
+  const foodMap = useMemo(() => {
+    const entries = new Map<string, Food>();
+    for (const food of availableFoods) {
+      entries.set(food.id, food);
+      if (food.legacyId) {
+        entries.set(food.legacyId, food);
+      }
+    }
+    return entries;
+  }, [availableFoods]);
 
   function getFoodName(foodId: string): string {
     return foodMap.get(foodId)?.name ?? "Wird geladen...";
@@ -223,8 +232,10 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
       };
 
       // Always try to persist to Supabase if possible
+      let persistedRecipe: Recipe | null = null;
+
       try {
-        await persistPersonalRecipe(formattedRecipe);
+        persistedRecipe = await persistPersonalRecipe(formattedRecipe);
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message === "AUTH_REQUIRED") {
@@ -234,8 +245,14 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         }
       }
 
-      // Always update local storage as a reliable fallback/cache
-      upsertLocalRecipe(formattedRecipe, availableFoods);
+      if (persistedRecipe) {
+        deleteLocalRecipeById(formattedRecipe.id, availableFoods);
+        if (formattedRecipe.legacyId) {
+          deleteLocalRecipeById(formattedRecipe.legacyId, availableFoods);
+        }
+      } else {
+        upsertLocalRecipe(formattedRecipe, availableFoods);
+      }
       
       toast.success(isEditing ? "Rezept aktualisiert" : "Rezept erstellt");
       router.push("/rezepte");

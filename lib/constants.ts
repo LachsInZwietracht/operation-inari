@@ -19,7 +19,7 @@ export const NUTRIENT_GROUP_LABELS: Record<NutrientGroup, string> = {
   mineralstoffe: "Mineralstoffe",
 };
 
-export const APP_NAME = "Prodi";
+export const APP_NAME = "Inari";
 export const APP_DESCRIPTION = "Professionelle Ernährungsberatung";
 
 export const INDICATION_OPTIONS = [

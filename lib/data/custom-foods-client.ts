@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Food, NutrientValue, FoodPortionSize } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
+import { isUuid } from "@/lib/data/local-records";
 
 interface FoodRow {
   id: string;
@@ -62,7 +63,8 @@ function mapFoodRow(row: FoodRow): Food {
   }));
 
   return {
-    id: row.source_food_id, // we use source_food_id as local ID since it matches our local format
+    id: row.id,
+    legacyId: row.source_food_id,
     name: row.name,
     categoryId: row.category_id ?? "cat_sonstiges",
     source: "Eigene Eingabe",
@@ -86,6 +88,28 @@ function mapFoodRow(row: FoodRow): Food {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function fetchCustomFoodRowByIdentity(
+  foodId: string,
+  client: SupabaseClient,
+): Promise<FoodRow | null> {
+  const column = isUuid(foodId) ? "id" : "source_food_id";
+  const { data, error } = await withTimeout(
+    client
+      .from("foods")
+      .select(
+        "id, name, data_source_id, source_food_id, source_version, bls_code, food_group_id, category_id, manufacturer, allergens, additives, tags, is_branded, is_custom, is_recipe_derived, co2_per_portion, sustainability_score, prod_score, created_at, updated_at, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)"
+      )
+      .eq("is_custom", true)
+      .eq(column, foodId)
+      .maybeSingle(),
+    5000,
+    "Supabase custom food lookup timed out",
+  );
+
+  if (error) throw new Error(error.message);
+  return (data as unknown as FoodRow | null) ?? null;
 }
 
 export async function fetchCustomFoodsClient(supabase?: SupabaseClient): Promise<Food[]> {
@@ -116,14 +140,18 @@ export async function persistCustomFood(
 
   if (!userId) throw new Error("AUTH_REQUIRED");
 
+  const canonicalId = isUuid(food.id) ? food.id : null;
+  const legacyId = canonicalId ? food.legacyId ?? food.id : food.legacyId ?? food.id;
+
   // Upsert the main food record
   const { data: persistedFood, error: foodError } = await client
     .from("foods")
     .upsert(
       {
+        ...(canonicalId ? { id: canonicalId } : {}),
         name: food.name,
         data_source_id: food.sourceId ?? "custom",
-        source_food_id: food.id, // we map local ID to source_food_id
+        source_food_id: legacyId,
         source_version: food.sourceVersion ?? null,
         bls_code: food.blsCode ?? null,
         food_group_id: food.foodGroupId ?? null,
@@ -141,7 +169,7 @@ export async function persistCustomFood(
         user_id: userId,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "data_source_id, source_food_id" }
+      { onConflict: canonicalId ? "id" : "data_source_id,source_food_id" }
     )
     .select("id")
     .single();
@@ -195,7 +223,21 @@ export async function persistCustomFood(
     if (insPortionsError) throw new Error(insPortionsError.message);
   }
 
-  return food;
+  const persisted = await fetchCustomFoodByIdClient(supabaseId, client);
+  if (!persisted) {
+    throw new Error("Persisted custom food could not be loaded");
+  }
+
+  return persisted;
+}
+
+export async function fetchCustomFoodByIdClient(
+  foodId: string,
+  supabase?: SupabaseClient,
+): Promise<Food | null> {
+  const client = resolveBrowserClient(supabase);
+  const row = await fetchCustomFoodRowByIdentity(foodId, client);
+  return row ? mapFoodRow(row) : null;
 }
 
 export async function deleteCustomFoodClient(
@@ -203,11 +245,9 @@ export async function deleteCustomFoodClient(
   supabase?: SupabaseClient,
 ): Promise<void> {
   const client = resolveBrowserClient(supabase);
-  const { error } = await client
-    .from("foods")
-    .delete()
-    .eq("data_source_id", "custom")
-    .eq("source_food_id", foodId);
+  let query = client.from("foods").delete().eq("data_source_id", "custom");
+  query = isUuid(foodId) ? query.eq("id", foodId) : query.eq("source_food_id", foodId);
+  const { error } = await query;
 
   if (error) throw new Error(error.message);
 }

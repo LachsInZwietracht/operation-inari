@@ -50,6 +50,7 @@ export interface FoodGroupNode {
 
 export interface Food extends Timestamped {
   id: ID;
+  legacyId?: ID;
   name: string;
   categoryId: ID;
   source: string; // e.g. "BLS 3.02", "Eigene Eingabe"

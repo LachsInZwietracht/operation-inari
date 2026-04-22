@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ernährungsprotokoll ausfüllen — Prodi",
+  title: "Ernährungsprotokoll ausfüllen — Inari",
   description:
     "Füllen Sie Ihr Ernährungsprotokoll aus und senden Sie es an Ihre Ernährungsberatung.",
 };

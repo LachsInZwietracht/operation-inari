@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
 function PdfHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <View style={styles.header}>
-      <Text style={styles.brand}>Operation Prodi</Text>
+      <Text style={styles.brand}>Inari</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>
       <Text style={[styles.h1, { marginTop: 10 }]}>{title}</Text>
     </View>
@@ -135,7 +135,7 @@ function MetricTable({
 
 function ReportPdfDocument({ request }: { request: ReportExportRequest }) {
   return (
-    <Document title={request.title} author="Operation Prodi">
+    <Document title={request.title} author="Inari">
       <Page size="A4" style={styles.page}>
         <PdfHeader
           title={request.title}
@@ -197,7 +197,7 @@ function ReportPdfDocument({ request }: { request: ReportExportRequest }) {
         ) : null}
 
         <Text style={styles.footer} fixed>
-          Operation Prodi · generiert am {new Date().toLocaleDateString("de-DE")}
+          Inari · generiert am {new Date().toLocaleDateString("de-DE")}
         </Text>
       </Page>
     </Document>
@@ -206,7 +206,7 @@ function ReportPdfDocument({ request }: { request: ReportExportRequest }) {
 
 function MailMergePdfDocument({ request }: { request: PatientMailMergeExportRequest }) {
   return (
-    <Document title={request.title} author="Operation Prodi">
+    <Document title={request.title} author="Inari">
       {request.documents.map((document) => (
         <Page key={document.patientId} size="A4" style={styles.page}>
           <PdfHeader
@@ -218,7 +218,7 @@ function MailMergePdfDocument({ request }: { request: PatientMailMergeExportRequ
             <Text style={styles.body}>{document.body}</Text>
           </View>
           <Text style={styles.footer} fixed>
-            Operation Prodi · Patientendokument
+            Inari · Patientendokument
           </Text>
         </Page>
       ))}

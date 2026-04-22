@@ -3,9 +3,13 @@ import type { DailyMealPlan, Food, NutritionProtocol, Recipe } from "@/lib/types
 
 function createFoodResolver(foods: Food[]) {
   const foodsById = new Set(foods.map((food) => food.id));
+  const foodsByLegacyId = new Map<string, string>();
   const foodsByBlsCode = new Map<string, string>();
 
   for (const food of foods) {
+    if (food.legacyId) {
+      foodsByLegacyId.set(food.legacyId, food.id);
+    }
     if (food.blsCode) {
       foodsByBlsCode.set(food.blsCode, food.id);
     }
@@ -14,6 +18,10 @@ function createFoodResolver(foods: Food[]) {
   return (foodId: string) => {
     if (foodsById.has(foodId)) {
       return foodId;
+    }
+
+    if (foodsByLegacyId.has(foodId)) {
+      return foodsByLegacyId.get(foodId) ?? foodId;
     }
 
     const blsCode = LEGACY_FOOD_ID_TO_BLS_CODE[foodId];

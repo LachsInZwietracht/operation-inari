@@ -5,7 +5,7 @@ export const MAIL_MERGE_TEMPLATES: MailMergeTemplate[] = [
     id: "follow_up",
     name: "Termin-Nachverfolgung",
     category: "termin",
-    subject: "Ihr nächster Beratungstermin bei Operation Prodi",
+    subject: "Ihr nächster Beratungstermin bei Inari",
     body: `Liebe*r {{patient.firstName}} {{patient.lastName}},\n\nwir freuen uns, Sie am {{appointment.date}} um {{appointment.time}} Uhr in unserer Praxis begrüßen zu dürfen.\nBitte bringen Sie Ihr Ernährungstagebuch und – falls vorhanden – aktuelle Laborwerte mit.\n\nSollte der Termin nicht wahrgenommen werden können, geben Sie uns bitte kurz Rückmeldung.\n\nFreundliche Grüße\n{{practice.name}}`,
   },
   {

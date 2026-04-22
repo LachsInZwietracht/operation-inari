@@ -2,13 +2,14 @@ import type { DailyMealPlan, Food } from "@/lib/types";
 
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization";
 
-const STORAGE_KEY = "prodi_meal_plans";
+const STORAGE_KEY = "inari_meal_plans";
+const LEGACY_STORAGE_KEY = "prodi_meal_plans";
 
 export function getLocalMealPlansRecord(foods: Food[] = []): Record<string, DailyMealPlan> {
   if (typeof window === "undefined") return {};
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return {};
 
     const parsed = JSON.parse(raw) as Record<string, DailyMealPlan>;
@@ -37,4 +38,5 @@ export function saveLocalMealPlansRecord(
   );
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }

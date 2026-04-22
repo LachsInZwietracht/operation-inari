@@ -6,6 +6,7 @@ import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot } from "@/l
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization"
 import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
 import { getLocalMealPlansRecord, saveLocalMealPlansRecord } from "@/lib/data/local-meal-plans"
+import { isLocalMigrationCandidate } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const ALL_SLOT_TYPES: MealSlotType[] = [
@@ -71,13 +72,19 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
   )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
+  const plansRef = useRef(plans)
 
-  // Sync to local storage for offline/fallback
   useEffect(() => {
-    saveLocalMealPlansRecord(plans, foods)
+    plansRef.current = plans
+  }, [plans])
+
+  useEffect(() => {
+    const localPlans = Object.fromEntries(
+      Object.entries(plans).filter(([, plan]) => isLocalMigrationCandidate(plan))
+    )
+    saveLocalMealPlansRecord(localPlans, foods)
   }, [foods, plans])
 
-  // Load from Supabase when authenticated
   useEffect(() => {
     if (!isAuthenticated || authLoading) return
 
@@ -89,27 +96,38 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
         const persistedPlans = await fetchMealPlansClient()
         if (cancelled) return
 
-        setPlans((prev) => {
-          const next = { ...prev }
-          for (const plan of persistedPlans) {
-            next[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
-          }
-          return next
-        })
+        const nextPlans: Record<string, DailyMealPlan> = {}
+        for (const plan of initialPlans) {
+          nextPlans[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+        }
+        for (const plan of persistedPlans) {
+          nextPlans[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+        }
 
-        // Migration of local-only plans
+        const localCandidates = Object.values(plansRef.current).filter(isLocalMigrationCandidate)
+        for (const plan of localCandidates) {
+          if (!nextPlans[plan.date]) {
+            nextPlans[plan.date] = ensureAllSlots(plan)
+          }
+        }
+
+        setPlans(nextPlans)
+
         if (!migrationDone.current) {
           migrationDone.current = true
-          const localDates = Object.keys(plans)
-          const remoteDates = new Set(persistedPlans.map(p => p.date))
-          const datesToMigrate = localDates.filter(d => !remoteDates.has(d))
-          
-          for (const date of datesToMigrate) {
-            const plan = plans[date]
-            if (plan && plan.slots.some(s => s.entries.length > 0)) {
-              void persistMealPlan(plan).catch(err => {
-                console.error(`Failed to migrate meal plan for ${date}:`, err)
-              })
+          for (const plan of localCandidates) {
+            if (!plan.slots.some((slot) => slot.entries.length > 0)) continue
+
+            try {
+              const persistedPlan = await persistMealPlan(plan)
+              if (cancelled) return
+
+              setPlans((prev) => ({
+                ...prev,
+                [persistedPlan.date]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
+              }))
+            } catch (err) {
+              console.error(`Failed to migrate meal plan for ${plan.date}:`, err)
             }
           }
         }
@@ -125,7 +143,7 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, authLoading, foods])
+  }, [isAuthenticated, authLoading, foods, initialPlans])
 
   const getPlanForDate = useCallback(
     (date: string): DailyMealPlan => {
@@ -150,21 +168,49 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     [getPlanForDate],
   )
 
-  const syncPlanToSupabase = useCallback((plan: DailyMealPlan) => {
-    if (isAuthenticated) {
-      void persistMealPlan(plan).catch(err => {
+  const syncPlanToSupabase = useCallback(
+    async (plan: DailyMealPlan) => {
+      if (!isAuthenticated) return
+
+      try {
+        const persistedPlan = await persistMealPlan(plan)
+        setPlans((prev) => ({
+          ...prev,
+          [persistedPlan.date]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
+        }))
+      } catch (err) {
         console.error(`Failed to sync meal plan for ${plan.date}:`, err)
+      }
+    },
+    [foods, isAuthenticated]
+  )
+
+  const updateCurrentPlan = useCallback(
+    (updater: (plan: DailyMealPlan) => DailyMealPlan) => {
+      let updatedPlan: DailyMealPlan | null = null
+
+      setPlans((prev) => {
+        const currentPlan = prev[currentDate]
+          ? ensureAllSlots(prev[currentDate])
+          : createEmptyPlan(currentDate)
+        updatedPlan = updater(currentPlan)
+
+        return {
+          ...prev,
+          [currentDate]: updatedPlan,
+        }
       })
-    }
-  }, [isAuthenticated])
+
+      if (updatedPlan) {
+        void syncPlanToSupabase(updatedPlan)
+      }
+    },
+    [currentDate, syncPlanToSupabase]
+  )
 
   const addEntry = useCallback(
     (slotType: MealSlotType, entry: Omit<MealEntry, "id">) => {
-      setPlans((prev) => {
-        const plan = prev[currentDate]
-          ? ensureAllSlots(prev[currentDate])
-          : createEmptyPlan(currentDate)
-
+      updateCurrentPlan((plan) => {
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -173,24 +219,15 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           }
         })
 
-        const updatedPlan = { ...plan, slots: newSlots }
-        syncPlanToSupabase(updatedPlan)
-
-        return {
-          ...prev,
-          [currentDate]: updatedPlan,
-        }
+        return { ...plan, slots: newSlots }
       })
     },
-    [currentDate, syncPlanToSupabase]
+    [updateCurrentPlan]
   )
 
   const removeEntry = useCallback(
     (slotType: MealSlotType, entryId: string) => {
-      setPlans((prev) => {
-        const plan = prev[currentDate]
-        if (!plan) return prev
-
+      updateCurrentPlan((plan) => {
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -199,24 +236,15 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           }
         })
 
-        const updatedPlan = { ...plan, slots: newSlots }
-        syncPlanToSupabase(updatedPlan)
-
-        return {
-          ...prev,
-          [currentDate]: updatedPlan,
-        }
+        return { ...plan, slots: newSlots }
       })
     },
-    [currentDate, syncPlanToSupabase]
+    [updateCurrentPlan]
   )
 
   const updateEntryAmount = useCallback(
     (slotType: MealSlotType, entryId: string, amount: number) => {
-      setPlans((prev) => {
-        const plan = prev[currentDate]
-        if (!plan) return prev
-
+      updateCurrentPlan((plan) => {
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -227,16 +255,10 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
           }
         })
 
-        const updatedPlan = { ...plan, slots: newSlots }
-        syncPlanToSupabase(updatedPlan)
-
-        return {
-          ...prev,
-          [currentDate]: updatedPlan,
-        }
+        return { ...plan, slots: newSlots }
       })
     },
-    [currentDate, syncPlanToSupabase]
+    [updateCurrentPlan]
   )
 
   const setDate = useCallback((date: string) => {

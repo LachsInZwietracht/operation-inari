@@ -63,6 +63,10 @@ interface PersistRecipeOptions {
   supabase?: SupabaseClient;
 }
 
+interface DeleteRecipeOptions {
+  supabase?: SupabaseClient;
+}
+
 function resolveBrowserClient(supabase?: SupabaseClient) {
   if (supabase) return supabase;
   return createBrowserSupabaseClient();
@@ -275,4 +279,27 @@ export async function persistPersonalRecipe(
   }
 
   return persisted;
+}
+
+export async function deletePersonalRecipeClient(
+  recipeId: string,
+  options: DeleteRecipeOptions = {},
+): Promise<void> {
+  const client = resolveBrowserClient(options.supabase);
+  const userId = await getAuthenticatedUserId(client);
+
+  if (!userId) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  const column = isUuid(recipeId) ? "id" : "legacy_id";
+  const { error } = await client
+    .from("recipes")
+    .delete()
+    .eq("user_id", userId)
+    .eq(column, recipeId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

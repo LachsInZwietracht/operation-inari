@@ -19,7 +19,7 @@ export const ADMIN_USERS: AdminUser[] = [
   {
     id: "user_admin",
     name: "Fabian Radlow",
-    email: "fabian@prodi.app",
+    email: "fabian@inari.app",
     role: "Administrator",
     status: "aktiv",
     lastLogin: "2026-03-12T07:45:00Z",
@@ -27,7 +27,7 @@ export const ADMIN_USERS: AdminUser[] = [
   {
     id: "user_nutri",
     name: "Sarah Dietrich",
-    email: "sarah@prodi.app",
+    email: "sarah@inari.app",
     role: "Ernährungsfachkraft",
     status: "aktiv",
     lastLogin: "2026-03-11T15:20:00Z",
@@ -35,7 +35,7 @@ export const ADMIN_USERS: AdminUser[] = [
   {
     id: "user_guest",
     name: "Max Mustermann",
-    email: "max@prodi.app",
+    email: "max@inari.app",
     role: "Gast",
     status: "eingeladen",
     lastLogin: "–",

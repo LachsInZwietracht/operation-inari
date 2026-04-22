@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DailyMealPlan, MealEntry, MealSlot, MealSlotType } from "@/lib/types";
+import { isUuid } from "@/lib/data/local-records";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
 
@@ -86,6 +87,7 @@ function mapMealPlanRow(row: MealPlanRow): DailyMealPlan {
 
   return {
     id: row.id,
+    legacyId: row.legacy_id ?? undefined,
     date: row.date,
     slots,
   };
@@ -143,15 +145,18 @@ export async function persistMealPlan(
     throw new Error("AUTH_REQUIRED");
   }
 
+  const canonicalId = isUuid(plan.id) ? plan.id : null;
+  const legacyId = canonicalId ? plan.legacyId ?? plan.id : plan.legacyId ?? plan.id;
   const planPayload = {
-    legacy_id: plan.id,
+    ...(canonicalId ? { id: canonicalId } : {}),
+    legacy_id: legacyId,
     date: plan.date,
     user_id: userId,
   };
 
   const { data: persistedPlan, error: planError } = await client
     .from("daily_meal_plans")
-    .upsert(planPayload, { onConflict: "user_id,date" })
+    .upsert(planPayload, { onConflict: canonicalId ? "id" : "user_id,date" })
     .select("id,date,user_id,legacy_id")
     .single();
 

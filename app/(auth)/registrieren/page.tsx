@@ -14,11 +14,11 @@ export default function RegistrierenPage() {
     <Card>
       <CardHeader className="text-center">
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground text-lg font-bold">
-          P
+          I
         </div>
         <CardTitle className="text-2xl">Registrieren</CardTitle>
         <CardDescription>
-          Erstellen Sie Ihr Prodi-Konto
+          Erstellen Sie Ihr Inari-Konto
         </CardDescription>
       </CardHeader>
       <CardContent>

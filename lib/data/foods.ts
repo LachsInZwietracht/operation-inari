@@ -190,18 +190,41 @@ export async function fetchFoodsByIds(
   if (!ids || ids.length === 0) return [];
   try {
     const client = await resolveClient(supabase);
-    const { data, error } = await withTimeout(
-      client
-        .from("foods")
-        .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
-        .in("id", ids),
-      10000,
-      "Supabase foods lookup timed out"
-    );
+    const uuidIds = ids.filter(isUuid);
+    const legacyIds = ids.filter((id) => !isUuid(id));
+    const rows: FoodRowWithRelations[] = [];
 
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as unknown as FoodRowWithRelations[];
-    return rows.map(mapFoodRow);
+    if (uuidIds.length > 0) {
+      const { data, error } = await withTimeout(
+        client
+          .from("foods")
+          .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
+          .in("id", uuidIds),
+        10000,
+        "Supabase foods lookup timed out"
+      );
+
+      if (error) throw new Error(error.message);
+      rows.push(...((data ?? []) as unknown as FoodRowWithRelations[]));
+    }
+
+    if (legacyIds.length > 0) {
+      const { data, error } = await withTimeout(
+        client
+          .from("foods")
+          .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
+          .in("source_food_id", legacyIds),
+        10000,
+        "Supabase foods lookup timed out"
+      );
+
+      if (error) throw new Error(error.message);
+      rows.push(...((data ?? []) as unknown as FoodRowWithRelations[]));
+    }
+
+    return rows
+      .map(mapFoodRow)
+      .filter((food, index, self) => self.findIndex((item) => item.id === food.id) === index);
   } catch (error) {
     console.error("fetchFoodsByIds error:", error);
     return [];
@@ -249,11 +272,12 @@ export async function fetchFoodById(
       selectColumns.push("food_portions(label,amount_grams)");
     }
 
+    const column = isUuid(id) ? "id" : "source_food_id";
     const { data, error } = await withTimeout(
       client
         .from("foods")
         .select(selectColumns.join(","))
-        .eq("id", id)
+        .eq(column, id)
         .single(),
       5000,
       "Supabase food lookup timed out"
@@ -332,11 +356,6 @@ export async function fetchCatalogFoodById(
   id: string,
   options: FetchFoodByIdOptions = {}
 ): Promise<Food | null> {
-  if (!isUuid(id)) {
-    const brandedFoods = await fetchBrandedFoods();
-    return brandedFoods.find((item) => item.id === id) ?? null;
-  }
-
   const food = await fetchFoodById(id, options);
   if (food) {
     return food;
@@ -369,6 +388,7 @@ function mapFoodRow(row: FoodRowWithRelations): Food {
 
   return {
     id: row.id,
+    legacyId: row.source_food_id,
     name: row.name,
     categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
     source: formatSource(row),
@@ -464,6 +484,7 @@ function mapRpcFoodRow(row: RpcFoodRow): Food {
 
   return {
     id: row.food_id,
+    legacyId: row.source_food_id,
     name: row.food_name,
     categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
     source: formatSourceFromRpc(row),

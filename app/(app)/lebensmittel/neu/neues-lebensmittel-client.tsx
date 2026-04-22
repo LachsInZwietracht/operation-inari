@@ -92,7 +92,7 @@ export function NeuesLebensmittelPageClient() {
 
   const { fields, append, remove } = useFieldArray({ name: "portionSizes", control: form.control });
 
-  const onSubmit = (values: z.infer<typeof nutrientSchema>) => {
+  const onSubmit = async (values: z.infer<typeof nutrientSchema>) => {
     const sourceMeta = FOOD_SOURCES.find((source) => source.id === values.sourceId);
     const nutrients = [
       { nutrientId: "energie", amount: values.energie },
@@ -106,7 +106,7 @@ export function NeuesLebensmittelPageClient() {
       ? values.additives.split(",").map((token) => token.trim()).filter(Boolean)
       : undefined;
 
-    const food = addFood({
+    const food = await addFood({
       name: values.name,
       categoryId: values.categoryId,
       manufacturer: values.manufacturer,

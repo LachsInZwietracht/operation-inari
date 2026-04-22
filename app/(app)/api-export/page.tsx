@@ -391,7 +391,7 @@ export default function ApiExportPage() {
                 <Code className="h-5 w-5 text-muted-foreground" />
                 API-Endpunkte
               </CardTitle>
-              <CardDescription>REST API v1 — Basis-URL: https://api.prodi.app/v1</CardDescription>
+              <CardDescription>REST API v1 — Basis-URL: https://api.inari.app/v1</CardDescription>
             </CardHeader>
             <CardContent>
               <Table data-testid="api-endpoints-table">

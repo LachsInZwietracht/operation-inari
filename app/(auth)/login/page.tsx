@@ -14,11 +14,11 @@ export default function LoginPage() {
     <Card>
       <CardHeader className="text-center">
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground text-lg font-bold">
-          P
+          I
         </div>
         <CardTitle className="text-2xl">Anmelden</CardTitle>
         <CardDescription>
-          Melden Sie sich bei Prodi an
+          Melden Sie sich bei Inari an
         </CardDescription>
       </CardHeader>
       <CardContent>

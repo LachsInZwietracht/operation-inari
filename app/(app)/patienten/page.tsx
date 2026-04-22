@@ -142,7 +142,7 @@ export default function PatientenPage() {
       "protocol.energy": patient.indication?.includes("Diabetes") ? "1850" : "2000",
       "protocol.protein": "85",
       "protocol.priority": patient.indication ?? "Ernährungscoaching",
-      "practice.name": "Operation Prodi Ernährungszentrum",
+      "practice.name": "Inari Ernährungszentrum",
     }
 
     return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, token) => {

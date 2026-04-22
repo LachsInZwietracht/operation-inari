@@ -72,7 +72,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Data: `FOOD_CATEGORIES`, `FOOD_SOURCES`, `FOOD_GROUPS`, `fetchFoodsBrowserPage()`, `/api/foods/browser`.
 - **Group navigation:** `FoodGroupTree` uses `FOOD_GROUPS`; ensure new groups update `getFoodGroupDescendants`.
 - **Search contract:** name-mode search prefers the `search_foods_with_total` RPC and falls back to `search_foods()` if the new migration has not been applied yet. Code/group/browse modes use direct paginated Supabase queries.
-- **Custom foods:** Local custom foods are still merged into page 1 so offline/unauthenticated entries remain visible without reintroducing full-catalog hydration.
+- **Custom foods:** Page 1 still merges local custom-food migration candidates so offline or unauthenticated entries remain visible, but authenticated saves now canonicalize to Supabase IDs immediately and localStorage keeps only unmigrated/offline entries.
 - **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
 
 ### 4.6 Rezepte Overview (`/rezepte`)

@@ -1147,8 +1147,8 @@ ${microSentence}`
 
     return {
       format: "PDF",
-      title: "Operation Prodi Bericht",
-      fileBaseName: `prodi-bericht-${selectedPlan.date}`,
+      title: "Inari Bericht",
+      fileBaseName: `inari-bericht-${selectedPlan.date}`,
       reportId: activeReportId,
       reportVersionId: resolvedReportVersion?.id,
       patientId: effectivePatientRef,
@@ -1273,7 +1273,10 @@ ${microSentence}`
           format: format.toUpperCase(),
         }),
       })
-      const nextReportId = response.headers.get("x-prodi-patient-report-id") ?? undefined
+      const nextReportId =
+        response.headers.get("x-inari-patient-report-id") ??
+        response.headers.get("x-prodi-patient-report-id") ??
+        undefined
       await downloadResponseFile(response, `${reportPayload.fileBaseName}.${format}`)
       if (nextReportId) {
         setActiveReportId(nextReportId)

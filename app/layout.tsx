@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Prodi — Ernährungsberatung",
+  title: "Inari — Ernährungsberatung",
   description: "Professionelle Software für Ernährungsberatung und Diätetik",
 };
 

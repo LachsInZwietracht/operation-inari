@@ -120,9 +120,9 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard">
                 <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-sm font-bold">
-                  P
+                  I
                 </div>
-                <span className="truncate text-lg font-semibold">Prodi</span>
+                <span className="truncate text-lg font-semibold">Inari</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

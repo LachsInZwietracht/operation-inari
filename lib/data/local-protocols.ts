@@ -2,13 +2,14 @@ import type { Food, NutritionProtocol } from "@/lib/types";
 
 import { normalizeProtocolFoodReferences } from "@/lib/data/food-reference-normalization";
 
-const STORAGE_KEY = "prodi_protocols";
+const STORAGE_KEY = "inari_protocols";
+const LEGACY_STORAGE_KEY = "prodi_protocols";
 
 export function getLocalProtocols(foods: Food[] = []): NutritionProtocol[] {
   if (typeof window === "undefined") return [];
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
 
     return (JSON.parse(raw) as NutritionProtocol[]).map((protocol) =>
@@ -26,4 +27,5 @@ export function saveLocalProtocols(protocols: NutritionProtocol[], foods: Food[]
     normalizeProtocolFoodReferences(protocol, foods),
   );
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }

@@ -21,6 +21,7 @@ export interface MealSlot {
 
 export interface DailyMealPlan {
   id: ID;
+  legacyId?: ID;
   date: string; // ISO date string YYYY-MM-DD
   slots: MealSlot[];
 }

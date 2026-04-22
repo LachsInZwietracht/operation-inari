@@ -103,7 +103,7 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 - Food detail pages use `fetchFoodById()` for single-record queries
 
 **localStorage (fallback for some user data):**
-- `prodi_custom_foods`, `prodi_custom_recipes`, `prodi_meal_plans`, `institution-menus` (local fallback; primary storage is Supabase `institution_menus` + `institution_menu_slots`)
+- `inari_custom_foods`, `inari_custom_recipes`, `inari_meal_plans`, `institution-menus` (local fallback; primary storage is Supabase `institution_menus` + `institution_menu_slots`). Browser helpers still read the legacy `prodi_*` keys during the rename transition.
 - Custom foods merge with Supabase data at runtime via `useCustomFoods(baseFoods)`
 - Some features still use local fallback even though auth and Supabase persistence already exist elsewhere in the app. Verify per feature before changing that behavior.
 
@@ -578,7 +578,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 
 **What was migrated:**
 - Zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in any page or component
-- `useCustomFoods(baseFoods)` merges localStorage custom foods with Supabase base data
+- `useCustomFoods(baseFoods)` loads local custom-food migration candidates first, then replaces them with canonical Supabase rows after authenticated sync
 - `useInstitutionMenu(initialMenus, recipes)` reads foods from context, derives categories from `food.categoryId`. Supports full CRUD (create/delete/status) with Supabase persistence and localStorage fallback. Server fetcher `fetchMenuPlans()` falls back to `INSTITUTION_MENUS` mock data when Supabase is empty or unavailable.
 - Food detail pages use `fetchFoodById()` for single-record Supabase queries
 - Supabase-backed user hooks no longer seed runtime state from `lib/mock-data`; they initialize from localStorage migration candidates only, then merge real remote rows after sync.
@@ -622,14 +622,15 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 
 ### Phase 5: localStorage → Supabase (Remaining User Data) — PARTIALLY COMPLETE
 
-Supabase-backed clinical/workspace hooks now store only local migration candidates in localStorage and no longer bootstrap mock rows into runtime state. Custom foods plus user-created recipes/meal plans still live in localStorage as primary storage (the shared templates now live in Supabase). Once Supabase auth is implemented:
+Supabase-backed clinical/workspace hooks now store only local migration candidates in localStorage and no longer bootstrap mock rows into runtime state. The same rule now applies to `useCustomFoods`, `useRecipes`, and `useMealPlan`: authenticated sessions fetch remote user-owned rows first, merge only still-unmigrated local records, and replace temp IDs with canonical Supabase IDs immediately after successful writes. `localStorage` remains an offline buffer for unmigrated records only, not a full mirror of persisted authored data.
 
-1. Ship a one-off migration hook that runs on first load after the release: it reads `prodi_custom_foods`, `prodi_custom_recipes`, and `prodi_meal_plans`, POSTs them to new Supabase endpoints, and only purges the local keys after a successful `201` response.
-2. If the user is not authenticated, queue the data in memory and prompt them to create an account before uploading (or keep the local fallback until auth is available).
-3. Log every migration attempt (success/failure) to Sentry so CS can help recover data if the upload fails.
-4. After a grace period (e.g., two releases), remove the migration code and treat the absence of Supabase data as "fresh account".
+Rules going forward:
 
-Document this behavior in the release notes so testers know their custom entries will be moved server-side.
+1. New Supabase-backed hooks must initialize from `remote + local migration candidates`, never from `lib/mock-data`.
+2. Authenticated create/update/delete flows must operate on canonical Supabase IDs in-memory as soon as persistence succeeds.
+3. Legacy/local IDs may remain as compatibility aliases (`legacy_id` / `source_food_id`) where URLs or historical references still need them.
+4. Leave static mock/reference catalogs alone for now (food groups, nutrient definitions, pediatric percentiles, etc.) because they are stable seed data rather than user-facing mock records.
+5. Brand-key migrations should use the same transition pattern: emit/read the new `inari_*` identifier first, keep accepting legacy `prodi_*` identifiers for at least one release, then remove the fallback once clients have moved.
 
 ### Phase 6: Payload Optimization — PARTIALLY COMPLETE
 
@@ -779,7 +780,7 @@ When `.env.local` provides `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_
 4. All test projects depend on this setup and reuse the saved auth state
 
 **Test credentials** (defined in `tests/auth.setup.ts`):
-- Email: `test@prodi.local`
+- Email: `test@inari.local`
 - Password: `test-password-123!`
 
 These are created automatically by the auth setup via the Supabase Admin API. They only exist in the local Supabase instance and are safe to commit — do **not** reuse them for production or staging environments.
