@@ -120,16 +120,17 @@ Product direction:
 - **Birthday list** — dashboard widget for upcoming patient birthdays.
 
 ### 5.1a Counseling Workflow
-**Status:** Implemented (Supabase-backed counseling sessions and template persistence with local fallback and login-time migration).
+**Status:** Implemented (Supabase-backed counseling sessions and template persistence with local fallback and login-time migration; patient-level workflow hub now orchestrates intake → assessment → planning → reporting → follow-up).
 - Counseling sessions persist with patient linkage, structured follow-up timeline, shared materials, and progress metrics.
 - Counseling templates persist per user and can be inserted into the session authoring flow instead of remaining browser-only.
 
 ### 5.3 Reports & Exports
-**Status:** Partially implemented (real PDF/CSV generation for reports, patient documents, and export jobs; broader document/storage workflows still open).
-- **Clinical report export** — `/berichte` generates real server-side PDF and CSV files from the selected meal plan analysis.
+**Status:** Implemented for investor-demo scope (real PDF/CSV generation, patient-bound immutable report history, archived reopen, and export audit logging).
+- **Clinical report export** — `/berichte` generates real server-side PDF and CSV files from the selected meal plan analysis, supports patient-aware workflow handoff via optional context query params, and now creates versioned patient-bound report records on export.
 - **Patient document export** — `/patienten` mail merge creates branded PDF bundles with placeholder substitution.
 - **Export journal** — `/api-export` persists real export history in Supabase via `export_jobs`.
-- **Deferred scope:** binary file retention, scheduled exports, and advanced backend print pipelines are still future work.
+- **Patient report history** — patient detail/workflow now surfaces immutable report versions with archived reopen and direct file download instead of relying only on the generic export journal.
+- **Remaining deferred scope:** scheduled exports, advanced backend print pipelines, and document-retention policies beyond patient report exports.
 
 ### 5.2 Anthropometric Data & Weight Analysis
 **Status:** Implemented (Supabase-backed anthropometric history; adjacent patient analytics still mixed persistence).
@@ -160,9 +161,10 @@ Product direction:
 ## 8. Institutional / Clinical Features
 
 ### 8.4 Hospital Management Features
-**Status:** Partially implemented / exploratory. Some UI pieces exist, but hospital-grade integration scope remains roadmap.
+**Status:** Partially implemented with real operational analytics. Inpatient meal workflow, tray cards, and institution dashboards now run on persisted menu plans, stays, meal orders, and allergen constraints; HIS integration remains roadmap.
 - **Patient self-service menu selection** — tablet/bedside terminal selection for patients, filtered by diet form and allergens.
 - **Table cards / tray cards** — auto-generate cards for meal trays showing room/bed, diet form, and selection.
+- **Institution analytics** — compliance and institution statistics should derive from active menu cycles, meal orders, inpatient stays, and restriction snapshots rather than mock KPI datasets.
 - **HIS Integration (HL7/FHIR):** Bidirectional sync with Hospital Information Systems to handle patient census data and diet orders.
 
 ---

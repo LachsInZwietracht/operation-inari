@@ -112,7 +112,12 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/berichte/berichte-client.tsx`
   - Builds a typed `ReportExportRequest` from the currently selected plan, visible nutrient rows, active sections, and resolved placeholder notes.
   - Generic report comparisons now use the persisted user default reference preference instead of a hardcoded DGE adult baseline.
+  - **Patient-aware handoff:** accepts optional `patientId`, `planId`, and `protocolId` query params. `patientId` adds a context banner, `planId` preselects a valid plan once on load, and `protocolId` is informational only in v1.
+  - **Patient-bound reopen:** accepts `reportId` to reload a saved patient report record, restore the saved report length/sections/notes, and reopen the linked plan context.
+  - **Archived reopen:** accepts `reportVersionId` to open a frozen patient report version from stored snapshot data instead of recalculating from the current meal plan.
   - **Real exports:** `PDF erstellen` and `CSV/Nährstoffdaten` POST to `/api/exports/report`.
+  - **Patient report persistence:** non-inline exports with valid patient + plan context now create or update a `patient_reports` parent record, append an immutable `patient_report_versions` row, and upload the generated file to private Supabase Storage.
+  - **Archived mode:** historical report versions render as read-only snapshot views, expose direct file download, and remain readable even if the source meal plan changes later.
   - **Preview:** `Druckvorschau anzeigen` requests the same PDF payload with inline disposition and opens it in a new tab.
   - **Contract boundary:** the page owns selection and payload assembly; rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
 
@@ -210,6 +215,41 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Update order state from `pending` to `confirmed` to `delivered`.
 - **Kitchen output:** The `Küche` tab aggregates saved service orders by recipe, patient list, and special instructions instead of relying on planned menu portions alone.
 - **Tray cards:** `/institution/krankenhaus/tablettenkarten` renders a print view from saved `meal_orders` using `date`, `mealSlot`, and `station` query params.
+
+### 4.21a Einrichtung – Nährstoff-Compliance (`/institution/compliance`)
+- **Route:** `app/(app)/institution/compliance/page.tsx` (server) → `compliance-client.tsx` (client).
+- **Data sources:** `fetchMenuPlans()`, `fetchRecipes()`, `fetchFoodsForInstitution()`, `fetchInpatientStays()`, `fetchMealOrders()`, `fetchPatientAllergens()`.
+- **Shared analytics engine:** `lib/institution-analytics.ts`.
+  - Resolves the active institution menu cycle.
+  - Calculates per-day nutrient totals per diet form from real menu slots, recipe ingredients, and food nutrients.
+  - Compares actual intake against `DIET_FORMS[].nutrientTargets` and produces `DayCompliance` rows plus daily and cycle averages.
+- **UI behavior:** The page filters by diet form, shows trend bars over the active cycle, and renders nutrient-level result tables for each cycle date. When no active calculable menu exists, it shows an explicit empty state.
+
+### 4.21b Einrichtung – Statistiken (`/institution/statistiken`)
+- **Route:** `app/(app)/institution/statistiken/page.tsx` (server) → `statistiken-client.tsx` (client).
+- **Data sources:** Same shared institutional analytics payload as `/institution/compliance`.
+- **KPIs:** Occupancy, average daily and per-portion cost, active diet forms, and compliance rate now come from real inpatient stays, meal orders, and menu-derived cost/compliance calculations.
+- **Tabs:**
+  - `Kostformen` shows real diet-form distribution from active inpatient stays.
+  - `Menüwahl` shows most-ordered recipes plus real order-fulfillment status analytics instead of mock recipe ratings.
+  - `Kosten` charts cycle-wide daily cost and per-portion cost from menu-derived shopping math.
+  - `Übersicht` summarizes restriction-heavy cases, allergen profiles, pending orders, and cycle status from the same shared dataset.
+- **Fallback behavior:** The pages no longer own local mock analytics datasets. They render from shared derived data and show an empty state when no active cycle is available.
+
+### 4.22 Patient Workflow Hub (`/patienten/[id]`)
+- **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab before `Stammdaten`.
+- **Purpose:** Present the investor/demo-ready ambulatory patient journey in one place without introducing a new backend workflow entity.
+- **Core component:** `components/patient-workflow-tab.tsx`.
+- **Derived stages:** `Intake`, `Assessment`, `Plan`, `Report`, `Follow-up`.
+  - Stages are derived from existing persisted records, not stored separately.
+  - Inputs come from digital protocol links/submissions, internal protocols, counseling sessions, patient screenings/anthropometrics, and patient-linked appointments.
+- **Behavior:**
+  - Shows a top summary with next recommended action, latest activity, and readiness count.
+  - Renders per-stage status cards with guided CTAs into existing routes like protocol creation, counseling, reports, and appointments.
+  - Aggregates a compact patient timeline from digital submissions, protocols, counseling milestones, and follow-up appointments.
+- **Report history:** The workflow now lists patient-bound report records from `patient_reports`. The `Report` stage becomes `done` once a report record exists and deep-links back into `/berichte?reportId=...`.
+- **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
+- **Implementation note:** Patient report records are metadata-only in v1. Reports are rebuilt from current source data on reopen; PDF/CSV binaries are not retained.
 
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.

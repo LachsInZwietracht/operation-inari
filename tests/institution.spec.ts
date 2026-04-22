@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function visitInstitutionPage(page: Page, path: string, heading: string) {
   await page.goto(path, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 30_000 });
 }
 
@@ -127,6 +126,7 @@ test.describe("Institution Features", () => {
 
     // Should show overview stats
     await expect(page.getByText(/Durchschnitt/i).first()).toBeVisible();
+    await expect(page.getByText(/Aktiver Zyklus/i).first()).toBeVisible();
 
     // Should show compliance data with nutrient results
     await expect(page.getByText("Energie").first()).toBeVisible();
@@ -192,7 +192,6 @@ test.describe("Institution Features", () => {
 
     // Should show KPI cards
     await expect(page.getByText("Belegungsrate").first()).toBeVisible();
-    await expect(page.getByText("75,0 %").first()).toBeVisible();
     await expect(page.getByText(/Kosten\/Tag/i).first()).toBeVisible();
     await expect(page.getByText("Compliance-Rate").first()).toBeVisible();
 
@@ -202,11 +201,13 @@ test.describe("Institution Features", () => {
 
     // Switch to Menüwahl tab
     await page.getByRole("tab", { name: "Menüwahl" }).click();
-    await expect(page.getByText("Kartoffelsuppe").first()).toBeVisible();
+    await expect(page.getByText("Beliebteste Gerichte")).toBeVisible();
+    await expect(page.getByText("Auftragsstatus im Zyklus")).toBeVisible();
+    await expect(page.getByText("Ausstehend").first()).toBeVisible();
 
     // Switch to Kosten tab
     await page.getByRole("tab", { name: "Kosten" }).click();
-    await expect(page.getByText(/Wochenkosten/).first()).toBeVisible();
+    await expect(page.getByText(/Zykluskosten/).first()).toBeVisible();
   });
 
   test("creates a new menu plan", async ({ page }) => {

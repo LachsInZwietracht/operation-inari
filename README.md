@@ -29,7 +29,10 @@ For detailed technical implementation guides, architectural overview, and featur
 - [Product Requirements](./docs/product-requirements.md)
 
 Recent platform changes:
+- `/patienten/[id]` now opens on a new Workflow hub that orchestrates intake, assessment, planning, reporting, and follow-up from existing patient data with guided deep links.
 - Reports (`/berichte`) now generate real server-side PDF and CSV exports.
+- `/berichte` now accepts patient-aware workflow handoff via query params, shows the patient context in the UI, and safely preselects a passed meal plan when available.
+- Patient-bound reports now keep immutable export history: each patient export creates a versioned snapshot plus a stored PDF/CSV file in private Supabase Storage, and archived history reopens via `/berichte?reportVersionId=...`.
 - Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
 - `API & Export` now creates real export jobs and reads persisted history from Supabase.
 - `/referenzwerte` now resolves DGE/ÖGE/SGE/RDA values from Supabase, supports persisted custom profiles, and stores user defaults plus patient-specific assignments.
@@ -38,6 +41,7 @@ Recent platform changes:
 - Patient medical calculators now include unit-aware Cockcroft-Gault clearance plus full MNA and expanded SGA documentation, with structured persistence in screenings/lab values.
 - Digital protocol submissions now support the full practitioner workflow: public patient entry, dashboard review, conversion into a prefilled internal protocol draft, and server-tracked converted state.
 - `/institution/krankenhaus` now runs a real inpatient meal workflow with persisted bed assignments, safe staff-side meal selection, kitchen aggregation, and printable tray cards.
+- `/institution/compliance` and `/institution/statistiken` now derive live institutional analytics from the active menu cycle, meal orders, inpatient stays, and patient allergen constraints instead of page-local mock KPI datasets.
 - `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.
 - Open Food Facts is now a first-class food source with validated product promotion, attribution, and detail-page quality indicators.
 
@@ -88,7 +92,8 @@ npm run validate:nutrients
 
 ### Export System
 - Apply the latest migrations before testing exports: `npx supabase db push`
-- Export metadata is persisted in `export_jobs`; binary files are generated on demand and are not stored in Supabase.
+- `export_jobs` remains the generic export audit log.
+- Patient-bound report exports now also persist immutable snapshots in `patient_report_versions` and store the exported PDF/CSV files in the private Supabase bucket `patient-report-files`.
 
 ### Hospital Meal Workflow
 - Apply the latest migrations before using the inpatient stay and meal-order workflow: `npx supabase db push`
