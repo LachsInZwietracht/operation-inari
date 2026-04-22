@@ -2,20 +2,15 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import type { LabValueEntry } from "@/lib/types"
-import { LAB_VALUES } from "@/lib/mock-data"
 import {
   deleteLabValueClient,
   fetchLabValuesClient,
   persistLabValue,
 } from "@/lib/data/patient-lab-values-client"
+import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEY = "prodi_lab_values"
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value)
-}
 
 function loadFromStorage(): LabValueEntry[] {
   if (typeof window === "undefined") return []
@@ -29,22 +24,15 @@ function loadFromStorage(): LabValueEntry[] {
 }
 
 function buildInitial(): LabValueEntry[] {
-  const stored = loadFromStorage()
-  const storedIds = new Set(stored.map((e) => e.id))
-  const mockOnly = LAB_VALUES.filter((e) => !storedIds.has(e.id))
-  return sortEntries([...mockOnly, ...stored])
+  return sortEntries(loadFromStorage())
 }
 
 function sortEntries(items: LabValueEntry[]) {
   return [...items].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 }
 
-function isMockEntry(entry: LabValueEntry) {
-  return LAB_VALUES.some((mockEntry) => mockEntry.id === entry.id)
-}
-
 function getLocalOnlyEntries(items: LabValueEntry[]) {
-  return items.filter((entry) => !isMockEntry(entry))
+  return items.filter(isLocalMigrationCandidate)
 }
 
 export function useLabValues() {
@@ -81,7 +69,9 @@ export function useLabValues() {
         const merged = [...remoteEntries]
 
         for (const local of localOnly) {
-          const existsRemote = remoteEntries.some((remoteEntry) => remoteEntry.id === local.id)
+          const existsRemote = remoteEntries.some((remoteEntry) =>
+            matchesRecordIdentity(remoteEntry, local),
+          )
           if (!existsRemote) {
             merged.push(local)
           }
@@ -92,7 +82,9 @@ export function useLabValues() {
         if (!migrationDone.current) {
           migrationDone.current = true
           const pendingMigration = localOnly.filter(
-            (localEntry) => !remoteEntries.some((remoteEntry) => remoteEntry.id === localEntry.id),
+            (localEntry) => !remoteEntries.some((remoteEntry) =>
+              matchesRecordIdentity(remoteEntry, localEntry),
+            ),
           )
 
           for (const entry of pendingMigration) {

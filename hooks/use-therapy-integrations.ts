@@ -3,20 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { TherapyDeviceIntegration } from "@/lib/types";
-import { THERAPY_INTEGRATIONS } from "@/lib/mock-data";
 import {
   deleteTherapyIntegrationClient,
   fetchTherapyIntegrationsClient,
   persistTherapyIntegration,
 } from "@/lib/data/patient-therapy-integrations-client";
+import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "prodi_therapy_integrations";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value);
-}
 
 function loadFromStorage(): TherapyDeviceIntegration[] {
   if (typeof window === "undefined") return [];
@@ -34,17 +29,11 @@ function sortEntries(items: TherapyDeviceIntegration[]) {
 }
 
 function buildInitial(): TherapyDeviceIntegration[] {
-  const stored = loadFromStorage();
-  const ids = new Set(stored.map((entry) => entry.id));
-  return sortEntries([...THERAPY_INTEGRATIONS.filter((entry) => !ids.has(entry.id)), ...stored]);
-}
-
-function isMockEntry(entry: TherapyDeviceIntegration) {
-  return THERAPY_INTEGRATIONS.some((mockEntry) => mockEntry.id === entry.id);
+  return sortEntries(loadFromStorage());
 }
 
 function getLocalOnlyEntries(items: TherapyDeviceIntegration[]) {
-  return items.filter((entry) => !isMockEntry(entry));
+  return items.filter(isLocalMigrationCandidate);
 }
 
 export function useTherapyIntegrations() {
@@ -82,7 +71,9 @@ export function useTherapyIntegrations() {
         const merged = [...remoteEntries];
 
         for (const local of localOnly) {
-          const existsRemote = remoteEntries.some((remoteEntry) => remoteEntry.id === local.id);
+          const existsRemote = remoteEntries.some((remoteEntry) =>
+            matchesRecordIdentity(remoteEntry, local),
+          );
           if (!existsRemote) {
             merged.push(local);
           }
@@ -93,7 +84,9 @@ export function useTherapyIntegrations() {
         if (!migrationDone.current) {
           migrationDone.current = true;
           const pendingMigration = localOnly.filter(
-            (localEntry) => !remoteEntries.some((remoteEntry) => remoteEntry.id === localEntry.id),
+            (localEntry) => !remoteEntries.some((remoteEntry) =>
+              matchesRecordIdentity(remoteEntry, localEntry),
+            ),
           );
 
           for (const entry of pendingMigration) {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   BarChart,
   Bar,
@@ -19,6 +20,7 @@ import {
   AlertTriangle,
   Award,
   CheckCircle2,
+  Download,
   FileText,
   Leaf,
   ListChecks,
@@ -30,6 +32,7 @@ import { PageHeader } from "@/components/page-header"
 import { NutrientChart, type NutrientChartDataPoint } from "@/components/nutrient-chart"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
@@ -78,6 +81,7 @@ import type {
   Food,
   MealEntry,
   NutrientValue,
+  PatientReportVersion,
   Recipe,
   ReportTemplate,
   ReportExportRequest,
@@ -89,6 +93,8 @@ import { createRecipeLookup } from "@/lib/recipes"
 import { useFoods } from "@/components/foods-provider"
 import { loadBrowserMealPlans } from "@/lib/data/meal-plan-browser-source"
 import { downloadResponseFile } from "@/lib/utils"
+import { usePatients } from "@/hooks/use-patients"
+import { usePatientReports } from "@/hooks/use-patient-reports"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -374,6 +380,203 @@ function MacroPieTooltip({ active, payload }: ChartTooltipProps<{ name: string; 
   )
 }
 
+function SnapshotMetricTable({
+  title,
+  rows,
+}: {
+  title: string
+  rows: Array<{ label: string; value: string; reference?: string; coverage?: string }>
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Bereich</TableHead>
+              <TableHead>Istwert</TableHead>
+              <TableHead>Referenz</TableHead>
+              <TableHead>Abdeckung</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={`${title}-${row.label}`}>
+                <TableCell className="font-medium">{row.label}</TableCell>
+                <TableCell>{row.value}</TableCell>
+                <TableCell>{row.reference ?? "—"}</TableCell>
+                <TableCell>{row.coverage ?? "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ArchivedReportView({
+  version,
+  patientContextLabel,
+  patientIndication,
+  isFileAvailable,
+}: {
+  version: PatientReportVersion
+  patientContextLabel: string | null
+  patientIndication?: string
+  isFileAvailable: boolean | null
+}) {
+  const snapshot = version.snapshot
+  const selectedSections = snapshot.selectedSections
+  const downloadLabel = version.format === "PDF" ? "PDF herunterladen" : "CSV herunterladen"
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Berichte"
+        description="Archivierte patientengebundene Berichtsversion"
+        helpText="Diese Ansicht zeigt einen eingefrorenen Export. Inhalte werden nicht aus dem aktuellen Ernährungsplan neu berechnet."
+      />
+
+      <Alert>
+        <FileText className="h-4 w-4" />
+        <AlertTitle>Archivierte Berichtsversion</AlertTitle>
+        <AlertDescription>
+          Version {version.versionNumber} vom {formatDate(version.exportedAt)}. Änderungen am Quellplan beeinflussen diese Ansicht nicht.
+        </AlertDescription>
+      </Alert>
+
+      {patientContextLabel ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Bericht für {patientContextLabel}</CardTitle>
+            <CardDescription>
+              {patientIndication ? `${patientIndication} · ` : ""}
+              Historische Version {version.versionNumber} · {snapshot.planDateLabel}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
+      {isFileAvailable === false ? (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Exportdatei nicht verfügbar</AlertTitle>
+          <AlertDescription>
+            Die archivierte Auswertung bleibt lesbar, aber die ursprünglich gespeicherte Datei konnte nicht mehr gefunden werden.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Badge variant="outline">Version {version.versionNumber}</Badge>
+        <Badge variant="outline">{snapshot.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
+        <Badge variant="outline">{version.format}</Badge>
+        <Button asChild>
+          <a href={`/api/patient-report-versions/${version.id}/download`}>
+            {downloadLabel}
+            <Download className="ml-2 h-4 w-4" />
+          </a>
+        </Button>
+      </div>
+
+      {snapshot.badges?.length ? (
+        <div className="flex flex-wrap gap-2">
+          {snapshot.badges.map((badge) => (
+            <Badge key={badge} variant="secondary">{badge}</Badge>
+          ))}
+        </div>
+      ) : null}
+
+      {selectedSections.summary ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Kurzfazit & Indikatoren</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {snapshot.narrative ? <p className="whitespace-pre-line text-sm">{snapshot.narrative}</p> : null}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {snapshot.summaryMetrics.map((metric) => (
+                <div key={metric.label} className="rounded-lg border p-3">
+                  <p className="text-sm font-medium">{metric.label}</p>
+                  <p className="mt-1 text-lg font-semibold">{metric.value}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {metric.reference ?? "Keine Referenz"}
+                    {metric.coverage ? ` · ${metric.coverage}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {selectedSections.table ? (
+        <div className="grid gap-4">
+          <SnapshotMetricTable title="Nährstofftabelle" rows={snapshot.nutrientRows} />
+          <SnapshotMetricTable title="Vitamine" rows={snapshot.vitaminRows} />
+          <SnapshotMetricTable title="Mineralstoffe" rows={snapshot.mineralRows} />
+        </div>
+      ) : null}
+
+      {selectedSections.charts ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Zusätzliche Berichtshinweise</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            {snapshot.specialNotes?.length ? (
+              snapshot.specialNotes.map((note) => <p key={note}>{note}</p>)
+            ) : (
+              <p>Keine zusätzlichen Archivhinweise gespeichert.</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {selectedSections.meals ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Speiseplanübersicht</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mahlzeit</TableHead>
+                  <TableHead>Zusammenfassung</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {snapshot.mealRows.map((mealRow) => (
+                  <TableRow key={`${mealRow.slot}-${mealRow.summary}`}>
+                    <TableCell className="font-medium">{mealRow.slot}</TableCell>
+                    <TableCell>{mealRow.summary}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {selectedSections.notes ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Individuelle Hinweise</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-line text-sm">{snapshot.notes || "Keine zusätzlichen Hinweise gespeichert."}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Page Component
 // ---------------------------------------------------------------------------
@@ -384,7 +587,11 @@ interface BerichtePageClientProps {
 }
 
 export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const foods = useFoods()
+  const { getPatient } = usePatients()
+  const { getReport, getVersion, loadReport, loadVersion } = usePatientReports()
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
   const categoryMap = useMemo(() => new Map(FOOD_CATEGORIES.map((category) => [category.id, category])), [])
@@ -409,6 +616,125 @@ export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientPro
   const [editingTemplate, setEditingTemplate] = useState<ReportTemplate | null>(null)
   const [templateForm, setTemplateForm] = useState({ name: "", category: "", content: "" })
   const [isExporting, setIsExporting] = useState(false)
+  const hasAppliedInitialSelection = useRef(false)
+  const hasAppliedSavedConfig = useRef(false)
+  const requestedPatientId = searchParams.get("patientId") ?? undefined
+  const requestedPlanId = searchParams.get("planId") ?? undefined
+  const requestedProtocolId = searchParams.get("protocolId") ?? undefined
+  const requestedReportId = searchParams.get("reportId") ?? undefined
+  const requestedReportVersionId = searchParams.get("reportVersionId") ?? undefined
+  const [activeReportId, setActiveReportId] = useState<string | undefined>(requestedReportId)
+  const [resolvedReport, setResolvedReport] = useState(() =>
+    requestedReportId ? getReport(requestedReportId) ?? undefined : undefined,
+  )
+  const [isLoadingResolvedReport, setIsLoadingResolvedReport] = useState(Boolean(requestedReportId))
+  const [resolvedReportVersion, setResolvedReportVersion] = useState<PatientReportVersion | undefined>(() =>
+    requestedReportVersionId ? getVersion(requestedReportVersionId) ?? undefined : undefined,
+  )
+  const [isLoadingResolvedReportVersion, setIsLoadingResolvedReportVersion] = useState(Boolean(requestedReportVersionId))
+  const [isArchivedFileAvailable, setIsArchivedFileAvailable] = useState<boolean | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const requestedPatient = useMemo(
+    () => (requestedPatientId ? getPatient(requestedPatientId) : undefined),
+    [getPatient, requestedPatientId],
+  )
+
+  useEffect(() => {
+    setActiveReportId(requestedReportId)
+  }, [requestedReportId])
+
+  useEffect(() => {
+    hasAppliedInitialSelection.current = false
+    hasAppliedSavedConfig.current = false
+  }, [requestedReportId, requestedReportVersionId, requestedPlanId])
+
+  useEffect(() => {
+    if (!requestedReportId) {
+      setResolvedReport(undefined)
+      setIsLoadingResolvedReport(false)
+      return
+    }
+
+    const existing = getReport(requestedReportId)
+    if (existing) {
+      setResolvedReport(existing)
+      setIsLoadingResolvedReport(false)
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingResolvedReport(true)
+    void loadReport(requestedReportId).then((report) => {
+      if (cancelled) return
+      setResolvedReport(report ?? undefined)
+      setIsLoadingResolvedReport(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [getReport, loadReport, requestedReportId])
+
+  useEffect(() => {
+    if (!requestedReportVersionId) {
+      setResolvedReportVersion(undefined)
+      setIsLoadingResolvedReportVersion(false)
+      return
+    }
+
+    const existing = getVersion(requestedReportVersionId)
+    if (existing) {
+      setResolvedReportVersion(existing)
+      setIsLoadingResolvedReportVersion(false)
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingResolvedReportVersion(true)
+    void loadVersion(requestedReportVersionId).then((version) => {
+      if (cancelled) return
+      setResolvedReportVersion(version ?? undefined)
+      setIsLoadingResolvedReportVersion(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [getVersion, loadVersion, requestedReportVersionId])
+
+  useEffect(() => {
+    if (!resolvedReportVersion) {
+      setIsArchivedFileAvailable(null)
+      return
+    }
+
+    let cancelled = false
+    void fetch(`/api/patient-report-versions/${resolvedReportVersion.id}/download`, {
+      method: "HEAD",
+    })
+      .then((response) => {
+        if (!cancelled) {
+          setIsArchivedFileAvailable(response.ok)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsArchivedFileAvailable(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [resolvedReportVersion])
+
+  const effectivePatientRef = resolvedReportVersion?.patientRef ?? resolvedReport?.patientRef ?? requestedPatientId
+  const effectivePlanId = resolvedReportVersion?.planId ?? resolvedReport?.planId ?? requestedPlanId
+  const effectiveProtocolId = resolvedReportVersion?.protocolId ?? resolvedReport?.protocolId ?? requestedProtocolId
+  const effectivePatient = useMemo(
+    () => (effectivePatientRef ? getPatient(effectivePatientRef) : undefined),
+    [effectivePatientRef, getPatient],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -427,12 +753,46 @@ export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientPro
     }
   }, [basePlans, foods])
 
-  // Default selection
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isArchivedMode = Boolean(resolvedReportVersion)
+
+  // Default selection with optional route handoff.
   useEffect(() => {
-    if (!selectedPlanId && allPlans.length > 0) {
-      setSelectedPlanId(allPlans[0].id)
+    if (hasAppliedInitialSelection.current || allPlans.length === 0 || isLoadingResolvedReport) {
+      return
     }
-  }, [allPlans, selectedPlanId])
+
+    hasAppliedInitialSelection.current = true
+
+    if (effectivePlanId) {
+      const requestedPlanExists = allPlans.some((plan) => plan.id === effectivePlanId)
+      if (requestedPlanExists) {
+        setSelectedPlanId(effectivePlanId)
+        return
+      }
+
+      if (resolvedReport) {
+        setSelectedPlanId("")
+        return
+      }
+
+      setSelectedPlanId(allPlans[0].id)
+      return
+    }
+
+    setSelectedPlanId(allPlans[0].id)
+  }, [allPlans, effectivePlanId, isLoadingResolvedReport, resolvedReport])
+
+  useEffect(() => {
+    if (!resolvedReport || hasAppliedSavedConfig.current) {
+      return
+    }
+
+    hasAppliedSavedConfig.current = true
+    setReportLength(resolvedReport.reportLength)
+    setSelectedSections(resolvedReport.selectedSections)
+    setCustomNotes(resolvedReport.notes ?? "")
+  }, [resolvedReport])
 
   const selectedPlan = useMemo(
     () => allPlans.find((p) => p.id === selectedPlanId),
@@ -747,7 +1107,9 @@ ${microSentence}`
 
   const placeholderValues = useMemo(
     () => ({
-      patientName: "Max Beispiel",
+      patientName: effectivePatient
+        ? `${effectivePatient.firstName} ${effectivePatient.lastName}`
+        : resolvedReportVersion?.patientName ?? resolvedReport?.patientName ?? "Max Beispiel",
       planDate: planDateLabel || "--",
       energyCoverage: formatPercent(energyCoverage),
       co2: `${formatNumber(totalCo2, 1)} kg`,
@@ -766,8 +1128,12 @@ ${microSentence}`
       nextStep2: "Rezeptpool aktualisieren",
       claimTarget: String(healthClaimResults.filter((claim) => claim.met).length),
     }),
-    [planDateLabel, energyCoverage, totalCo2, micronutrientAlerts, planNutrients, fiberPer100, healthClaimResults],
+    [effectivePatient, resolvedReportVersion?.patientName, resolvedReport?.patientName, planDateLabel, energyCoverage, totalCo2, micronutrientAlerts, planNutrients, fiberPer100, healthClaimResults],
   )
+
+  const patientContextLabel = effectivePatient
+    ? `${effectivePatient.firstName} ${effectivePatient.lastName}`
+    : resolvedReportVersion?.patientName ?? resolvedReport?.patientName ?? null
 
   const resolvedNotes = useMemo(() => {
     return customNotes.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, token) => {
@@ -783,6 +1149,13 @@ ${microSentence}`
       format: "PDF",
       title: "Operation Prodi Bericht",
       fileBaseName: `prodi-bericht-${selectedPlan.date}`,
+      reportId: activeReportId,
+      reportVersionId: resolvedReportVersion?.id,
+      patientId: effectivePatientRef,
+      patientName: patientContextLabel ?? undefined,
+      patientIndication: effectivePatient?.indication ?? resolvedReportVersion?.patientIndication ?? resolvedReport?.patientIndication,
+      planId: selectedPlan.id,
+      protocolId: effectiveProtocolId,
       planDateLabel,
       reportLength,
       selectedSections,
@@ -847,6 +1220,14 @@ ${microSentence}`
       ],
     }
   }, [
+    activeReportId,
+    effectivePatient?.indication,
+    effectivePatientRef,
+    effectiveProtocolId,
+    patientContextLabel,
+    resolvedReportVersion?.id,
+    resolvedReportVersion?.patientIndication,
+    resolvedReport?.patientIndication,
     selectedPlan,
     planDateLabel,
     reportLength,
@@ -892,7 +1273,23 @@ ${microSentence}`
           format: format.toUpperCase(),
         }),
       })
+      const nextReportId = response.headers.get("x-prodi-patient-report-id") ?? undefined
       await downloadResponseFile(response, `${reportPayload.fileBaseName}.${format}`)
+      if (nextReportId) {
+        setActiveReportId(nextReportId)
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.set("reportId", nextReportId)
+        if (reportPayload.patientId) {
+          nextParams.set("patientId", reportPayload.patientId)
+        }
+        if (reportPayload.planId) {
+          nextParams.set("planId", reportPayload.planId)
+        }
+        if (reportPayload.protocolId) {
+          nextParams.set("protocolId", reportPayload.protocolId)
+        }
+        router.replace(`/berichte?${nextParams.toString()}`)
+      }
       toast.success(`Bericht als ${format.toUpperCase()} exportiert`)
     } catch (error) {
       toast.error((error as Error).message || "Bericht konnte nicht exportiert werden")
@@ -1030,10 +1427,45 @@ ${microSentence}`
 
   // ---- Render -------------------------------------------------------------
 
+  if (isLoadingResolvedReportVersion) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Berichte"
+          description="Archivierte patientengebundene Berichtsversion"
+          helpText="Die gespeicherte Berichtshistorie wird geladen."
+        />
+      </div>
+    )
+  }
+
+  if (resolvedReportVersion) {
+    return (
+      <ArchivedReportView
+        version={resolvedReportVersion}
+        patientContextLabel={patientContextLabel}
+        patientIndication={effectivePatient?.indication ?? resolvedReportVersion.patientIndication}
+        isFileAvailable={isArchivedFileAvailable}
+      />
+    )
+  }
+
   if (allPlans.length === 0) {
     return (
       <div className="space-y-6">
         <PageHeader title="Berichte" description="Nährstoffanalyse und Auswertungen" helpText="Erstellen Sie detaillierte Nährstoffanalysen Ihrer Ernährungspläne. Vergleichen Sie Ist- und Sollwerte nach DGE-Referenzen und exportieren Sie Berichte für Ihre Patienten." />
+        {patientContextLabel ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Bericht für {patientContextLabel}</CardTitle>
+              <CardDescription>
+                {(effectivePatient?.indication ?? resolvedReport?.patientIndication) ? `${effectivePatient?.indication ?? resolvedReport?.patientIndication} · ` : ""}
+                Der Patienten-Kontext wurde übernommen. Für die Analyse wird weiterhin ein Ernährungsplan benötigt.
+                {effectiveProtocolId ? " Geöffnet aus Protokoll-Kontext." : ""}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-muted-foreground">
@@ -1048,6 +1480,29 @@ ${microSentence}`
   return (
     <div className="space-y-6">
       <PageHeader title="Berichte" description="Nährstoffanalyse und Auswertungen" helpText="Erstellen Sie detaillierte Nährstoffanalysen Ihrer Ernährungspläne. Vergleichen Sie Ist- und Sollwerte nach DGE-Referenzen und exportieren Sie Berichte für Ihre Patienten." />
+
+      {patientContextLabel ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Bericht für {patientContextLabel}</CardTitle>
+            <CardDescription>
+              {(effectivePatient?.indication ?? resolvedReport?.patientIndication) ? `${effectivePatient?.indication ?? resolvedReport?.patientIndication} · ` : ""}
+              Der Patienten-Kontext wurde übernommen. Die Auswertung basiert weiterhin auf dem ausgewählten Ernährungsplan.
+              {effectiveProtocolId ? " Geöffnet aus Protokoll-Kontext." : ""}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
+      {resolvedReport && !selectedPlan && allPlans.length > 0 ? (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Quellplan nicht verfügbar</AlertTitle>
+          <AlertDescription>
+            Der zuletzt gespeicherte Ernährungsplan für diesen Bericht wurde nicht gefunden. Wähle einen anderen Plan, um den Bericht neu zu berechnen.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Plan selector */}
       <div className="flex items-center gap-3">

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import {
   addDays,
@@ -116,6 +117,7 @@ function formatTimeRange(appointment: PracticeAppointment) {
 }
 
 export default function TerminePage() {
+  const searchParams = useSearchParams()
   const {
     appointments,
     upcomingAppointments,
@@ -124,10 +126,11 @@ export default function TerminePage() {
     deleteAppointment,
   } = usePracticeAppointments()
   const { patients } = usePatients()
+  const patientFilterParam = searchParams.get("patientId")
 
   const [view, setView] = useState<ViewMode>("day")
   const [activeDate, setActiveDate] = useState<Date>(new Date())
-  const [patientFilter, setPatientFilter] = useState<string>("alle")
+  const [patientFilter, setPatientFilter] = useState<string>(patientFilterParam ?? "alle")
   const [typeFilter, setTypeFilter] = useState<string>("alle")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingAppointment, setEditingAppointment] = useState<PracticeAppointment | null>(null)

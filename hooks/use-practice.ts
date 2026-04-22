@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { InvoiceEntry, PracticeAppointment } from "@/lib/types"
-import { PRACTICE_APPOINTMENTS, PRACTICE_INVOICES } from "@/lib/mock-data"
 import { deleteInvoiceClient, fetchInvoicesClient, persistInvoice } from "@/lib/data/invoices-client"
 import { deleteAppointmentClient, fetchAppointmentsClient, persistAppointment } from "@/lib/data/appointments-client"
+import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEYS = {
@@ -52,18 +52,23 @@ export function usePracticeAppointments() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [appointments, setAppointments] = useState<PracticeAppointment[]>(() => {
     const stored = loadFromStorage<PracticeAppointment>(STORAGE_KEYS.appointments)
-    return sortAppointments(stored && stored.length ? stored : PRACTICE_APPOINTMENTS)
+    return sortAppointments(stored ?? [])
   })
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
+  const appointmentsRef = useRef(appointments)
+
+  useEffect(() => {
+    appointmentsRef.current = appointments
+  }, [appointments])
 
   // Sync to local storage for offline/fallback
   useEffect(() => {
     try {
-      const custom = appointments.filter(
-        (appt) => !PRACTICE_APPOINTMENTS.find((m) => m.id === appt.id),
+      persistToStorage(
+        STORAGE_KEYS.appointments,
+        appointments.filter(isLocalMigrationCandidate),
       )
-      localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(custom))
     } catch {
       // Ignore quota errors
     }
@@ -82,14 +87,12 @@ export function usePracticeAppointments() {
         if (cancelled) return
 
         setAppointments((prev) => {
-          const localOnly = prev.filter(
-            (appt) => !PRACTICE_APPOINTMENTS.find((m) => m.id === appt.id),
-          )
+          const localOnly = prev.filter(isLocalMigrationCandidate)
           const merged = [...remoteAppointments]
 
           for (const local of localOnly) {
-            const existsRemote = remoteAppointments.some(
-              (r) => r.id === local.id || r.legacyId === local.id,
+            const existsRemote = remoteAppointments.some((remoteAppointment) =>
+              matchesRecordIdentity(remoteAppointment, local),
             )
             if (!existsRemote) {
               merged.push(local)
@@ -102,11 +105,11 @@ export function usePracticeAppointments() {
         // Migrate local-only appointments to Supabase
         if (!migrationDone.current) {
           migrationDone.current = true
-          const localOnly = appointments.filter(
-            (appt) =>
-              !PRACTICE_APPOINTMENTS.find((m) => m.id === appt.id) &&
-              !remoteAppointments.some(
-                (r) => r.id === appt.id || r.legacyId === appt.id,
+          const localOnly = appointmentsRef.current.filter(
+            (appointment) =>
+              isLocalMigrationCandidate(appointment) &&
+              !remoteAppointments.some((remoteAppointment) =>
+                matchesRecordIdentity(remoteAppointment, appointment),
               ),
           )
 
@@ -235,18 +238,23 @@ export function usePracticeInvoices() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [invoices, setInvoices] = useState<InvoiceEntry[]>(() => {
     const stored = loadFromStorage<InvoiceEntry>(STORAGE_KEYS.invoices)
-    return sortInvoices(stored && stored.length ? stored : PRACTICE_INVOICES)
+    return sortInvoices(stored ?? [])
   })
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
+  const invoicesRef = useRef(invoices)
+
+  useEffect(() => {
+    invoicesRef.current = invoices
+  }, [invoices])
 
   // Sync to local storage for offline/fallback
   useEffect(() => {
     try {
-      const custom = invoices.filter(
-        (inv) => !PRACTICE_INVOICES.find((m) => m.id === inv.id),
+      persistToStorage(
+        STORAGE_KEYS.invoices,
+        invoices.filter(isLocalMigrationCandidate),
       )
-      localStorage.setItem(STORAGE_KEYS.invoices, JSON.stringify(custom))
     } catch {
       // Ignore quota errors
     }
@@ -265,14 +273,12 @@ export function usePracticeInvoices() {
         if (cancelled) return
 
         setInvoices((prev) => {
-          const localOnly = prev.filter(
-            (inv) => !PRACTICE_INVOICES.find((m) => m.id === inv.id),
-          )
+          const localOnly = prev.filter(isLocalMigrationCandidate)
           const merged = [...remoteInvoices]
 
           for (const local of localOnly) {
-            const existsRemote = remoteInvoices.some(
-              (r) => r.id === local.id || r.legacyId === local.id,
+            const existsRemote = remoteInvoices.some((remoteInvoice) =>
+              matchesRecordIdentity(remoteInvoice, local),
             )
             if (!existsRemote) {
               merged.push(local)
@@ -285,11 +291,11 @@ export function usePracticeInvoices() {
         // Migrate local-only invoices to Supabase
         if (!migrationDone.current) {
           migrationDone.current = true
-          const localOnly = invoices.filter(
-            (inv) =>
-              !PRACTICE_INVOICES.find((m) => m.id === inv.id) &&
-              !remoteInvoices.some(
-                (r) => r.id === inv.id || r.legacyId === inv.id,
+          const localOnly = invoicesRef.current.filter(
+            (invoice) =>
+              isLocalMigrationCandidate(invoice) &&
+              !remoteInvoices.some((remoteInvoice) =>
+                matchesRecordIdentity(remoteInvoice, invoice),
               ),
           )
 

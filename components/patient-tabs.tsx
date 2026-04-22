@@ -61,6 +61,7 @@ import {
   KetogenicPlannerCard,
 } from "@/components/therapy-panels"
 import { GuidedProtocolAssistant } from "@/components/guided-protocol-assistant"
+import { PatientWorkflowTab } from "@/components/patient-workflow-tab"
 import { ReferenceProfileSelector } from "@/components/reference-profile-selector"
 import { formatDate, formatNumber } from "@/lib/format"
 import { downloadCsv } from "@/lib/utils"
@@ -85,6 +86,8 @@ import { useCounseling } from "@/hooks/use-counseling"
 import type { Patient, AnthropometricEntry, DigitalProtocolLink } from "@/lib/types"
 import { toast } from "sonner"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
+import { usePracticeAppointments } from "@/hooks/use-practice"
+import { usePatientReports } from "@/hooks/use-patient-reports"
 import {
   ALLERGEN_DEFINITIONS,
   ALLERGEN_MAP,
@@ -278,6 +281,8 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     sessions: counselingSessions,
     isLoadingRemote: isLoadingCounseling,
   } = useCounseling()
+  const { appointments } = usePracticeAppointments()
+  const { reports: patientReports } = usePatientReports(patient.id)
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)
@@ -819,9 +824,14 @@ export function PatientTabs({ patient }: PatientTabsProps) {
     })
   }
 
+  const patientAppointments = appointments.filter(
+    (appointment) => appointment.patientId === patient.id || appointment.patientId === patient.legacyId,
+  )
+
   return (
-    <Tabs defaultValue="stammdaten">
+    <Tabs defaultValue="workflow">
       <TabsList>
+        <TabsTrigger value="workflow">Workflow</TabsTrigger>
         <TabsTrigger value="stammdaten">Stammdaten</TabsTrigger>
         <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
         <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
@@ -831,6 +841,33 @@ export function PatientTabs({ patient }: PatientTabsProps) {
         <TabsTrigger value="protokolle">Protokolle</TabsTrigger>
         <TabsTrigger value="beratungen">Beratungen</TabsTrigger>
       </TabsList>
+
+      <TabsContent value="workflow" className="space-y-4">
+        <PatientWorkflowTab
+          patient={patient}
+          protocols={protocols}
+          digitalLinks={digitalLinks}
+          digitalSubmissions={digitalSubmissions}
+          sessions={sessions}
+          anthroEntries={anthroEntries}
+          screenings={screenings}
+          appointments={patientAppointments}
+          patientReports={patientReports}
+          setQrDialogLink={setQrDialogLink}
+          onGenerateLink={() =>
+            void generateLink({
+              patientId: patient.id,
+              method: digitalMethod,
+              status: "pending",
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            })
+          }
+          onMarkSubmissionReviewed={(submissionId) => void updateSubmissionStatus(submissionId, "reviewed")}
+          isLoadingSubmissions={isLoadingSubmissions}
+          digitalLinksPending={digitalLinksPending}
+          counselingPending={counselingPending}
+        />
+      </TabsContent>
 
       <TabsContent value="stammdaten" className="space-y-4">
         <Card>

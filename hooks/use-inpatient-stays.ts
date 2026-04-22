@@ -3,20 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { InpatientStay } from "@/lib/types";
-import { INPATIENT_STAYS } from "@/lib/mock-data";
 import {
   deleteInpatientStayClient,
   fetchInpatientStaysClient,
   persistInpatientStay,
 } from "@/lib/data/inpatient-stays-client";
+import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "prodi_inpatient_stays";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string) {
-  return UUID_REGEX.test(value);
-}
 
 function loadFromStorage(): InpatientStay[] {
   if (typeof window === "undefined") return [];
@@ -38,10 +33,7 @@ function sortStays(items: InpatientStay[]) {
 }
 
 function buildInitialStays() {
-  const stored = loadFromStorage();
-  const storedIds = new Set(stored.map((stay) => stay.id));
-  const mockOnly = INPATIENT_STAYS.filter((stay) => !storedIds.has(stay.id));
-  return sortStays([...mockOnly, ...stored]);
+  return sortStays(loadFromStorage());
 }
 
 export function useInpatientStays() {
@@ -57,8 +49,10 @@ export function useInpatientStays() {
 
   useEffect(() => {
     try {
-      const custom = stays.filter((stay) => !INPATIENT_STAYS.some((mockStay) => mockStay.id === stay.id));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(stays.filter(isLocalMigrationCandidate)),
+      );
     } catch {
       // ignore
     }
@@ -75,11 +69,11 @@ export function useInpatientStays() {
         const remoteStays = await fetchInpatientStaysClient();
         if (cancelled) return;
 
-        const localOnly = staysRef.current.filter((stay) => !isUuid(stay.id));
+        const localOnly = staysRef.current.filter(isLocalMigrationCandidate);
         const merged = [...remoteStays];
 
         for (const local of localOnly) {
-          if (!remoteStays.some((remoteStay) => remoteStay.id === local.id)) {
+          if (!remoteStays.some((remoteStay) => matchesRecordIdentity(remoteStay, local))) {
             merged.push(local);
           }
         }
@@ -88,7 +82,9 @@ export function useInpatientStays() {
 
         if (!migrationDone.current) {
           migrationDone.current = true;
-          const pendingMigration = localOnly.filter((stay) => !remoteStays.some((remoteStay) => remoteStay.id === stay.id));
+          const pendingMigration = localOnly.filter(
+            (stay) => !remoteStays.some((remoteStay) => matchesRecordIdentity(remoteStay, stay)),
+          );
 
           for (const stay of pendingMigration) {
             void persistInpatientStay(stay)

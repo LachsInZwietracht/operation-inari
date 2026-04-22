@@ -177,6 +177,7 @@ function buildFallbackCandidates(
     });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPageClientProps) {
   const recipeSource = useMemo(() => {
     const merged = new Map<string, Recipe>();

@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/exports/csv";
 import { renderReportPdfBuffer } from "@/lib/exports/pdf";
 import { buildFileResponse, createExportJob } from "@/lib/exports/server";
+import {
+  PATIENT_REPORT_FILES_BUCKET,
+  persistPatientReportRecord,
+  persistPatientReportVersion,
+} from "@/lib/data/patient-reports-client";
 
 function buildReportCsv(request: ReportExportRequest) {
   const rows: string[][] = [
@@ -58,11 +63,96 @@ export async function POST(request: Request) {
   }
 
   const { data: authData } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
   const createdBy = authData.user?.email ?? "Unbekannt";
+  const shouldPersistPatientReport =
+    body.disposition !== "inline" &&
+    Boolean(body.patientId && body.planId && body.patientName);
+  let patientReportId: string | undefined;
+  let patientReportVersionId: string | undefined;
+
+  async function persistPatientReport(
+    format: "PDF" | "CSV",
+    fileName: string,
+    payload: Buffer | string,
+    contentType: string,
+  ) {
+    if (!shouldPersistPatientReport || !body.patientId || !body.planId || !body.patientName || !userId) {
+      return;
+    }
+
+    const report = await persistPatientReportRecord(
+      {
+        id: body.reportId,
+        patientRef: body.patientId,
+        patientName: body.patientName,
+        patientIndication: body.patientIndication,
+        title: body.title,
+        planId: body.planId,
+        protocolId: body.protocolId,
+        planDateLabel: body.planDateLabel,
+        reportLength: body.reportLength,
+        selectedSections: body.selectedSections,
+        activeSectionLabels: body.activeSectionLabels,
+        notes: body.notes,
+        lastFormat: format,
+        lastFileName: fileName,
+      },
+      supabase,
+    );
+    patientReportId = report.id;
+
+    const storagePath = [
+      userId,
+      body.patientId,
+      report.id,
+      `${new Date().toISOString().replace(/[:.]/g, "-")}-${format.toLowerCase()}-${crypto.randomUUID()}.${format === "PDF" ? "pdf" : "csv"}`,
+    ].join("/");
+
+    const { error: uploadError } = await supabase.storage
+      .from(PATIENT_REPORT_FILES_BUCKET)
+      .upload(storagePath, payload, {
+        contentType,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    try {
+      const version = await persistPatientReportVersion(
+        {
+          patientReportId: report.id,
+          patientRef: body.patientId,
+          patientName: body.patientName,
+          patientIndication: body.patientIndication,
+          title: body.title,
+          planId: body.planId,
+          protocolId: body.protocolId,
+          format,
+          fileName,
+          fileSize: typeof payload === "string" ? Buffer.byteLength(payload, "utf8") : payload.length,
+          contentType,
+          storagePath,
+          snapshot: {
+            ...body,
+            format,
+          },
+        },
+        supabase,
+      );
+      patientReportVersionId = version.id;
+    } catch (error) {
+      await supabase.storage.from(PATIENT_REPORT_FILES_BUCKET).remove([storagePath]);
+      throw error;
+    }
+  }
 
   if (body.format === "PDF") {
     const pdfBuffer = await renderReportPdfBuffer(body);
     const fileName = `${body.fileBaseName}.pdf`;
+    await persistPatientReport("PDF", fileName, pdfBuffer, "application/pdf");
     await createExportJob(supabase, {
       format: "PDF",
       scope: "Berichte",
@@ -79,11 +169,16 @@ export async function POST(request: Request) {
       contentType: "application/pdf",
       fileName,
       disposition: body.disposition,
+      headers: {
+        ...(patientReportId ? { "x-prodi-patient-report-id": patientReportId } : {}),
+        ...(patientReportVersionId ? { "x-prodi-patient-report-version-id": patientReportVersionId } : {}),
+      },
     });
   }
 
   const csv = buildReportCsv(body);
   const fileName = `${body.fileBaseName}.csv`;
+  await persistPatientReport("CSV", fileName, csv, "text/csv;charset=utf-8");
   await createExportJob(supabase, {
     format: "CSV",
     scope: "Berichte",
@@ -99,5 +194,9 @@ export async function POST(request: Request) {
   return buildFileResponse(csv, {
     contentType: "text/csv;charset=utf-8",
     fileName,
+    headers: {
+      ...(patientReportId ? { "x-prodi-patient-report-id": patientReportId } : {}),
+      ...(patientReportVersionId ? { "x-prodi-patient-report-version-id": patientReportVersionId } : {}),
+    },
   });
 }

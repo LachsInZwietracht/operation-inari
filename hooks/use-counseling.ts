@@ -9,12 +9,12 @@ import type {
   CounselingSession,
   CounselingTimelineEntry,
 } from "@/lib/types"
-import { COUNSELING_SESSIONS } from "@/lib/mock-data"
 import {
   deleteCounselingSessionClient,
   fetchCounselingSessionsClient,
   persistCounselingSession,
 } from "@/lib/data/counseling-client"
+import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEY = "prodi_counseling"
@@ -38,18 +38,11 @@ function sortSessions(list: CounselingSession[]): CounselingSession[] {
 }
 
 function buildInitial(): CounselingSession[] {
-  const stored = loadFromStorage()
-  const storedIds = new Set(stored.flatMap((session) => [session.id, session.legacyId].filter(Boolean)))
-  const mockOnly = COUNSELING_SESSIONS.filter((session) => !storedIds.has(session.id))
-  return sortSessions([...mockOnly, ...stored])
-}
-
-function isMockSession(session: CounselingSession) {
-  return COUNSELING_SESSIONS.some((mockEntry) => mockEntry.id === session.id)
+  return sortSessions(loadFromStorage())
 }
 
 function getLocalOnlySessions(sessions: CounselingSession[]) {
-  return sessions.filter((session) => !isMockSession(session))
+  return sessions.filter(isLocalMigrationCandidate)
 }
 
 export function useCounseling() {
@@ -88,9 +81,8 @@ export function useCounseling() {
         const merged = [...remoteSessions]
 
         for (const localSession of localOnly) {
-          const existsRemote = remoteSessions.some(
-            (remoteSession) =>
-              remoteSession.id === localSession.id || remoteSession.legacyId === localSession.id,
+          const existsRemote = remoteSessions.some((remoteSession) =>
+            matchesRecordIdentity(remoteSession, localSession),
           )
           if (!existsRemote) {
             merged.push(localSession)
@@ -101,11 +93,9 @@ export function useCounseling() {
 
         if (!migrationDone.current) {
           const pendingMigration = localOnly.filter(
-            (localSession) =>
-              !remoteSessions.some(
-                (remoteSession) =>
-                  remoteSession.id === localSession.id || remoteSession.legacyId === localSession.id,
-              ),
+            (localSession) => !remoteSessions.some((remoteSession) =>
+              matchesRecordIdentity(remoteSession, localSession),
+            ),
           )
 
           let shouldRetryMigration = false

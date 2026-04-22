@@ -2,20 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagnosisEntry } from "@/lib/types";
-import { DIAGNOSES } from "@/lib/mock-data";
 import {
   deleteDiagnosisClient,
   fetchDiagnosesClient,
   persistDiagnosis,
 } from "@/lib/data/patient-diagnoses-client";
+import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "prodi_diagnoses";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value);
-}
 
 function loadFromStorage(): DiagnosisEntry[] {
   if (typeof window === "undefined") return [];
@@ -33,18 +28,11 @@ function sortEntries(items: DiagnosisEntry[]) {
 }
 
 function buildInitial(): DiagnosisEntry[] {
-  const stored = loadFromStorage();
-  const storedIds = new Set(stored.map((item) => item.id));
-  const combined = [...DIAGNOSES.filter((item) => !storedIds.has(item.id)), ...stored];
-  return sortEntries(combined);
-}
-
-function isMockEntry(entry: DiagnosisEntry) {
-  return DIAGNOSES.some((mockEntry) => mockEntry.id === entry.id);
+  return sortEntries(loadFromStorage());
 }
 
 function getLocalOnlyEntries(items: DiagnosisEntry[]) {
-  return items.filter((entry) => !isMockEntry(entry));
+  return items.filter(isLocalMigrationCandidate);
 }
 
 export function useDiagnoses() {
@@ -82,7 +70,9 @@ export function useDiagnoses() {
         const merged = [...remoteEntries];
 
         for (const local of localOnly) {
-          const existsRemote = remoteEntries.some((remoteEntry) => remoteEntry.id === local.id);
+          const existsRemote = remoteEntries.some((remoteEntry) =>
+            matchesRecordIdentity(remoteEntry, local),
+          );
           if (!existsRemote) {
             merged.push(local);
           }
@@ -93,7 +83,9 @@ export function useDiagnoses() {
         if (!migrationDone.current) {
           migrationDone.current = true;
           const pendingMigration = localOnly.filter(
-            (localEntry) => !remoteEntries.some((remoteEntry) => remoteEntry.id === localEntry.id),
+            (localEntry) => !remoteEntries.some((remoteEntry) =>
+              matchesRecordIdentity(remoteEntry, localEntry),
+            ),
           );
 
           for (const entry of pendingMigration) {

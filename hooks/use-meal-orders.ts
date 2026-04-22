@@ -3,20 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MealOrder } from "@/lib/types";
-import { MEAL_ORDERS } from "@/lib/mock-data";
 import {
   deleteMealOrderClient,
   fetchMealOrdersClient,
   persistMealOrder,
 } from "@/lib/data/meal-orders-client";
+import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "prodi_meal_orders";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string) {
-  return UUID_REGEX.test(value);
-}
 
 function loadFromStorage(): MealOrder[] {
   if (typeof window === "undefined") return [];
@@ -39,10 +34,7 @@ function sortOrders(items: MealOrder[]) {
 }
 
 function buildInitialOrders() {
-  const stored = loadFromStorage();
-  const storedIds = new Set(stored.map((order) => order.id));
-  const mockOnly = MEAL_ORDERS.filter((order) => !storedIds.has(order.id));
-  return sortOrders([...mockOnly, ...stored]);
+  return sortOrders(loadFromStorage());
 }
 
 export function useMealOrders() {
@@ -58,8 +50,10 @@ export function useMealOrders() {
 
   useEffect(() => {
     try {
-      const custom = orders.filter((order) => !MEAL_ORDERS.some((mockOrder) => mockOrder.id === order.id));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(orders.filter(isLocalMigrationCandidate)),
+      );
     } catch {
       // ignore
     }
@@ -76,11 +70,11 @@ export function useMealOrders() {
         const remoteOrders = await fetchMealOrdersClient();
         if (cancelled) return;
 
-        const localOnly = ordersRef.current.filter((order) => !isUuid(order.id));
+        const localOnly = ordersRef.current.filter(isLocalMigrationCandidate);
         const merged = [...remoteOrders];
 
         for (const local of localOnly) {
-          if (!remoteOrders.some((remoteOrder) => remoteOrder.id === local.id)) {
+          if (!remoteOrders.some((remoteOrder) => matchesRecordIdentity(remoteOrder, local))) {
             merged.push(local);
           }
         }
@@ -89,7 +83,9 @@ export function useMealOrders() {
 
         if (!migrationDone.current) {
           migrationDone.current = true;
-          const pendingMigration = localOnly.filter((order) => !remoteOrders.some((remoteOrder) => remoteOrder.id === order.id));
+          const pendingMigration = localOnly.filter(
+            (order) => !remoteOrders.some((remoteOrder) => matchesRecordIdentity(remoteOrder, order)),
+          );
 
           for (const order of pendingMigration) {
             void persistMealOrder(order)

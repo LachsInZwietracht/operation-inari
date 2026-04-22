@@ -28,6 +28,18 @@ type CreatedPatient = {
   insuranceProvider?: string;
 };
 
+type WorkflowFixture = {
+  linkId: string;
+  submissionId: string;
+  protocolId: string;
+  appointmentId: string;
+};
+
+type PatientReportFixture = {
+  id: string;
+  versionId: string;
+};
+
 async function getTestUserId() {
   const { data, error } = await admin.auth.admin.listUsers();
   if (error) throw new Error(error.message);
@@ -70,6 +82,8 @@ async function createPatientFixture(input: TestPatientInput): Promise<CreatedPat
 }
 
 async function deletePatientFixture(patientId: string) {
+  await admin.from("patient_report_versions").delete().eq("patient_ref", patientId);
+  await admin.from("patient_reports").delete().eq("patient_ref", patientId);
   const { error } = await admin.from("patients").delete().eq("id", patientId);
   if (error) {
     throw new Error(error.message);
@@ -81,6 +95,182 @@ async function deleteClinicalRows(table: string, patientId: string) {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+async function createWorkflowFixture(patientId: string): Promise<WorkflowFixture> {
+  const userId = await getTestUserId();
+
+  const linkId = crypto.randomUUID();
+  const submissionId = crypto.randomUUID();
+  const protocolId = crypto.randomUUID();
+  const appointmentId = crypto.randomUUID();
+
+  const { error: linkError } = await admin.from("patient_digital_protocol_links").insert({
+    id: linkId,
+    user_id: userId,
+    patient_id: patientId,
+    method: "Digitales 24h Recall",
+    status: "received",
+    url: `https://demo.prodi.local/protokoll/${linkId}`,
+    qr_code: "data:image/png;base64,demo",
+    expires_at: "2026-12-31",
+  });
+  if (linkError) throw new Error(linkError.message);
+
+  const { error: protocolError } = await admin.from("nutrition_protocols").insert({
+    id: protocolId,
+    user_id: userId,
+    patient_id: patientId,
+    title: "3-Tage-Ernährungsprotokoll",
+    type: "ernaehrungsprotokoll",
+    start_date: "2026-04-19",
+    end_date: "2026-04-21",
+    notes: "Aus digitaler Einreichung übernommen",
+    metadata: { source: "digital_protocol_submission", sourceSubmissionId: submissionId },
+  });
+  if (protocolError) throw new Error(protocolError.message);
+
+  const { error: submissionError } = await admin.from("digital_protocol_submissions").insert({
+    id: submissionId,
+    link_id: linkId,
+    patient_id: patientId,
+    submitted_at: "2026-04-20T08:00:00.000Z",
+    days: [{ date: "2026-04-19", entries: [{ mealSlot: "Frühstück", freeText: "2 Scheiben Vollkornbrot", time: "08:00" }] }],
+    notes: "Patient hat App genutzt",
+    status: "converted",
+    converted_protocol_id: protocolId,
+  });
+  if (submissionError) throw new Error(submissionError.message);
+
+  const { error: appointmentError } = await admin.from("appointments").insert({
+    id: appointmentId,
+    user_id: userId,
+    title: "Follow-up Ernährung",
+    date: "2026-05-05",
+    start_time: "09:00:00",
+    end_time: "09:30:00",
+    patient_id: patientId,
+    location: "Raum 2",
+    type: "kontrolle",
+    reminder: "24 Stunden",
+  });
+  if (appointmentError) throw new Error(appointmentError.message);
+
+  return { linkId, submissionId, protocolId, appointmentId };
+}
+
+async function deleteWorkflowFixture(patientId: string, fixture: WorkflowFixture) {
+  await admin.from("appointments").delete().eq("id", fixture.appointmentId);
+  await admin.from("nutrition_protocol_entries").delete().eq("protocol_id", fixture.protocolId);
+  await admin.from("nutrition_protocols").delete().eq("id", fixture.protocolId);
+  await admin.from("digital_protocol_submissions").delete().eq("id", fixture.submissionId);
+  await admin.from("patient_digital_protocol_links").delete().eq("id", fixture.linkId);
+  await deleteClinicalRows("appointments", patientId);
+}
+
+async function createPatientReportFixture(patient: CreatedPatient): Promise<PatientReportFixture> {
+  const userId = await getTestUserId();
+  const reportId = crypto.randomUUID();
+  const versionId = crypto.randomUUID();
+
+  const { error } = await admin.from("patient_reports").insert({
+    id: reportId,
+    user_id: userId,
+    patient_ref: patient.id,
+    patient_name: `${patient.firstName} ${patient.lastName}`,
+    patient_indication: patient.indication ?? null,
+    title: "Operation Prodi Bericht",
+    plan_id: "fixture_plan_ref",
+    protocol_id: null,
+    plan_date_label: "15.06.2026",
+    report_length: "full",
+    selected_sections: {
+      summary: true,
+      table: true,
+      charts: true,
+      meals: true,
+      notes: true,
+    },
+    active_section_labels: ["Kurzfazit & Indikatoren", "Nährstofftabellen", "Diagramme", "Speiseplanübersicht", "Individuelle Hinweise"],
+    notes: "Verlauf stabil, Fokus auf Ballaststoffe.",
+    last_format: "PDF",
+    last_file_name: "prodi-bericht-2026-06-15.pdf",
+    latest_version_number: 0,
+  });
+
+  if (error) throw new Error(error.message);
+
+  const { error: versionError } = await admin.from("patient_report_versions").insert({
+    id: versionId,
+    patient_report_id: reportId,
+    user_id: userId,
+    patient_ref: patient.id,
+    patient_name: `${patient.firstName} ${patient.lastName}`,
+    patient_indication: patient.indication ?? null,
+    title: "Operation Prodi Bericht",
+    plan_id: "fixture_plan_ref",
+    protocol_id: null,
+    version_number: 1,
+    format: "PDF",
+    file_name: "prodi-bericht-2026-06-15.pdf",
+    file_size: 1024,
+    content_type: "application/pdf",
+    storage_bucket: "patient-report-files",
+    storage_path: `${userId}/${patient.id}/${reportId}/${versionId}.pdf`,
+    snapshot: {
+      format: "PDF",
+      title: "Operation Prodi Bericht",
+      fileBaseName: "prodi-bericht-2026-06-15",
+      reportId,
+      patientId: patient.id,
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      patientIndication: patient.indication ?? undefined,
+      planId: "fixture_plan_ref",
+      planDateLabel: "15.06.2026",
+      reportLength: "full",
+      selectedSections: {
+        summary: true,
+        table: true,
+        charts: true,
+        meals: true,
+        notes: true,
+      },
+      activeSectionLabels: ["Kurzfazit & Indikatoren", "Nährstofftabellen", "Diagramme", "Speiseplanübersicht", "Individuelle Hinweise"],
+      summaryMetrics: [
+        { label: "Energieabdeckung", value: "1800 kcal", reference: "2000 kcal", coverage: "90%" },
+      ],
+      nutrientRows: [
+        { label: "Eiweiß", value: "80 g", reference: "60 g", coverage: "133%" },
+      ],
+      vitaminRows: [
+        { label: "Vitamin C", value: "110 mg", reference: "95 mg", coverage: "116%" },
+      ],
+      mineralRows: [
+        { label: "Calcium", value: "950 mg", reference: "1000 mg", coverage: "95%" },
+      ],
+      mealRows: [
+        { slot: "Frühstück", summary: "Porridge mit Obst" },
+      ],
+      notes: "Verlauf stabil, Fokus auf Ballaststoffe.",
+      narrative: "Archivierte Patientenfassung.",
+      badges: ["Plan 15.06.2026", "Vollversion"],
+      specialNotes: ["PRODIscore 82"],
+    },
+  });
+
+  if (versionError) throw new Error(versionError.message);
+
+  const { error: updateError } = await admin
+    .from("patient_reports")
+    .update({
+      latest_version_id: versionId,
+      latest_version_number: 1,
+    })
+    .eq("id", reportId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  return { id: reportId, versionId };
 }
 
 async function fetchClinicalRows<T extends Record<string, unknown>>(
@@ -205,11 +395,60 @@ test.describe("Patient Management", () => {
     try {
       await openPatientDetail(page, patient);
 
+      await expect(page.getByRole("tab", { name: "Workflow" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Stammdaten" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Anthropometrie" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Protokolle" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Beratungen" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByText("Patient Journey")).toBeVisible();
+      await page.getByRole("tab", { name: "Stammdaten" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("shows derived workflow progress for a patient journey", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Workflow",
+      lastName: "Journey",
+      indication: "Adipositas",
+    });
+    const fixture = await createWorkflowFixture(patient.id);
+
+    try {
+      await openPatientDetail(page, patient);
+
+      await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByText("3/5 Schritte abgeschlossen")).toBeVisible();
+      await expect(page.getByRole("link", { name: "Protokoll öffnen" }).first()).toBeVisible();
+      await expect(page.getByText("Ein patientenbezogener Kontrolltermin ist bereits im Kalender hinterlegt.")).toBeVisible();
+      await expect(page.getByText("Digitale Einreichung", { exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Kontrolltermin planen" }).first()).toHaveAttribute("href", `/termine?patientId=${patient.id}`);
+    } finally {
+      await deleteWorkflowFixture(patient.id, fixture);
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("shows patient report history in workflow", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Report",
+      lastName: "Workflow",
+      indication: "Adipositas",
+    });
+    const report = await createPatientReportFixture(patient);
+
+    try {
+      await openPatientDetail(page, patient);
+
+      await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByText("Berichtshistorie")).toBeVisible();
+      await expect(page.getByText("Operation Prodi Bericht").first()).toBeVisible();
+      await expect(page.getByRole("link", { name: "Historie öffnen" }).first()).toHaveAttribute("href", `/berichte?reportVersionId=${report.versionId}`);
+      await expect(page.getByRole("link", { name: "PDF herunterladen" }).first()).toHaveAttribute("href", `/api/patient-report-versions/${report.versionId}/download`);
+      await expect(page.getByText("Eine archivierte Berichtsversion liegt vor und kann unverändert erneut geöffnet oder heruntergeladen werden.")).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
     }

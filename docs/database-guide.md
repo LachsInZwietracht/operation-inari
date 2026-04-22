@@ -36,7 +36,7 @@ Current operational notes:
 - Runtime compatibility for old mock food IDs is handled at load/persist boundaries, not by ad hoc mapping inside calculation code.
 - Food delivery is intentionally split by use case: lightweight search index for navigation, targeted loaders for list views, and heavier loaders only where full nutrient math is required.
 - Reference values now use Supabase tables for official rows plus persisted custom profile and preference tables.
-- Export jobs persist metadata only. Generated files are produced on demand and are not stored in the database in v1.
+- Export jobs persist metadata only. Patient-bound report binaries now live in Supabase Storage and immutable report snapshots live in `patient_report_versions`; `export_jobs` remains an audit journal.
 
 ### Data Model (TypeScript Types)
 
@@ -248,11 +248,17 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 | `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
+| `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary |
+| `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at` |
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
 
 ### Export Job Notes
 
-- `export_jobs` stores **metadata only**. The generated PDF/CSV/JSON binaries are returned directly by `app/api/exports/*` and are not persisted in Supabase storage in v1.
+- `export_jobs` stores **metadata only** and is still not the patient document source of truth.
+- Patient-bound report exports additionally:
+  - persist a stable parent record in `patient_reports`
+  - append immutable export versions to `patient_report_versions`
+  - store the original PDF/CSV file in the private Supabase bucket `patient-report-files`
 - RLS is user-scoped:
   - users can read their own export rows
   - users can insert their own export rows
@@ -575,6 +581,13 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - `useCustomFoods(baseFoods)` merges localStorage custom foods with Supabase base data
 - `useInstitutionMenu(initialMenus, recipes)` reads foods from context, derives categories from `food.categoryId`. Supports full CRUD (create/delete/status) with Supabase persistence and localStorage fallback. Server fetcher `fetchMenuPlans()` falls back to `INSTITUTION_MENUS` mock data when Supabase is empty or unavailable.
 - Food detail pages use `fetchFoodById()` for single-record Supabase queries
+- Supabase-backed user hooks no longer seed runtime state from `lib/mock-data`; they initialize from localStorage migration candidates only, then merge real remote rows after sync.
+- This rule now covers patients, practice appointments/invoices, protocols, counseling sessions/templates, screenings, digital protocol links, inpatient stays, meal orders, diagnoses, activities, anthropometrics, lab values, medications, PROCAM, therapy settings/integrations, and patient allergens.
+
+**Bootstrap rule for future hooks:**
+- If a hook persists to Supabase, do not append mock constants during initialization.
+- localStorage should contain only local migration candidates, not canned demo rows.
+- Once remote data is available, treat Supabase as the source of truth and merge in only non-persisted local records.
 
 ### Legacy Food References in Existing Mock/Local Records
 
@@ -607,9 +620,9 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - ✅ The browser falls back to `search_foods()` if `search_foods_with_total()` is not present yet, which keeps older environments usable during rollout.
 - ⏳ Cologne phonetics still only run client-side for the command palette fallback; they have not been ported into Postgres yet.
 
-### Phase 5: localStorage → Supabase (Remaining User Data) — NOT STARTED
+### Phase 5: localStorage → Supabase (Remaining User Data) — PARTIALLY COMPLETE
 
-Custom foods plus user-created recipes/meal plans still live in localStorage (the shared templates now live in Supabase). Once Supabase auth is implemented:
+Supabase-backed clinical/workspace hooks now store only local migration candidates in localStorage and no longer bootstrap mock rows into runtime state. Custom foods plus user-created recipes/meal plans still live in localStorage as primary storage (the shared templates now live in Supabase). Once Supabase auth is implemented:
 
 1. Ship a one-off migration hook that runs on first load after the release: it reads `prodi_custom_foods`, `prodi_custom_recipes`, and `prodi_meal_plans`, POSTs them to new Supabase endpoints, and only purges the local keys after a successful `201` response.
 2. If the user is not authenticated, queue the data in memory and prompt them to create an account before uploading (or keep the local fallback until auth is available).

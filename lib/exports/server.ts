@@ -44,11 +44,13 @@ export function buildFileResponse(payload: Buffer | string, options: {
   contentType: string;
   fileName: string;
   disposition?: "attachment" | "inline";
+  headers?: Record<string, string>;
 }) {
   return new Response(payload, {
     headers: {
       "content-type": options.contentType,
       "content-disposition": `${options.disposition ?? "attachment"}; filename="${options.fileName}"`,
+      ...(options.headers ?? {}),
     },
   });
 }

@@ -302,6 +302,13 @@ export interface ReportExportRequest {
   title: string;
   fileBaseName: string;
   disposition?: "attachment" | "inline";
+  reportId?: ID;
+  reportVersionId?: ID;
+  patientId?: ID;
+  patientName?: string;
+  patientIndication?: string;
+  planId?: ID;
+  protocolId?: ID;
   planDateLabel: string;
   reportLength: "short" | "full";
   selectedSections: ReportExportSectionState;

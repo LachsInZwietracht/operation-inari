@@ -2,20 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PatientAllergenEntry } from "@/lib/types";
-import { PATIENT_ALLERGENS } from "@/lib/mock-data";
 import {
   deletePatientAllergenClient,
   fetchPatientAllergensClient,
   persistPatientAllergen,
 } from "@/lib/data/patient-allergens-client";
+import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 
 const STORAGE_KEY = "prodi_patient_allergens";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value);
-}
 
 function loadFromStorage(): PatientAllergenEntry[] {
   if (typeof window === "undefined") return [];
@@ -29,10 +24,7 @@ function loadFromStorage(): PatientAllergenEntry[] {
 }
 
 function buildInitialEntries(): PatientAllergenEntry[] {
-  const stored = loadFromStorage();
-  const storedIds = new Set(stored.map((entry) => entry.id));
-  const mockOnly = PATIENT_ALLERGENS.filter((entry) => !storedIds.has(entry.id));
-  return [...mockOnly, ...stored];
+  return sortEntries(loadFromStorage());
 }
 
 function sortEntries(items: PatientAllergenEntry[]) {
@@ -54,8 +46,10 @@ export function usePatientAllergens() {
 
   useEffect(() => {
     try {
-      const custom = entries.filter((entry) => !PATIENT_ALLERGENS.some((mockEntry) => mockEntry.id === entry.id));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(custom));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(entries.filter(isLocalMigrationCandidate)),
+      );
     } catch {
       // ignore
     }
@@ -72,11 +66,13 @@ export function usePatientAllergens() {
         const remoteEntries = await fetchPatientAllergensClient();
         if (cancelled) return;
 
-        const localOnly = entriesRef.current.filter((e) => !isUuid(e.id));
+        const localOnly = entriesRef.current.filter(isLocalMigrationCandidate);
         const merged = [...remoteEntries];
 
         for (const local of localOnly) {
-          const existsRemote = remoteEntries.some((r) => r.id === local.id);
+          const existsRemote = remoteEntries.some((remoteEntry) =>
+            matchesRecordIdentity(remoteEntry, local),
+          );
           if (!existsRemote) {
             merged.push(local);
           }
@@ -87,7 +83,9 @@ export function usePatientAllergens() {
         if (!migrationDone.current) {
           migrationDone.current = true;
           const pendingMigration = localOnly.filter(
-            (local) => !remoteEntries.some((r) => r.id === local.id),
+            (local) => !remoteEntries.some((remoteEntry) =>
+              matchesRecordIdentity(remoteEntry, local),
+            ),
           );
 
           for (const entry of pendingMigration) {

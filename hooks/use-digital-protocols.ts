@@ -3,21 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DigitalProtocolLink } from "@/lib/types";
-import { DIGITAL_PROTOCOL_LINKS } from "@/lib/mock-data";
 import {
   deleteDigitalProtocolLinkClient,
   fetchDigitalProtocolLinksClient,
   persistDigitalProtocolLink,
 } from "@/lib/data/patient-digital-protocol-links-client";
+import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
 import { generateQrDataUrl } from "@/lib/qr";
 
 const STORAGE_KEY = "prodi_digital_protocols";
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value);
-}
 
 function loadFromStorage(): DigitalProtocolLink[] {
   if (typeof window === "undefined") return [];
@@ -35,17 +30,11 @@ function sortEntries(items: DigitalProtocolLink[]) {
 }
 
 function buildInitial(): DigitalProtocolLink[] {
-  const stored = loadFromStorage();
-  const ids = new Set(stored.map((item) => item.id));
-  return sortEntries([...DIGITAL_PROTOCOL_LINKS.filter((item) => !ids.has(item.id)), ...stored]);
-}
-
-function isMockEntry(entry: DigitalProtocolLink) {
-  return DIGITAL_PROTOCOL_LINKS.some((mockEntry) => mockEntry.id === entry.id);
+  return sortEntries(loadFromStorage());
 }
 
 function getLocalOnlyEntries(items: DigitalProtocolLink[]) {
-  return items.filter((entry) => !isMockEntry(entry));
+  return items.filter(isLocalMigrationCandidate);
 }
 
 export function useDigitalProtocols() {
@@ -83,7 +72,9 @@ export function useDigitalProtocols() {
         const merged = [...remoteEntries];
 
         for (const local of localOnly) {
-          const existsRemote = remoteEntries.some((remoteEntry) => remoteEntry.id === local.id);
+          const existsRemote = remoteEntries.some((remoteEntry) =>
+            matchesRecordIdentity(remoteEntry, local),
+          );
           if (!existsRemote) {
             merged.push(local);
           }
@@ -94,7 +85,9 @@ export function useDigitalProtocols() {
         if (!migrationDone.current) {
           migrationDone.current = true;
           const pendingMigration = localOnly.filter(
-            (localEntry) => !remoteEntries.some((remoteEntry) => remoteEntry.id === localEntry.id),
+            (localEntry) => !remoteEntries.some((remoteEntry) =>
+              matchesRecordIdentity(remoteEntry, localEntry),
+            ),
           );
 
           for (const entry of pendingMigration) {
@@ -205,7 +198,7 @@ export function useDigitalProtocols() {
 
       if (isAuthenticated && nextLink) {
         const linkToPersist = nextLink
-        const persistPromise = UUID_REGEX.test(linkToPersist.id)
+        const persistPromise = isUuid(linkToPersist.id)
           ? persistDigitalProtocolLink(linkToPersist)
           : fetchDigitalProtocolLinksClient().then((remoteEntries) => {
               const matchedRemote = remoteEntries.find(

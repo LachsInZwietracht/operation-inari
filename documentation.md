@@ -138,6 +138,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **New counseling session:** `app/(app)/patienten/[id]/beratungen/neu/page.tsx` uses `components/counseling-session-form.tsx`.
 - **Counseling detail:** `app/(app)/patienten/[id]/beratungen/[beratungId]/page.tsx` renders the session workspace for timeline entries, materials, and progress metrics.
 - **Persistence:** `hooks/use-counseling.ts` is Supabase-first with localStorage fallback, remote sync, and migration of legacy local-only sessions after login.
+- **Bootstrap behavior:** Supabase-backed patient/practice hooks initialize from local migration candidates only; canned mock rows are no longer injected into runtime state before remote sync.
 - **Template source:** `components/counseling-template-picker.tsx` now reads live templates from `hooks/use-counseling-templates.ts` instead of importing static mock data directly.
 - **Data layer:** `lib/data/counseling-client.ts` handles `counseling_sessions` and `counseling_templates`, including legacy-id migration support and patient ID resolution against the `patients` table.
 - **Schema:** migration `20260508000024_counseling.sql` adds the counseling tables, patient foreign key, JSONB payloads for timeline/material/progress sections, and per-user RLS policies.

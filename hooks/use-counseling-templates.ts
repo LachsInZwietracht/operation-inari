@@ -4,12 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import type { CounselingTemplate } from "@/lib/types"
-import { COUNSELING_TEMPLATES } from "@/lib/mock-data"
 import {
   deleteCounselingTemplateClient,
   fetchCounselingTemplatesClient,
   persistCounselingTemplate,
 } from "@/lib/data/counseling-client"
+import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEY = "prodi_counseling_templates"
@@ -30,18 +30,11 @@ function sortTemplates(templates: CounselingTemplate[]): CounselingTemplate[] {
 }
 
 function buildInitial(): CounselingTemplate[] {
-  const stored = loadFromStorage()
-  const storedIds = new Set(stored.flatMap((template) => [template.id, template.legacyId].filter(Boolean)))
-  const mockOnly = COUNSELING_TEMPLATES.filter((template) => !storedIds.has(template.id))
-  return sortTemplates([...mockOnly, ...stored])
-}
-
-function isMockTemplate(template: CounselingTemplate) {
-  return COUNSELING_TEMPLATES.some((mockTemplate) => mockTemplate.id === template.id)
+  return sortTemplates(loadFromStorage())
 }
 
 function getLocalOnlyTemplates(templates: CounselingTemplate[]) {
-  return templates.filter((template) => !isMockTemplate(template))
+  return templates.filter(isLocalMigrationCandidate)
 }
 
 export function useCounselingTemplates() {
@@ -78,9 +71,8 @@ export function useCounselingTemplates() {
         const merged = [...remoteTemplates]
 
         for (const localTemplate of localOnly) {
-          const existsRemote = remoteTemplates.some(
-            (remoteTemplate) =>
-              remoteTemplate.id === localTemplate.id || remoteTemplate.legacyId === localTemplate.id,
+          const existsRemote = remoteTemplates.some((remoteTemplate) =>
+            matchesRecordIdentity(remoteTemplate, localTemplate),
           )
           if (!existsRemote) {
             merged.push(localTemplate)
@@ -93,11 +85,9 @@ export function useCounselingTemplates() {
           migrationDone.current = true
 
           const pendingMigration = localOnly.filter(
-            (localTemplate) =>
-              !remoteTemplates.some(
-                (remoteTemplate) =>
-                  remoteTemplate.id === localTemplate.id || remoteTemplate.legacyId === localTemplate.id,
-              ),
+            (localTemplate) => !remoteTemplates.some((remoteTemplate) =>
+              matchesRecordIdentity(remoteTemplate, localTemplate),
+            ),
           )
 
           for (const template of pendingMigration) {

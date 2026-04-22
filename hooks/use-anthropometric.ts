@@ -2,20 +2,15 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import type { AnthropometricEntry } from "@/lib/types"
-import { ANTHROPOMETRIC_DATA } from "@/lib/mock-data"
 import {
   deleteAnthropometricEntryClient,
   fetchAnthropometricEntriesClient,
   persistAnthropometricEntry,
 } from "@/lib/data/patient-anthropometrics-client"
+import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const STORAGE_KEY = "prodi_anthropometric"
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value)
-}
 
 function loadFromStorage(): AnthropometricEntry[] {
   if (typeof window === "undefined") return []
@@ -33,18 +28,11 @@ function sortEntries(items: AnthropometricEntry[]) {
 }
 
 function buildInitial(): AnthropometricEntry[] {
-  const stored = loadFromStorage()
-  const storedIds = new Set(stored.map((e) => e.id))
-  const mockOnly = ANTHROPOMETRIC_DATA.filter((e) => !storedIds.has(e.id))
-  return sortEntries([...mockOnly, ...stored])
-}
-
-function isMockEntry(entry: AnthropometricEntry) {
-  return ANTHROPOMETRIC_DATA.some((mockEntry) => mockEntry.id === entry.id)
+  return sortEntries(loadFromStorage())
 }
 
 function getLocalOnlyEntries(items: AnthropometricEntry[]) {
-  return items.filter((entry) => !isMockEntry(entry))
+  return items.filter(isLocalMigrationCandidate)
 }
 
 export function useAnthropometric() {
@@ -81,7 +69,9 @@ export function useAnthropometric() {
         const merged = [...remoteEntries]
 
         for (const local of localOnly) {
-          const existsRemote = remoteEntries.some((remoteEntry) => remoteEntry.id === local.id)
+          const existsRemote = remoteEntries.some((remoteEntry) =>
+            matchesRecordIdentity(remoteEntry, local),
+          )
           if (!existsRemote) {
             merged.push(local)
           }
@@ -93,7 +83,7 @@ export function useAnthropometric() {
           migrationDone.current = true
 
           const pendingMigration = localOnly.filter((localEntry) =>
-            !remoteEntries.some((remoteEntry) => remoteEntry.id === localEntry.id),
+            !remoteEntries.some((remoteEntry) => matchesRecordIdentity(remoteEntry, localEntry)),
           )
 
           for (const entry of pendingMigration) {

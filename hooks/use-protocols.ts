@@ -3,22 +3,13 @@
 import { useState, useCallback, useEffect } from "react"
 
 import type { Food, NutritionProtocol } from "@/lib/types"
-import { PROTOCOLS } from "@/lib/mock-data"
 import { normalizeProtocolFoodReferences } from "@/lib/data/food-reference-normalization"
+import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/local-records"
 import { deleteProtocolClient, fetchProtocolsClient, persistProtocol } from "@/lib/data/protocols-client"
 import { getLocalProtocols, saveLocalProtocols } from "@/lib/data/local-protocols"
 
 function buildInitial(foods: Food[]): NutritionProtocol[] {
-  const stored = getLocalProtocols(foods)
-  const storedIds = new Set(
-    stored.flatMap((protocol) => [protocol.id, protocol.legacyId].filter(Boolean)),
-  )
-
-  const mockOnly = PROTOCOLS
-    .filter((protocol) => !storedIds.has(protocol.id))
-    .map((protocol) => normalizeProtocolFoodReferences(protocol, foods))
-
-  return [...mockOnly, ...stored].sort(
+  return getLocalProtocols(foods).sort(
     (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
   )
 }
@@ -41,7 +32,7 @@ export function useProtocols(foods: Food[] = []) {
             normalizeProtocolFoodReferences(protocol, foods),
           )) {
             const existingIndex = merged.findIndex(
-              (entry) => entry.id === persisted.id || entry.id === persisted.legacyId,
+              (entry) => matchesRecordIdentity(entry, persisted),
             )
 
             if (existingIndex >= 0) {
@@ -68,11 +59,7 @@ export function useProtocols(foods: Food[] = []) {
   }, [foods])
 
   useEffect(() => {
-    const localOnly = protocols.filter(
-      (protocol) =>
-        !PROTOCOLS.find((mock) => mock.id === protocol.id) &&
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(protocol.id),
-    )
+    const localOnly = protocols.filter(isLocalMigrationCandidate)
 
     saveLocalProtocols(localOnly, foods)
   }, [foods, protocols])
