@@ -115,8 +115,8 @@ Product direction:
 ## 5. Patient/Client Management
 
 ### 5.1 Patient Records
-**Status:** Implemented (Supabase-backed patient records, eGK workflow, PDF mail merge).
-- **eGK Card Reader Support:** Read German insurance cards directly via Web Serial API or WebSocket companion app.
+**Status:** Implemented (Supabase-backed patient records, eGK demo workflow, PDF mail merge).
+- **eGK Demo Workflow:** Simulate German insurance card intake via demo Web Serial / companion flows for patient onboarding demos and test runs.
 - **Serial letter / mail merge** — Generate personalized PDFs using tokens (e.g., `{{patient.name}}`).
 - **Birthday list** — dashboard widget for upcoming patient birthdays.
 

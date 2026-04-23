@@ -124,6 +124,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.15 Patienten Mail Merge (`/patienten`)
 - **Component:** `app/(app)/patienten/page.tsx`
   - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
+  - **eGK demo:** the patient overview and patient creation form expose clearly labeled simulated eGK flows for tests/product demos; the current Web Serial and companion paths still return demo card payloads rather than production connector data.
   - The authoring UI for templates/placeholders is still client-side and reads bundled product defaults from `lib/patient-mailings.ts`.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
   - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.
@@ -132,6 +133,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/api-export/page.tsx`
   - Export cards now call `/api/exports/datasets` with typed `format` + `scope` combinations.
   - The default report export builder resolves references via the same user preference pipeline used in the interactive UI.
+  - Report text templates in `/berichte` are bundled product defaults from `lib/report-templates.ts`, then extended with user-created local templates via `useReportTemplates()`.
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
 

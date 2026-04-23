@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import type { ReportTemplate } from "@/lib/types"
-import { REPORT_TEMPLATES } from "@/lib/mock-data"
+import { REPORT_TEMPLATES } from "@/lib/report-templates"
 
 const STORAGE_KEY = "prodi_report_templates"
 

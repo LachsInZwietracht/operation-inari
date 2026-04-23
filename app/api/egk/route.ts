@@ -7,6 +7,6 @@ export async function GET() {
   return NextResponse.json({
     card,
     receivedAt: new Date().toISOString(),
-    source: "companion",
+    source: "companion-demo",
   })
 }

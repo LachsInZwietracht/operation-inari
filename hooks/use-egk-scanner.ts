@@ -42,7 +42,7 @@ export function useEgkScanner() {
     try {
       if (isSupported) {
         const port = await (navigator as NavigatorWithSerial)?.serial?.requestPort();
-        if (!port) throw new Error("Kein Kartenleser ausgewählt");
+        if (!port) throw new Error("Kein Demo-Kartenleser ausgewählt");
         serialPortRef.current = port;
         if (!port.readable) {
           await port.open({ baudRate: 9600 });
@@ -52,7 +52,7 @@ export function useEgkScanner() {
     } catch (error) {
       console.error("eGK connect error", error);
       setStatus("error");
-      setLastError(error instanceof Error ? error.message : "Konnte Kartenleser nicht verbinden");
+      setLastError(error instanceof Error ? error.message : "Konnte Demo-Kartenleser nicht verbinden");
     } finally {
       setIsConnecting(false);
     }
@@ -71,7 +71,7 @@ export function useEgkScanner() {
 
   const scanCard = useCallback(async () => {
     if (status !== "ready") {
-      throw new Error("Kartenleser ist nicht bereit");
+      throw new Error("Demo-Kartenleser ist nicht bereit");
     }
     setIsReading(true);
     setLastError(null);
@@ -94,7 +94,7 @@ export function useEgkScanner() {
     try {
       const response = await fetch(companionEndpoint);
       if (!response.ok) {
-        throw new Error("Companion-Connector antwortet nicht");
+        throw new Error("Demo-Companion antwortet nicht");
       }
       const payload = (await response.json()) as { card: EgkCardData };
       setLastCard(payload.card);
@@ -102,7 +102,7 @@ export function useEgkScanner() {
       return payload.card;
     } catch (error) {
       setStatus("error");
-      setLastError(error instanceof Error ? error.message : "Abruf fehlgeschlagen");
+      setLastError(error instanceof Error ? error.message : "Demo-Abruf fehlgeschlagen");
       throw error;
     } finally {
       setIsReading(false);

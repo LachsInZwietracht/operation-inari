@@ -466,6 +466,7 @@ test.describe("Patient Management", () => {
   test("creates a new patient", async ({ page }) => {
     await page.goto("/patienten/neu");
     await expect(page.getByRole("heading", { name: "Neuer Patient" })).toBeVisible();
+    await expect(page.getByText("eGK-Demo")).toBeVisible();
 
     const firstNameInput = page.locator('input[name="firstName"]');
     const lastNameInput = page.locator('input[name="lastName"]');
@@ -484,6 +485,12 @@ test.describe("Patient Management", () => {
     await expect(page.getByRole("link", { name: new RegExp(`${uniqueLastName}, ${firstName}`) }).first()).toBeVisible({
       timeout: 30_000,
     });
+  });
+
+  test("labels the patient list egk area as demo mode", async ({ page }) => {
+    await openPatientList(page);
+    await expect(page.getByText("eGK-Demo")).toBeVisible();
+    await expect(page.getByText("Simulierte eGK-Daten für Tests und Produktdemos.")).toBeVisible();
   });
 
   test("views patient detail with tabs", async ({ page }) => {

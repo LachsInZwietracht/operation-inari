@@ -14,7 +14,6 @@ export { ANTHROPOMETRIC_DATA } from "./anthropometric-data";
 export { PROTOCOLS } from "./protocols";
 export { COUNSELING_SESSIONS } from "./counseling-sessions";
 export { COUNSELING_TEMPLATES } from "./counseling-templates";
-export { REPORT_TEMPLATES } from "./report-templates";
 export { LAB_PARAMETERS } from "./lab-parameters";
 export { LAB_VALUES } from "./lab-values";
 export {

@@ -117,9 +117,9 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
     try {
       const card = await scanCard()
       applyCardData(card)
-      toast.success("eGK-Daten übernommen")
+      toast.success("Demo-eGK-Daten übernommen")
     } catch (error) {
-      toast.error((error as Error).message || "Karte konnte nicht eingelesen werden")
+      toast.error((error as Error).message || "Demo-Karte konnte nicht eingelesen werden")
     }
   }, [applyCardData, scanCard])
 
@@ -171,9 +171,9 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
         <Card className="border-dashed border-primary/40 bg-primary/5">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base">eGK-Kartenleser</CardTitle>
+              <CardTitle className="text-base">eGK-Demo</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Lesen Sie Stammdaten direkt von elektronischen Gesundheitskarten aus.
+                Simulieren Sie eGK-Stammdaten für Tests und Demos.
               </p>
             </div>
             <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
@@ -181,7 +181,7 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
           <CardContent className="space-y-4">
             {!egkSupported && (
               <p className="text-sm text-muted-foreground">
-                Ihr Browser unterstützt aktuell keine Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche oder den Companion-Connector.
+                Ihr Browser unterstützt aktuell keine Demo-Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche.
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -192,7 +192,7 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                 disabled={egkStatus === "ready" || isEgkConnecting}
                 onClick={() => void connectEgk()}
               >
-                {isEgkConnecting ? "Verbinde..." : "Leser verbinden"}
+                {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
               </Button>
               <Button
                 type="button"
@@ -200,7 +200,7 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                 disabled={egkStatus !== "ready" || isEgkReading}
                 onClick={() => void handleEgkScan()}
               >
-                {isEgkReading ? "Lese Karte..." : "Karte einlesen"}
+                {isEgkReading ? "Lese Demo-Karte..." : "Demo-Karte einlesen"}
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={handleEgkSimulation}>
                 Demo-Karte nutzen
@@ -209,7 +209,7 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
             {lastCard && (
               <div className="rounded-md border bg-background p-3 text-sm">
                 <p className="font-medium">
-                  Zuletzt gelesen: {lastCard.firstName} {lastCard.lastName}
+                  Zuletzt simuliert: {lastCard.firstName} {lastCard.lastName}
                 </p>
                 <p className="text-muted-foreground">
                   {lastCard.street}, {lastCard.zip} {lastCard.city} · {lastCard.insuranceProvider}

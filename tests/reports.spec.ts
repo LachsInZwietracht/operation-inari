@@ -195,6 +195,18 @@ test.describe("Berichte", () => {
     await expect(page.getByText(/Calcium/i).or(page.getByText(/Eisen/i)).first()).toBeVisible();
   });
 
+  test("shows bundled report templates in the report sidebar", async ({ page }) => {
+    await page.goto("/berichte");
+    await expect(page.getByRole("heading", { name: "Berichte" })).toBeVisible();
+
+    const templateCard = page.locator("[data-slot='card']").filter({ hasText: "Textvorlagen & Platzhalter" }).first();
+    await templateCard.scrollIntoViewIfNeeded();
+
+    await expect(templateCard.getByText("Kurzbericht Standard")).toBeVisible();
+    await expect(templateCard.getByText("Follow-up Coaching")).toBeVisible();
+    await expect(templateCard.getByText("Institution – Wochenreport")).toBeVisible();
+  });
+
   test("exports reports as PDF and CSV", async ({ page }) => {
     await page.goto("/berichte");
     await expect(page.getByRole("heading", { name: "Berichte" })).toBeVisible();

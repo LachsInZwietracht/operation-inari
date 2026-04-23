@@ -195,15 +195,15 @@ export default function PatientenPage() {
       const status = matchedPatient ? "matched" : "pending"
       const event = addEgkEvent({ card, patientId: matchedPatient?.id, source: mode === "demo" ? "simulation" : mode === "serial" ? "webserial" : "companion", status })
       if (matchedPatient) {
-        toast.success(`Karte ${matchedPatient.lastName} zugeordnet`)
+        toast.success(`Demo-Karte ${matchedPatient.lastName} zugeordnet`)
       } else {
-        toast.message("Neue eGK erfasst", {
+        toast.message("Neue Demo-eGK erfasst", {
           description: "Noch keinem Patienten zugewiesen",
         })
       }
       return event
     } catch (error) {
-      toast.error((error as Error)?.message ?? "Karte konnte nicht eingelesen werden")
+      toast.error((error as Error)?.message ?? "Demo-Karte konnte nicht eingelesen werden")
       return null
     }
   }
@@ -235,7 +235,7 @@ export default function PatientenPage() {
     const patient = patientMap.get(patientId)
     if (!patient) return
     assignEgkEvent(eventId, patient)
-    toast.success(`eGK ${patient.lastName} zugeordnet`)
+    toast.success(`Demo-eGK ${patient.lastName} zugeordnet`)
   }
 
   const handleGenerateMerge = async () => {
@@ -374,9 +374,9 @@ export default function PatientenPage() {
         <CardHeader className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" /> eGK-Intake
+              <CreditCard className="h-5 w-5" /> eGK-Demo
             </CardTitle>
-            <CardDescription>Direktlesung über Web Serial oder Companion-App.</CardDescription>
+            <CardDescription>Simulierte eGK-Daten für Tests und Produktdemos.</CardDescription>
           </div>
           <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
         </CardHeader>
@@ -389,7 +389,7 @@ export default function PatientenPage() {
               disabled={egkStatus === "ready" || isEgkConnecting}
               onClick={() => void connectEgk()}
             >
-              {isEgkConnecting ? "Verbinde..." : "Leser verbinden"}
+              {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
             </Button>
             <Button
               type="button"
@@ -398,10 +398,10 @@ export default function PatientenPage() {
               onClick={() => void handleEgkIntake("serial")}
             >
               <Cable className="mr-2 h-4 w-4" />
-              {isEgkReading ? "Lese..." : "Karte einlesen"}
+              {isEgkReading ? "Lese Demo..." : "Demo-Karte einlesen"}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => void handleEgkIntake("companion")}>
-              <Inbox className="mr-2 h-4 w-4" /> Companion Sync
+              <Inbox className="mr-2 h-4 w-4" /> Demo-Companion
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => void handleEgkIntake("demo")}>
               Demo-Karte
@@ -409,14 +409,14 @@ export default function PatientenPage() {
           </div>
           {!egkSupported && (
             <p className="text-sm text-muted-foreground">
-              Browser unterstützt kein Web Serial – Companion-App nutzen.
+              Browser unterstützt keine Demo-Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche.
             </p>
           )}
           {egkError && <p className="text-sm text-destructive">{egkError}</p>}
           {lastEgkCard && (
             <div className="rounded-md border bg-background p-3 text-sm">
               <p className="font-medium">
-                Zuletzt gelesen: {lastEgkCard.firstName} {lastEgkCard.lastName}
+                Zuletzt simuliert: {lastEgkCard.firstName} {lastEgkCard.lastName}
               </p>
               <p className="text-muted-foreground">
                 {lastEgkCard.street}, {lastEgkCard.zip} {lastEgkCard.city} · {lastEgkCard.insuranceProvider}
@@ -424,7 +424,7 @@ export default function PatientenPage() {
             </div>
           )}
           <div className="space-y-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Eingehende Karten</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Simulierte Kartenereignisse</p>
             {egkEvents.length > 0 ? (
               <div className="divide-y rounded-md border">
                 {egkEvents.slice(0, 4).map((event) => {
