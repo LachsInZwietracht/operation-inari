@@ -41,11 +41,12 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 import { usePatients } from "@/hooks/use-patients"
+import { useCounseling } from "@/hooks/use-counseling"
 import { useEgkScanner } from "@/hooks/use-egk-scanner"
 import { useEgkInbox } from "@/hooks/use-egk-inbox"
 import { useMailMergeHistory } from "@/hooks/use-mail-merge"
 import { useBirthdayReminders } from "@/hooks/use-birthday-reminders"
-import { COUNSELING_SESSIONS, MAIL_MERGE_PLACEHOLDERS, MAIL_MERGE_TEMPLATES } from "@/lib/mock-data"
+import { MAIL_MERGE_PLACEHOLDERS, MAIL_MERGE_TEMPLATES } from "@/lib/mock-data"
 import { INDICATION_OPTIONS } from "@/lib/constants"
 import type { EgkCardData, Patient, PatientMailMergeExportRequest } from "@/lib/types"
 import { downloadResponseFile } from "@/lib/utils"
@@ -54,6 +55,7 @@ const UNASSIGNED_EGK_VALUE = "__unassigned__"
 
 export default function PatientenPage() {
   const { patients } = usePatients()
+  const { sessions: counselingSessions } = useCounseling()
   const [search, setSearch] = useState("")
   const [indicationFilter, setIndicationFilter] = useState<string>("alle")
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(MAIL_MERGE_TEMPLATES[0]?.id ?? "")
@@ -86,14 +88,14 @@ export default function PatientenPage() {
 
   const lastSessionMap = useMemo(() => {
     const map = new Map<string, string>()
-    for (const session of COUNSELING_SESSIONS) {
+    for (const session of counselingSessions) {
       const existing = map.get(session.patientId)
       if (!existing || session.date > existing) {
         map.set(session.patientId, session.date)
       }
     }
     return map
-  }, [])
+  }, [counselingSessions])
 
   const filtered = useMemo(() => {
     return patients.filter((p) => {

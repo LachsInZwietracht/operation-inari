@@ -22,8 +22,9 @@ Product direction:
 - Comprehensive food database with **14,000+ foods** from official sources
 - Support for multiple food composition databases:
   - **BLS** (Bundeslebensmittelschluessel) — German standard
-  - **Souci-Fachmann-Kraut (SFK)** — detailed reference work (**Critical for scientific parity with EBISpro**)
-  - **Swiss Nutrient Database** — for Swiss market
+  - **Souci-Fachmann-Kraut (SFK)** — detailed reference work (**Scientific Gold Standard; critical for research parity**)
+  - **Austrian Food Data (ÖNWT)** — for the Austrian market
+  - **Swiss Nutrient Database** — for the Swiss market
   - **USDA National Nutrient Database** — for international / English-speaking clients
   - **Australian Food Composition Database (AFCD)** — for Australian market and English-language support
 - Up to **330+ nutrients** per food item, including:
@@ -216,5 +217,8 @@ Roadmap notes:
 ### Phase 5 - Ecosystem & Scaling
 1. **Manufacturer Live API:** Integrate Open Food Facts and clinical manufacturer feeds.
 2. Professional Recipe Exchange.
+3. Multilingual UI (German + English first, then French + Italian).
+4. Meal-Master recipe import.
+nal Recipe Exchange.
 3. Multilingual UI (German + English first, then French + Italian).
 4. Meal-Master recipe import.

@@ -28,6 +28,12 @@ type CreatedPatient = {
   insuranceProvider?: string;
 };
 
+type CreatedCounselingSession = {
+  id: string;
+  patientId: string;
+  sessionDate: string;
+};
+
 type WorkflowFixture = {
   linkId: string;
   submissionId: string;
@@ -92,6 +98,42 @@ async function deletePatientFixture(patientId: string) {
 
 async function deleteClinicalRows(table: string, patientId: string) {
   const { error } = await admin.from(table).delete().eq("patient_id", patientId);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function createCounselingSessionFixture(patientId: string, sessionDate: string): Promise<CreatedCounselingSession> {
+  const userId = await getTestUserId();
+  const sessionId = crypto.randomUUID();
+
+  const { error } = await admin.from("counseling_sessions").insert({
+    id: sessionId,
+    user_id: userId,
+    patient_id: patientId,
+    session_date: sessionDate,
+    duration_minutes: 60,
+    session_type: "Folgeberatung",
+    indication: "Adipositas",
+    content: `Beratung vom ${sessionDate}`,
+    timeline: [],
+    materials: [],
+    progress: [],
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: sessionId,
+    patientId,
+    sessionDate,
+  };
+}
+
+async function deleteCounselingSessionFixture(sessionId: string) {
+  const { error } = await admin.from("counseling_sessions").delete().eq("id", sessionId);
   if (error) {
     throw new Error(error.message);
   }
@@ -358,6 +400,40 @@ test.describe("Patient Management", () => {
     } finally {
       await deletePatientFixture(primary.id);
       await deletePatientFixture(secondary.id);
+    }
+  });
+
+  test("shows the latest counseling date from backend sessions on the patient card", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Counseling",
+      lastName: "Latest",
+      indication: "Adipositas",
+    });
+    const olderSession = await createCounselingSessionFixture(patient.id, "2026-04-10");
+    const newerSession = await createCounselingSessionFixture(patient.id, "2026-05-15");
+
+    try {
+      await openPatientList(page);
+      await expect(patientCard(page, patient)).toContainText("Letzte Beratung: 15.05.2026");
+    } finally {
+      await deleteCounselingSessionFixture(olderSession.id);
+      await deleteCounselingSessionFixture(newerSession.id);
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("does not show a counseling row on the patient card when no session exists", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Counseling",
+      lastName: "None",
+      indication: "Adipositas",
+    });
+
+    try {
+      await openPatientList(page);
+      await expect(patientCard(page, patient)).not.toContainText("Letzte Beratung:");
+    } finally {
+      await deletePatientFixture(patient.id);
     }
   });
 

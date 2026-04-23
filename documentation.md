@@ -123,6 +123,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.15 Patienten Mail Merge (`/patienten`)
 - **Component:** `app/(app)/patienten/page.tsx`
+  - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
   - The authoring UI for templates/placeholders is still client-side.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
   - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.

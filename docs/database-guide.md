@@ -566,14 +566,50 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - They wrap their client component in `<FoodsProvider>` to make data available via `useFoods()` hook
 - The layout provides a lightweight search index via `<FoodSearchProvider>` (see Data Access Architecture in Section 1)
 
-**What still uses mock data (intentionally):**
-| Mock constant | Reason to keep |
-|---|---|
-| `BRANDED_FOODS` | Placeholder branded products until OFF integration |
-| `NUTRIENT_DEFINITIONS` | Static reference data, stable across sources |
-| `FOOD_CATEGORIES` | UI category catalog, stable |
-| `FOOD_GROUPS` | BLS hierarchy, stable |
-| `REFERENCE_VALUES` | DGE values — in Supabase seed but UI still reads mock |
+**Current mock-data audit status (2026-04-23):**
+- `lib/mock-data/` still contains 34 TypeScript modules.
+- The runtime app still has 27 import sites from `@/lib/mock-data` outside tests/docs/seeds.
+- The food catalog migration itself is complete: there are still zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in app pages/components.
+
+**What still uses mock data at runtime today:**
+| Area | Current status | Representative files |
+|---|---|---|
+| Core food catalog | Migrated to Supabase | `lib/data/foods.ts`, `app/(app)/lebensmittel/**` |
+| Recipes | Supabase-first, falls back to mock recipes if remote data is unavailable/empty | `lib/data/recipes.ts` |
+| Reference values | Supabase-first, falls back to bundled reference standards | `lib/data/reference-values-client.ts` |
+| Branded foods | Mock fallback still present | `lib/data/foods.ts` |
+| Patient mail-merge templates / placeholders | Still seeded from mock data | `app/(app)/patienten/page.tsx` |
+| Patient counseling session summary on `/patienten` | Migrated to real `useCounseling()` session data | `app/(app)/patienten/page.tsx` |
+| eGK scanner / inbox / companion API | Demo data still powered by mock cards/events | `hooks/use-egk-scanner.ts`, `hooks/use-egk-inbox.ts`, `app/api/egk/route.ts` |
+| Report templates | Still seeded from mock templates, then extended in localStorage | `hooks/use-report-templates.ts` |
+| Food synonyms | Still seeded from mock synonyms, then extended in localStorage | `hooks/use-food-synonyms.ts` |
+| Nutrition plan presets | `DIET_LINES` still mock-backed | `app/(app)/ernaehrungsplan/ernaehrungsplan-client.tsx` |
+| Institution diet-form catalog / weekday labels | Still static mock/reference data | `app/(app)/institution/**`, `lib/institution-analytics.ts`, `lib/hospital-workflow.ts` |
+| Pediatric percentiles / lab parameter catalog | Still static mock/reference data | `components/pediatric-percentile-chart.tsx`, `components/patient-tabs.tsx` |
+| Knowledge library | Still mock-backed content | `app/(app)/wissen/wissen-client.tsx` |
+| Database update timeline | Still mock-backed release notes | `app/(app)/datenbank/page.tsx` |
+| Admin / security | Still mock-backed UI data | `app/(app)/admin/users/page.tsx` |
+| Pricing / billing | Still mock-backed UI data | `app/(app)/admin/tarife/page.tsx` |
+| Performance dashboard | Still mock-backed KPI data | `app/(app)/leistung/page.tsx` |
+
+**How to read the remaining mock data:**
+- **User-facing placeholder/demo data:** Admin, Tarife, Leistung, Wissen, Datenbank updates, eGK demo flows, `/patienten` mail-merge defaults, report-template seeds.
+- **Static reference/catalog data:** diet forms, weekday labels, percentiles, lab parameter definitions, bundled reference standards.
+- **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
+
+**Mock-data cleanup checklist:**
+- [ ] Replace `/patienten` mail-merge templates/placeholders with persisted template records or server-delivered defaults.
+- [x] Replace the mock `COUNSELING_SESSIONS` summary on `/patienten` with real counseling-session queries.
+- [ ] Decide whether eGK mock cards/events remain a permanent demo mode or move behind an explicit dev-only flag.
+- [ ] Replace mock report-template seeds with Supabase-backed defaults and migration logic.
+- [ ] Replace mock food-synonym seeds with seeded database rows or a curated bundled reference source.
+- [ ] Decide whether `DIET_LINES` should become persisted practice presets or remain static product defaults.
+- [ ] Move institution `DIET_FORMS` and weekday labels into a non-mock catalog module if they are intended to stay static.
+- [ ] Move pediatric percentiles and lab parameter definitions into explicit reference-data modules so they are no longer treated as “mock”.
+- [ ] Replace `/wissen` knowledge cards and sustainability examples with managed content or rename them explicitly as bundled content.
+- [ ] Replace `/datenbank` release notes with a real changelog source or mark the page as informational/demo-only.
+- [ ] Replace Admin, Tarife, and Leistung page datasets with real backends or mark those routes as demo-only until implemented.
+- [ ] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
 
 **What was migrated:**
 - Zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in any page or component
