@@ -27,10 +27,6 @@ export {
   DIGITAL_PROTOCOL_LINKS,
 } from "./patient-extensions";
 export { THERAPY_INTEGRATIONS } from "./therapy-integrations";
-export {
-  MAIL_MERGE_TEMPLATES,
-  MAIL_MERGE_PLACEHOLDERS,
-} from "./patient-mailings";
 export { EGK_CARDS, EGK_SCAN_EVENTS } from "./egk";
 export { GROWTH_PERCENTILES } from "./growth-percentiles";
 export { PATIENT_ALLERGENS } from "./patient-allergens";

@@ -437,6 +437,32 @@ test.describe("Patient Management", () => {
     }
   });
 
+  test("renders mail-merge defaults and inserts placeholders", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Mailing",
+      lastName: "Defaults",
+      indication: "Adipositas",
+    });
+
+    try {
+      await openPatientList(page);
+
+      const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
+      const templateSelect = mailMergeCard.getByRole("combobox").first();
+      await expect(templateSelect).toContainText("Termin-Nachverfolgung");
+      await templateSelect.click();
+      await expect(page.getByRole("option", { name: "Protokoll-Auswertung" })).toBeVisible();
+      await page.keyboard.press("Escape");
+
+      const bodyTextarea = mailMergeCard.locator("textarea").first();
+      await bodyTextarea.fill("Hallo ");
+      await page.getByRole("button", { name: "{{patient.firstName}}" }).click();
+      await expect(bodyTextarea).toHaveValue("Hallo {{patient.firstName}}");
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("creates a new patient", async ({ page }) => {
     await page.goto("/patienten/neu");
     await expect(page.getByRole("heading", { name: "Neuer Patient" })).toBeVisible();

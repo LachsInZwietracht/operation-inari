@@ -567,8 +567,8 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - The layout provides a lightweight search index via `<FoodSearchProvider>` (see Data Access Architecture in Section 1)
 
 **Current mock-data audit status (2026-04-23):**
-- `lib/mock-data/` still contains 34 TypeScript modules.
-- The runtime app still has 27 import sites from `@/lib/mock-data` outside tests/docs/seeds.
+- `lib/mock-data/` still contains 33 TypeScript modules.
+- The runtime app still has 26 import sites from `@/lib/mock-data` outside tests/docs/seeds.
 - The food catalog migration itself is complete: there are still zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in app pages/components.
 
 **What still uses mock data at runtime today:**
@@ -578,7 +578,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Recipes | Supabase-first, falls back to mock recipes if remote data is unavailable/empty | `lib/data/recipes.ts` |
 | Reference values | Supabase-first, falls back to bundled reference standards | `lib/data/reference-values-client.ts` |
 | Branded foods | Mock fallback still present | `lib/data/foods.ts` |
-| Patient mail-merge templates / placeholders | Still seeded from mock data | `app/(app)/patienten/page.tsx` |
+| Patient mail-merge templates / placeholders | Moved to bundled product defaults outside `lib/mock-data` | `lib/patient-mailings.ts`, `app/(app)/patienten/page.tsx` |
 | Patient counseling session summary on `/patienten` | Migrated to real `useCounseling()` session data | `app/(app)/patienten/page.tsx` |
 | eGK scanner / inbox / companion API | Demo data still powered by mock cards/events | `hooks/use-egk-scanner.ts`, `hooks/use-egk-inbox.ts`, `app/api/egk/route.ts` |
 | Report templates | Still seeded from mock templates, then extended in localStorage | `hooks/use-report-templates.ts` |
@@ -593,12 +593,12 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Performance dashboard | Still mock-backed KPI data | `app/(app)/leistung/page.tsx` |
 
 **How to read the remaining mock data:**
-- **User-facing placeholder/demo data:** Admin, Tarife, Leistung, Wissen, Datenbank updates, eGK demo flows, `/patienten` mail-merge defaults, report-template seeds.
+- **User-facing placeholder/demo data:** Admin, Tarife, Leistung, Wissen, Datenbank updates, eGK demo flows, report-template seeds.
 - **Static reference/catalog data:** diet forms, weekday labels, percentiles, lab parameter definitions, bundled reference standards.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
 
 **Mock-data cleanup checklist:**
-- [ ] Replace `/patienten` mail-merge templates/placeholders with persisted template records or server-delivered defaults.
+- [x] Move `/patienten` mail-merge templates/placeholders to non-mock bundled product defaults.
 - [x] Replace the mock `COUNSELING_SESSIONS` summary on `/patienten` with real counseling-session queries.
 - [ ] Decide whether eGK mock cards/events remain a permanent demo mode or move behind an explicit dev-only flag.
 - [ ] Replace mock report-template seeds with Supabase-backed defaults and migration logic.
