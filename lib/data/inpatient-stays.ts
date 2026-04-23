@@ -3,7 +3,6 @@ import { cache } from "react";
 import type { InpatientStay } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
-import { INPATIENT_STAYS } from "@/lib/mock-data";
 
 interface InpatientStayRow {
   id: string;
@@ -53,13 +52,9 @@ export const fetchInpatientStays = cache(async (): Promise<InpatientStay[]> => {
     }
 
     const rows = (data ?? []) as InpatientStayRow[];
-    if (rows.length === 0) {
-      return INPATIENT_STAYS;
-    }
-
     return rows.map((row) => mapInpatientStayRow(row));
   } catch (error) {
     console.warn("Failed to fetch inpatient stays from Supabase:", error);
-    return INPATIENT_STAYS;
+    return [];
   }
 });

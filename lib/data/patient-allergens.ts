@@ -3,7 +3,6 @@ import { cache } from "react";
 import type { PatientAllergenEntry } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
-import { PATIENT_ALLERGENS } from "@/lib/mock-data";
 
 interface PatientAllergenRow {
   id: string;
@@ -45,13 +44,9 @@ export const fetchPatientAllergens = cache(async (): Promise<PatientAllergenEntr
     }
 
     const rows = (data ?? []) as PatientAllergenRow[];
-    if (rows.length === 0) {
-      return PATIENT_ALLERGENS;
-    }
-
     return rows.map((row) => mapPatientAllergenRow(row));
   } catch (error) {
     console.warn("Failed to fetch patient allergens from Supabase:", error);
-    return PATIENT_ALLERGENS;
+    return [];
   }
 });

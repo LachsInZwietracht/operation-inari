@@ -5,7 +5,6 @@ import type { InstitutionMenu, MenuCycleLength } from "@/lib/types/institution";
 import type { MealSlotType } from "@/lib/types";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
-import { INSTITUTION_MENUS } from "@/lib/mock-data";
 
 interface FetchMenuPlansOptions {
   supabase?: SupabaseClient;
@@ -18,18 +17,32 @@ async function resolveClient(supabase?: SupabaseClient) {
   return createServerSupabaseClient();
 }
 
+async function resolveUserId(client: SupabaseClient, explicitUserId?: string | null) {
+  if (explicitUserId !== undefined) {
+    return explicitUserId;
+  }
+
+  const { data, error } = await client.auth.getUser();
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.user?.id ?? null;
+}
+
 export const fetchMenuPlans = cache(async (
   options: FetchMenuPlansOptions = {}
 ): Promise<InstitutionMenu[]> => {
   try {
     const client = await resolveClient(options.supabase);
+    const userId = await resolveUserId(client, options.userId);
     let query = client
       .from("institution_menus")
       .select("id, name, cycle_length, start_date, diet_form_ids, status, created_at, updated_at, institution_menu_slots(week_number, day_of_week, diet_form_id, slot_type, recipe_id, portion_count)")
       .order("created_at", { ascending: false });
 
-    if (options.userId) {
-      query = query.or(`user_id.eq.${options.userId},user_id.is.null`);
+    if (userId) {
+      query = query.or(`user_id.eq.${userId},user_id.is.null`);
     } else {
       query = query.is("user_id", null);
     }
@@ -49,7 +62,6 @@ export const fetchMenuPlans = cache(async (
     }
 
     const rows = data ?? [];
-    if (rows.length === 0 && !options.userId) return INSTITUTION_MENUS;
 
     return rows.map((row: Record<string, unknown>) => {
       // Reconstruct the deep nested structure
@@ -100,7 +112,6 @@ export const fetchMenuPlans = cache(async (
     });
   } catch (error) {
     console.warn("Failed to fetch menu plans from Supabase:", error);
-    if (!options.userId) return INSTITUTION_MENUS;
     return [];
   }
 });

@@ -3,7 +3,6 @@ import { cache } from "react";
 import type { MealOrder } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
-import { MEAL_ORDERS } from "@/lib/mock-data";
 
 interface MealOrderRow {
   id: string;
@@ -65,13 +64,9 @@ export const fetchMealOrders = cache(async (): Promise<MealOrder[]> => {
     }
 
     const rows = (data ?? []) as MealOrderRow[];
-    if (rows.length === 0) {
-      return MEAL_ORDERS;
-    }
-
     return rows.map((row) => mapMealOrderRow(row));
   } catch (error) {
     console.warn("Failed to fetch meal orders from Supabase:", error);
-    return MEAL_ORDERS;
+    return [];
   }
 });

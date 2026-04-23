@@ -50,8 +50,7 @@ import {
 } from "@/components/ui/table";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { ALLERGEN_MAP } from "@/lib/allergen-constants";
-import { DIET_FORMS, INSTITUTION_MENUS } from "@/lib/mock-data";
-import { RECIPES } from "@/lib/mock-data/recipes";
+import { DIET_FORMS } from "@/lib/mock-data";
 import {
   buildKitchenSummary,
   buildMealCandidates,
@@ -91,20 +90,6 @@ const ORDER_STATUS_CONFIG: Record<MealOrder["status"], { label: string; classNam
 };
 
 const MEAL_SLOTS: MealSlotType[] = ["fruehstueck", "mittagessen", "abendessen"];
-const FALLBACK_SLOT_RECIPES: Record<MealSlotType, string[]> = {
-  fruehstueck: ["recipe_haferbrei", "recipe_vollkornbrot_quark"],
-  mittagessen: [
-    "recipe_kartoffelsuppe",
-    "recipe_gemuese_reis",
-    "recipe_haehnchen_salat",
-    "recipe_lachs_brokkoli",
-    "recipe_linseneintopf",
-    "recipe_pasta_tomate",
-  ],
-  abendessen: ["recipe_vollkornbrot_quark", "recipe_linseneintopf", "recipe_kartoffelsuppe"],
-  snack_vormittag: [],
-  snack_nachmittag: [],
-};
 
 interface KrankenhausPageClientProps {
   recipes: Recipe[];
@@ -144,46 +129,9 @@ function getDietBadges(dietFormIds: string[]) {
   });
 }
 
-function buildFallbackCandidates(
-  stay: InpatientStay,
-  mealSlot: MealSlotType,
-  recipes: Recipe[],
-  allergenIds: string[],
-): MealCandidate[] {
-  const recipeMap = new Map(recipes.map((recipe) => [recipe.id, recipe]));
-  const fallbackIds = FALLBACK_SLOT_RECIPES[mealSlot] ?? [];
-
-  return fallbackIds
-    .map((recipeId) => recipeMap.get(recipeId))
-    .filter((recipe): recipe is Recipe => Boolean(recipe))
-    .map((recipe) => {
-      const blockedReasons: string[] = [];
-      for (const allergenId of allergenIds) {
-        const definition = ALLERGEN_MAP.get(allergenId);
-        if (!definition) continue;
-        if (definition.foodMatchTokens.some((token) =>
-          (recipe.allergens ?? []).some((entry) => entry.toLowerCase().includes(token.toLowerCase())),
-        )) {
-          blockedReasons.push(`Allergenkonflikt: ${definition.label}`);
-        }
-      }
-      return {
-        recipeId: recipe.id,
-        recipeName: recipe.name,
-        dietFormIds: stay.dietFormIds,
-        blockedReasons,
-        isSelectable: blockedReasons.length === 0,
-      };
-    });
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPageClientProps) {
   const recipeSource = useMemo(() => {
     const merged = new Map<string, Recipe>();
-    for (const recipe of RECIPES) {
-      merged.set(recipe.id, recipe);
-    }
     for (const recipe of recipes) {
       merged.set(recipe.id, recipe);
       if (recipe.legacyId) {
@@ -192,7 +140,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
     }
     return Array.from(new Set(merged.values()));
   }, [recipes]);
-  const menuSource = INSTITUTION_MENUS;
+  const menuSource = initialMenus;
   const { patients } = usePatients();
   const { getForPatient } = usePatientAllergens();
   const { stays, addStay, updateStay, isLoadingRemote: staysLoading } = useInpatientStays();
@@ -340,14 +288,11 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
       mealSlot: selectedMealSlot,
       allergens: nextAllergens,
     });
-    const finalCandidates = nextCandidates.length > 0
-      ? nextCandidates
-      : buildFallbackCandidates(stay, selectedMealSlot, recipeSource, nextAllergens.map((entry) => entry.allergenId));
     setSelectionStayId(stay.id);
     setSelectedCandidateId(existingOrder?.recipeId ?? "");
     setSpecialInstructions(existingOrder?.specialInstructions ?? "");
     setSelectionAllergens(nextAllergens);
-    setSelectionCandidates(finalCandidates);
+    setSelectionCandidates(nextCandidates);
   }
 
   function closeSelectionDialog() {
@@ -892,7 +837,9 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
               {selectionCandidates.length === 0 ? (
                 <Card>
                   <CardContent className="py-8 text-center text-muted-foreground">
-                    Für dieses Servicefenster gibt es im aktiven Menü keine verfügbaren Optionen.
+                    {!activeMenu
+                      ? "Kein aktiver Menüplan verfügbar. Aktivieren Sie zuerst einen Menüplan."
+                      : "Für dieses Servicefenster gibt es im aktiven Menü keine verfügbaren Optionen."}
                   </CardContent>
                 </Card>
               ) : (

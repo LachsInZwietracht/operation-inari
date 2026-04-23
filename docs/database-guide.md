@@ -574,12 +574,11 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | `FOOD_CATEGORIES` | UI category catalog, stable |
 | `FOOD_GROUPS` | BLS hierarchy, stable |
 | `REFERENCE_VALUES` | DGE values — in Supabase seed but UI still reads mock |
-| `INSTITUTION_MENUS` | Institution menu defaults — Supabase-backed with mock fallback |
 
 **What was migrated:**
 - Zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in any page or component
 - `useCustomFoods(baseFoods)` loads local custom-food migration candidates first, then replaces them with canonical Supabase rows after authenticated sync
-- `useInstitutionMenu(initialMenus, recipes)` reads foods from context, derives categories from `food.categoryId`. Supports full CRUD (create/delete/status) with Supabase persistence and localStorage fallback. Server fetcher `fetchMenuPlans()` falls back to `INSTITUTION_MENUS` mock data when Supabase is empty or unavailable.
+- `useInstitutionMenu(initialMenus, recipes)` reads foods from context, derives categories from `food.categoryId`. Supports full CRUD (create/delete/status) with Supabase persistence and localStorage fallback. Server fetchers now return authenticated Supabase rows (plus shared rows where applicable) or `[]`, never canned institution defaults.
 - Food detail pages use `fetchFoodById()` for single-record Supabase queries
 - Supabase-backed user hooks no longer seed runtime state from `lib/mock-data`; they initialize from localStorage migration candidates only, then merge real remote rows after sync.
 - This rule now covers patients, practice appointments/invoices, protocols, counseling sessions/templates, screenings, digital protocol links, inpatient stays, meal orders, diagnoses, activities, anthropometrics, lab values, medications, PROCAM, therapy settings/integrations, and patient allergens.

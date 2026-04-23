@@ -173,13 +173,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.19 Einrichtung – Menüplanung (`/institution/menueplaene`)
 - **Route:** `app/(app)/institution/menueplaene/page.tsx` (server) → `menueplaene-client.tsx` (client).
-- **Server data:** `fetchMenuPlans()` from `lib/data/menu-plans.ts` fetches from Supabase with mock-data fallback when no `userId` or empty result.
+- **Server data:** `fetchMenuPlans()` from `lib/data/menu-plans.ts` reads the authenticated user's Supabase menus (plus any shared `user_id IS NULL` rows) and otherwise returns an empty list.
 - **Hook:** `useInstitutionMenu(initialMenus, recipes)` in `hooks/use-institution-menu.ts`. Follows the Supabase-first + localStorage fallback pattern.
   - **CRUD:** `createMenu(params)` generates a UUID and persists locally + Supabase. `deleteMenu(menuId)` removes from state and calls `deleteMenuPlanClient`. `setMenuStatus(menuId, status)` toggles between `draft`/`active`/`archived`.
   - **Editing:** `assignRecipe`, `removeRecipe`, `updatePortionCount` modify slots in the nested week→day→dietMenu→slot structure and sync to Supabase.
   - **Derived data:** `generateProductionList(menuId, week, day)` and `generateShoppingList(menuId, week)` compute ingredient aggregations with category-based cost estimates from the food database.
 - **Client data layer:** `lib/data/menu-plans-client.ts` provides `fetchMenuPlansClient`, `persistMenuPlan`, and `deleteMenuPlanClient` for browser-side Supabase operations.
 - **UI features:**
+  - **Empty state:** When no menu exists yet, the page shows an explicit onboarding card instead of pre-populated demo plans.
   - **Drag-and-drop planner:** Recipes are dragged from a Sheet sidebar (`Rezeptbibliothek`) into a 7-day × 3-meal grid per diet form tab. Drop triggers a portion count dialog.
   - **Create dialog:** Name, cycle length (1/2/4 weeks), start date, and multi-checkbox diet form selection.
   - **Delete:** AlertDialog confirmation, disabled when only one menu remains.
@@ -208,12 +209,12 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Selection engine:** `lib/hospital-workflow.ts`.
   - Resolves service candidates for a selected date and meal slot.
   - Blocks options that violate assigned diet forms or patient allergen entries.
-  - Falls back to the bundled institutional cycle and recipe library for demo-safe operation when remote menu or recipe records are incomplete.
 - **Workflow UI:**
   - Assign a real patient to station / room / bed with one or more diet forms.
   - Open a staff-side selection dialog for breakfast, lunch, or dinner.
   - Persist exactly one order per inpatient stay and service window.
   - Update order state from `pending` to `confirmed` to `delivered`.
+- **Empty state behavior:** Without an active menu or active stays, the route shows explicit empty states and disables meal selection instead of synthesizing demo service options.
 - **Kitchen output:** The `Küche` tab aggregates saved service orders by recipe, patient list, and special instructions instead of relying on planned menu portions alone.
 - **Tray cards:** `/institution/krankenhaus/tablettenkarten` renders a print view from saved `meal_orders` using `date`, `mealSlot`, and `station` query params.
 
@@ -235,7 +236,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - `Menüwahl` shows most-ordered recipes plus real order-fulfillment status analytics instead of mock recipe ratings.
   - `Kosten` charts cycle-wide daily cost and per-portion cost from menu-derived shopping math.
   - `Übersicht` summarizes restriction-heavy cases, allergen profiles, pending orders, and cycle status from the same shared dataset.
-- **Fallback behavior:** The pages no longer own local mock analytics datasets. They render from shared derived data and show an empty state when no active cycle is available.
+- **Fallback behavior:** The pages no longer own local mock analytics datasets or server-side canned institution records. They render from shared derived data and show an empty state when no active cycle is available.
 
 ### 4.22 Patient Workflow Hub (`/patienten/[id]`)
 - **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab before `Stammdaten`.

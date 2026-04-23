@@ -852,6 +852,19 @@ export function MenueplaenePageClient({ recipes, initialMenus }: MenueplaenePage
         })}
       </div>
 
+      {menus.length === 0 && (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Noch keine Menüpläne vorhanden.</p>
+              <p className="text-sm text-muted-foreground">
+                Legen Sie Ihren ersten Menüplan an, um Wochenplanung, Produktion und Einkauf zu starten.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Main tabbed content */}
       {activeMenu && (
         <Card>
