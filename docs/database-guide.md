@@ -586,14 +586,15 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Nutrition plan presets | `DIET_LINES` still mock-backed | `app/(app)/ernaehrungsplan/ernaehrungsplan-client.tsx` |
 | Institution diet-form catalog / weekday labels | Still static mock/reference data | `app/(app)/institution/**`, `lib/institution-analytics.ts`, `lib/hospital-workflow.ts` |
 | Pediatric percentiles / lab parameter catalog | Still static mock/reference data | `components/pediatric-percentile-chart.tsx`, `components/patient-tabs.tsx` |
-| Knowledge library | Still mock-backed content | `app/(app)/wissen/wissen-client.tsx` |
-| Database update timeline | Still mock-backed release notes | `app/(app)/datenbank/page.tsx` |
-| Admin / security | Still mock-backed UI data | `app/(app)/admin/users/page.tsx` |
+| Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
+| Database status | Live `data_sources` catalog, no editorial changelog yet | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts` |
+| Admin / security | Explicit preview/read-only concept page | `app/(app)/admin/users/page.tsx`, `lib/content/ops-preview.ts` |
 | Pricing / billing | Still mock-backed UI data | `app/(app)/admin/tarife/page.tsx` |
-| Performance dashboard | Still mock-backed KPI data | `app/(app)/leistung/page.tsx` |
+| Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 
 **How to read the remaining mock data:**
-- **User-facing placeholder/demo data:** Admin, Tarife, Leistung, Wissen, Datenbank updates, explicitly labeled eGK demo flows.
+- **User-facing placeholder/demo data:** Tarife and explicitly labeled eGK demo flows.
+- **Bundled product/reference content:** Wissen cards, Admin preview content, Leistung validation references.
 - **Static reference/catalog data:** diet forms, weekday labels, percentiles, lab parameter definitions, bundled reference standards.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
 
@@ -606,9 +607,10 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [ ] Decide whether `DIET_LINES` should become persisted practice presets or remain static product defaults.
 - [ ] Move institution `DIET_FORMS` and weekday labels into a non-mock catalog module if they are intended to stay static.
 - [ ] Move pediatric percentiles and lab parameter definitions into explicit reference-data modules so they are no longer treated as “mock”.
-- [ ] Replace `/wissen` knowledge cards and sustainability examples with managed content or rename them explicitly as bundled content.
-- [ ] Replace `/datenbank` release notes with a real changelog source or mark the page as informational/demo-only.
-- [ ] Replace Admin, Tarife, and Leistung page datasets with real backends or mark those routes as demo-only until implemented.
+- [x] Reclassify `/wissen` knowledge cards as bundled product content and keep analytics live/runtime-backed.
+- [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog and an informational changelog note.
+- [x] Rework Admin and Leistung pages into truthful preview/reference surfaces instead of fake live operational backends.
+- [ ] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
 - [ ] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
 
 **What was migrated:**

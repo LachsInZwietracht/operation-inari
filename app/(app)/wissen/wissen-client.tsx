@@ -6,11 +6,10 @@ import { PageHeader } from "@/components/page-header"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
-import { KNOWLEDGE_CARDS, SUSTAINABILITY_METRICS } from "@/lib/mock-data"
+import { KNOWLEDGE_LIBRARY_DEFAULTS } from "@/lib/content/knowledge-library"
 import { calculateRecipeNutrients, calculatePerServing, scaleNutrients, sumNutrients } from "@/lib/nutrients"
 import { calculateProdScore } from "@/lib/prodi-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
@@ -20,7 +19,7 @@ import type { DailyMealPlan, MealEntry, NutrientValue, Recipe } from "@/lib/type
 import { useFoods } from "@/components/foods-provider"
 import { createRecipeLookup } from "@/lib/recipes"
 
-const knowledgeCategories = Array.from(new Set(KNOWLEDGE_CARDS.map((card) => card.category)))
+const knowledgeCategories = Array.from(new Set(KNOWLEDGE_LIBRARY_DEFAULTS.map((card) => card.category)))
 const categoryMap = new Map(FOOD_CATEGORIES.map((category) => [category.id, category.name]))
 
 interface WissenPageClientProps {
@@ -59,7 +58,7 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
   )
 
   const filteredCards = useMemo(() => {
-    return KNOWLEDGE_CARDS.filter((card) => {
+    return KNOWLEDGE_LIBRARY_DEFAULTS.filter((card) => {
       const matchesCategory = category === "all" || card.category === category
       if (!matchesCategory) return false
       if (!query) return true
@@ -103,14 +102,9 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
     <div className="space-y-6">
       <PageHeader
         title="Wissensbibliothek"
-        description="Lexikon, Qualitätskennzahlen und Nachhaltigkeit an einem Ort"
-        helpText="Ihr Nachschlagewerk für Ernährungswissen. Finden Sie Fachlexikon-Einträge, Qualitätskennzahlen und Nachhaltigkeitsinformationen – ideal als Beratungsgrundlage."
-      >
-        <Button variant="outline" size="sm">
-          <BookOpenCheck className="mr-2 h-4 w-4" />
-          Neue Notiz
-        </Button>
-      </PageHeader>
+        description="Bundled Fachkarten plus live berechnete Kennzahlen aus Ihren Daten"
+        helpText="Die Fachkarten in dieser Ansicht sind aktuell gebuendelte Produktinhalte. PRODIscore- und Nachhaltigkeitskarten werden dagegen live aus Lebensmitteln, Rezepten und gespeicherten Plaenen berechnet."
+      />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card className="lg:col-span-2">
@@ -139,9 +133,16 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
                 </SelectContent>
               </Select>
             </div>
-            <CardTitle className="text-base">Lexikon & Ressourcen</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <BookOpenCheck className="h-5 w-5 text-muted-foreground" />
+                Fachkarten & Ressourcen
+              </CardTitle>
+              <Badge variant="secondary">Bundled Defaults</Badge>
+            </div>
             <CardDescription>
-              Strukturierte Wissenskarten für Beratung, Therapie und interne SOPs.
+              Strukturierte Wissenskarten fuer Beratung, Therapie und interne SOPs. Diese Inhalte werden derzeit nicht
+              ueber ein CMS oder eine Datenbank gepflegt.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -163,17 +164,18 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
-                      <p className="text-muted-foreground line-clamp-3">{card.summary}</p>
-                      <div className="flex flex-wrap gap-1">
-                        {card.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-[11px]">
-                            {tag}
-                          </Badge>
-                        ))}
+                        <p className="text-muted-foreground line-clamp-3">{card.summary}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {card.tags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-[11px]">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      <div className="flex items-center gap-2 text-sm text-primary">
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                        Gebuendelte Referenzkarte
                       </div>
-                      <Button size="sm" variant="ghost" className="px-0 text-primary">
-                        Karte öffnen <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-                      </Button>
                     </CardContent>
                   </Card>
                 ))}
@@ -184,10 +186,13 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Award className="text-primary h-5 w-5" /> PRODIscore Monitor
-            </CardTitle>
-            <CardDescription>Lebensmittel- und Rezeptqualität im Überblick.</CardDescription>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Award className="text-primary h-5 w-5" /> PRODIscore Monitor
+              </CardTitle>
+              <Badge>Live-Analyse</Badge>
+            </div>
+            <CardDescription>Lebensmittel- und Rezeptqualitaet aus aktuell geladenen Runtime-Daten.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {recipeScore && (
@@ -238,7 +243,7 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
         <Card>
           <CardHeader>
             <CardTitle>Treiber des PRODIscore</CardTitle>
-            <CardDescription>Positive und kritische Faktoren für das Referenzrezept.</CardDescription>
+            <CardDescription>Positive und kritische Faktoren fuer das aktuelle Referenzrezept.</CardDescription>
           </CardHeader>
           <CardContent>
             {recipeScore ? (
@@ -284,9 +289,12 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Leaf className="text-emerald-500 h-5 w-5" /> Nachhaltigkeits-KPIs
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Leaf className="text-emerald-500 h-5 w-5" /> Nachhaltigkeits-KPIs
+              </CardTitle>
+              <Badge>Live-Analyse</Badge>
+            </div>
             <CardDescription>Aus dem letzten synchronisierten Tagesplan.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -333,20 +341,40 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
 
       <Card>
         <CardHeader>
-          <CardTitle>CO₂-Dashboard</CardTitle>
-          <CardDescription>Aggregierte Kennzahlen aus Wissenskarten & Speiseplänen.</CardDescription>
+          <CardTitle>Live-Uebersicht</CardTitle>
+          <CardDescription>Zusammenfassung der aktuell geladenen Lebensmittel-, Rezept- und Planbasis.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-4">
-          {SUSTAINABILITY_METRICS.map((metric) => (
+          {[
+            {
+              id: "foods",
+              label: "Geladene Lebensmittel",
+              value: formatNumber(foods.length),
+              helper: "Aktuelle Runtime-Basis fuer Suche und Analysen",
+            },
+            {
+              id: "recipes",
+              label: "Rezepte",
+              value: formatNumber(recipes.length),
+              helper: "Supabase plus vorhandene Fallback-Daten",
+            },
+            {
+              id: "plans",
+              label: "Ernaehrungsplaene",
+              value: formatNumber(mealPlans.length),
+              helper: "Fuer Analyse und Berichtsauswahl verfuegbar",
+            },
+            {
+              id: "co2",
+              label: "Letzter CO2-Fussabdruck",
+              value: sustainability ? `${formatNumber(sustainability.totalCo2, 2)} kg` : "–",
+              helper: sustainability ? "Abgeleitet aus dem letzten geladenen Tagesplan" : "Kein analysierbarer Plan vorhanden",
+            },
+          ].map((metric) => (
             <div key={metric.id} className="rounded-lg border p-4">
               <p className="text-muted-foreground text-xs uppercase">{metric.label}</p>
-              <p className="text-2xl font-semibold">
-                {formatNumber(metric.value, metric.unit === "%" ? 0 : 2)} {metric.unit}
-              </p>
-              <p className="text-xs text-emerald-600">
-                {metric.change >= 0 ? "+" : ""}
-                {metric.change}% vs. Vormonat
-              </p>
+              <p className="text-2xl font-semibold">{metric.value}</p>
+              <p className="text-xs text-muted-foreground">{metric.helper}</p>
             </div>
           ))}
         </CardContent>

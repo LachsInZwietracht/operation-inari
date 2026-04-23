@@ -1,117 +1,136 @@
-"use client";
+import { Database, Globe, Scale, TestTube2 } from "lucide-react"
 
-import { useState } from "react";
-import { Filter } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { FOOD_SOURCES } from "@/lib/data/food-sources";
-import { FOOD_DATABASE_UPDATES } from "@/lib/mock-data";
-import { formatNumber } from "@/lib/format";
+import { PageHeader } from "@/components/page-header"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { fetchDataSources } from "@/lib/data/data-sources"
+import { formatDate, formatNumber } from "@/lib/format"
 
-export default function DatenbankPage() {
-  const [sourceFilter, setSourceFilter] = useState("all");
+export default async function DatenbankPage() {
+  const { sources, error } = await fetchDataSources()
 
-  const filteredUpdates = FOOD_DATABASE_UPDATES.filter((update) =>
-    sourceFilter === "all" ? true : update.sourceId === sourceFilter,
-  );
+  const totalRecords = sources.reduce((sum, source) => sum + (source.recordCount ?? 0), 0)
+  const latestImport = sources[0]?.importedAt ?? null
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Datenbank-Updates"
-        description="Versionshistorie, Release Notes und Quellenfilter"
-        helpText="Hier sehen Sie alle Aktualisierungen der Lebensmitteldatenbanken. Verfolgen Sie Änderungen im BLS und weiteren Quellen und filtern Sie nach Datenbank oder Zeitraum."
+        title="Datenbankstatus"
+        description="Live geladener Quellenkatalog aus Supabase statt statischer Release-Notizen"
+        helpText="Diese Ansicht zeigt reale Datensaetze aus der Tabelle `data_sources`: Version, Importzeitpunkt, Datentiefe und Lizenz. Ein redaktioneller Changelog fuer Datenbankupdates existiert derzeit noch nicht."
       />
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-full md:w-[260px]">
-            <SelectValue placeholder="Quelle filtern" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alle Quellen</SelectItem>
-            {FOOD_SOURCES.map((source) => (
-              <SelectItem key={source.id} value={source.id}>
-                {source.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-sm text-muted-foreground">
-          <Filter className="mr-1 inline h-4 w-4" /> {filteredUpdates.length} Releases angezeigt
-        </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="flex items-center justify-between gap-4 pt-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Aktive Quellen</p>
+              <p className="text-2xl font-semibold">{sources.length}</p>
+              <p className="text-xs text-muted-foreground">Aus `data_sources` geladen</p>
+            </div>
+            <div className="rounded-full bg-muted p-2">
+              <Database className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between gap-4 pt-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Erfasste Datensaetze</p>
+              <p className="text-2xl font-semibold">{formatNumber(totalRecords)}</p>
+              <p className="text-xs text-muted-foreground">Summe der gemeldeten Record Counts</p>
+            </div>
+            <div className="rounded-full bg-muted p-2">
+              <TestTube2 className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between gap-4 pt-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Letzter Import</p>
+              <p className="text-2xl font-semibold">{latestImport ? formatDate(latestImport) : "–"}</p>
+              <p className="text-xs text-muted-foreground">Neuester Zeitstempel aus dem Quellenkatalog</p>
+            </div>
+            <div className="rounded-full bg-muted p-2">
+              <Globe className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {filteredUpdates.map((update) => {
-          const source = FOOD_SOURCES.find((s) => s.id === update.sourceId);
-          return (
-            <Card key={update.id} className="border-l-4 border-l-primary">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between text-base">
-                  Version {update.version}
-                  <Badge variant="secondary">{source?.name ?? update.sourceId}</Badge>
-                </CardTitle>
-                <CardDescription>{update.releaseDate}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">{update.notes}</p>
-                <ul className="list-inside list-disc text-sm">
-                  {update.highlights.map((highlight) => (
-                    <li key={highlight}>{highlight}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {error ? (
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-base">Quellenkatalog derzeit nicht verfuegbar</CardTitle>
+            <CardDescription>
+              Die Seite faellt bewusst nicht auf statische Release-Notizen zurueck, wenn Supabase-Daten fehlen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">{error}</CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Quelle & Abdeckung</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Katalogstatus</CardTitle>
+            <Badge>Live</Badge>
+          </div>
+          <CardDescription>Versionen, Importzeitpunkte, Datentiefe und Lizenzen pro Quelle.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          {FOOD_SOURCES.map((source) => (
-            <div key={source.id} className="rounded-lg border p-3 text-sm">
-              <p className="font-semibold">{source.name}</p>
-              <p className="text-xs text-muted-foreground">Version {source.version}</p>
-              <p className="mt-2 text-muted-foreground">{source.coverage}</p>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {sources.map((source) => (
+            <div key={source.id} className="rounded-lg border p-4 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{source.name}</p>
+                  <p className="text-xs text-muted-foreground">Quelle: {source.id}</p>
+                </div>
+                <Badge variant="outline">v{source.version}</Badge>
+              </div>
+              <div className="mt-4 space-y-2 text-muted-foreground">
+                <p>Importiert: {formatDate(source.importedAt)}</p>
+                <p>Datensaetze: {source.recordCount != null ? formatNumber(source.recordCount) : "nicht hinterlegt"}</p>
+                <p>Naehrstoffe: {source.nutrientCount != null ? formatNumber(source.nutrientCount) : "nicht hinterlegt"}</p>
+                <p>Lizenz: {source.license ?? "nicht hinterlegt"}</p>
+                {source.url ? (
+                  <a className="text-primary underline-offset-4 hover:underline" href={source.url} rel="noreferrer" target="_blank">
+                    Quelle oeffnen
+                  </a>
+                ) : null}
+              </div>
             </div>
           ))}
+          {sources.length === 0 && !error ? (
+            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+              Keine Datenquellen gefunden. Fuehren Sie die Seed-/Migrationsschritte fuer `data_sources` aus.
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Angekündigte Releases</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-muted-foreground" />
+              Hinweis zur Aenderungshistorie
+            </CardTitle>
+            <Badge variant="secondary">Informational</Badge>
+          </div>
+          <CardDescription>Es gibt derzeit keinen separaten redaktionellen Release-Feed fuer Datenbankupdates.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          {FOOD_SOURCES.slice(0, 3).map((source) => (
-            <div key={source.id} className="rounded-md bg-muted/50 p-3 text-sm">
-              <p className="font-semibold">{source.name}</p>
-              <p className="text-xs text-muted-foreground">Nächstes Update Q{formatNumber(Math.random() * 4 + 1, 0)} / {new Date().getFullYear()}</p>
-              <p className="mt-1 text-muted-foreground">
-                Fokus: Erweiterte Mikronährstoffe & CO₂-Daten
-              </p>
-            </div>
-          ))}
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Diese Seite zeigt den produktiven Quellenkatalog. Wenn kuenftig echte Import-Changelogs benoetigt werden,
+            sollten sie in einer eigenen Tabelle oder einem CMS gepflegt werden statt ueber statische Mock-Notizen.
+          </p>
+          <p>
+            Bis dahin gelten Version, Importzeitpunkt, Record Count und Lizenzangaben als massgebliche Live-Metadaten.
+          </p>
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

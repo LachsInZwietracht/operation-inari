@@ -136,6 +136,32 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Report text templates in `/berichte` are bundled product defaults from `lib/report-templates.ts`, then extended with user-created local templates via `useReportTemplates()`.
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
+  - **Truth model:** Export creation and export history are live. The `REST API` and `Integrationen` tabs are intentionally marked as preview/read-only until API-key issuance, webhook delivery, and integration persistence have real backends.
+  - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
+
+### 4.16a Datenbankstatus (`/datenbank`)
+- **Component:** `app/(app)/datenbank/page.tsx`
+  - The route now reads the live source catalog from `data_sources` through `fetchDataSources()`.
+  - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.
+  - The route no longer fabricates release notes or future quarter announcements; until a real changelog source exists, it is a live catalog-status page plus an informational note about missing editorial history.
+
+### 4.16b Wissensbibliothek (`/wissen`)
+- **Component:** `app/(app)/wissen/wissen-client.tsx`
+  - Knowledge cards now come from bundled product content in `lib/content/knowledge-library.ts`, not `lib/mock-data`.
+  - The page copy explicitly distinguishes bundled reference content from live runtime analytics.
+  - PRODIscore and sustainability sections remain live calculations based on loaded foods, recipes, and meal plans.
+
+### 4.16c Leistung & Validierung (`/leistung`)
+- **Component:** `app/(app)/leistung/page.tsx`
+  - The route is now an honest validation/reference surface instead of a fake live telemetry dashboard.
+  - It documents actual repo checks (`typecheck`, targeted Playwright, nutrient validation), benchmark targets, hotspot areas, and manual verification routes.
+  - Stress-test simulation, fake response curves, fake system metrics, and mock DB telemetry are no longer presented as live operational data.
+
+### 4.16d Admin & Sicherheit (`/admin/users`)
+- **Component:** `app/(app)/admin/users/page.tsx`
+  - The route is now an explicit preview/read-only admin concept page.
+  - It shows current Supabase auth session context when available plus bundled role/control/compliance reference content from `lib/content/ops-preview.ts`.
+  - Team management, invites, audit logs, MFA resets, and policy toggles are no longer claimed as live backend-backed actions.
 
 ### 4.17 Beratungen (Patient Counseling)
 - **New counseling session:** `app/(app)/patienten/[id]/beratungen/neu/page.tsx` uses `components/counseling-session-form.tsx`.
