@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FOOD_SYNONYMS } from "@/lib/mock-data";
 import type { FoodSynonym } from "@/lib/types";
+import { fetchSystemFoodSynonyms } from "@/lib/data/food-synonyms-client";
 
 const STORAGE_KEY = "prodi_food_synonyms_v1";
 const STORAGE_PRIMARY_KEY = "prodi_food_synonym_primary_v1";
@@ -54,8 +54,30 @@ function savePreferredMap(map: PreferredMap) {
 }
 
 export function useFoodSynonyms() {
+  const [systemSynonyms, setSystemSynonyms] = useState<FoodSynonym[]>([]);
   const [userSynonyms, setUserSynonyms] = useState<FoodSynonym[]>(() => loadUserSynonyms());
   const [preferredMap, setPreferredMap] = useState<PreferredMap>(() => loadPreferredMap());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSystemSynonyms() {
+      try {
+        const synonyms = await fetchSystemFoodSynonyms();
+        if (!cancelled) {
+          setSystemSynonyms(synonyms);
+        }
+      } catch (error) {
+        console.error("Failed to load system food synonyms from Supabase:", error);
+      }
+    }
+
+    void loadSystemSynonyms();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     saveUserSynonyms(userSynonyms);
@@ -65,7 +87,7 @@ export function useFoodSynonyms() {
     savePreferredMap(preferredMap);
   }, [preferredMap]);
 
-  const synonyms = useMemo(() => [...FOOD_SYNONYMS, ...userSynonyms], [userSynonyms]);
+  const synonyms = useMemo(() => [...systemSynonyms, ...userSynonyms], [systemSynonyms, userSynonyms]);
 
   const synonymsById = useMemo(() => {
     const map = new Map<string, FoodSynonym>();

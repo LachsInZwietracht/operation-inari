@@ -566,9 +566,9 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - They wrap their client component in `<FoodsProvider>` to make data available via `useFoods()` hook
 - The layout provides a lightweight search index via `<FoodSearchProvider>` (see Data Access Architecture in Section 1)
 
-**Current mock-data audit status (2026-04-23):**
-- `lib/mock-data/` still contains 32 TypeScript modules.
-- The runtime app still has 25 import sites from `@/lib/mock-data` outside tests/docs/seeds.
+**Current mock-data audit status (2026-04-24):**
+- `lib/mock-data/` still contains 31 TypeScript modules.
+- The runtime app still has 16 import sites from `@/lib/mock-data` outside tests/docs/seeds.
 - The food catalog migration itself is complete: there are still zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in app pages/components.
 
 **What still uses mock data at runtime today:**
@@ -582,7 +582,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Patient counseling session summary on `/patienten` | Migrated to real `useCounseling()` session data | `app/(app)/patienten/page.tsx` |
 | eGK scanner / inbox / companion API | Explicit demo mode powered by mock cards/events | `hooks/use-egk-scanner.ts`, `hooks/use-egk-inbox.ts`, `app/api/egk/route.ts` |
 | Report templates | Moved to bundled product defaults outside `lib/mock-data` | `lib/report-templates.ts`, `hooks/use-report-templates.ts` |
-| Food synonyms | Still seeded from mock synonyms, then extended in localStorage | `hooks/use-food-synonyms.ts` |
+| Food synonyms | System synonyms now load from Supabase `food_synonyms`; user-created aliases still persist locally as an offline overlay | `hooks/use-food-synonyms.ts`, `lib/data/food-synonyms-client.ts` |
 | Nutrition plan presets | `DIET_LINES` still mock-backed | `app/(app)/ernaehrungsplan/ernaehrungsplan-client.tsx` |
 | Institution diet-form catalog / weekday labels | Still static mock/reference data | `app/(app)/institution/**`, `lib/institution-analytics.ts`, `lib/hospital-workflow.ts` |
 | Pediatric percentiles / lab parameter catalog | Still static mock/reference data | `components/pediatric-percentile-chart.tsx`, `components/patient-tabs.tsx` |
@@ -603,7 +603,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [x] Replace the mock `COUNSELING_SESSIONS` summary on `/patienten` with real counseling-session queries.
 - [x] Keep eGK mock cards/events as explicit demo mode with user-facing demo labeling.
 - [x] Move report-template seeds to non-mock bundled product defaults.
-- [ ] Replace mock food-synonym seeds with seeded database rows or a curated bundled reference source.
+- [x] Replace mock food-synonym seeds with seeded database rows or a curated bundled reference source.
 - [ ] Decide whether `DIET_LINES` should become persisted practice presets or remain static product defaults.
 - [ ] Move institution `DIET_FORMS` and weekday labels into a non-mock catalog module if they are intended to stay static.
 - [ ] Move pediatric percentiles and lab parameter definitions into explicit reference-data modules so they are no longer treated as “mock”.
@@ -668,6 +668,7 @@ Rules going forward:
 3. Legacy/local IDs may remain as compatibility aliases (`legacy_id` / `source_food_id`) where URLs or historical references still need them.
 4. Leave static mock/reference catalogs alone for now (food groups, nutrient definitions, pediatric percentiles, etc.) because they are stable seed data rather than user-facing mock records.
 5. Brand-key migrations should use the same transition pattern: emit/read the new `inari_*` identifier first, keep accepting legacy `prodi_*` identifiers for at least one release, then remove the fallback once clients have moved.
+6. `useFoodSynonyms()` now follows a split model: read seeded system aliases from Supabase `food_synonyms`, then layer local user aliases from `localStorage` until synonym write policies and browser persistence are added.
 
 ### Phase 6: Payload Optimization — PARTIALLY COMPLETE
 
@@ -693,7 +694,7 @@ Rules going forward:
 - `/lebensmittel` calls `/api/foods/browser`, which uses paginated server queries and only merges local custom foods into page 1 on the client
 - Cologne phonetics for German sound matching ("Karotte" ↔ "Garotte")
 - Trigram similarity scoring
-- Synonym lookup via `useFoodSynonyms()` hook
+- Synonym lookup via `useFoodSynonyms()` hook, which reads system aliases from Supabase `food_synonyms` and merges local user aliases client-side
 - The list view now scales to larger catalogs without pushing the full foods table into the browser
 
 ### Deployed: Postgres Trigram + ILIKE Search

@@ -73,6 +73,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Group navigation:** `FoodGroupTree` uses `FOOD_GROUPS`; ensure new groups update `getFoodGroupDescendants`.
 - **Search contract:** name-mode search prefers the `search_foods_with_total` RPC and falls back to `search_foods()` if the new migration has not been applied yet. Code/group/browse modes use direct paginated Supabase queries.
 - **Custom foods:** Page 1 still merges local custom-food migration candidates so offline or unauthenticated entries remain visible, but authenticated saves now canonicalize to Supabase IDs immediately and localStorage keeps only unmigrated/offline entries.
+- **Synonyms:** `useFoodSynonyms()` now reads seeded system aliases from Supabase `food_synonyms` via `lib/data/food-synonyms-client.ts` and merges them with local user-created aliases stored in `localStorage`. The foods UI no longer bootstraps synonym seeds from `lib/mock-data`.
 - **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
 
 ### 4.6 Rezepte Overview (`/rezepte`)

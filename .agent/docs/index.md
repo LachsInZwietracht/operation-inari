@@ -29,12 +29,24 @@ Comprehensive guide for backend services using Supabase with CLI-first workflow.
 - Testing procedures
 - Edge Functions deployment
 
+### [Roadmap](./roadmap.md)
+Possible next tasks and features for the Inari platform, organized by category.
+
+**Use for:** Deciding what to work on next, understanding what's built vs. what remains
+
+**Key areas:**
+- Feature completion (eGK, ETL, analytics, PWA)
+- User experience (onboarding, notifications, patient portal, i18n)
+- Technical infrastructure (auth/roles, CI/CD, performance, API docs)
+- Business & growth (billing, report templates, GDPR compliance)
+
 ## Quick Reference
 
 | Technology | Documentation | Primary Use Cases |
 |------------|---------------|-------------------|
 | **Stripe** | [stripe.md](./stripe.md) | Payments, subscriptions, billing |
 | **Supabase** | [supabase.md](./supabase.md) | Database, auth, real-time features |
+| **Roadmap** | [roadmap.md](./roadmap.md) | Next tasks, feature backlog |
 
 ## Usage Guidelines
 
