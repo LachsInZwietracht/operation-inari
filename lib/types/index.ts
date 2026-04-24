@@ -9,6 +9,7 @@ export * from "./counseling";
 export * from "./lab-values";
 export * from "./auth";
 export * from "./platform";
+export type { OnboardingStatus, PracticeInfo } from "./platform";
 export * from "./report";
 export * from "./institution";
 export * from "./reference-values";

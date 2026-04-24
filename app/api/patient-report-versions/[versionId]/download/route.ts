@@ -12,18 +12,32 @@ interface RouteContext {
 
 async function loadVersion(versionId: string) {
   const supabase = await createClient()
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+
+  if (authError) {
+    throw new Error(authError.message)
+  }
+
+  if (!authData.user) {
+    return { supabase, version: null, authRequired: true }
+  }
+
   const version = await fetchPatientReportVersionByIdClient(versionId, supabase)
 
   if (!version) {
-    return { supabase, version: null }
+    return { supabase, version: null, authRequired: false }
   }
 
-  return { supabase, version }
+  return { supabase, version, authRequired: false }
 }
 
 export async function HEAD(_request: Request, context: RouteContext) {
   const { versionId } = await context.params
-  const { supabase, version } = await loadVersion(versionId)
+  const { supabase, version, authRequired } = await loadVersion(versionId)
+
+  if (authRequired) {
+    return new Response(null, { status: 401 })
+  }
 
   if (!version) {
     return new Response(null, { status: 404 })
@@ -38,7 +52,11 @@ export async function HEAD(_request: Request, context: RouteContext) {
 
 export async function GET(_request: Request, context: RouteContext) {
   const { versionId } = await context.params
-  const { supabase, version } = await loadVersion(versionId)
+  const { supabase, version, authRequired } = await loadVersion(versionId)
+
+  if (authRequired) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 })
+  }
 
   if (!version) {
     return NextResponse.json({ error: "PATIENT_REPORT_VERSION_NOT_FOUND" }, { status: 404 })

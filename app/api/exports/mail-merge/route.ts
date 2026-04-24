@@ -13,8 +13,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "INVALID_MAIL_MERGE_REQUEST" }, { status: 400 });
   }
 
-  const pdfBuffer = await renderMailMergePdfBuffer(body);
   const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+  }
+
+  const pdfBuffer = await renderMailMergePdfBuffer(body);
   const fileName = `${body.fileBaseName}.pdf`;
 
   await createExportJob(supabase, {

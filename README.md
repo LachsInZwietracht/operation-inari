@@ -54,9 +54,10 @@ Recent platform changes:
 4. Apply migrations: `npx supabase db push`
 5. Run the app: `npm run dev`
 
-### Temporary Auth Note
-Route protection is currently disabled for local testing via `DISABLE_AUTH_FOR_TESTING = true` in `middleware.ts`.
-Before staging or production work, set that flag back to `false` so login is enforced again.
+### Auth & RBAC
+Route protection is enabled by default whenever Supabase is configured. For temporary local UI work only, set `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true`.
+
+Production and staging must leave that flag unset. Admin routes require an `owner` or `admin` membership, institution routes require `owner`, `admin`, or `institution_admin`, and patient data remains scoped by the existing per-user Supabase RLS policies.
 
 ### Data Import
 To populate the food database (7,140 items):

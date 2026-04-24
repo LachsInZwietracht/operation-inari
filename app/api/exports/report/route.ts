@@ -64,6 +64,10 @@ export async function POST(request: Request) {
 
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id;
+  if (!userId) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+  }
+
   const createdBy = authData.user?.email ?? "Unbekannt";
   const shouldPersistPatientReport =
     body.disposition !== "inline" &&

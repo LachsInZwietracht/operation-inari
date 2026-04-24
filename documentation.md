@@ -17,7 +17,7 @@ Working assumptions:
 - Auth routes live under `app/(auth)`.
 - `app/page.tsx` redirects to `/dashboard`.
 - Most stateful features use Supabase-first persistence with `localStorage` fallback where noted.
-- `middleware.ts` currently uses `DISABLE_AUTH_FOR_TESTING = true` for local development. Treat that as a temporary local convenience, not a product invariant.
+- `middleware.ts` enforces auth/RBAC whenever Supabase is configured. `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` is the temporary local-only bypass.
 
 Validation note:
 - Prefer proportional validation. Use the lightest reliable check for the area you changed.
@@ -33,7 +33,7 @@ Validation note:
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
 - **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern where implemented. Data is synced to the cloud when authenticated but remains available in `localStorage` for offline use.
 - **Reference values:** Official DGE/ÖGE/SGE/RDA rows now load from Supabase. Custom profiles, user defaults, and patient-specific assignments persist remotely with bundled fallback data for pre-migration environments.
-- **Export pipeline:** Real file generation lives behind server routes in `app/api/exports/*`. Client pages build typed payloads, the server renders PDF/CSV output, and export metadata is written to `export_jobs`.
+- **Export pipeline:** Real file generation lives behind authenticated server routes in `app/api/exports/*`. Client pages build typed payloads, the server renders PDF/CSV output, and export metadata is written to `export_jobs`.
 
 ## 3. Data & State Layers
 - **Supabase-First Persistence:** 
@@ -165,9 +165,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.16d Admin & Sicherheit (`/admin/users`)
 - **Component:** `app/(app)/admin/users/page.tsx`
-  - The route is now an explicit preview/read-only admin concept page.
-  - It shows current Supabase auth session context when available plus bundled role/control/compliance reference content from `lib/content/ops-preview.ts`.
-  - Team management, invites, audit logs, MFA resets, and policy toggles are no longer claimed as live backend-backed actions.
+  - The route is now backed by persisted Supabase RBAC membership records.
+  - It requires an `owner` or `admin` membership and lists active organization members, roles, and status values from `organization_memberships`.
+  - Invitation, role-change, MFA reset, and team-wide patient sharing workflows remain deferred; RBAC v1 only establishes the protected route and persisted role foundation.
 
 ### 4.17 Beratungen (Patient Counseling)
 - **New counseling session:** `app/(app)/patienten/[id]/beratungen/neu/page.tsx` uses `components/counseling-session-form.tsx`.

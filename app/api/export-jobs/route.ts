@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   if (!authData.user) {
-    return NextResponse.json([], { status: 200 });
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
   }
 
   const { data, error } = await withTimeout(

@@ -221,6 +221,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260428000015_export_jobs.sql` | `export_jobs` table for persisted export/import history with user-scoped RLS |
 | `20260429000016_appointments.sql` | `appointments` table with RLS, indexes on `user_id`/`date`/`type`/`patient_id`, and auto-update trigger |
 | `20260506000022_reference_profiles_and_lab_metadata.sql` | Runtime reference-value lookup columns, custom profile tables, user/patient preference tables, and `patient_lab_values.metadata` |
+| `20260511000028_team_rbac.sql` | RBAC foundation: `organizations`, `organization_memberships`, `access_audit_logs`, RLS helper functions, and membership/admin policies |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0), 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -251,10 +252,22 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary |
 | `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at` |
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
+| `organizations` | Team/organization boundary for RBAC | `name`, `created_by` |
+| `organization_memberships` | Persisted user roles | `organization_id`, `user_id`, `email`, `role`, `status` |
+| `access_audit_logs` | Foundation for access/security audit events | `organization_id`, `actor_user_id`, `action`, `target_type`, `metadata` |
+
+### Auth & RBAC Notes
+
+- Middleware auth is enabled by default when Supabase env vars exist. `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` is the only supported local bypass.
+- RBAC v1 roles are `owner`, `admin`, `dietitian`, `assistant`, and `institution_admin`.
+- `/admin/*` is limited to `owner` and `admin`; `/institution/*` is limited to `owner`, `admin`, and `institution_admin`.
+- Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
+- New authenticated users can be bootstrapped into a default organization/membership by the server access helper; Playwright setup creates an `owner` membership for the test user.
 
 ### Export Job Notes
 
 - `export_jobs` stores **metadata only** and is still not the patient document source of truth.
+- Export APIs now require an authenticated user before creating files or audit rows.
 - Patient-bound report exports additionally:
   - persist a stable parent record in `patient_reports`
   - append immutable export versions to `patient_report_versions`
@@ -588,13 +601,13 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Pediatric percentiles / lab parameter catalog | Still static mock/reference data | `components/pediatric-percentile-chart.tsx`, `components/patient-tabs.tsx` |
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
 | Database status | Live `data_sources` catalog, no editorial changelog yet | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts` |
-| Admin / security | Explicit preview/read-only concept page | `app/(app)/admin/users/page.tsx`, `lib/content/ops-preview.ts` |
+| Admin / security | RBAC-backed team membership view with persisted roles; invite/role mutation flows still deferred | `app/(app)/admin/users/page.tsx`, `lib/auth/access.ts`, `lib/auth/rbac.ts` |
 | Pricing / billing | Still mock-backed UI data | `app/(app)/admin/tarife/page.tsx` |
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 
 **How to read the remaining mock data:**
 - **User-facing placeholder/demo data:** Tarife and explicitly labeled eGK demo flows.
-- **Bundled product/reference content:** Wissen cards, Admin preview content, Leistung validation references.
+- **Bundled product/reference content:** Wissen cards, Leistung validation references.
 - **Static reference/catalog data:** diet forms, weekday labels, percentiles, lab parameter definitions, bundled reference standards.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
 
@@ -609,7 +622,8 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [ ] Move pediatric percentiles and lab parameter definitions into explicit reference-data modules so they are no longer treated as “mock”.
 - [x] Reclassify `/wissen` knowledge cards as bundled product content and keep analytics live/runtime-backed.
 - [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog and an informational changelog note.
-- [x] Rework Admin and Leistung pages into truthful preview/reference surfaces instead of fake live operational backends.
+- [x] Replace Admin preview with persisted RBAC membership data; full invitation and role-edit workflows remain deferred.
+- [x] Rework Leistung into a truthful preview/reference surface instead of a fake live operational backend.
 - [ ] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
 - [ ] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
 
@@ -813,12 +827,13 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 
 When `.env.local` provides `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, the app's middleware enforces authentication on all routes. Playwright tests use a global setup (`tests/auth.setup.ts`) that:
 1. Creates a test user via the Supabase Admin API (using `SUPABASE_SERVICE_ROLE_KEY`)
-2. Logs in through the UI at `/login`
-3. Saves the authenticated session to `tests/.auth/user.json` (storageState)
-4. All test projects depend on this setup and reuse the saved auth state
+2. Ensures the test user has an `owner` membership in `organization_memberships`
+3. Logs in through the UI at `/login`
+4. Saves the authenticated session to `tests/.auth/user.json` (storageState)
+5. All test projects depend on this setup and reuse the saved auth state
 
 **Test credentials** (defined in `tests/auth.setup.ts`):
-- Email: `test@inari.local`
+- Email: `test@prodi.local`
 - Password: `test-password-123!`
 
 These are created automatically by the auth setup via the Supabase Admin API. They only exist in the local Supabase instance and are safe to commit — do **not** reuse them for production or staging environments.

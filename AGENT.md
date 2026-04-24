@@ -30,6 +30,8 @@ Notable repo details:
 - React Compiler is enabled in `next.config.ts`
 - Playwright currently runs the `setup` project plus Chromium by default
 - External image `remotePatterns` are not currently configured in `next.config.ts`
+- Auth is enforced by default when Supabase env vars are present. `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` is a local-only bypass.
+- RBAC roles are persisted in `organization_memberships`: `owner`, `admin`, `dietitian`, `assistant`, and `institution_admin`.
 
 ## Development Commands
 
@@ -55,6 +57,7 @@ Notable repo details:
 - Preserve existing user changes. Do not overwrite or revert work you did not make.
 - Do not expose secrets through `NEXT_PUBLIC_` variables.
 - If a task requires schema, migration, auth, or shared contract changes, inspect the relevant implementation and docs first.
+- Do not weaken route protection or add new bypasses outside the documented local `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` flag.
 
 ## Change Discipline
 
@@ -118,6 +121,16 @@ If unrelated tests fail, stop and report the failure instead of “fixing” unr
 - Client-visible variables must use `NEXT_PUBLIC_`.
 - Store local development variables in `.env.local`.
 - Document required variables in `.env.example` when applicable.
+- `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` disables middleware auth and RBAC checks for local testing only. Leave it unset in staging and production.
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` enable middleware auth. Without them, the app keeps an open local fallback for UI development.
+
+## Auth & RBAC
+
+- `/admin/*` requires `owner` or `admin`.
+- `/institution/*` requires `owner`, `admin`, or `institution_admin`.
+- Patient pages require authentication, but patient and clinical rows remain user-owned through existing `user_id` RLS in RBAC v1.
+- Export APIs require an authenticated user and continue to rely on user-scoped RLS for exported data.
+- Use `lib/auth/access.ts` and `lib/auth/rbac.ts` for new server-side access checks instead of reimplementing role logic.
 
 ## Reference Docs
 
