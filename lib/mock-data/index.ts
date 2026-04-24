@@ -74,11 +74,3 @@ export {
   RESPONSE_TIME_HISTORY,
 } from "./performance";
 export { KNOWLEDGE_CARDS, SUSTAINABILITY_METRICS } from "./knowledge";
-export {
-  PRODUCT_TIERS,
-  TIER_COMPARISON,
-  ADDON_PLANS,
-  BILLING_SUMMARY,
-  INVOICE_HISTORY,
-  USAGE_METRICS,
-} from "./pricing";

@@ -97,7 +97,7 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 ### Data Persistence
 
 **Supabase (primary):**
-- Schema defined in `supabase/migrations/` (6 migration files, run in order)
+- Schema defined in `supabase/migrations/` (run migration files in order)
 - Seed data in `supabase/seed.sql` (nutrient definitions, data sources, DGE reference values)
 - BLS 4.0 imported: 7,140 foods + ~265k nutrient rows + English synonyms
 - Food detail pages use `fetchFoodById()` for single-record queries
@@ -217,7 +217,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260412000004_indexes.sql` | GIN trigram indexes for search, B-tree indexes for all common query patterns |
 | `20260412000005_rls_policies.sql` | Row Level Security: public foods readable by all, custom foods/recipes/meal plans private per user, OFF staging admin-only. Reference tables (data_sources, nutrient_definitions, reference_values) are SELECT-only — writes require `service_role` key |
 | `20260412000006_search_function.sql` | `search_foods()` Postgres function with trigram similarity, filtering, and pagination. **Must** receive `auth.uid()` as `requesting_user_id` or custom foods will be silently excluded |
-| `20260427000014_invoices.sql` | `invoices` table with RLS, indexes on `user_id`/`status`/`due_date`, and auto-update trigger |
+| `20260427000014_invoices.sql` and later | Invoices, appointments, patient workspace persistence, digital protocol submissions, institution menus, reference profiles, allergens, counseling, hospital workflow, patient reports, and team RBAC. Inspect migration files directly for authoritative schema details. |
 | `20260428000015_export_jobs.sql` | `export_jobs` table for persisted export/import history with user-scoped RLS |
 | `20260429000016_appointments.sql` | `appointments` table with RLS, indexes on `user_id`/`date`/`type`/`patient_id`, and auto-update trigger |
 | `20260506000022_reference_profiles_and_lab_metadata.sql` | Runtime reference-value lookup columns, custom profile tables, user/patient preference tables, and `patient_lab_values.metadata` |
@@ -560,7 +560,7 @@ ETL Pipeline:
 ## 6. Migration Strategy — Mock Data to Real Data
 
 ### Phase 1: Schema Migration — COMPLETE
-1. ~~Create Supabase migrations for all tables in Section 4~~ — 6 migrations in `supabase/migrations/`
+1. ~~Create Supabase migrations for core nutrition tables~~ — migrations live in `supabase/migrations/`
 2. ~~Seed `nutrient_definitions` with our existing 28 + new BLS nutrients~~ — 42 definitions in `seed.sql`
 3. ~~Seed `data_sources` with source metadata~~ — 10 sources seeded (note: `hersteller` uses `version: 'varies'` as placeholder)
 4. ~~Seed `reference_values` with official DGE values (age-stratified)~~ — 54 reference values (adults 25–51, gender-stratified)
@@ -602,11 +602,11 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
 | Database status | Live `data_sources` catalog, no editorial changelog yet | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts` |
 | Admin / security | RBAC-backed team membership view with persisted roles; invite/role mutation flows still deferred | `app/(app)/admin/users/page.tsx`, `lib/auth/access.ts`, `lib/auth/rbac.ts` |
-| Pricing / billing | Still mock-backed UI data | `app/(app)/admin/tarife/page.tsx` |
+| Pricing / billing | Preview-only UI backed by bundled product catalog data; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 
 **How to read the remaining mock data:**
-- **User-facing placeholder/demo data:** Tarife and explicitly labeled eGK demo flows.
+- **User-facing placeholder/demo data:** Explicitly labeled eGK demo flows.
 - **Bundled product/reference content:** Wissen cards, Leistung validation references.
 - **Static reference/catalog data:** diet forms, weekday labels, percentiles, lab parameter definitions, bundled reference standards.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
@@ -624,7 +624,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog and an informational changelog note.
 - [x] Replace Admin preview with persisted RBAC membership data; full invitation and role-edit workflows remain deferred.
 - [x] Rework Leistung into a truthful preview/reference surface instead of a fake live operational backend.
-- [ ] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
+- [x] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
 - [ ] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
 
 **What was migrated:**
@@ -695,7 +695,7 @@ Rules going forward:
 
 **Remaining:**
 1. **Migrate more pages:** Other routes still use `fetchAllFoods()` — audit each to determine if `fetchAllFoodsForList()` suffices
-2. **Paginated client hooks:** Replace the "load everything" pattern with paginated React Query hooks backed by Supabase server-side filtering
+2. **Paginated client hooks:** Replace the "load everything" pattern with paginated hooks backed by Supabase server-side filtering
 3. **On-demand nutrient fetch:** Fetch full nutrients lazily only when a user drills into a food detail page
 
 ---

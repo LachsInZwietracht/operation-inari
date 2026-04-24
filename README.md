@@ -24,9 +24,11 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 ## 📖 Documentation
 
 For detailed technical implementation guides, architectural overview, and feature references, see:
+- [Documentation Index](./docs/README.md)
 - [Feature Implementation Guide](./documentation.md)
 - [Database & ETL Guide](./docs/database-guide.md)
 - [Product Requirements](./docs/product-requirements.md)
+- [Competitive Audit](./docs/competitive-audit.md)
 
 Recent platform changes:
 - `/patienten/[id]` now opens on a new Workflow hub that orchestrates intake, assessment, planning, reporting, and follow-up from existing patient data with guided deep links.

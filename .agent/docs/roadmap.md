@@ -1,40 +1,29 @@
-# Inari — Roadmap & Possible Tasks
+# Agent Roadmap Notes
 
 Last updated: 2026-04-24
 
-## Active Task Status
+Use this as an agent-readable backlog summary. For product intent, read `docs/product-requirements.md`. For competitor strategy, read `docs/competitive-audit.md`.
 
-1. **Production Auth Gate + RBAC Foundation** — In progress / implementation added.
-   - Auth bypass moved to `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true`; production/staging default is protected when Supabase is configured.
-   - Persisted RBAC foundation added with organizations, memberships, roles, and audit-log table.
-   - `/admin/*`, `/institution/*`, protected app pages, and export APIs now have explicit auth/RBAC gates.
-   - `/admin/users` now reads real membership data instead of only showing a read-only preview.
-   - Deferred: full invitation flow, role mutation UI, and team-wide patient sharing.
+## Clinic-First Priorities
 
-## Feature Completion & Polish
+1. **Data credibility:** SFK/full BLS expansion, source/version visibility, calculation validation, and database update workflows.
+2. **Clinic IT readiness:** SSO, audit logs, HL7/FHIR, API keys, webhooks, and production connector foundations.
+3. **Patient-to-kitchen bridge:** Diet orders, allergen-safe meal selection, tray cards, kitchen reports, and institution analytics.
+4. **Clinical documentation:** Immutable report history, report packs, patient handouts, clinic handoff documents, and export retention policy.
+5. **Patient portal:** Remote diary, report delivery, follow-up reminders, patient feedback, and secure communication.
+6. **Commercial readiness:** Clinic pricing, contract/admin flows, migration tools, security documentation, and guided demo/onboarding flows.
 
-1. **eGK Health Card Integration** — Scanner is partially mocked/demo mode. Build out real serial/companion app connectivity for production use.
-2. **Food Database ETL** — Import pipeline for BLS 4.0, OpenFoodFacts, USDA etc. is scaffolded but needs actual data loading and validation runs.
-3. **Institution Analytics & Compliance** — Pages are structural templates. Flesh out real charts, KPIs, and compliance rule engines.
-4. **Therapy Integration Expansion** — PROCAM risk assessment exists, but other therapy tools (diabetes management, renal nutrition, etc.) could be added.
-5. **Offline/PWA Support** — PWA status component exists with localStorage fallback, but full offline sync (service worker, background sync) could be hardened.
+## Current Implementation Themes
 
-## User Experience
+- Auth/RBAC foundation exists; full invitation, role mutation, team sharing, and broader audit coverage remain open.
+- eGK is demo/simulated; production connector work remains open.
+- Food database foundation exists with BLS/Open Food Facts flows; broader official/licensed data sources remain roadmap.
+- Institution workflows exist for menu cycles, inpatient meal orders, compliance, and tray cards; deeper kitchen ERP features remain roadmap.
+- Export/report foundations exist; scheduled exports, retention policy, and richer clinic document packs remain roadmap.
+- Billing/tariff surface is explicitly preview-only; real subscription/checkout backend is not wired.
 
-6. **Onboarding Flow** — ✅ Done. Dialog-based wizard on dashboard: practice info, optional first patient, quick tips. Hooks: `use-onboarding`, `use-practice-info`.
-7. **Notifications & Reminders** — Push notifications, email reminders for appointments, protocol follow-ups.
-8. **Patient Portal / Self-Service** — Full patient-facing portal for submitting protocols, viewing meal plans, and messaging.
-9. **Multi-language Support (i18n)** — Currently German-only. Adding English/other languages would expand reach.
+## Agent Guidance
 
-## Technical & Infrastructure
-
-10. **Authentication & Role-Based Access** — Foundation implemented; next steps are invitations, role-change workflows, audit event coverage, and team/practice sharing.
-11. **Deployment & CI/CD** — Production deployment pipeline, staging environment, automated test runs on PR.
-12. **Performance Optimization** — Run existing benchmarks, optimize large food DB queries, add server-side caching.
-13. **API Documentation** — OpenAPI docs for the `/api-export` routes and third-party integrations.
-
-## Business & Growth
-
-14. **Billing / Subscription (Polar.sh)** — Polar.sh is a dependency but payment flows may not be fully wired up.
-15. **PDF Report Templates** — ✅ Done. Added 5 report templates (insurance, discharge, initial assessment, progress, pediatric) and 3 mail merge templates (welcome, protocol reminder, therapy completion).
-16. **Data Export Compliance** — GDPR data export/deletion workflows for patient data.
+- Do not treat this file as implementation proof.
+- Verify feature status in code and `documentation.md` before editing.
+- Update this file only when priorities or backlog facts materially change.

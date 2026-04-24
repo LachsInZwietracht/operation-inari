@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -20,7 +21,7 @@ import {
   BILLING_SUMMARY,
   INVOICE_HISTORY,
   USAGE_METRICS,
-} from "@/lib/mock-data"
+} from "@/lib/content/billing-preview"
 import type { TierComparisonRow } from "@/lib/types"
 
 const COMPARISON_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
@@ -57,15 +58,15 @@ export default function TarifePage() {
   function handleTierSelect(tierId: string) {
     setSelectedTier(tierId)
     const tier = PRODUCT_TIERS.find((t) => t.id === tierId)
-    toast.success(`${tier?.name ?? "Tarif"} ausgewählt`, {
-      description: tier?.id === currentTier.id ? "bereits aktiv" : "Wir melden uns mit einem Wechsel-Offer.",
+    toast.info(`${tier?.name ?? "Tarif"} vorgemerkt`, {
+      description: "Preview-Modus: Es wurde kein Vertrag und kein Checkout gestartet.",
     })
   }
 
   function handleAddOn(id: string) {
     const addon = ADDON_PLANS.find((plan) => plan.id === id)
-    toast.info(`${addon?.name} aktiviert`, {
-      description: "Team wird über die Zusatzkosten informiert.",
+    toast.info(`${addon?.name} vorgemerkt`, {
+      description: "Preview-Modus: Zusatzmodule werden noch nicht gebucht.",
     })
   }
 
@@ -73,23 +74,31 @@ export default function TarifePage() {
     <div className="space-y-6">
       <PageHeader
         title="Produkt-Tarife"
-        description="Vergleichen Sie Pakete, verwalten Sie Add-ons und behalten Sie Ihre Rechnungen im Blick"
-        helpText="Vergleichen Sie die verfügbaren Tarife und Add-ons. Verwalten Sie Ihr Abonnement, sehen Sie Ihre Rechnungshistorie ein und passen Sie Ihren Plan an Ihre Bedürfnisse an."
+        description="Preview für Klinikpakete, Add-ons und Vertragsplanung"
+        helpText="Diese Ansicht zeigt den geplanten Tarifkatalog. Es gibt noch keinen angebundenen Zahlungsanbieter, keinen Checkout und keine Live-Abonnementverwaltung."
       />
+
+      <Alert>
+        <Shield className="h-4 w-4" />
+        <AlertTitle>Billing-Preview</AlertTitle>
+        <AlertDescription>
+          Diese Seite ist eine Produkt- und Vertragsplanungsansicht. Tarifauswahl, Add-ons, Nutzung und Rechnungen sind nicht mit einem Zahlungsanbieter verbunden.
+        </AlertDescription>
+      </Alert>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader className="flex flex-wrap items-center gap-3">
             <div>
-              <CardTitle className="text-base">Aktueller Tarif</CardTitle>
-              <CardDescription>Expert + Plus Add-on</CardDescription>
+              <CardTitle className="text-base">Geplanter Referenztarif</CardTitle>
+              <CardDescription>Beispiel: Expert + Plus Add-on</CardDescription>
             </div>
             <Badge className={cn("ml-auto", BILLING_STATUS_BADGE[BILLING_SUMMARY.status])}>{BILLING_SUMMARY.status}</Badge>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-6">
             <div>
               <p className="text-sm text-muted-foreground">Zahlweise</p>
-              <p className="font-semibold capitalize">{billingCycle === "monthly" ? "monatlich" : "jährlich"}</p>
+              <p className="font-semibold capitalize">{billingCycle === "monthly" ? "monatlich" : "jährlich"} geplant</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Nächste Rechnung</p>
@@ -108,12 +117,12 @@ export default function TarifePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Abrechnung</CardTitle>
-            <CardDescription>Zahlzyklus wechseln</CardDescription>
+            <CardDescription>Geplanten Zahlzyklus vergleichen</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-4">
             <div>
               <Label className="text-xs uppercase text-muted-foreground">Jährliche Abrechnung</Label>
-              <p className="text-sm">Sparen Sie 2 Monate</p>
+              <p className="text-sm">Preview-Kalkulation</p>
             </div>
             <Switch checked={billingCycle === "annual"} onCheckedChange={(checked) => setBillingCycle(checked ? "annual" : "monthly")} />
           </CardContent>
@@ -180,7 +189,7 @@ export default function TarifePage() {
             <Shield className="h-5 w-5 text-muted-foreground" />
             Nutzung & Limits
           </CardTitle>
-          <CardDescription>Behalten Sie Ihre Ressourcenauslastung im Blick</CardDescription>
+          <CardDescription>Geplante Planlimits, keine Live-Nutzungsdaten</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
           {USAGE_METRICS.map((metric) => (
@@ -190,7 +199,7 @@ export default function TarifePage() {
                 <span className="text-xs text-muted-foreground">{metric.unit}</span>
               </div>
               <div className="text-2xl font-bold">{metric.used}</div>
-              <Progress value={(metric.used / metric.limit) * 100} />
+              <Progress value={metric.limit > 0 ? (metric.used / metric.limit) * 100 : 0} />
             </div>
           ))}
         </CardContent>
@@ -228,9 +237,9 @@ export default function TarifePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CreditCard className="h-5 w-5 text-muted-foreground" />
-              Rechnungsverlauf
+              Vertrags- und Rechnungsstatus
             </CardTitle>
-            <CardDescription>Alle Rechnungen zum Download</CardDescription>
+            <CardDescription>Platzhalter bis ein Billing-Backend angebunden ist</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -262,7 +271,7 @@ export default function TarifePage() {
               <Receipt className="h-5 w-5 text-muted-foreground" />
               Add-ons
             </CardTitle>
-            <CardDescription>Erweitern Sie Ihren Plan bei Bedarf</CardDescription>
+            <CardDescription>Optionen für Angebots- und Vertragsplanung</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {ADDON_PLANS.map((addon) => (
@@ -278,7 +287,7 @@ export default function TarifePage() {
                   <span className="text-xs font-medium text-muted-foreground">{addon.price}</span>
                 </div>
                 <Button className="mt-3 w-full" variant="outline" size="sm" onClick={() => handleAddOn(addon.id)}>
-                  Aktivieren
+                  Vormerken
                 </Button>
               </div>
             ))}
@@ -288,8 +297,8 @@ export default function TarifePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Aktiver Plan</CardTitle>
-          <CardDescription>Wechseln Sie Ihren Tarif jederzeit</CardDescription>
+          <CardTitle className="text-base">Vorgemerkter Plan</CardTitle>
+          <CardDescription>Preview-Auswahl für Angebotsgespräche</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-6">
           <div>
@@ -300,7 +309,12 @@ export default function TarifePage() {
             <p className="text-sm text-muted-foreground">Preis</p>
             <p className="text-xl font-semibold">{priceLabel}</p>
           </div>
-          <Button className="ml-auto" onClick={() => toast.success("Upgrade angefragt")}>Vertrag aktualisieren</Button>
+          <Button
+            className="ml-auto"
+            onClick={() => toast.info("Anfrage vorgemerkt", { description: "Preview-Modus: Es wurde keine Vertragsänderung gespeichert." })}
+          >
+            Anfrage vormerken
+          </Button>
         </CardContent>
       </Card>
     </div>

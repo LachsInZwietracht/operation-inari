@@ -1,9 +1,9 @@
 import type {
-  ProductTier,
-  TierComparisonRow,
   AddonPlan,
   BillingSummary,
   InvoiceRecord,
+  ProductTier,
+  TierComparisonRow,
   UsageMetric,
 } from "@/lib/types";
 
@@ -14,13 +14,9 @@ export const PRODUCT_TIERS: ProductTier[] = [
     description: "Alle Kernfeatures 14 Tage testen oder dauerhaft mit limitierter Datenbank nutzen.",
     priceMonthly: 0,
     priceAnnual: 0,
-    cta: "Kostenlos starten",
+    cta: "Anfrage vorbereiten",
     bestFor: "Einzelpraxen im Test",
-    features: [
-      "14-tägige Vollversion",
-      "10 Rezepte & 5 Patienten",
-      "Community-Forum",
-    ],
+    features: ["14-tägige Vollversion", "10 Rezepte & 5 Patienten", "Community-Forum"],
     limits: [
       { label: "Rezepte", value: "10" },
       { label: "Patienten", value: "5" },
@@ -33,14 +29,10 @@ export const PRODUCT_TIERS: ProductTier[] = [
     description: "Basisfunktionen plus strukturierte Patienten- und Rezeptverwaltung.",
     priceMonthly: 39,
     priceAnnual: 390,
-    cta: "Compact wählen",
+    cta: "Anfrage vorbereiten",
     badge: "Beliebt",
     bestFor: "Beratungen im Aufbau",
-    features: [
-      "50 Nährstoffe je Lebensmittel",
-      "Unlimitierte Rezepte",
-      "Kalender & Abrechnung light",
-    ],
+    features: ["50 Nährstoffe je Lebensmittel", "Unlimitierte Rezepte", "Kalender & Abrechnung light"],
     limits: [
       { label: "Nährstoffe", value: "50" },
       { label: "Benutzer", value: "1" },
@@ -53,13 +45,9 @@ export const PRODUCT_TIERS: ProductTier[] = [
     description: "Professioneller Tarif mit Patientenakten, Protokollen und Teamzugriff.",
     priceMonthly: 79,
     priceAnnual: 790,
-    cta: "Basis upgraden",
+    cta: "Anfrage vorbereiten",
     bestFor: "Ambulante Praxen",
-    features: [
-      "Patientenmanagement",
-      "Digitale Protokolle",
-      "Mehrbenutzer & Rollen",
-    ],
+    features: ["Patientenmanagement", "Digitale Protokolle", "Mehrbenutzer & Rollen"],
     limits: [
       { label: "Benutzer", value: "3" },
       { label: "Patienten", value: "Unlimitiert" },
@@ -72,16 +60,12 @@ export const PRODUCT_TIERS: ProductTier[] = [
     description: "Komplettlösung mit Diabetes, Laboren, Statistik und Reporting.",
     priceMonthly: 139,
     priceAnnual: 1390,
-    cta: "Expert aktivieren",
+    cta: "Anfrage vorbereiten",
     bestFor: "Versorgungszentren",
-    features: [
-      "80+ Nährstoffe",
-      "Diabetes & Medikation",
-      "Berichte & PROCAM",
-    ],
+    features: ["80+ Nährstoffe", "Diabetes & Medikation", "Berichte & PROCAM"],
     limits: [
       { label: "Benutzer", value: "10" },
-      { label: "API-Zugriff", value: "inklusive" },
+      { label: "API-Zugriff", value: "geplant" },
       { label: "Support", value: "SLA 4h" },
     ],
   },
@@ -91,13 +75,9 @@ export const PRODUCT_TIERS: ProductTier[] = [
     description: "Add-on mit BLS/SFK-Datenbanken, 330 Nährstoffen und Herstellerdaten.",
     priceMonthly: 69,
     priceAnnual: 690,
-    cta: "Add-on aktivieren",
+    cta: "Anfrage vorbereiten",
     bestFor: "Forschung & Kliniken",
-    features: [
-      "BLS/SFK Zugriff",
-      "330 Nährstoffe",
-      "Herstellerprodukte",
-    ],
+    features: ["BLS/SFK Zugriff", "330 Nährstoffe", "Herstellerprodukte"],
     limits: [
       { label: "Datenbanken", value: "4" },
       { label: "Herstellerprodukte", value: "29k" },
@@ -112,11 +92,7 @@ export const PRODUCT_TIERS: ProductTier[] = [
     priceAnnual: 2490,
     cta: "Demo anfragen",
     bestFor: "Kliniken & Caterer",
-    features: [
-      "Menüzyklen bis 4 Wochen",
-      "Produktion & Einkauf",
-      "Kosten- & Compliance-Reporting",
-    ],
+    features: ["Menüzyklen bis 4 Wochen", "Produktion & Einkauf", "Kosten- & Compliance-Reporting"],
     limits: [
       { label: "Standorte", value: "5" },
       { label: "Diet lines", value: "unlimitiert" },
@@ -225,35 +201,21 @@ export const ADDON_PLANS: AddonPlan[] = [
 ];
 
 export const BILLING_SUMMARY: BillingSummary = {
-  id: "current",
+  id: "preview",
   cycle: "annual",
-  nextInvoice: "2026-05-01",
-  amount: "1.790 €",
-  paymentMethod: "SEPA •••• 42",
-  status: "aktiv",
+  nextInvoice: "nicht verbunden",
+  amount: "kein Live-Betrag",
+  paymentMethod: "kein Zahlungsanbieter",
+  status: "pausiert",
 };
 
 export const INVOICE_HISTORY: InvoiceRecord[] = [
   {
-    id: "inv_2404",
-    date: "2026-04-01",
-    tier: "Expert + Plus",
-    amount: "1.790 €",
-    status: "bezahlt",
-  },
-  {
-    id: "inv_2403",
-    date: "2025-04-01",
-    tier: "Expert",
-    amount: "1.390 €",
-    status: "bezahlt",
-  },
-  {
-    id: "inv_2402",
-    date: "2024-04-01",
-    tier: "Basis",
-    amount: "790 €",
-    status: "bezahlt",
+    id: "preview-contract",
+    date: "Beispiel",
+    tier: "Clinic Contract",
+    amount: "nach Angebot",
+    status: "offen",
   },
 ];
 
@@ -261,22 +223,22 @@ export const USAGE_METRICS: UsageMetric[] = [
   {
     id: "patients",
     label: "Aktive Patient:innen",
-    used: 184,
+    used: 0,
     limit: 500,
-    unit: "von 500",
+    unit: "Preview",
   },
   {
     id: "recipes",
     label: "Gespeicherte Rezepte",
-    used: 312,
+    used: 0,
     limit: 2000,
-    unit: "von 2k",
+    unit: "Preview",
   },
   {
     id: "users",
     label: "Teammitglieder",
-    used: 8,
+    used: 0,
     limit: 10,
-    unit: "von 10",
+    unit: "Preview",
   },
 ];

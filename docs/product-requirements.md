@@ -8,6 +8,7 @@ How to use it:
 - Treat this file as roadmap and product context, not as the implementation source of truth.
 - When this document conflicts with current code, migrations, or the feature guide, current implementation wins.
 - Status labels are directional and may lag behind the latest branch changes.
+- Use `docs/competitive-audit.md` for competitor landscape, clinic-first gaps, and market strategy.
 
 Product direction:
 - Build a modern nutrition counseling and therapy platform for clinics, practices, and pharmacies.
@@ -71,7 +72,7 @@ Product direction:
 - **PRODIscore-style food quality rating** (5-level scale).
 - Allergen declaration (LMIV-compliant) and CO2 footprint calculation.
 
-### 2.4 Recipe Libraries
+### 2.3 Recipe Libraries
 **Status:** Partially implemented.
 - **Pre-built recipe & plan library** — ship with 1,300+ professionally created recipes (seed data with `is_system` flag).
 - **Professional recipe exchange platform** — allow practitioners to publish recipes to a shared library within the app.
@@ -105,7 +106,7 @@ Product direction:
 - **AI-Assisted Food Matching (Market Leader Feature):** Implement NLP (Natural Language Processing) to map free-text patient entries ("1 Brötchen") to correct database IDs.
 - **Freiburger Ernährungsprotokoll template** — standardized Freiburg protocol matching official DIN A4 layout.
 
-### 4.3 Digital Client Protocol (Remote Entry)
+### 4.2 Digital Client Protocol (Remote Entry)
 **Status:** Implemented (public entry, practitioner review inbox, and draft conversion workflow).
 - Web-based entry for patients via smartphone; submissions sync into the practitioner's dashboard.
 - Practitioners can review incoming submissions and convert them into prefilled internal nutrition protocols for final clinical cleanup and save.
@@ -120,7 +121,7 @@ Product direction:
 - **Serial letter / mail merge** — Generate personalized PDFs using tokens (e.g., `{{patient.name}}`).
 - **Birthday list** — dashboard widget for upcoming patient birthdays.
 
-### 5.1a Counseling Workflow
+### 5.2 Counseling Workflow
 **Status:** Implemented (Supabase-backed counseling sessions and template persistence with local fallback and login-time migration; patient-level workflow hub now orchestrates intake → assessment → planning → reporting → follow-up).
 - Counseling sessions persist with patient linkage, structured follow-up timeline, shared materials, and progress metrics.
 - Counseling templates persist per user and can be inserted into the session authoring flow instead of remaining browser-only.
@@ -133,7 +134,7 @@ Product direction:
 - **Patient report history** — patient detail/workflow now surfaces immutable report versions with archived reopen and direct file download instead of relying only on the generic export journal.
 - **Remaining deferred scope:** scheduled exports, advanced backend print pipelines, and document-retention policies beyond patient report exports.
 
-### 5.2 Anthropometric Data & Weight Analysis
+### 5.4 Anthropometric Data & Weight Analysis
 **Status:** Implemented (Supabase-backed anthropometric history; adjacent patient analytics still mixed persistence).
 - **BMI amputation correction** — adjust BMI formula using clinical correction factors (e.g., lower leg = 6.0%).
 - **Target weight projection** — "what-if" calculator using current weight trends.
@@ -146,7 +147,7 @@ Product direction:
 - **MNA (Mini Nutritional Assessment)** — guided 18-item questionnaire for elderly patients with stored answer detail.
 - **SGA (Subjective Global Assessment)** — structured assessment based on history and physical signs with persisted answer detail.
 
-### 5.4 Clinical Record Detail
+### 5.6 Clinical Record Detail
 **Status:** Implemented (Supabase-backed clinical workspace with offline fallback and login-time migration).
 - **Diagnoses** — patient diagnoses with ICD codes now persist in Supabase with offline fallback and login-time migration.
 - **Medications** — patient medication lists now persist in Supabase with offline fallback and login-time migration.
@@ -159,9 +160,9 @@ Product direction:
 
 ---
 
-## 8. Institutional / Clinical Features
+## 6. Institutional / Clinical Features
 
-### 8.4 Hospital Management Features
+### 6.1 Hospital Management Features
 **Status:** Partially implemented with real operational analytics. Inpatient meal workflow, tray cards, and institution dashboards now run on persisted menu plans, stays, meal orders, and allergen constraints; HIS integration remains roadmap.
 - **Patient self-service menu selection** — tablet/bedside terminal selection for patients, filtered by diet form and allergens.
 - **Table cards / tray cards** — auto-generate cards for meal trays showing room/bed, diet form, and selection.
@@ -170,23 +171,23 @@ Product direction:
 
 ---
 
-## 10. User Management & Security
+## 7. User Management & Security
 
-### 10.1 Authentication & Authorization
+### 7.1 Authentication & Authorization
 - **Implementation note:** Local development may bypass auth temporarily in `middleware.ts`. Do not treat that as the intended production model.
 - **SSO (Active Directory/LDAP):** Mandatory for clinical sales to allow hospital IT to manage user access centrally.
 
 ---
 
-## 11. Technical Requirements
+## 8. Technical Requirements
 
-### 11.3 Integrations
+### 8.1 Integrations
 - **HL7 message import** — HL7 v2.x parser to map segments (PID, OBX, ORC) to patient and lab models. This covers legacy systems where FHIR is not yet available.
 - **Web Serial/WebUSB** — for medical device and eGK card reader communication.
 
 ---
 
-## 14. Prioritization (Market-Leader Roadmap)
+## 9. Prioritization (Market-Leader Roadmap)
 
 Roadmap notes:
 - These phases describe intended sequencing, not a strict delivery history.
@@ -217,8 +218,5 @@ Roadmap notes:
 ### Phase 5 - Ecosystem & Scaling
 1. **Manufacturer Live API:** Integrate Open Food Facts and clinical manufacturer feeds.
 2. Professional Recipe Exchange.
-3. Multilingual UI (German + English first, then French + Italian).
-4. Meal-Master recipe import.
-nal Recipe Exchange.
 3. Multilingual UI (German + English first, then French + Italian).
 4. Meal-Master recipe import.

@@ -1,67 +1,23 @@
-# Project Documentation
+# Agent Documentation Index
 
-This folder contains critical documentation for important libraries and technologies used in this project. **Always check this documentation before implementing features related to these topics.**
+This folder contains agent playbooks and narrow technical notes. The canonical project-wide agent contract is `AGENTS.md`.
 
-## Available Documentation
+## Read Order
 
-### [Stripe Integration](./stripe.md)
-Complete guide for payment processing and customer management using Stripe.
+1. Start with `AGENTS.md`.
+2. Use `docs/README.md` to choose product/implementation docs.
+3. Use files in `.agent/docs` only when the task matches the topic.
 
-**Use for:** Payment flows, subscriptions, checkout processes, customer billing
+## Available Playbooks
 
-**Key features:**
-- Test/Live environment setup
-- Next.js integration patterns  
-- Checkout implementation
-- Customer management
-- Webhook handling
-- PCI compliance
+| File | Use For | Notes |
+|---|---|---|
+| `supabase.md` | Supabase, migrations, RLS, ETL credentials, auth behavior | Verify commands against `package.json`; use `npx supabase` unless scripts exist. |
+| `billing.md` | Tariffs, subscriptions, checkout, provider selection | Billing is preview-only; no provider is active unless code proves otherwise. |
+| `roadmap.md` | Agent-readable backlog and strategic priorities | Product requirements and competitive audit are the higher-level sources. |
 
-### [Supabase Integration](./supabase.md)
-Comprehensive guide for backend services using Supabase with CLI-first workflow.
+## Maintenance Rules
 
-**Use for:** Authentication, database operations, real-time features, Edge Functions
-
-**Key features:**
-- Local development with CLI
-- Database migrations and seeding
-- TypeScript type generation
-- Testing procedures
-- Edge Functions deployment
-
-### [Roadmap](./roadmap.md)
-Possible next tasks and features for the Inari platform, organized by category.
-
-**Use for:** Deciding what to work on next, understanding what's built vs. what remains
-
-**Key areas:**
-- Feature completion (eGK, ETL, analytics, PWA)
-- User experience (onboarding, notifications, patient portal, i18n)
-- Technical infrastructure (auth/roles, CI/CD, performance, API docs)
-- Business & growth (billing, report templates, GDPR compliance)
-
-## Quick Reference
-
-| Technology | Documentation | Primary Use Cases |
-|------------|---------------|-------------------|
-| **Stripe** | [stripe.md](./stripe.md) | Payments, subscriptions, billing |
-| **Supabase** | [supabase.md](./supabase.md) | Database, auth, real-time features |
-| **Roadmap** | [roadmap.md](./roadmap.md) | Next tasks, feature backlog |
-
-## Usage Guidelines
-
-1. **Before implementing any feature**, check if relevant documentation exists here
-2. **Follow documented patterns** and best practices for consistency
-3. **Use recommended libraries** and configurations from the docs
-4. **Refer to environment setup** procedures for proper configuration
-5. **Follow CLI workflows** as documented for consistency across the team
-
-## Adding New Documentation
-
-When working with new libraries or technologies, **ask the user if documentation should be created** rather than creating it automatically:
-
-1. **Ask first**: "Should I create documentation for [technology name] in .agent/docs?"
-2. **If approved**: Create a new `.md` file with the technology name
-3. **Include**: Setup instructions, key patterns, and best practices
-4. **Update**: This index with a reference to the new documentation
-5. **Follow**: The same structure as existing docs for consistency
+- Keep these playbooks concise and operational.
+- Remove vendor docs when the vendor is not installed or confirmed by product direction.
+- Do not duplicate long feature, schema, or roadmap sections here; link to `docs/` instead.
