@@ -1,5 +1,18 @@
 import type { ID } from "./common";
 
+export interface PracticeInfo {
+  name: string;
+  address: string;
+  phone: string;
+  email?: string;
+}
+
+export interface OnboardingStatus {
+  completed: boolean;
+  skippedAt?: string;
+  completedAt?: string;
+}
+
 export interface InstitutionalMenuPlan {
   id: ID;
   title: string;
