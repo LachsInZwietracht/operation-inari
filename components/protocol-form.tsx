@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { differenceInYears } from "date-fns"
-import { Info, ListChecks, Loader2, Plus, Sparkles, Trash2, Zap } from "lucide-react"
+import { Check, Info, ListChecks, Loader2, Plus, Search, Sparkles, Trash2, Zap } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -38,6 +38,11 @@ import {
 } from "@/components/ui/command"
 import { Badge } from "@/components/ui/badge"
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -67,7 +72,7 @@ import {
 import { PROTOCOL_TEMPLATES } from "@/lib/protocol-templates"
 import { usePatients } from "@/hooks/use-patients"
 import { useFoods } from "@/components/foods-provider"
-import { matchSmartInput } from "@/lib/nlp-matching"
+import { matchSmartInputMulti, type SmartMatchResultSet } from "@/lib/nlp-matching"
 
 const entrySchema = z.object({
   foodId: z.string().min(1),
@@ -146,6 +151,11 @@ export function ProtocolForm({
   const [foodDialogOpen, setFoodDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [smartInputs, setSmartInputs] = useState<Record<number, string>>({})
+  const [smartCandidates, setSmartCandidates] = useState<{
+    dayIndex: number
+    resultSets: SmartMatchResultSet[]
+    selections: Record<number, number> // fragmentIndex -> candidateIndex
+  } | null>(null)
   const [activeDayIndex, setActiveDayIndex] = useState(0)
   const [templateStepsState, setTemplateStepsState] = useState<Record<string, number[]>>({})
 
@@ -379,30 +389,90 @@ export function ProtocolForm({
     }
   }
 
+  const MATCH_TYPE_LABELS: Record<string, string> = {
+    exact: "exakt",
+    prefix: "Prefix",
+    contains: "enthält",
+    fuzzy: "ähnlich",
+    phonetic: "phonetisch",
+  }
+
+  function confidenceBadgeVariant(confidence: number): "default" | "secondary" | "destructive" {
+    if (confidence >= 0.8) return "default"
+    if (confidence >= 0.5) return "secondary"
+    return "destructive"
+  }
+
   const handleSmartAdd = (dayIndex: number) => {
     const input = smartInputs[dayIndex]
     if (!input) return
 
-    const result = matchSmartInput(input, foods)
-    if (result) {
+    const resultSets = matchSmartInputMulti(input, foods)
+    if (resultSets.length === 0) {
+      toast.error("Lebensmittel nicht erkannt", {
+        description: "Versuchen Sie es mit einer anderen Beschreibung wie '1 Glas Apfelsaft'.",
+      })
+      return
+    }
+
+    // Single fragment with high confidence → auto-add
+    const isSingleHighConfidence =
+      resultSets.length === 1 && resultSets[0].best && resultSets[0].best.confidence >= 0.8
+
+    if (isSingleHighConfidence) {
+      const best = resultSets[0].best!
       appendEntry(dayIndex, {
-        foodId: result.foodId,
-        amount: result.amount,
+        foodId: best.foodId,
+        amount: best.amount,
         mealSlot: "mittagessen",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        measurementMode: result.unit ? "household" : "grams",
-        householdUnit: result.unit,
-        householdQuantity: result.quantity,
+        measurementMode: best.unit ? "household" : "grams",
+        householdUnit: best.unit,
+        householdQuantity: best.quantity,
       })
       setSmartInputs((prev) => ({ ...prev, [dayIndex]: "" }))
-      toast.success(`Hinzugefügt: ${result.foodName}`, {
-        description: `${result.quantity ? `${result.quantity} ${result.unit}` : `${result.amount}g`}`
+      toast.success(`Hinzugefügt: ${best.foodName}`, {
+        description: `${best.quantity ? `${best.quantity} ${best.unit}` : `${best.amount}g`}`,
       })
-    } else {
-      toast.error("Lebensmittel nicht erkannt", {
-        description: "Versuchen Sie es mit einer anderen Beschreibung wie '1 Glas Apfelsaft'."
-      })
+      return
     }
+
+    // Otherwise open candidate selection popover
+    const defaultSelections: Record<number, number> = {}
+    resultSets.forEach((rs, i) => {
+      if (rs.best) defaultSelections[i] = 0
+    })
+    setSmartCandidates({ dayIndex, resultSets, selections: defaultSelections })
+  }
+
+  const handleAcceptCandidates = () => {
+    if (!smartCandidates) return
+    const { dayIndex, resultSets, selections } = smartCandidates
+    let addedCount = 0
+
+    resultSets.forEach((rs, fragmentIndex) => {
+      const selectedIdx = selections[fragmentIndex]
+      if (selectedIdx === undefined || selectedIdx === -1) return
+      const candidate = rs.candidates[selectedIdx]
+      if (!candidate) return
+
+      appendEntry(dayIndex, {
+        foodId: candidate.foodId,
+        amount: candidate.amount,
+        mealSlot: "mittagessen",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        measurementMode: candidate.unit ? "household" : "grams",
+        householdUnit: candidate.unit,
+        householdQuantity: candidate.quantity,
+      })
+      addedCount++
+    })
+
+    if (addedCount > 0) {
+      toast.success(`${addedCount} Lebensmittel hinzugefügt`)
+      setSmartInputs((prev) => ({ ...prev, [dayIndex]: "" }))
+    }
+    setSmartCandidates(null)
   }
 
   const watchedDays = form.watch("days")
@@ -875,31 +945,136 @@ export function ProtocolForm({
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <div className="flex-1 space-y-2">
-                    <FormLabel className="text-xs text-muted-foreground">Smart-Eingabe (z.B. &quot;1 Glas Apfelsaft&quot;)</FormLabel>
-                    <div className="relative">
-                      <Input
-                        placeholder="z.B. 2 Scheiben Vollkornbrot"
-                        value={smartInputs[dayIndex] || ""}
-                        onChange={(e) => setSmartInputs(prev => ({ ...prev, [dayIndex]: e.target.value }))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault()
-                            handleSmartAdd(dayIndex)
-                          }
-                        }}
-                        className="pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 text-purple-500 hover:bg-purple-50 hover:text-purple-600"
-                        onClick={() => handleSmartAdd(dayIndex)}
-                        disabled={!smartInputs[dayIndex]}
-                      >
-                        <Zap className="h-4 w-4 fill-current" />
-                      </Button>
-                    </div>
+                    <FormLabel className="text-xs text-muted-foreground">Smart-Eingabe (z.B. &quot;1 Glas Apfelsaft&quot; oder &quot;Brot mit Butter und Käse&quot;)</FormLabel>
+                    <Popover
+                      open={smartCandidates?.dayIndex === dayIndex}
+                      onOpenChange={(open) => { if (!open) setSmartCandidates(null) }}
+                    >
+                      <PopoverTrigger asChild>
+                        <div className="relative">
+                          <Input
+                            placeholder="z.B. 2 Scheiben Vollkornbrot"
+                            value={smartInputs[dayIndex] || ""}
+                            onChange={(e) => setSmartInputs(prev => ({ ...prev, [dayIndex]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                handleSmartAdd(dayIndex)
+                              }
+                            }}
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 text-purple-500 hover:bg-purple-50 hover:text-purple-600"
+                            onClick={() => handleSmartAdd(dayIndex)}
+                            disabled={!smartInputs[dayIndex]}
+                          >
+                            <Zap className="h-4 w-4 fill-current" />
+                          </Button>
+                        </div>
+                      </PopoverTrigger>
+                      {smartCandidates?.dayIndex === dayIndex && (
+                        <PopoverContent className="w-[420px] p-0" align="start">
+                          <div className="space-y-0 divide-y">
+                            {smartCandidates.resultSets.map((rs, fragmentIndex) => (
+                              <div key={fragmentIndex} className="p-3 space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  &quot;{rs.inputFragment}&quot;
+                                </p>
+                                {rs.candidates.length === 0 ? (
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">Kein Treffer</span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSmartCandidates(null)
+                                        setActiveDayIndex(dayIndex)
+                                        setFoodDialogOpen(true)
+                                      }}
+                                    >
+                                      <Search className="mr-1 h-3 w-3" />
+                                      Manuell suchen
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {rs.candidates.map((candidate, candidateIndex) => {
+                                      const isSelected = smartCandidates.selections[fragmentIndex] === candidateIndex
+                                      return (
+                                        <button
+                                          key={candidate.foodId}
+                                          type="button"
+                                          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent ${
+                                            isSelected ? "bg-accent ring-1 ring-ring" : ""
+                                          }`}
+                                          onClick={() =>
+                                            setSmartCandidates((prev) =>
+                                              prev
+                                                ? {
+                                                    ...prev,
+                                                    selections: {
+                                                      ...prev.selections,
+                                                      [fragmentIndex]: isSelected ? -1 : candidateIndex,
+                                                    },
+                                                  }
+                                                : null,
+                                            )
+                                          }
+                                        >
+                                          <span className="flex items-center gap-2">
+                                            {isSelected && <Check className="h-3 w-3 text-primary" />}
+                                            <span>{candidate.foodName}</span>
+                                          </span>
+                                          <span className="flex items-center gap-1.5">
+                                            <span className="text-xs text-muted-foreground">
+                                              {MATCH_TYPE_LABELS[candidate.matchType] ?? candidate.matchType}
+                                            </span>
+                                            <Badge variant={confidenceBadgeVariant(candidate.confidence)} className="text-[10px] px-1.5 py-0">
+                                              {Math.round(candidate.confidence * 100)}%
+                                            </Badge>
+                                          </span>
+                                        </button>
+                                      )
+                                    })}
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="w-full justify-start text-xs text-muted-foreground"
+                                      onClick={() => {
+                                        setSmartCandidates(null)
+                                        setActiveDayIndex(dayIndex)
+                                        setFoodDialogOpen(true)
+                                      }}
+                                    >
+                                      <Search className="mr-1 h-3 w-3" />
+                                      Manuell suchen
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="border-t p-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="w-full"
+                              onClick={handleAcceptCandidates}
+                              disabled={Object.values(smartCandidates.selections).every((v) => v === -1)}
+                            >
+                              <Check className="mr-1 h-3 w-3" />
+                              Übernehmen
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      )}
+                    </Popover>
                   </div>
                 </div>
 

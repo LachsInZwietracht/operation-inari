@@ -1,17 +1,17 @@
 "use client"
 
-import { use, useCallback, useEffect, useMemo, useState } from "react"
+import { use, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { ProtocolForm } from "@/components/protocol-form"
+import { SmartMatchReviewDialog } from "@/components/smart-match-review-dialog"
 import { useProtocols } from "@/hooks/use-protocols"
 import { usePatients } from "@/hooks/use-patients"
 import { useFoods } from "@/components/foods-provider"
 import { useDigitalProtocolSubmissions } from "@/hooks/use-digital-protocol-submissions"
-import { buildProtocolDraftFromSubmission } from "@/lib/digital-protocol-conversion"
 import { Button } from "@/components/ui/button"
-import type { DigitalProtocolSubmission, NutritionProtocol } from "@/lib/types"
+import type { DigitalProtocolSubmission, NutritionProtocol, ProtocolDraftPrefill } from "@/lib/types"
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -32,6 +32,8 @@ export function NeuesProtokollPageClient({
   const [resolvedSubmission, setResolvedSubmission] = useState<DigitalProtocolSubmission | null | undefined>(
     digitalSubmissionId ? undefined : null,
   )
+  const [showReviewDialog, setShowReviewDialog] = useState(false)
+  const [reviewedDraft, setReviewedDraft] = useState<ProtocolDraftPrefill | undefined>(undefined)
 
   useEffect(() => {
     if (!digitalSubmissionId) {
@@ -57,10 +59,20 @@ export function NeuesProtokollPageClient({
     }
   }, [digitalSubmissionId, getSubmission, loadSubmission])
 
-  const initialValues = useMemo(
-    () => (resolvedSubmission ? buildProtocolDraftFromSubmission(resolvedSubmission, foods) : undefined),
-    [foods, resolvedSubmission],
-  )
+  // When submission resolves, open the review dialog
+  useEffect(() => {
+    if (resolvedSubmission && resolvedSubmission.status !== "converted" && !reviewedDraft) {
+      setShowReviewDialog(true)
+    }
+  }, [resolvedSubmission, reviewedDraft])
+
+  const handleReviewConfirm = useCallback((draft: ProtocolDraftPrefill) => {
+    setReviewedDraft(draft)
+    setShowReviewDialog(false)
+  }, [])
+
+  // Use reviewed draft if available, otherwise no initial values for submission flow
+  const initialValues = reviewedDraft
 
   const handleSubmit = useCallback(
     async (protocol: Omit<NutritionProtocol, "id" | "createdAt" | "updatedAt">) => {
@@ -146,6 +158,28 @@ export function NeuesProtokollPageClient({
             <Link href={`/patienten/${id}`}>Zurueck zum Patienten</Link>
           </Button>
         </div>
+      </div>
+    )
+  }
+
+  // For submission flow: show review dialog first, then form after review
+  if (resolvedSubmission && !reviewedDraft) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Digitales Protokoll uebernehmen"
+          description={`${patient.firstName} ${patient.lastName}`}
+        />
+        <p className="text-sm text-muted-foreground">
+          Die Smart-Match Überprüfung wird geöffnet...
+        </p>
+        <SmartMatchReviewDialog
+          open={showReviewDialog}
+          onOpenChange={setShowReviewDialog}
+          submission={resolvedSubmission}
+          foods={foods}
+          onConfirm={handleReviewConfirm}
+        />
       </div>
     )
   }

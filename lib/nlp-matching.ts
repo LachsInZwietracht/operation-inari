@@ -1,4 +1,5 @@
 import { HOUSEHOLD_MEASURES } from "./constants";
+import { scoreMatch, type SearchMatch } from "./search/fuzzy-search";
 import { type Food } from "./types";
 
 export interface SmartMatchResult {
@@ -10,6 +11,22 @@ export interface SmartMatchResult {
   confidence: number;
 }
 
+export interface SmartMatchCandidate {
+  foodId: string;
+  foodName: string;
+  amount: number;
+  unit?: string;
+  quantity?: number;
+  confidence: number;
+  matchType: SearchMatch["matchType"];
+}
+
+export interface SmartMatchResultSet {
+  inputFragment: string;
+  candidates: SmartMatchCandidate[];
+  best: SmartMatchCandidate | null;
+}
+
 const UNIT_KEYWORDS: Record<string, string[]> = {
   teaspoon: ["tl", "teelöffel"],
   tablespoon: ["el", "esslöffel"],
@@ -19,30 +36,31 @@ const UNIT_KEYWORDS: Record<string, string[]> = {
   handful: ["handvoll"],
   piece: ["stück", "stk"],
   scoop: ["kelle", "schöpfkelle"],
-  grams: ["g", "gramm"]
+  grams: ["g", "gramm"],
 };
 
-/**
- * AI-Assisted matching logic (NLP lite)
- * In a real-world scenario, this would call an LLM or a specialized NLP service.
- * For this MVP, we use a robust heuristic-based keyword matcher.
- */
-export function matchSmartInput(text: string, foods: Food[]): SmartMatchResult | null {
-  const normalized = text.toLowerCase().trim();
-  if (!normalized) return null;
+const COMPOUND_SEPARATORS = /\s+mit\s+|\s+und\s+|\s*,\s+|\s+sowie\s+/i;
 
-  // 1. Extract Quantity (e.g. "1.5", "2", "ein")
+function splitCompoundInput(text: string): string[] {
+  return text
+    .split(COMPOUND_SEPARATORS)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function extractQuantityAndUnit(text: string): {
+  quantity: number;
+  unit: string | undefined;
+  foodSearchText: string;
+} {
+  const normalized = text.toLowerCase().trim();
+
   let quantity = 1;
   const quantityMatch = normalized.match(/^(\d+([.,]\d+)?)/);
   if (quantityMatch) {
     quantity = parseFloat(quantityMatch[1].replace(",", "."));
-  } else if (normalized.startsWith("ein ")) {
-    quantity = 1;
-  } else if (normalized.startsWith("eine ")) {
-    quantity = 1;
   }
 
-  // 2. Extract Unit
   let unit: string | undefined = undefined;
   let foodSearchText = normalized.replace(/^(\d+([.,]\d+)?|ein|eine)\s*/, "");
 
@@ -57,57 +75,117 @@ export function matchSmartInput(text: string, foods: Food[]): SmartMatchResult |
     if (unit) break;
   }
 
-  // 3. Find Food
-  // Search strategy:
-  // a) Exact match
-  // b) Starts with
-  // c) Includes
-  // d) Keyword score
-  
-  let bestMatch: Food | null = null;
-  let maxScore = 0;
+  return { quantity, unit, foodSearchText };
+}
 
-  for (const food of foods) {
-    const foodName = food.name.toLowerCase();
-    let score = 0;
-
-    if (foodName === foodSearchText) {
-      score = 100;
-    } else if (foodName.startsWith(foodSearchText)) {
-      score = 80;
-    } else if (foodName.includes(foodSearchText)) {
-      score = 50;
-    }
-
-    if (score > maxScore) {
-      maxScore = score;
-      bestMatch = food;
-    }
-  }
-
-  if (!bestMatch || maxScore < 30) return null;
-
-  // 4. Calculate Amount
-  let amount = 100; // Default fallback
+function calculateAmount(
+  unit: string | undefined,
+  quantity: number,
+): number {
   if (unit === "grams") {
-    amount = quantity;
-  } else if (unit) {
-    const measure = HOUSEHOLD_MEASURES.find(m => m.id === unit);
-    if (measure) {
-      amount = measure.grams * quantity;
-    }
-  } else {
-    // If no unit, assume "piece" if quantity is small, otherwise grams?
-    // Better: default to "piece" equivalent (100g)
-    amount = 100 * quantity;
+    return quantity;
   }
+  if (unit) {
+    const measure = HOUSEHOLD_MEASURES.find((m) => m.id === unit);
+    if (measure) {
+      return measure.grams * quantity;
+    }
+  }
+  return 100 * quantity;
+}
+
+interface MatchSmartInputMultiOptions {
+  maxCandidates?: number;
+}
+
+export function matchSmartInputMulti(
+  text: string,
+  foods: Food[],
+  options?: MatchSmartInputMultiOptions,
+): SmartMatchResultSet[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  const maxCandidates = options?.maxCandidates ?? 3;
+  const fragments = splitCompoundInput(trimmed);
+
+  // First fragment inherits the parsed quantity/unit, subsequent fragments default
+  const firstParsed = extractQuantityAndUnit(fragments[0]);
+
+  return fragments.map((fragment, index) => {
+    const { quantity, unit, foodSearchText } =
+      index === 0
+        ? firstParsed
+        : (() => {
+            const parsed = extractQuantityAndUnit(fragment);
+            // If subsequent fragment has no explicit quantity/unit, use defaults
+            const hasExplicitQuantity = /^(\d+([.,]\d+)?|ein|eine)\b/i.test(
+              fragment.trim(),
+            );
+            return {
+              quantity: hasExplicitQuantity ? parsed.quantity : 1,
+              unit: parsed.unit,
+              foodSearchText: hasExplicitQuantity
+                ? parsed.foodSearchText
+                : fragment.toLowerCase().trim(),
+            };
+          })();
+
+    if (!foodSearchText) {
+      return { inputFragment: fragment, candidates: [], best: null };
+    }
+
+    // Score every food using the fuzzy search engine
+    const scored: { food: Food; match: SearchMatch }[] = [];
+    for (const food of foods) {
+      const match = scoreMatch(foodSearchText, food.name);
+      if (match) {
+        scored.push({ food, match });
+      }
+    }
+
+    // Sort by score descending, take top N
+    scored.sort((a, b) => b.match.score - a.match.score);
+    const topN = scored.slice(0, maxCandidates);
+
+    const candidates: SmartMatchCandidate[] = topN.map(({ food, match }) => ({
+      foodId: food.id,
+      foodName: food.name,
+      amount: calculateAmount(unit, quantity),
+      unit: unit === "grams" ? undefined : unit,
+      quantity: unit === "grams" ? undefined : quantity,
+      confidence: match.score,
+      matchType: match.matchType,
+    }));
+
+    return {
+      inputFragment: fragment,
+      candidates,
+      best: candidates[0] ?? null,
+    };
+  });
+}
+
+/**
+ * AI-Assisted matching logic (NLP lite) — now powered by fuzzy search engine.
+ * Backward-compatible wrapper around matchSmartInputMulti.
+ */
+export function matchSmartInput(
+  text: string,
+  foods: Food[],
+): SmartMatchResult | null {
+  const results = matchSmartInputMulti(text, foods, { maxCandidates: 1 });
+  if (results.length === 0) return null;
+
+  const best = results[0].best;
+  if (!best) return null;
 
   return {
-    foodId: bestMatch.id,
-    foodName: bestMatch.name,
-    amount,
-    unit: unit === "grams" ? undefined : unit,
-    quantity: unit === "grams" ? undefined : quantity,
-    confidence: maxScore / 100
+    foodId: best.foodId,
+    foodName: best.foodName,
+    amount: best.amount,
+    unit: best.unit,
+    quantity: best.quantity,
+    confidence: best.confidence,
   };
 }

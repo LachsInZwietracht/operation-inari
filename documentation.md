@@ -104,8 +104,13 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Submitted diaries can be opened as a prefilled draft via `/patienten/[id]/protokolle/neu?digitalSubmission=<id>`.
   - Draft generation uses `lib/digital-protocol-conversion.ts`: confident food matches are prefilled as protocol rows, unmatched free text is preserved in notes, and the resulting protocol metadata records the submission source.
   - Final conversion is completed server-side through `/api/digital-protocol-submissions/convert`, which sets the submission status to `converted` and stores the created protocol ID.
-- **Smart-Eingabe (NLP Lite):** The `ProtocolForm` includes an AI-assisted input that allows entering food like "1 Glas Apfelsaft" or "2 Scheiben Brot".
-- **NLP Engine:** `lib/nlp-matching.ts` parses free-text for quantity, unit, and food name using keyword heuristics.
+- **Smart-Eingabe (NLP + Fuzzy Search):** The `ProtocolForm` includes an AI-assisted input that allows entering food like "1 Glas Apfelsaft", "2 Scheiben Brot", or compound entries like "Brot mit Butter und Käse".
+  - **Supported formats:** `[quantity] [unit] food`, `food mit food und food`, German word variations and typos.
+  - **Compound splitting:** Separators `mit`, `und`, `,`, `sowie` split input into independent fragments. The first fragment inherits the parsed quantity/unit; subsequent fragments default to 1 piece (100g).
+  - **Confidence levels:** `≥ 80%` (green, auto-accepted), `50–79%` (yellow, review recommended), `< 50%` (red, manual search suggested).
+  - **Candidate selection:** When a single fragment matches with ≥ 80% confidence, the food is auto-added. Otherwise a popover shows top 3 candidates per fragment with match type labels (exakt, ähnlich, phonetisch) and confidence badges.
+  - **Review dialog for digital protocols:** When converting a digital protocol submission, a `SmartMatchReviewDialog` sheet opens first, letting the practitioner review all matched entries, accept/reject/re-search individually, then confirm the reviewed draft before opening the protocol form.
+- **NLP Engine:** `lib/nlp-matching.ts` uses the 7-tier fuzzy search engine from `lib/search/fuzzy-search.ts` (exact, prefix, contains, word-level, trigram, phonetic word, phonetic full) instead of basic substring matching. Exports both `matchSmartInput()` (backward-compat single result) and `matchSmartInputMulti()` (multi-candidate, compound-aware).
 - **Persistence:** Protocols use `useProtocols` for Supabase-first persistence with automatic local fallback.
 
 ### 4.14 Berichte (`/berichte`)
