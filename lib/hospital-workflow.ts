@@ -1,7 +1,7 @@
 import { addDays, differenceInCalendarDays, parseISO } from "date-fns";
 
 import { ALLERGEN_MAP } from "@/lib/allergen-constants";
-import { DIET_FORMS } from "@/lib/mock-data";
+import { DIET_FORMS } from "@/lib/reference-data/institution";
 import type { InpatientStay, InstitutionMenu, MealCandidate, MealOrder, MealSlotType, Patient, PatientAllergenEntry, Recipe } from "@/lib/types";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 

@@ -66,7 +66,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useMealPlan } from "@/hooks/use-meal-plan"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
-import { DIET_LINES } from "@/lib/mock-data"
+import { DIET_LINES } from "@/lib/reference-data/diet-lines"
 import {
   scaleNutrients,
   sumNutrients,

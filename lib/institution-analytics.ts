@@ -1,7 +1,7 @@
 import { addDays, parseISO } from "date-fns";
 
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
-import { DIET_FORMS } from "@/lib/mock-data";
+import { DIET_FORMS } from "@/lib/reference-data/institution";
 import { getNutrientValue, scaleNutrients, sumNutrients } from "@/lib/nutrients";
 import type {
   ComplianceResult,

@@ -237,7 +237,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Sync indicator:** Shows "Gespeichert" with check icon or "Synchronisiere…" with spinner.
   - **Production tab:** Day-selectable production list with expandable ingredient details.
   - **Shopping tab:** Category-grouped shopping list with portion scaling and CSV export.
-- **Extension notes:** To add new meal slots, extend `VISIBLE_MEAL_SLOTS` and ensure `MEAL_SLOT_LABELS` has a matching entry. To add new diet form categories, extend `DIET_FORMS` in `lib/mock-data/institution.ts`. Shopping cost estimates use `CATEGORY_COST_PER_KG` in the hook — update when adding new food categories.
+- **Extension notes:** To add new meal slots, extend `VISIBLE_MEAL_SLOTS` and ensure `MEAL_SLOT_LABELS` has a matching entry. To add new diet form categories, extend `DIET_FORMS` in `lib/reference-data/institution.ts`. Shopping cost estimates use `CATEGORY_COST_PER_KG` in the hook — update when adding new food categories.
 
 ### 4.17 Allergen & Intolerance Management
 

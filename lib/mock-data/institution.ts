@@ -1,5 +1,4 @@
 import type {
-  DietForm,
   InstitutionMenu,
   HospitalBed,
   DietaryOrder,
@@ -13,134 +12,9 @@ import type {
   CostAnalysis,
   DayCompliance,
 } from "@/lib/types";
+export { DIET_FORMS, DAY_LABELS, DAY_LABELS_FULL } from "@/lib/reference-data/institution";
 
 const ts = { createdAt: "2026-03-01T00:00:00Z", updatedAt: "2026-03-01T00:00:00Z" };
-
-// ──────────────────────────────────────────────
-// Diet forms (Kostformen)
-// ──────────────────────────────────────────────
-
-export const DIET_FORMS: DietForm[] = [
-  {
-    id: "diet_vollkost",
-    name: "Vollkost",
-    shortName: "VK",
-    category: "standard",
-    description: "Ausgewogene Vollkost nach DGE-Empfehlungen",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 2000, min: 1800, max: 2200 },
-      { nutrientId: "eiweiss", target: 60, min: 50, max: 80 },
-      { nutrientId: "fett", target: 65, min: 55, max: 80 },
-      { nutrientId: "kohlenhydrate", target: 250, min: 220, max: 300 },
-      { nutrientId: "ballaststoffe", target: 30, min: 25 },
-      { nutrientId: "natrium", max: 2300 },
-    ],
-    allergenExclusions: [],
-    isActive: true,
-  },
-  {
-    id: "diet_leichte_vollkost",
-    name: "Leichte Vollkost",
-    shortName: "LVK",
-    category: "standard",
-    description: "Gut verträgliche Kost, vermeidet blähende und stark gewürzte Speisen",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 1800, min: 1600, max: 2000 },
-      { nutrientId: "eiweiss", target: 55, min: 45, max: 70 },
-      { nutrientId: "fett", target: 60, min: 50, max: 70 },
-      { nutrientId: "kohlenhydrate", target: 230, min: 200, max: 270 },
-      { nutrientId: "ballaststoffe", target: 25, min: 20 },
-    ],
-    allergenExclusions: [],
-    isActive: true,
-  },
-  {
-    id: "diet_diabetes",
-    name: "Diabeteskost",
-    shortName: "DK",
-    category: "diabetes",
-    description: "Kohlenhydratkontrollierte Kost für Diabetes mellitus",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 1800, min: 1600, max: 2000 },
-      { nutrientId: "eiweiss", target: 70, min: 60, max: 90 },
-      { nutrientId: "fett", target: 55, min: 45, max: 65 },
-      { nutrientId: "kohlenhydrate", target: 200, min: 170, max: 230 },
-      { nutrientId: "zucker", max: 30 },
-      { nutrientId: "ballaststoffe", target: 35, min: 30 },
-    ],
-    allergenExclusions: [],
-    isActive: true,
-  },
-  {
-    id: "diet_nieren",
-    name: "Nierendiät",
-    shortName: "ND",
-    category: "renal",
-    description: "Protein- und kaliumreduzierte Kost bei Niereninsuffizienz",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 2000, min: 1800, max: 2200 },
-      { nutrientId: "eiweiss", target: 40, min: 35, max: 50 },
-      { nutrientId: "kalium", max: 2000 },
-      { nutrientId: "phosphor", max: 1000 },
-      { nutrientId: "natrium", max: 2000 },
-    ],
-    allergenExclusions: [],
-    isActive: true,
-  },
-  {
-    id: "diet_glutenfrei",
-    name: "Glutenfreie Kost",
-    shortName: "GF",
-    category: "allergen",
-    description: "Strikter Ausschluss glutenhaltiger Getreide",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 2000, min: 1800, max: 2200 },
-      { nutrientId: "eiweiss", target: 60, min: 50, max: 80 },
-      { nutrientId: "ballaststoffe", target: 25, min: 20 },
-    ],
-    allergenExclusions: ["Gluten"],
-    isActive: true,
-  },
-  {
-    id: "diet_laktosefrei",
-    name: "Laktosefreie Kost",
-    shortName: "LF",
-    category: "allergen",
-    description: "Kost ohne Laktose bei Laktoseintoleranz",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 2000, min: 1800, max: 2200 },
-      { nutrientId: "calcium", target: 1000, min: 800 },
-    ],
-    allergenExclusions: ["Milch"],
-    isActive: true,
-  },
-  {
-    id: "diet_pueriert",
-    name: "Pürierte Kost",
-    shortName: "PK",
-    category: "consistency",
-    description: "Pürierte Kost bei Kau- und Schluckstörungen",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 1800, min: 1600, max: 2000 },
-      { nutrientId: "eiweiss", target: 60, min: 50, max: 75 },
-    ],
-    allergenExclusions: [],
-    isActive: true,
-  },
-  {
-    id: "diet_fluessig",
-    name: "Flüssigkost",
-    shortName: "FK",
-    category: "consistency",
-    description: "Ausschließlich flüssige Nahrung, prä-/postoperativ",
-    nutrientTargets: [
-      { nutrientId: "energie", target: 1500, min: 1200, max: 1800 },
-      { nutrientId: "eiweiss", target: 50, min: 40, max: 65 },
-    ],
-    allergenExclusions: [],
-    isActive: false,
-  },
-];
 
 // ──────────────────────────────────────────────
 // Institution menu (1-week sample)
@@ -793,6 +667,3 @@ export const KITCHEN_STATIONS = [
   "Diätküche",
   "Patisserie",
 ] as const;
-
-export const DAY_LABELS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] as const;
-export const DAY_LABELS_FULL = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"] as const;

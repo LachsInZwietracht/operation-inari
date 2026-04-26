@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { DIET_FORMS, DAY_LABELS } from "@/lib/mock-data";
+import { DIET_FORMS, DAY_LABELS } from "@/lib/reference-data/institution";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { PageHeader } from "@/components/page-header";
 import { formatNumber } from "@/lib/format";

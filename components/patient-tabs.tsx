@@ -66,10 +66,8 @@ import { ReferenceProfileSelector } from "@/components/reference-profile-selecto
 import { formatDate, formatNumber } from "@/lib/format"
 import { downloadCsv } from "@/lib/utils"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
-import {
-  LAB_PARAMETERS,
-  GROWTH_PERCENTILES,
-} from "@/lib/mock-data"
+import { LAB_PARAMETERS } from "@/lib/reference-data/lab-parameters"
+import { GROWTH_PERCENTILES } from "@/lib/reference-data/growth-percentiles"
 import { AMPUTATION_AREAS, PROTOCOL_TYPE_LABELS } from "@/lib/constants"
 import { useDiagnoses } from "@/hooks/use-diagnoses"
 import { useMedications } from "@/hooks/use-medications"

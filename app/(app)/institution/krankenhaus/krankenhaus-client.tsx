@@ -50,7 +50,7 @@ import {
 } from "@/components/ui/table";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { ALLERGEN_MAP } from "@/lib/allergen-constants";
-import { DIET_FORMS } from "@/lib/mock-data";
+import { DIET_FORMS } from "@/lib/reference-data/institution";
 import {
   buildKitchenSummary,
   buildMealCandidates,

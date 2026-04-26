@@ -85,7 +85,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-import { DIET_FORMS, DAY_LABELS } from "@/lib/mock-data";
+import { DIET_FORMS, DAY_LABELS } from "@/lib/reference-data/institution";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { useInstitutionMenu } from "@/hooks/use-institution-menu";
 import { formatNumber } from "@/lib/format";

@@ -16,7 +16,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { GROWTH_PERCENTILES } from "@/lib/mock-data"
+import { GROWTH_PERCENTILES } from "@/lib/reference-data/growth-percentiles"
 import type { AnthropometricEntry, Gender } from "@/lib/types"
 
 const METRICS = [
