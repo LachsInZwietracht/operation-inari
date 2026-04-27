@@ -29,8 +29,7 @@ import {
 import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
-import type { FoodSourceId } from "@/lib/types";
-import { useFoods } from "@/components/foods-provider";
+import type { Food, FoodSourceId } from "@/lib/types";
 
 const ALLERGENS = [
   "Gluten",
@@ -42,6 +41,8 @@ const ALLERGENS = [
   "Fisch",
   "Sesam",
 ];
+
+const EMPTY_BASE_FOODS: Food[] = [];
 
 const nutrientSchema = z.object({
   name: z.string().min(1, "Name ist erforderlich"),
@@ -70,8 +71,7 @@ const nutrientSchema = z.object({
 
 export function NeuesLebensmittelPageClient() {
   const router = useRouter();
-  const foods = useFoods();
-  const { addFood } = useCustomFoods(foods);
+  const { addFood } = useCustomFoods(EMPTY_BASE_FOODS);
 
   const form = useForm<z.infer<typeof nutrientSchema>>({
     resolver: zodResolver(nutrientSchema),

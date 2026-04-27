@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,27 +21,38 @@ import {
 } from "@/components/ui/table";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
-import { getNutrientValue } from "@/lib/nutrients";
 import { formatNumber } from "@/lib/format";
 import { Search, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useFoods } from "@/components/foods-provider";
-import { useNutrientValues } from "@/hooks/use-nutrient-values";
+import { useFoodSearch } from "@/components/foods-provider";
+import { useNutrientValueMaps } from "@/hooks/use-nutrient-values";
 
 type SortDir = "asc" | "desc";
 
+const TABLE_NUTRIENT_IDS = ["energie", "eiweiss", "fett", "kohlenhydrate"];
+
 export function AustauschtabellenPageClient() {
-  const foods = useFoods();
+  const { index: foods, isLoading: isIndexLoading, loadIndex } = useFoodSearch();
   const [selectedNutrient, setSelectedNutrient] = useState("energie");
   const [categoryFilter, setCategoryFilter] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const nutrientDef = NUTRIENT_DEFINITIONS.find((d) => d.id === selectedNutrient);
-  const { values: nutrientValues, isLoading: nutrientLoading, error: nutrientError } = useNutrientValues(
-    selectedNutrient,
-    foods,
+  const nutrientIds = useMemo(
+    () => Array.from(new Set([selectedNutrient, ...TABLE_NUTRIENT_IDS])),
+    [selectedNutrient],
   );
+  const { valuesByNutrient, isLoading: nutrientLoading, error: nutrientError } =
+    useNutrientValueMaps(nutrientIds);
+  const nutrientValues = useMemo(
+    () => valuesByNutrient.get(selectedNutrient) ?? new Map<string, number>(),
+    [selectedNutrient, valuesByNutrient],
+  );
+
+  useEffect(() => {
+    void loadIndex();
+  }, [loadIndex]);
 
   const filtered = useMemo(() => {
     return foods
@@ -56,6 +67,10 @@ export function AustauschtabellenPageClient() {
         return sortDir === "desc" ? bVal - aVal : aVal - bVal;
       });
   }, [foods, search, categoryFilter, sortDir, nutrientValues]);
+
+  function getNutrientAmount(foodId: string, nutrientId: string) {
+    return valuesByNutrient.get(nutrientId)?.get(foodId) ?? 0;
+  }
 
   return (
     <div className="space-y-6">
@@ -102,7 +117,7 @@ export function AustauschtabellenPageClient() {
         </Select>
       </div>
 
-      {nutrientLoading && (
+      {(isIndexLoading || nutrientLoading) && (
         <p className="text-muted-foreground text-sm">Nährstoffwerte werden geladen …</p>
       )}
       {nutrientError && (
@@ -154,16 +169,16 @@ export function AustauschtabellenPageClient() {
                       {formatNumber(nutrientVal, 1)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatNumber(getNutrientValue(food.nutrients, "energie"), 0)}
+                      {formatNumber(getNutrientAmount(food.id, "energie"), 0)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatNumber(getNutrientValue(food.nutrients, "eiweiss"), 1)}
+                      {formatNumber(getNutrientAmount(food.id, "eiweiss"), 1)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatNumber(getNutrientValue(food.nutrients, "fett"), 1)}
+                      {formatNumber(getNutrientAmount(food.id, "fett"), 1)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatNumber(getNutrientValue(food.nutrients, "kohlenhydrate"), 1)}
+                      {formatNumber(getNutrientAmount(food.id, "kohlenhydrate"), 1)}
                     </TableCell>
                   </TableRow>
                 );

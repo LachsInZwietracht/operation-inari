@@ -35,6 +35,7 @@ import {
 
 import { useNutrientCalculation } from "@/hooks/use-nutrient-calculation";
 import { getNutrientValue } from "@/lib/nutrients";
+import { calculateProdScore } from "@/lib/prodi-score";
 import { formatNumber } from "@/lib/format";
 import type { Recipe, Ingredient, Food } from "@/lib/types";
 import { useFoodSearch } from "@/components/foods-provider";
@@ -42,6 +43,7 @@ import { persistPersonalRecipe } from "@/lib/data/recipes-client";
 import { deleteLocalRecipeById, upsertLocalRecipe } from "@/lib/data/local-recipes";
 import { FoodSearchDialog } from "@/components/food-search-dialog";
 import { fetchFoodsByIds } from "@/lib/data/foods-client";
+import { deriveRecipeAllergens, computeIngredientCo2 } from "@/lib/allergen-derivation";
 
 const UNIQUE_CATEGORIES = [
   "Suppe",
@@ -176,6 +178,12 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   const perServingFat = getNutrientValue(perServingNutrients, "fett");
   const perServingCarbs = getNutrientValue(perServingNutrients, "kohlenhydrate");
 
+  // Auto-derive allergens from current ingredients for visual hint
+  const autoDetectedAllergens = useMemo(
+    () => deriveRecipeAllergens(ingredientsForCalc, availableFoods),
+    [ingredientsForCalc, availableFoods],
+  );
+
   const foodMap = useMemo(() => {
     const entries = new Map<string, Food>();
     for (const food of availableFoods) {
@@ -206,6 +214,25 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
   async function onSubmit(values: RecipeFormValues) {
     setSaving(true);
     try {
+      const ingredients = values.ingredients.map(i => ({ foodId: i.foodId, amount: i.amount }));
+
+      // Compute PRODIscore from live nutrients
+      const computedProdScore = perServingNutrients.length > 0
+        ? Math.round(calculateProdScore(perServingNutrients).score)
+        : values.prodScore;
+
+      // Compute CO₂ per portion from ingredient breakdown
+      const co2Result = computeIngredientCo2(ingredients, availableFoods);
+      const computedCo2 = co2Result.totalCo2 > 0
+        ? Number((co2Result.totalCo2 / Math.max(values.servings, 1)).toFixed(4))
+        : values.co2PerPortion;
+
+      // Merge manual + auto-derived allergens
+      const derivedAllergens = deriveRecipeAllergens(ingredients, availableFoods);
+      const manualAllergens = values.allergens ?? [];
+      const mergedAllergens = Array.from(new Set([...manualAllergens, ...derivedAllergens]))
+        .sort((a, b) => a.localeCompare(b, "de"));
+
       const formattedRecipe: Recipe = {
         id: recipe?.id ?? `recipe_${Date.now()}`,
         name: values.name,
@@ -215,16 +242,15 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         prepTime: values.prepTime,
         cookTime: values.cookTime,
         imageUrl: values.imageUrl || undefined,
-        prodScore: values.prodScore,
-        co2PerPortion: values.co2PerPortion,
-        allergens: values.allergens,
+        prodScore: computedProdScore,
+        co2PerPortion: computedCo2,
+        allergens: mergedAllergens,
         additives: values.additives ? values.additives.split(",").map(s => s.trim()) : undefined,
-        ingredients: values.ingredients.map(i => ({ foodId: i.foodId, amount: i.amount })),
+        ingredients,
         instructions: values.instructions.map(s => s.value),
         sourceType: recipe?.sourceType ?? "personal",
         createdAt: recipe?.createdAt ?? new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        // Save cached nutrient values for list view performance
         cachedKcalPerPortion: perServingKcal,
         cachedProteinPerPortion: perServingProtein,
         cachedFatPerPortion: perServingFat,
@@ -583,12 +609,13 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                         <div className="grid grid-cols-2 gap-2">
                           {RECIPE_ALLERGENS.map((allergen) => {
                             const checked = field.value?.includes(allergen) ?? false;
+                            const isAutoDetected = autoDetectedAllergens.includes(allergen);
                             return (
                               <label key={allergen} className="flex items-center gap-2 text-sm">
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 rounded border"
-                                  checked={checked}
+                                  checked={checked || isAutoDetected}
                                   onChange={(event) => {
                                     const current = field.value ?? [];
                                     if (event.target.checked) {
@@ -598,11 +625,21 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                                     }
                                   }}
                                 />
-                                {allergen}
+                                <span className={isAutoDetected && !checked ? "text-muted-foreground italic" : ""}>
+                                  {allergen}
+                                  {isAutoDetected && !checked && (
+                                    <span className="ml-1 text-xs text-muted-foreground">(auto)</span>
+                                  )}
+                                </span>
                               </label>
                             );
                           })}
                         </div>
+                        {autoDetectedAllergens.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Allergene werden automatisch aus den Zutaten erkannt und beim Speichern ergänzt.
+                          </p>
+                        )}
                       </FormItem>
                     )}
                   />

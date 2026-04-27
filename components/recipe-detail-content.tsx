@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback } from "react";
-import { Clock, Users, Pencil, Flame, Drumstick, Droplet, Wheat } from "lucide-react";
+import { Clock, Users, Pencil, Flame, Drumstick, Droplet, Wheat, Leaf, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 import { MacroRingChart } from "@/components/macro-ring-chart";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
@@ -31,23 +32,15 @@ import {
   getNutrientValue,
   scaleNutrients,
 } from "@/lib/nutrients";
+import { calculateProdScore } from "@/lib/prodi-score";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import type { Recipe, Food, PatientAllergenEntry } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
 import { fetchFoodsByIds } from "@/lib/data/foods-client";
 import { useEffect, useMemo, useState } from "react";
 import { checkAllergenConflicts } from "@/lib/allergen-warnings";
+import { deriveRecipeAllergens, computeIngredientCo2 } from "@/lib/allergen-derivation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
-
-function getScoreBadge(score: number | undefined) {
-  if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
-  if (score >= 85) return { label: "A", color: "bg-emerald-100 text-emerald-900" };
-  if (score >= 70) return { label: "B", color: "bg-lime-100 text-lime-900" };
-  if (score >= 55) return { label: "C", color: "bg-amber-100 text-amber-900" };
-  if (score >= 40) return { label: "D", color: "bg-orange-100 text-orange-900" };
-  return { label: "E", color: "bg-red-100 text-red-900" };
-}
 
 interface RecipeDetailContentProps {
   recipe: Recipe;
@@ -60,16 +53,10 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
   const { convertRecipeToFood } = useCustomFoods(availableFoods);
   const { getDisplayName } = useFoodSynonyms();
 
-  const allergenWarnings = useMemo(() => {
-    if (!patientAllergens?.length || !recipe.allergens?.length) return [];
-    return checkAllergenConflicts(recipe.allergens, patientAllergens);
-  }, [recipe.allergens, patientAllergens]);
-
   useEffect(() => {
-    // If we only have some (or no) foods, fetch the ones specifically for this recipe
     const ingredientIds = recipe.ingredients.map(i => i.foodId);
     const missingIds = ingredientIds.filter(id => !availableFoods.some(f => f.id === id));
-    
+
     if (missingIds.length > 0) {
       fetchFoodsByIds(missingIds).then(newFoods => {
         setAvailableFoods(prev => [...prev, ...newFoods]);
@@ -80,7 +67,7 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
   const totalNutrients = calculateRecipeNutrients(recipe, availableFoods);
   const perServing = calculatePerServing(totalNutrients, recipe.servings);
 
-  const totalKcal = totalNutrients.length > 0 
+  const totalKcal = totalNutrients.length > 0
     ? getNutrientValue(totalNutrients, "energie")
     : (recipe.cachedKcalPerPortion ? recipe.cachedKcalPerPortion * recipe.servings : 0);
 
@@ -102,6 +89,61 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
 
   const foodMap = new Map(availableFoods.map((f) => [f.id, f]));
 
+  // ── Dynamic PRODIscore ──
+  const prodScore = useMemo(() => {
+    if (perServing.length > 0) return calculateProdScore(perServing);
+    return null;
+  }, [perServing]);
+
+  const positiveDrivers = useMemo(
+    () =>
+      prodScore?.drivers
+        .filter((d) => d.impact > 0)
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 2) ?? [],
+    [prodScore],
+  );
+
+  const negativeDrivers = useMemo(
+    () =>
+      prodScore?.drivers
+        .filter((d) => d.impact < 0)
+        .sort((a, b) => a.impact - b.impact)
+        .slice(0, 2) ?? [],
+    [prodScore],
+  );
+
+  // ── Dynamic CO₂ ──
+  const co2Breakdown = useMemo(
+    () => computeIngredientCo2(recipe.ingredients, availableFoods),
+    [recipe.ingredients, availableFoods],
+  );
+
+  const co2PerPortion = useMemo(() => {
+    if (co2Breakdown.totalCo2 > 0) {
+      return recipe.servings > 0 ? co2Breakdown.totalCo2 / recipe.servings : co2Breakdown.totalCo2;
+    }
+    return recipe.co2PerPortion ?? null;
+  }, [co2Breakdown.totalCo2, recipe.servings, recipe.co2PerPortion]);
+
+  // ── Allergen derivation ──
+  const derivedAllergens = useMemo(
+    () => deriveRecipeAllergens(recipe.ingredients, availableFoods),
+    [recipe.ingredients, availableFoods],
+  );
+
+  const manualAllergens = useMemo(() => recipe.allergens ?? [], [recipe.allergens]);
+
+  const allAllergens = useMemo(() => {
+    const combined = new Set([...manualAllergens, ...derivedAllergens]);
+    return Array.from(combined).sort((a, b) => a.localeCompare(b, "de"));
+  }, [manualAllergens, derivedAllergens]);
+
+  const allergenWarnings = useMemo(() => {
+    if (!patientAllergens?.length || !allAllergens.length) return [];
+    return checkAllergenConflicts(allAllergens, patientAllergens);
+  }, [allAllergens, patientAllergens]);
+
   const vitaminHighlights = NUTRIENT_DEFINITIONS.filter((nd) => nd.group === "vitamine")
     .map((nd) => ({ ...nd, value: getNutrientValue(perServing, nd.id) }))
     .filter((v) => v.value > 0)
@@ -114,12 +156,12 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  const scoreBadge = getScoreBadge(recipe.prodScore);
-
   const handleConvert = useCallback(() => {
     convertRecipeToFood(recipe);
     toast.success("Rezept als Lebensmittel gespeichert");
   }, [convertRecipeToFood, recipe]);
+
+  const badge = prodScore?.badge ?? { label: "–" as const, color: "bg-slate-200 text-slate-900", description: "Keine Daten" };
 
   return (
     <div className="space-y-6">
@@ -136,8 +178,8 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
         }
       >
         <div className="absolute right-4 top-4">
-          <Badge className={`${scoreBadge.color} border-none px-3 py-1 text-sm font-bold`}>
-            PRODIscore {scoreBadge.label}
+          <Badge className={`${badge.color} border-none px-3 py-1 text-sm font-bold`}>
+            PRODIscore {badge.label}
           </Badge>
         </div>
       </div>
@@ -185,18 +227,44 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
                   </AlertDescription>
                 </Alert>
               )}
-              <div className="flex flex-wrap gap-2">
-                {recipe.allergens?.map((allergen) => (
-                  <Badge key={allergen} variant="destructive" className="text-xs">
-                    {allergen}
-                  </Badge>
-                ))}
-                {recipe.additives?.map((additive) => (
-                  <Badge key={additive} variant="outline" className="text-xs">
-                    {additive}
-                  </Badge>
-                ))}
-              </div>
+              {allAllergens.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Allergendeklaration (LMIV)
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {allAllergens.map((allergen) => {
+                      const isAutoDetected = derivedAllergens.includes(allergen) && !manualAllergens.includes(allergen);
+                      return (
+                        <Badge
+                          key={allergen}
+                          variant="destructive"
+                          className={`text-xs ${isAutoDetected ? "border-dashed border-2" : ""}`}
+                        >
+                          {allergen}
+                          {isAutoDetected && (
+                            <span className="ml-1 opacity-70" title="Automatisch aus Zutaten erkannt">*</span>
+                          )}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  {derivedAllergens.some((a) => !manualAllergens.includes(a)) && (
+                    <p className="text-xs text-muted-foreground">
+                      * Automatisch aus Zutaten abgeleitet
+                    </p>
+                  )}
+                </div>
+              )}
+              {recipe.additives && recipe.additives.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {recipe.additives.map((additive) => (
+                    <Badge key={additive} variant="outline" className="text-xs">
+                      {additive}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -211,6 +279,7 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
                     <TableHead>Lebensmittel</TableHead>
                     <TableHead className="text-right">Menge</TableHead>
                     <TableHead className="text-right">Kalorien</TableHead>
+                    <TableHead className="text-right">CO₂</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -220,6 +289,7 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
                     const scaled = scaleNutrients(food.nutrients, food.baseAmount, ingredient.amount);
                     const kcal = getNutrientValue(scaled, "energie");
                     const displayName = getDisplayName(food.id, food.name) ?? food.name;
+                    const ingredientCo2 = co2Breakdown.entries.find((e) => e.foodId === ingredient.foodId);
                     return (
                       <TableRow key={ingredient.foodId}>
                         <TableCell>{displayName}</TableCell>
@@ -228,6 +298,9 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
                         </TableCell>
                         <TableCell className="text-right">
                           {formatNumber(kcal, 0)} kcal
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {ingredientCo2 ? `${formatNumber(ingredientCo2.co2, 3)} kg` : "–"}
                         </TableCell>
                       </TableRow>
                     );
@@ -303,17 +376,102 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
             </CardContent>
           </Card>
 
+          {/* ── PRODIscore Card ── */}
           <Card>
             <CardHeader>
-              <CardTitle>Nachhaltigkeit</CardTitle>
+              <CardTitle className="text-base">PRODIscore</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>
-                CO₂ je Portion: {recipe.co2PerPortion ? `${formatNumber(recipe.co2PerPortion, 2)} kg` : "n. a."}
-              </p>
-              <p className="text-muted-foreground text-xs">
-                Einschätzung basiert auf Zutatenmix und Produktionsweg.
-              </p>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-semibold">{prodScore ? Math.round(prodScore.score) : "–"}</p>
+                  <p className="text-muted-foreground text-xs">{prodScore?.summary ?? "Keine Nährstoffdaten"}</p>
+                </div>
+                <Badge className={`${badge.color} border-none px-3 py-1 text-xs font-bold`}>
+                  {badge.label}
+                </Badge>
+              </div>
+              {prodScore && <Progress value={prodScore.score} />}
+              {(positiveDrivers.length > 0 || negativeDrivers.length > 0) && (
+                <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  {positiveDrivers.map((driver) => (
+                    <div key={driver.id} className="rounded-md bg-emerald-50/70 p-2">
+                      <p className="font-medium">{driver.label}</p>
+                      <p className="text-muted-foreground">{driver.description}</p>
+                    </div>
+                  ))}
+                  {negativeDrivers.map((driver) => (
+                    <div key={driver.id} className="rounded-md bg-red-50/70 p-2">
+                      <p className="font-medium">{driver.label}</p>
+                      <p className="text-muted-foreground">{driver.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Sustainability Card ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Nachhaltigkeit</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">CO₂ je Portion</p>
+                  <p className="text-2xl font-semibold">
+                    {co2PerPortion !== null ? `${formatNumber(co2PerPortion, 2)} kg` : "n. a."}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase text-muted-foreground">Gesamt</p>
+                  <p className="font-semibold">
+                    {co2Breakdown.totalCo2 > 0 ? `${formatNumber(co2Breakdown.totalCo2, 2)} kg` : "–"}
+                  </p>
+                </div>
+              </div>
+              {co2Breakdown.totalCo2 > 0 && (
+                <>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Leaf className="h-3 w-3" /> Pflanzlich
+                      </span>
+                      <span>Tierisch</span>
+                    </div>
+                    <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="bg-emerald-400 transition-all"
+                        style={{ width: `${co2Breakdown.plantShare * 100}%` }}
+                      />
+                      <div
+                        className="bg-orange-400 transition-all"
+                        style={{ width: `${co2Breakdown.animalShare * 100}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+                      <span>{formatNumber(co2Breakdown.plantShare * 100, 0)}%</span>
+                      <span>{formatNumber(co2Breakdown.animalShare * 100, 0)}%</span>
+                    </div>
+                  </div>
+                  {co2Breakdown.entries.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                        Top-Verursacher
+                      </p>
+                      <div className="space-y-1">
+                        {co2Breakdown.entries.slice(0, 3).map((entry) => (
+                          <div key={entry.foodId} className="flex items-center justify-between text-xs">
+                            <span className="truncate mr-2">{entry.foodName}</span>
+                            <span className="text-muted-foreground shrink-0">{formatNumber(entry.co2, 3)} kg</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 

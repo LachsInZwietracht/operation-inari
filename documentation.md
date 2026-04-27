@@ -83,6 +83,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Custom foods:** Page 1 still merges local custom-food migration candidates so offline or unauthenticated entries remain visible, but authenticated saves now canonicalize to Supabase IDs immediately and localStorage keeps only unmigrated/offline entries.
 - **Synonyms:** `useFoodSynonyms()` now reads seeded system aliases from Supabase `food_synonyms` via `lib/data/food-synonyms-client.ts` and merges them with local user-created aliases stored in `localStorage`. The foods UI no longer bootstraps synonym seeds from `lib/mock-data`.
 - **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
+- **New custom food:** `/lebensmittel/neu` does not hydrate the catalog. It uses `useCustomFoods([])` only for the create/persist flow because submission does not need base foods.
+- **Food comparison:** `/lebensmittel/vergleichen` uses `fetchFoodsForComparison()` for the seven nutrients displayed in the comparison table, plus `fetchBrandedFoods()` for bundled manufacturer examples.
+- **Exchange tables:** `/austauschtabellen` does not fetch a server-side `Food[]` catalog. The client loads the shared food search index via `useFoodSearch()` and fetches only the selected/displayed nutrient columns through `useNutrientValueMaps()`.
 
 ### 4.3 Rezepte Overview (`/rezepte`)
 - **Component:** `app/(app)/rezepte/page.tsx`
@@ -94,12 +97,16 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Routing:** `app/(app)/rezepte/[id]/page.tsx` fetches the recipe from Supabase.
 - **Optimization:** No longer loads the full 7,000 food catalog.
 - **Hydration:** The page fetches recipe metadata first, then **asynchronously hydrates** only the specific foods used as ingredients via `fetchFoodsByIds`.
+- **Dynamic PRODIscore:** Computes the PRODIscore live from per-serving nutrients via `calculateProdScore()`. Displays numeric score, letter grade, progress bar, summary, and top positive/negative driver breakdown — replacing the old static `recipe.prodScore` display.
+- **Dynamic CO₂ footprint:** Computes per-ingredient and per-portion CO₂ from `computeIngredientCo2()`. Ingredients table includes a CO₂ column. Sustainability card shows total, per-portion, plant/animal share bar, and top emitters.
+- **LMIV allergen declaration:** Auto-derives allergens from ingredient foods using three strategies (explicit `food.allergens`, BLS food-group inference, name-token matching via `ALLERGEN_DEFINITIONS`). Merges with manually declared allergens and renders LMIV-compliant badges with auto-detection indicators. Core logic in `lib/allergen-derivation.ts`.
 
 ### 4.5 Recipe Form (`/rezepte/neu`, `/rezepte/[id]/bearbeiten`)
 - **Component:** `components/recipe-form.tsx`
   - Uses `FoodSearchDialog` for on-demand ingredient selection.
   - **Local-Save First:** Always persists to `localStorage` before attempting Supabase sync, ensuring data safety for offline/unauthenticated users.
   - **Nutrient Caching:** Automatically calculates and persists calorie/macro totals into the `recipes` table for performant list rendering.
+  - **Auto-computed on save:** PRODIscore and CO₂ per portion are computed from live nutrients/ingredients and stored alongside the recipe. Allergen checkboxes highlight auto-detected allergens from ingredients; on save, derived and manual allergens are merged.
 
 ### 4.6 Patient Detail (`/patienten/[id]` + nested tabs)
 - **Clinical record core:**

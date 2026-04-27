@@ -110,23 +110,33 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 
 ### Data Access Architecture
 
-The app uses a two-tier data delivery pattern to balance payload size vs. functionality:
+The app uses a tiered data delivery pattern to balance payload size vs. functionality:
 
 **Tier 1 — Search index (~100 KB, always loaded):**
 - `fetchFoodSearchIndex()` in `lib/data/foods.ts` fetches only `id`, `name`, `category_id`, `data_source_id`, `is_custom` from Supabase
-- Loaded once in `app/(app)/layout.tsx` and provided via `FoodSearchProvider` context
-- Consumed by the Cmd+K search palette (`useFoodSearchIndex()`) and any component that only needs food names
+- `app/(app)/layout.tsx` provides an empty `FoodSearchProvider`; consumers call `loadIndex()` to fetch `/api/foods/search-index` on demand
+- Consumed by the Cmd+K search palette (`useFoodSearch()`) and pages that only need food names/categories
 - Type: `FoodSearchItem[]`
 
-**Tier 2a — List-optimised food catalog (~2-3 MB, preferred for list/table views):**
+**Tier 2a — Search index plus nutrient maps (preferred for exchange/ranking views):**
+- Use `useFoodSearch()` for names/categories and `useNutrientValueMaps()` for only the displayed nutrient columns
+- `/austauschtabellen` follows this pattern, so the route no longer hydrates `Food[]` at page load
+- Prefer this when the UI sorts/ranks foods by nutrient values but does not need allergens, portions, source metadata, or full nutrient arrays
+
+**Tier 2b — List-optimised food catalog (~2-3 MB, preferred when components need `Food[]`):**
 - `fetchAllFoodsForList()` in `lib/data/foods.ts` fetches all food columns + only 13 selected nutrients (4 table display + 9 PRODIscore), no portions
 - Uses the `nutrientIds` filter on `fetchFoods()` which leverages PostgREST embedded resource filtering (`food_nutrients.nutrient_id=in.(...)`)
 - ~97% smaller than the full payload (~2-3 MB vs ~46 MB)
-- Used by `/lebensmittel` list page, `/dashboard`, and any route that only needs table columns + scoring
+- Used by list-style routes such as `/wissen` and protocol creation where full nutrient/portion data is not required but existing components still need `Food[]`
 
-**Tier 2b — Full food catalog with all nutrients (~46 MB, use sparingly):**
+**Tier 2c — Purpose-specific nutrient subsets:**
+- `fetchFoodsForComparison()` fetches only the seven nutrients rendered by `/lebensmittel/vergleichen` (`energie`, `eiweiss`, `fett`, `kohlenhydrate`, `ballaststoffe`, `natrium`, `kalium`)
+- `fetchFoodsForMealPlans()`, `fetchFoodsForReports()`, and `fetchFoodsForProtocols()` keep route-specific nutrient sets for their calculation surfaces
+- Prefer adding a named subset wrapper when a route needs a stable nutrient profile that is smaller than the full catalog
+
+**Tier 2d — Full food catalog with all nutrients (~46 MB, use sparingly):**
 - `fetchAllFoods()` in `lib/data/foods.ts` fetches all columns + all `food_nutrients` + `food_portions` joins
-- Required only for pages that do full nutrient math across all 37 nutrients (e.g., recipe editing, detailed meal plan analysis)
+- Required only for pages that truly need every nutrient and portion definition
 - Consumed via `useFoods()` hook in client components
 - Type: `Food[]`
 - Deduplicated within a single request via React `cache()`
@@ -134,15 +144,18 @@ The app uses a two-tier data delivery pattern to balance payload size vs. functi
 **Key files:**
 | File | Role |
 |---|---|
-| `lib/data/foods.ts` | All Supabase queries: `fetchFoods()`, `fetchFoodById()`, `fetchFoodsViaRpc()`, `fetchFoodsChunked()`, `fetchAllFoods()`, `fetchAllFoodsForList()`, `fetchFoodSearchIndex()` |
+| `lib/data/foods.ts` | All Supabase queries: `fetchFoods()`, `fetchFoodById()`, `fetchFoodsViaRpc()`, `fetchFoodsChunked()`, `fetchAllFoods()`, `fetchAllFoodsForList()`, route-specific subset wrappers, `fetchFoodSearchIndex()` |
+| `hooks/use-nutrient-values.ts` | Client-side nutrient amount maps for routes that rank/filter by a small set of nutrients without hydrating `Food[]` |
 | `components/foods-provider.tsx` | Two React contexts: `FoodsProvider` (full data) + `FoodSearchProvider` (search index) |
-| `app/(app)/layout.tsx` | Fetches search index, wraps app in `FoodSearchProvider` |
-| Individual `page.tsx` files | Pages needing nutrients fetch via `fetchAllFoodsForList()` or `fetchAllFoods()` and wrap client in `FoodsProvider` |
+| `app/(app)/layout.tsx` | Wraps app in `FoodSearchProvider`; the search index is loaded lazily through `/api/foods/search-index` |
+| Individual `page.tsx` files | Pages needing nutrients fetch via the narrowest suitable wrapper and wrap client components in `FoodsProvider` only when `useFoods()` is required |
 
 **Pattern for new pages:**
-- If you only need food names/categories: use `useFoodSearchIndex()` — no page-level fetch needed
-- If you need table display nutrients + PRODIscore: use `fetchAllFoodsForList()` + `FoodsProvider` (preferred)
-- If you need all 37 nutrients (e.g., full nutrient breakdown, recipe calculation): use `fetchAllFoods()` + `FoodsProvider`
+- If you only need food names/categories: use `useFoodSearch()` — no page-level fetch needed
+- If you need names/categories plus a few nutrient columns for ranking: use `useFoodSearch()` + `useNutrientValueMaps()`
+- If existing components need `Food[]` with table display nutrients + PRODIscore: use `fetchAllFoodsForList()` + `FoodsProvider`
+- If you need a small fixed nutrient set, add or reuse a named subset wrapper such as `fetchFoodsForComparison()`
+- If you need all nutrients and portions: use `fetchAllFoods()` + `FoodsProvider`
 - If you need protocol analysis/day views: use `fetchFoodsForProtocols()` instead of `fetchAllFoods()`
 - `fetchFoods()` also accepts a `nutrientIds` string array to fetch an arbitrary subset of nutrients
 - `fetchFoods()` exposes `withCount` (default `true`) to disable expensive `COUNT(*)` queries when paginating manually
@@ -576,8 +589,8 @@ ETL Pipeline:
 All pages now fetch food data from Supabase instead of the `FOODS` mock constant. The migration followed this pattern:
 
 **Architecture:**
-- Server `page.tsx` components call `fetchAllFoods()` (or `fetchFoodById()` for detail pages)
-- They wrap their client component in `<FoodsProvider>` to make data available via `useFoods()` hook
+- Server `page.tsx` components call the narrowest suitable food fetcher (`fetchFoodsBrowserPage()`, `fetchAllFoodsForList()`, route-specific subset wrappers, `fetchAllFoods()`, or `fetchFoodById()` for detail pages)
+- They wrap their client component in `<FoodsProvider>` only when the client needs catalog data via `useFoods()`
 - The layout provides a lightweight search index via `<FoodSearchProvider>` (see Data Access Architecture in Section 1)
 
 **Current mock-data audit status (2026-04-26):**
@@ -692,12 +705,14 @@ Rules going forward:
 **Done:**
 - Added `nutrientIds` filter to `fetchFoods()` — uses PostgREST embedded resource filtering to fetch only selected nutrients
 - Created `fetchAllFoodsForList()` — fetches 13 nutrients (4 table display: energie/eiweiss/fett/kohlenhydrate + 9 PRODIscore), no portions (~2-3 MB)
-- Switched `/lebensmittel` and `/dashboard` to use the lighter fetch
+- Added route-specific subset wrappers, including `fetchFoodsForComparison()` for `/lebensmittel/vergleichen`
+- Switched known full-catalog page loads away from `fetchAllFoods()` where full nutrient/portion data is not required
+- `/lebensmittel/neu` no longer fetches any catalog data before rendering the create form
+- `/austauschtabellen` now uses the lazy food search index plus `useNutrientValueMaps()` instead of hydrating `fetchAllFoodsForList()` through `FoodsProvider`
 
 **Remaining:**
-1. **Migrate more pages:** Other routes still use `fetchAllFoods()` — audit each to determine if `fetchAllFoodsForList()` suffices
-2. **Paginated client hooks:** Replace the "load everything" pattern with paginated hooks backed by Supabase server-side filtering
-3. **On-demand nutrient fetch:** Fetch full nutrients lazily only when a user drills into a food detail page
+1. **Paginated client hooks:** Continue replacing all-catalog hook patterns with paginated/server-backed reads where route behavior allows it
+2. **On-demand nutrient fetch:** Fetch full nutrients lazily only when a user drills into a food detail page or selects a specific item that needs full details
 
 ---
 
@@ -782,9 +797,11 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 ### Performance Considerations
 
 **Current architecture (7,140 BLS foods):**
-- Layout ships a ~100 KB search index to every page (acceptable)
-- List pages use `fetchAllFoodsForList()` — 13 nutrients only, ~2-3 MB (down from ~46 MB with all 37 nutrients + portions)
-- Pages requiring full nutrient math use `fetchAllFoods()` — all 37 nutrients + portions (~46 MB, use sparingly)
+- Layout provides lazy access to the ~100 KB food search index; consumers load it through `/api/foods/search-index`
+- `/austauschtabellen` uses the search index plus nutrient value maps for selected table columns instead of hydrating `Food[]`
+- Remaining list pages that need `Food[]` use `fetchAllFoodsForList()` — 13 nutrients only, ~2-3 MB (down from ~46 MB with all 37 nutrients + portions)
+- Comparison uses `fetchFoodsForComparison()` — seven displayed nutrients only, no portions
+- Pages requiring every nutrient and portion use `fetchAllFoods()` — all 37 nutrients + portions (~46 MB, use sparingly)
 - Protocol detail pages use `fetchFoodsForProtocols()` — protocol analysis/day-view nutrient subset, smaller than `fetchAllFoods()`
 - Food detail pages use `fetchFoodById()` for single-record queries (efficient)
 - React `cache()` deduplicates fetches within a single server request
@@ -804,13 +821,14 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
   2. Fetches each chunk via `fetchFoodsViaRpc()` with `limit`/`offset`
   3. Caches each chunk independently via `unstable_cache` with its own key (e.g., `foods-list-chunk-0`, `foods-list-chunk-1`)
   4. Reassembles all chunks into a single `Food[]`
-- All 6 cached wrappers (`fetchAllFoods`, `fetchAllFoodsForList`, `fetchFoodsForMealPlans`, `fetchFoodsForReports`, `fetchFoodsForProtocols`, `fetchFoodsForInstitution`) use `fetchFoodsChunked`
+- All 7 cached wrappers (`fetchAllFoods`, `fetchAllFoodsForList`, `fetchFoodsForMealPlans`, `fetchFoodsForComparison`, `fetchFoodsForReports`, `fetchFoodsForProtocols`, `fetchFoodsForInstitution`) use `fetchFoodsChunked`
 - Dynamic chunk sizes by variant:
 
 | Wrapper | Nutrients | ~Chunk size | ~Chunks |
 |---|---|---|---|
 | `fetchAllFoodsForList` | 13 | 1,935 | 4 |
 | `fetchFoodsForMealPlans` | 16 | 1,666 | 5 |
+| `fetchFoodsForComparison` | 7 | 2,608 | 3 |
 | `fetchFoodsForReports` | 16 | 1,666 | 5 |
 | `fetchFoodsForProtocols` | 28 | 1,304 | 6 |
 | `fetchFoodsForInstitution` | 265 | 197 | 37 |

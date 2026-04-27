@@ -105,3 +105,98 @@ export function useNutrientValues(nutrientId: string, foods: Food[]) {
     error,
   };
 }
+
+export function useNutrientValueMaps(nutrientIds: string[]) {
+  const cacheKey = useMemo(
+    () => Array.from(new Set(nutrientIds.filter(Boolean))).sort().join("|"),
+    [nutrientIds],
+  );
+  const normalizedIds = useMemo(() => (cacheKey ? cacheKey.split("|") : []), [cacheKey]);
+
+  const [valuesByNutrient, setValuesByNutrient] = useState<Map<string, Map<string, number>>>(() => {
+    const initial = new Map<string, Map<string, number>>();
+    for (const nutrientId of normalizedIds) {
+      const cached = nutrientCache.get(nutrientId);
+      if (cached) initial.set(nutrientId, cached);
+    }
+    return initial;
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const missingIds = normalizedIds.filter((nutrientId) => !nutrientCache.has(nutrientId));
+
+    if (missingIds.length === 0) {
+      const cachedValues = new Map<string, Map<string, number>>();
+      for (const nutrientId of normalizedIds) {
+        const cached = nutrientCache.get(nutrientId);
+        if (cached) cachedValues.set(nutrientId, cached);
+      }
+      setValuesByNutrient(cachedValues);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    async function load() {
+      const client = createClient();
+
+      const results = await Promise.all(
+        missingIds.map(async (nutrientId) => {
+          const { data, error } = await client
+            .from("food_nutrients")
+            .select("food_id, amount, per_amount")
+            .eq("nutrient_id", nutrientId)
+            .limit(10000);
+
+          if (error) {
+            throw new Error(`${nutrientId}: ${error.message}`);
+          }
+
+          const map = new Map<string, number>();
+          for (const row of (data ?? []) as FoodNutrientRow[]) {
+            map.set(row.food_id, normalizeAmount(row));
+          }
+
+          nutrientCache.set(nutrientId, map);
+          return [nutrientId, map] as const;
+        }),
+      );
+
+      if (!active) return;
+
+      const nextValues = new Map<string, Map<string, number>>();
+      for (const nutrientId of normalizedIds) {
+        const cached = nutrientCache.get(nutrientId);
+        if (cached) nextValues.set(nutrientId, cached);
+      }
+      for (const [nutrientId, map] of results) {
+        nextValues.set(nutrientId, map);
+      }
+
+      setValuesByNutrient(nextValues);
+      setLoading(false);
+    }
+
+    void load().catch((loadError) => {
+      if (!active) return;
+      setError(loadError instanceof Error ? loadError.message : "Nährstoffwerte konnten nicht geladen werden");
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [cacheKey, normalizedIds]);
+
+  return {
+    valuesByNutrient,
+    isLoading: loading,
+    error,
+  };
+}
