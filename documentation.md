@@ -164,7 +164,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/datenbank/page.tsx`
   - The route now reads the live source catalog from `data_sources` through `fetchDataSources()`.
   - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.
-  - The route no longer fabricates release notes or future quarter announcements; until a real changelog source exists, it is a live catalog-status page plus an informational note about missing editorial history.
+  - Database lifecycle events now have a real persistence target in `data_source_events`, surfaced as the `Datenbankhistorie` section. Empty states are honest when no ETL/import job has written events yet.
+  - Admins can run a v1 food-reference replacement workflow from the page. `FoodReplacementForm` calls the `replace_food_references` RPC through `app/(app)/datenbank/actions.ts`, replacing the selected source food with the selected target food in the current admin's own recipe ingredients, daily meal-plan food entries, and nutrition protocol entries.
+  - Each replacement writes `food_reference_replacements` and, when an organization membership exists, `access_audit_logs`. System/shared recipes and other users' records are intentionally not mutated in v1.
 
 ### 4.11 Wissensbibliothek (`/wissen`)
 - **Component:** `app/(app)/wissen/wissen-client.tsx`

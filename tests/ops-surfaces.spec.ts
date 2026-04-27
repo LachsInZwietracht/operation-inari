@@ -14,6 +14,9 @@ test.describe("Ops Surfaces", () => {
 
     await expect(page.getByRole("heading", { name: "Datenbankstatus" })).toBeVisible();
     await expect(page.getByText("Katalogstatus")).toBeVisible();
+    await expect(page.getByText("Datenbankhistorie")).toBeVisible();
+    await expect(page.getByText("Lebensmittelreferenzen ersetzen")).toBeVisible();
+    await expect(page.getByText("Ersetzungsprotokoll")).toBeVisible();
     await expect(page.getByText("BLS (Bundeslebensmittelschlüssel)")).toBeVisible();
   });
 

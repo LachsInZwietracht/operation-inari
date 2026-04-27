@@ -1,13 +1,23 @@
-import { Database, Globe, Scale, TestTube2 } from "lucide-react"
+import { ArrowRightLeft, Clock3, Database, FileClock, Globe, Scale, TestTube2 } from "lucide-react"
 
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchDataSources } from "@/lib/data/data-sources"
+import { fetchDataSourceEvents, fetchFoodReferenceReplacements } from "@/lib/data/database-lifecycle"
 import { formatDate, formatNumber } from "@/lib/format"
+import { FoodReplacementForm } from "./food-replacement-form"
 
 export default async function DatenbankPage() {
-  const { sources, error } = await fetchDataSources()
+  const [
+    { sources, error },
+    { events, error: eventsError },
+    { replacements, error: replacementsError },
+  ] = await Promise.all([
+    fetchDataSources(),
+    fetchDataSourceEvents(),
+    fetchFoodReferenceReplacements(),
+  ])
 
   const totalRecords = sources.reduce((sum, source) => sum + (source.recordCount ?? 0), 0)
   const latestImport = sources[0]?.importedAt ?? null
@@ -16,8 +26,8 @@ export default async function DatenbankPage() {
     <div className="space-y-6">
       <PageHeader
         title="Datenbankstatus"
-        description="Live geladener Quellenkatalog aus Supabase statt statischer Release-Notizen"
-        helpText="Diese Ansicht zeigt reale Datensaetze aus der Tabelle `data_sources`: Version, Importzeitpunkt, Datentiefe und Lizenz. Ein redaktioneller Changelog fuer Datenbankupdates existiert derzeit noch nicht."
+        description="Quellen, Versionen, Aenderungshistorie und auditierte Lebensmittelreferenzen"
+        helpText="Diese Ansicht zeigt reale Datenbank-Metadaten aus Supabase. Versionen kommen aus `data_sources`, Import-/Mappingereignisse aus `data_source_events`, und Lebensmittelersetzungen werden als Auditvorgang protokolliert."
       />
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -114,20 +124,142 @@ export default async function DatenbankPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <CardTitle className="flex items-center gap-2">
-              <Scale className="h-5 w-5 text-muted-foreground" />
-              Hinweis zur Aenderungshistorie
+              <FileClock className="h-5 w-5 text-muted-foreground" />
+              Datenbankhistorie
             </CardTitle>
-            <Badge variant="secondary">Informational</Badge>
+            <Badge variant="secondary">Audit</Badge>
           </div>
-          <CardDescription>Es gibt derzeit keinen separaten redaktionellen Release-Feed fuer Datenbankupdates.</CardDescription>
+          <CardDescription>Importe, Versionswechsel, Mappingkorrekturen und lizenzrelevante Hinweise pro Quelle.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {eventsError ? (
+            <div className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
+              {eventsError}
+            </div>
+          ) : null}
+          {events.length > 0 ? (
+            <div className="space-y-3">
+              {events.map((event) => (
+                <div key={event.id} className="rounded-lg border p-4 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{event.title}</p>
+                        <Badge variant="outline">{event.eventType}</Badge>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">{event.summary}</p>
+                    </div>
+                    <div className="text-right text-xs text-muted-foreground">
+                      <p>{event.dataSourceId.toUpperCase()} {event.version ? `v${event.version}` : ""}</p>
+                      <p>{formatDate(event.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>Datensaetze: {event.recordCount != null ? formatNumber(event.recordCount) : "k.A."}</span>
+                    <span>Naehrstoffe: {event.nutrientCount != null ? formatNumber(event.nutrientCount) : "k.A."}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !eventsError ? (
+            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+              Noch keine Datenbankereignisse protokolliert. Kuenftige ETL- und Mappinglaeufe schreiben hier echte
+              Changelog-Zeilen statt statischer Release-Notizen.
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
+              Lebensmittelreferenzen ersetzen
+            </CardTitle>
+            <Badge variant="secondary">Admin</Badge>
+          </div>
+          <CardDescription>
+            Ersetzt ein Lebensmittel in eigenen Rezepten, Tagesplaenen und Ernaehrungsprotokollen und schreibt ein
+            Auditprotokoll. System- und Fremddaten bleiben in v1 unveraendert.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FoodReplacementForm />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <Clock3 className="h-5 w-5 text-muted-foreground" />
+              Ersetzungsprotokoll
+            </CardTitle>
+            <Badge variant="outline">Live</Badge>
+          </div>
+          <CardDescription>Letzte Lebensmittelersetzungen im eigenen Mandanten-/Benutzerkontext.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {replacementsError ? (
+            <div className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
+              {replacementsError}
+            </div>
+          ) : null}
+          {replacements.map((replacement) => {
+            const total =
+              replacement.recipeIngredientsUpdated +
+              replacement.mealEntriesUpdated +
+              replacement.protocolEntriesUpdated
+
+            return (
+              <div key={replacement.id} className="rounded-lg border p-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">
+                      {replacement.sourceFoodName ?? replacement.sourceFoodId} -&gt;{" "}
+                      {replacement.targetFoodName ?? replacement.targetFoodId}
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      {total} Referenzen: {replacement.recipeIngredientsUpdated} Rezeptzutaten,{" "}
+                      {replacement.mealEntriesUpdated} Planeintraege, {replacement.protocolEntriesUpdated} Protokolleintraege
+                    </p>
+                    {replacement.reason ? (
+                      <p className="mt-1 text-muted-foreground">Begruendung: {replacement.reason}</p>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{formatDate(replacement.createdAt)}</p>
+                </div>
+              </div>
+            )
+          })}
+          {replacements.length === 0 && !replacementsError ? (
+            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+              Noch keine Lebensmittelreferenzen ersetzt.
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-muted-foreground" />
+              Scope v1
+            </CardTitle>
+            <Badge variant="secondary">Traceability</Badge>
+          </div>
+          <CardDescription>Grenzen der ersten Datenbank-Lifecycle-Ausbaustufe.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
-            Diese Seite zeigt den produktiven Quellenkatalog. Wenn kuenftig echte Import-Changelogs benoetigt werden,
-            sollten sie in einer eigenen Tabelle oder einem CMS gepflegt werden statt ueber statische Mock-Notizen.
+            Die Ersetzung laeuft atomar in Supabase und betrifft eigene Rezepte, Tagesplaene und Protokolle. Sie ist
+            fuer Datenbankupdates, Dubletten und veraltete Referenzen gedacht.
           </p>
           <p>
-            Bis dahin gelten Version, Importzeitpunkt, Record Count und Lizenzangaben als massgebliche Live-Metadaten.
+            Kuenftige Ausbaustufen koennen globale Systemrezepte, institutionelle Freigabeprozesse, Diff-Uploads und
+            ETL-seitige `data_source_events` direkt an Importjobs koppeln.
           </p>
         </CardContent>
       </Card>

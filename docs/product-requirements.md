@@ -52,8 +52,9 @@ Product direction:
 - **Food synonym management** — `food_synonyms` table linking user-defined names to food IDs; synonyms replace original names in search and printouts.
 
 ### 1.5 Database Management
-**Status:** Partially implemented (mock version history, comparison tool).
-- **Global search & replace foods** — find and replace a specific food ID across all recipes, meal plans, and protocols in one operation. Essential for handling database version updates.
+**Status:** Partially implemented (live source catalog, lifecycle-event persistence target, audited user-workspace food replacement).
+- **Global search & replace foods** — v1 replaces a specific food ID in the authenticated admin's own recipes, daily meal plans, and nutrition protocols, then logs the action in `food_reference_replacements` and `access_audit_logs`.
+- **Remaining scope:** institution-wide/system recipe replacement approvals, nutrient-source diff UI, ETL-written release events, and broader database version migration tooling.
 
 ---
 
