@@ -28,7 +28,8 @@ Precedence:
 Current operational notes:
 - The app is designed around a hosted Supabase project. Local Supabase is optional for development.
 - Push schema changes with `supabase db push`.
-- Core ETL commands are `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:reference-values`, `npm run etl:recipes`, and `npm run etl:off`.
+- Core ETL commands are `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:reference-values`, `npm run etl:recipes`, `npm run etl:off`, `npm run etl:synonyms`, and `npm run etl:portions`.
+- **Full pipeline:** `npm run etl:all` runs all steps in the correct order. Supports `--dry-run`, `--skip=bls,off`, and `--only=synonyms,portions` flags.
 - ETL scripts require server-side Supabase credentials such as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Do not use `NEXT_PUBLIC_*` variables for ETL.
 - BLS import and verification are expected to run together. The verifier checks imported counts against the source workbook.
 - Category mapping in `scripts/etl/import-bls.ts` must stay aligned with UI category definitions such as `lib/mock-data/categories.ts`.

@@ -17,6 +17,7 @@ export const NUTRIENT_GROUP_LABELS: Record<NutrientGroup, string> = {
   makronaehrstoffe: "Makronährstoffe",
   vitamine: "Vitamine",
   mineralstoffe: "Mineralstoffe",
+  sonstige: "Sonstige",
 };
 
 export const APP_NAME = "Inari";

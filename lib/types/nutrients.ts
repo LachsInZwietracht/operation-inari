@@ -1,6 +1,6 @@
 import { ID } from "./common";
 
-export type NutrientGroup = "makronaehrstoffe" | "vitamine" | "mineralstoffe";
+export type NutrientGroup = "makronaehrstoffe" | "vitamine" | "mineralstoffe" | "sonstige";
 
 export interface NutrientDefinition {
   id: ID;

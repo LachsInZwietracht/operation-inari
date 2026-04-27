@@ -314,7 +314,10 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ## 6. Scripts & ETL
 - **BLS Import (`scripts/etl/import-bls.ts`):** Syncs the 7,140 food items from the Excel source to Supabase.
-- **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Supports local-file, remote-URL, or live-sample inputs, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`.
+- **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Defaults to German products, paginates up to 500 products, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`.
+- **German Synonyms (`scripts/etl/generate-synonyms.ts`):** Generates regional and colloquial German food name synonyms (Karotte/Möhre, Quark/Topfen, etc.) for improved search. Run with `npm run etl:synonyms`.
+- **Portion Sizes (`scripts/etl/import-portions.ts`):** Imports curated German portion sizes from `lib/reference-data/food-portions.ts`, matching BLS foods by code prefix or food group. Run with `npm run etl:portions`.
+- **Master Orchestrator (`scripts/etl/run-all.ts`):** Runs the full ETL pipeline in order (BLS → verify → synonyms → portions → reference values → recipes → OFF). Supports `--dry-run`, `--skip`, and `--only` flags. Run with `npm run etl:all`.
 - **Scientific Validation (`scripts/validate-nutrient-math.ts`):** Running `npm run validate:nutrients` performs 113+ mathematical assertions to ensure calculation parity with official standards.
 
 ## 7. Verification Checklist

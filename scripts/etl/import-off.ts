@@ -29,7 +29,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const OFF_SOURCE_URL = process.env.OFF_SOURCE_URL;
 const OFF_SOURCE_FILE = process.env.OFF_SOURCE_FILE;
 const OFF_PAGE_SIZE = Number(process.env.OFF_PAGE_SIZE || "100");
-const OFF_LIMIT = Number(process.env.OFF_LIMIT || "100");
+const OFF_LIMIT = Number(process.env.OFF_LIMIT || "500");
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   console.error("SUPABASE_SERVICE_ROLE_KEY is required.");
@@ -88,18 +88,42 @@ async function loadProducts(): Promise<OffProduct[]> {
   }
 
   const pageSize = Math.max(1, Math.min(OFF_PAGE_SIZE, OFF_LIMIT));
-  const url = new URL("https://world.openfoodfacts.org/api/v2/search");
-  url.searchParams.set("page_size", String(pageSize));
-  url.searchParams.set("fields", "code,product_name,product_name_de,brands,categories,countries_tags,nutriments,nutrition_data_per");
+  const totalPages = Math.ceil(OFF_LIMIT / pageSize);
+  const allProducts: OffProduct[] = [];
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    console.warn(`OFF live fetch failed with ${response.status}; using sample fallback`);
+  for (let page = 1; page <= totalPages; page++) {
+    const url = new URL("https://world.openfoodfacts.org/api/v2/search");
+    url.searchParams.set("page_size", String(pageSize));
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("countries_tags_contains", "en:germany");
+    url.searchParams.set("fields", "code,product_name,product_name_de,brands,categories,countries_tags,nutriments,nutrition_data_per");
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(`OFF page ${page} fetch failed with ${response.status}; stopping pagination`);
+        break;
+      }
+
+      const payload = (await response.json()) as { products?: OffProduct[] };
+      const pageProducts = payload.products ?? [];
+      allProducts.push(...pageProducts);
+
+      console.log(`  Fetched page ${page}/${totalPages} (${pageProducts.length} products)`);
+
+      if (pageProducts.length < pageSize) break; // No more pages
+      if (allProducts.length >= OFF_LIMIT) break;
+    } catch (err) {
+      console.warn(`OFF page ${page} error: ${err instanceof Error ? err.message : String(err)}; continuing`);
+    }
+  }
+
+  if (allProducts.length === 0) {
+    console.warn("No products fetched from OFF API; using sample fallback");
     return SAMPLE_PRODUCTS;
   }
 
-  const payload = (await response.json()) as { products?: OffProduct[] };
-  return (payload.products ?? []).slice(0, OFF_LIMIT);
+  return allProducts.slice(0, OFF_LIMIT);
 }
 
 function toNumber(value: number | string | undefined) {
@@ -232,9 +256,14 @@ function mapNutrients(foodId: string, nutriments: Record<string, number>) {
 async function stageProducts(products: OffProduct[]) {
   let staged = 0;
 
-  for (const product of products) {
+  for (let i = 0; i < products.length; i++) {
+    const product = products[i];
     const normalized = normalizeProduct(product);
     if (!normalized) continue;
+
+    if ((i + 1) % 50 === 0) {
+      console.log(`  Staging progress: ${i + 1}/${products.length}`);
+    }
 
     const { error } = await supabase.from("off_staging").upsert(
       {

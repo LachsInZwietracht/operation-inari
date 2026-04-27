@@ -14,7 +14,10 @@
     "etl:reference-values": "npx tsx scripts/etl/import-reference-values.ts",
     "etl:recipes": "npx tsx scripts/etl/import-recipes-and-meal-plans.ts",
     "validate:nutrients": "tsx scripts/validate-nutrient-math.ts",
-    "etl:off": "npx tsx -r dotenv/config scripts/etl/import-off.ts dotenv_config_path=.env.local"
+    "etl:off": "npx tsx -r dotenv/config scripts/etl/import-off.ts dotenv_config_path=.env.local",
+    "etl:synonyms": "npx tsx scripts/etl/generate-synonyms.ts",
+    "etl:portions": "npx tsx scripts/etl/import-portions.ts",
+    "etl:all": "npx tsx scripts/etl/run-all.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

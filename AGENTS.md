@@ -59,6 +59,9 @@ Notable repo facts:
 - `npm run etl:reference-values` - import reference values.
 - `npm run etl:recipes` - import shared recipes and meal plan templates.
 - `npm run etl:off` - import Open Food Facts data.
+- `npm run etl:synonyms` - generate German food synonyms.
+- `npm run etl:portions` - import curated portion sizes.
+- `npm run etl:all` - run full ETL pipeline (supports `--skip`, `--only`, `--dry-run`).
 
 ## Hard Rules
 
