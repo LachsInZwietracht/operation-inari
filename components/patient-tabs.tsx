@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import {
   Activity as ActivityIcon,
@@ -51,18 +52,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { AnthropometricChart } from "@/components/anthropometric-chart"
-import { AnthropometricForm } from "@/components/anthropometric-form"
-import { PediatricPercentileChart } from "@/components/pediatric-percentile-chart"
-import {
-  AllergenAutomationCard,
-  DiabetesAnalyticsCard,
-  DietCatalogCard,
-  KetogenicPlannerCard,
-} from "@/components/therapy-panels"
-import { GuidedProtocolAssistant } from "@/components/guided-protocol-assistant"
-import { PatientWorkflowTab } from "@/components/patient-workflow-tab"
-import { ReferenceProfileSelector } from "@/components/reference-profile-selector"
 import { formatDate, formatNumber } from "@/lib/format"
 import { downloadCsv } from "@/lib/utils"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
@@ -95,6 +84,47 @@ import {
   type AllergenSeverity,
 } from "@/lib/allergen-constants"
 import { AlertTriangle, Trash2 } from "lucide-react"
+
+const AnthropometricChart = dynamic(
+  () => import("@/components/anthropometric-chart").then((mod) => mod.AnthropometricChart),
+  { ssr: false, loading: () => <div className="h-[300px] rounded-md bg-muted/40" /> },
+)
+const AnthropometricForm = dynamic(
+  () => import("@/components/anthropometric-form").then((mod) => mod.AnthropometricForm),
+  { ssr: false },
+)
+const PediatricPercentileChart = dynamic(
+  () => import("@/components/pediatric-percentile-chart").then((mod) => mod.PediatricPercentileChart),
+  { ssr: false, loading: () => <div className="h-[300px] rounded-md bg-muted/40" /> },
+)
+const DiabetesAnalyticsCard = dynamic(
+  () => import("@/components/therapy-panels").then((mod) => mod.DiabetesAnalyticsCard),
+  { ssr: false },
+)
+const KetogenicPlannerCard = dynamic(
+  () => import("@/components/therapy-panels").then((mod) => mod.KetogenicPlannerCard),
+  { ssr: false },
+)
+const AllergenAutomationCard = dynamic(
+  () => import("@/components/therapy-panels").then((mod) => mod.AllergenAutomationCard),
+  { ssr: false },
+)
+const DietCatalogCard = dynamic(
+  () => import("@/components/therapy-panels").then((mod) => mod.DietCatalogCard),
+  { ssr: false },
+)
+const GuidedProtocolAssistant = dynamic(
+  () => import("@/components/guided-protocol-assistant").then((mod) => mod.GuidedProtocolAssistant),
+  { ssr: false },
+)
+const PatientWorkflowTab = dynamic(
+  () => import("@/components/patient-workflow-tab").then((mod) => mod.PatientWorkflowTab),
+  { ssr: false },
+)
+const ReferenceProfileSelector = dynamic(
+  () => import("@/components/reference-profile-selector").then((mod) => mod.ReferenceProfileSelector),
+  { ssr: false },
+)
 
 function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
   if (typeof min === "number" && value < min) return "low"

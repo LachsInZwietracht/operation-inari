@@ -1,11 +1,11 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { de } from "date-fns/locale"
 import { FilePlus2, Mail, CheckCircle2, AlertTriangle } from "lucide-react"
-import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, Legend } from "recharts"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +46,11 @@ interface InvoiceFormState {
 }
 
 const STATUS_OPTIONS: InvoiceEntry["status"][] = ["offen", "mahnung", "bezahlt"]
+
+const RevenueTrendChart = dynamic(
+  () => import("./revenue-trend-chart").then((mod) => mod.RevenueTrendChart),
+  { ssr: false, loading: () => <div className="h-[260px] rounded-md bg-muted/40" /> },
+)
 
 function buildInvoiceFormState(): InvoiceFormState {
   return {
@@ -374,15 +379,7 @@ export default function AbrechnungPage() {
                 </p>
               ) : (
                 <div className="h-[260px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={revenueTrend}>
-                      <XAxis dataKey="month" interval={0} tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Legend />
-                      <Bar dataKey="revenue" name="Bezahlt" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="outstanding" name="Offen" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <RevenueTrendChart data={revenueTrend} />
                 </div>
               )}
             </CardContent>

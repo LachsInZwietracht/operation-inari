@@ -9,24 +9,28 @@ import { INSTITUTION_ROLES, hasAnyRole, mapLegacyUserRole } from "@/lib/auth/rba
 import { fetchCurrentMembership } from "@/lib/auth/access"
 import { createClient } from "@/lib/supabase/server"
 import type { AppRole } from "@/lib/types"
+import type { User } from "@supabase/supabase-js"
 
 export const dynamic = "force-dynamic";
 
-async function resolveCurrentRole(): Promise<AppRole | null> {
+async function resolveAppShellAuth(): Promise<{ user: User | null; role: AppRole | null }> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) return null
+  if (!user) return { user: null, role: null }
 
   try {
     const membership = await fetchCurrentMembership(supabase, user.id)
-    return membership?.role ?? mapLegacyUserRole(user.user_metadata?.role)
+    return {
+      user,
+      role: membership?.role ?? mapLegacyUserRole(user.user_metadata?.role),
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.warn("Failed to resolve RBAC membership for app shell:", message)
-    return mapLegacyUserRole(user.user_metadata?.role)
+    return { user, role: mapLegacyUserRole(user.user_metadata?.role) }
   }
 }
 
@@ -34,12 +38,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const authDisabled = process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
   const authOptional = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const shouldResolveRole = !authDisabled && !authOptional
-  const currentRole = shouldResolveRole ? await resolveCurrentRole() : null
+  const appShellAuth = shouldResolveRole ? await resolveAppShellAuth() : { user: null, role: null }
   const canAccessInstitution =
-    authDisabled || authOptional || hasAnyRole(currentRole, INSTITUTION_ROLES)
+    authDisabled || authOptional || hasAnyRole(appShellAuth.role, INSTITUTION_ROLES)
 
   return (
-    <AuthProvider>
+    <AuthProvider initialUser={appShellAuth.user}>
       <FoodSearchProvider foods={[]}>
         <SidebarProvider>
           <AppSidebar canAccessInstitution={canAccessInstitution} />

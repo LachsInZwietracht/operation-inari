@@ -48,12 +48,54 @@ function persistToStorage<T>(key: string, value: T[]) {
   }
 }
 
-export function usePracticeAppointments() {
+interface UsePracticeAppointmentsOptions {
+  initialAppointments?: PracticeAppointment[]
+}
+
+interface UsePracticeInvoicesOptions {
+  initialInvoices?: InvoiceEntry[]
+}
+
+function buildInitialAppointments(initialAppointments: PracticeAppointment[] = []) {
+  const stored = loadFromStorage<PracticeAppointment>(STORAGE_KEYS.appointments) ?? []
+  const localOnly = stored.filter(isLocalMigrationCandidate)
+  const merged = [...initialAppointments]
+
+  for (const local of localOnly) {
+    const existsRemote = initialAppointments.some((remoteAppointment) =>
+      matchesRecordIdentity(remoteAppointment, local),
+    )
+    if (!existsRemote) {
+      merged.push(local)
+    }
+  }
+
+  return sortAppointments(merged)
+}
+
+function buildInitialInvoices(initialInvoices: InvoiceEntry[] = []) {
+  const stored = loadFromStorage<InvoiceEntry>(STORAGE_KEYS.invoices) ?? []
+  const localOnly = stored.filter(isLocalMigrationCandidate)
+  const merged = [...initialInvoices]
+
+  for (const local of localOnly) {
+    const existsRemote = initialInvoices.some((remoteInvoice) =>
+      matchesRecordIdentity(remoteInvoice, local),
+    )
+    if (!existsRemote) {
+      merged.push(local)
+    }
+  }
+
+  return sortInvoices(merged)
+}
+
+export function usePracticeAppointments(options: UsePracticeAppointmentsOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [appointments, setAppointments] = useState<PracticeAppointment[]>(() => {
-    const stored = loadFromStorage<PracticeAppointment>(STORAGE_KEYS.appointments)
-    return sortAppointments(stored ?? [])
-  })
+  const initialAppointmentsRef = useRef(options.initialAppointments)
+  const [appointments, setAppointments] = useState<PracticeAppointment[]>(() =>
+    buildInitialAppointments(options.initialAppointments),
+  )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const appointmentsRef = useRef(appointments)
@@ -79,11 +121,13 @@ export function usePracticeAppointments() {
     if (!isAuthenticated || authLoading) return
 
     let cancelled = false
-    setIsLoadingRemote(true)
+    const initialRemoteAppointments = initialAppointmentsRef.current
+    setIsLoadingRemote(!initialRemoteAppointments)
 
     async function syncAppointments() {
       try {
-        const remoteAppointments = await fetchAppointmentsClient()
+        const remoteAppointments = initialRemoteAppointments ?? await fetchAppointmentsClient()
+        initialAppointmentsRef.current = undefined
         if (cancelled) return
 
         setAppointments((prev) => {
@@ -234,12 +278,12 @@ export function usePracticeAppointments() {
   }
 }
 
-export function usePracticeInvoices() {
+export function usePracticeInvoices(options: UsePracticeInvoicesOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [invoices, setInvoices] = useState<InvoiceEntry[]>(() => {
-    const stored = loadFromStorage<InvoiceEntry>(STORAGE_KEYS.invoices)
-    return sortInvoices(stored ?? [])
-  })
+  const initialInvoicesRef = useRef(options.initialInvoices)
+  const [invoices, setInvoices] = useState<InvoiceEntry[]>(() =>
+    buildInitialInvoices(options.initialInvoices),
+  )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const invoicesRef = useRef(invoices)
@@ -265,11 +309,13 @@ export function usePracticeInvoices() {
     if (!isAuthenticated || authLoading) return
 
     let cancelled = false
-    setIsLoadingRemote(true)
+    const initialRemoteInvoices = initialInvoicesRef.current
+    setIsLoadingRemote(!initialRemoteInvoices)
 
     async function syncInvoices() {
       try {
-        const remoteInvoices = await fetchInvoicesClient()
+        const remoteInvoices = initialRemoteInvoices ?? await fetchInvoicesClient()
+        initialInvoicesRef.current = undefined
         if (cancelled) return
 
         setInvoices((prev) => {

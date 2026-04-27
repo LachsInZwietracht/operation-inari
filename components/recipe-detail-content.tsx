@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Clock, Users, Pencil, Flame, Drumstick, Droplet, Wheat, Leaf, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -22,7 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { MacroRingChart } from "@/components/macro-ring-chart";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
@@ -46,6 +46,11 @@ interface RecipeDetailContentProps {
   recipe: Recipe;
   patientAllergens?: PatientAllergenEntry[];
 }
+
+const MacroRingChart = dynamic(
+  () => import("@/components/macro-ring-chart").then((mod) => mod.MacroRingChart),
+  { ssr: false, loading: () => <div className="h-[240px] rounded-md bg-muted/40" /> },
+);
 
 export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailContentProps) {
   const foods = useFoods();

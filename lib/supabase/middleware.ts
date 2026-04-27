@@ -78,7 +78,9 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(request, "/login")
   }
 
-  if (user) {
+  const needsRoleCheck = pathname.startsWith("/admin") || pathname.startsWith("/institution")
+
+  if (user && needsRoleCheck) {
     const role = await resolveRole(supabase, user.id, user.user_metadata?.role)
 
     if (pathname.startsWith("/admin") && !hasAnyRole(role, ADMIN_ROLES)) {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import dynamic from "next/dynamic";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { NutrientBar } from "@/components/nutrient-bar";
-import { MacroRingChart } from "@/components/macro-ring-chart";
 import { ReferenceProfileSelector } from "@/components/reference-profile-selector";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
@@ -35,6 +35,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 
 const categoryMap = new Map(FOOD_CATEGORIES.map((c) => [c.id, c.name]));
+
+const MacroRingChart = dynamic(
+  () => import("@/components/macro-ring-chart").then((mod) => mod.MacroRingChart),
+  { ssr: false, loading: () => <div className="h-[240px] rounded-md bg-muted/40" /> },
+);
 
 const SUMMARY_NUTRIENTS = [
   { id: "energie", label: "Energie", unit: "kcal" },
@@ -94,6 +99,40 @@ function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentP
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function NutrientTabs({
+  nutrients,
+  refConfig,
+}: {
+  nutrients: { nutrientId: string; amount: number }[];
+  refConfig: ResolvedReferenceConfig;
+}) {
+  const availableGroups = useMemo(() => {
+    return (Object.keys(NUTRIENT_GROUP_LABELS) as NutrientGroup[]).filter((group) => {
+      const defs = getNutrientsByGroup(group);
+      return defs.some((d) => nutrients.some((n) => n.nutrientId === d.id && n.amount > 0));
+    });
+  }, [nutrients]);
+
+  const defaultTab = availableGroups[0] ?? "makronaehrstoffe";
+
+  return (
+    <Tabs defaultValue={defaultTab}>
+      <TabsList className="flex-wrap">
+        {availableGroups.map((group) => (
+          <TabsTrigger key={group} value={group}>
+            {NUTRIENT_GROUP_LABELS[group]}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {availableGroups.map((group) => (
+        <TabsContent key={group} value={group}>
+          <NutrientTabContent group={group} nutrients={nutrients} refConfig={refConfig} />
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
 
@@ -315,22 +354,7 @@ export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentP
         <ReferenceProfileSelector compact />
       </div>
 
-      <Tabs defaultValue="makronaehrstoffe">
-        <TabsList className="flex-wrap">
-          {(Object.entries(NUTRIENT_GROUP_LABELS) as [NutrientGroup, string][]).map(
-            ([group, label]) => (
-              <TabsTrigger key={group} value={group}>
-                {label}
-              </TabsTrigger>
-            ),
-          )}
-        </TabsList>
-        {(Object.keys(NUTRIENT_GROUP_LABELS) as NutrientGroup[]).map((group) => (
-          <TabsContent key={group} value={group}>
-            <NutrientTabContent group={group} nutrients={food.nutrients} refConfig={refConfig} />
-          </TabsContent>
-        ))}
-      </Tabs>
+      <NutrientTabs nutrients={food.nutrients} refConfig={refConfig} />
     </div>
   );
 }

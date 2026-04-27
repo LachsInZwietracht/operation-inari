@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LogOut } from "lucide-react"
 import { toast } from "sonner"
@@ -15,21 +14,11 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { createClient } from "@/lib/supabase/client"
-import type { User as SupabaseUser } from "@supabase/supabase-js"
+import { useAuthContext } from "@/components/auth-provider"
 
 export function UserNav() {
   const router = useRouter()
-  const [user, setUser] = useState<SupabaseUser | null>(null)
-
-  useEffect(() => {
-    // Only attempt to get user if Supabase is configured
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return
-
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-    })
-  }, [])
+  const { user } = useAuthContext()
 
   if (!user) return null
 

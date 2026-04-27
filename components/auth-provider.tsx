@@ -12,17 +12,31 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({
+  children,
+  initialUser,
+}: {
+  children: ReactNode;
+  initialUser?: User | null;
+}) {
+  const hasInitialUser = initialUser !== undefined;
+  const [user, setUser] = useState<User | null>(initialUser ?? null);
+  const [loading, setLoading] = useState(!hasInitialUser);
 
   useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setLoading(false);
-    });
+    if (!hasInitialUser) {
+      supabase.auth.getUser().then(({ data }) => {
+        setUser(data.user);
+        setLoading(false);
+      });
+    }
 
     const {
       data: { subscription },
@@ -34,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [hasInitialUser]);
 
   return (
     <AuthContext.Provider value={{ user, loading, isAuthenticated: !!user }}>

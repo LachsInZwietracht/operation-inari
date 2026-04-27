@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { format, subMonths, startOfMonth, addDays, formatDistanceToNow } from "date-fns"
 import { de } from "date-fns/locale"
@@ -21,16 +22,6 @@ import {
   ArrowRight,
   Activity,
 } from "lucide-react"
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from "recharts"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -41,6 +32,15 @@ import { useCounseling } from "@/hooks/use-counseling"
 import { useBirthdayReminders } from "@/hooks/use-birthday-reminders"
 import { formatCurrency, formatDate } from "@/lib/format"
 import type { PracticeAppointment } from "@/lib/types"
+import type { PracticeOverviewData } from "@/lib/data/practice-overview"
+
+const RevenueChart = dynamic(
+  () => import("./revenue-chart").then((mod) => mod.RevenueChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[200px] rounded-md bg-muted/40" />,
+  },
+)
 
 const TYPE_LABELS: Record<PracticeAppointment["type"], string> = {
   beratung: "Beratung",
@@ -64,11 +64,19 @@ interface ActivityEvent {
   timestamp: Date
 }
 
-export function DashboardOverviewClient() {
-  const { patients } = usePatients()
-  const { appointments, upcomingAppointments } = usePracticeAppointments()
-  const { invoices } = usePracticeInvoices()
-  const { sessions } = useCounseling()
+export function DashboardOverviewClient({
+  initialData,
+}: {
+  initialData?: PracticeOverviewData | null
+}) {
+  const { patients } = usePatients({ initialPatients: initialData?.patients })
+  const { appointments, upcomingAppointments } = usePracticeAppointments({
+    initialAppointments: initialData?.appointments,
+  })
+  const { invoices } = usePracticeInvoices({ initialInvoices: initialData?.invoices })
+  const { sessions } = useCounseling({
+    initialSessions: initialData?.counselingSessions,
+  })
   const { reminders } = useBirthdayReminders(patients)
 
   const now = useMemo(() => new Date(), [])
@@ -368,29 +376,7 @@ export function DashboardOverviewClient() {
                 <p className="text-muted-foreground text-sm">Keine Rechnungsdaten vorhanden.</p>
               ) : (
                 <div className="h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={revenueData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Legend />
-                      <Bar
-                        dataKey="bezahlt"
-                        name="Bezahlt"
-                        stackId="revenue"
-                        fill="hsl(var(--primary))"
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="offen"
-                        name="Offen"
-                        stackId="revenue"
-                        fill="hsl(var(--chart-4))"
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <RevenueChart data={revenueData} />
                 </div>
               )}
             </CardContent>

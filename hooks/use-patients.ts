@@ -19,10 +19,6 @@ function loadFromStorage(): Patient[] {
   return []
 }
 
-function buildInitialPatients(): Patient[] {
-  return sortPatients(loadFromStorage())
-}
-
 function sortPatients(items: Patient[]) {
   return [...items].sort((a, b) => a.lastName.localeCompare(b.lastName, "de"))
 }
@@ -31,9 +27,32 @@ function getLocalOnlyPatients(items: Patient[]) {
   return items.filter(isLocalMigrationCandidate)
 }
 
-export function usePatients() {
+function buildInitialPatients(initialPatients: Patient[] = []): Patient[] {
+  const localOnly = getLocalOnlyPatients(loadFromStorage())
+  const merged = [...initialPatients]
+
+  for (const local of localOnly) {
+    const existsRemote = initialPatients.some((remotePatient) =>
+      matchesRecordIdentity(remotePatient, local),
+    )
+    if (!existsRemote) {
+      merged.push(local)
+    }
+  }
+
+  return sortPatients(merged)
+}
+
+interface UsePatientsOptions {
+  initialPatients?: Patient[]
+}
+
+export function usePatients(options: UsePatientsOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [patients, setPatients] = useState<Patient[]>(buildInitialPatients)
+  const initialPatientsRef = useRef(options.initialPatients)
+  const [patients, setPatients] = useState<Patient[]>(() =>
+    buildInitialPatients(options.initialPatients),
+  )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const patientsRef = useRef<Patient[]>(patients)
@@ -57,11 +76,13 @@ export function usePatients() {
     if (!isAuthenticated || authLoading) return
 
     let cancelled = false
-    setIsLoadingRemote(true)
+    const initialRemotePatients = initialPatientsRef.current
+    setIsLoadingRemote(!initialRemotePatients)
 
     async function syncPatients() {
       try {
-        const remotePatients = await fetchPatientsClient()
+        const remotePatients = initialRemotePatients ?? await fetchPatientsClient()
+        initialPatientsRef.current = undefined
         if (cancelled) return
 
         const localOnly = getLocalOnlyPatients(patientsRef.current)

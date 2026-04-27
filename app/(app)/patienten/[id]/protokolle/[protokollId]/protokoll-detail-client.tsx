@@ -1,11 +1,11 @@
 "use client"
 
 import { use } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { ProtocolDayView } from "@/components/protocol-day-view"
-import { ProtocolAnalysis } from "@/components/protocol-analysis"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -14,6 +14,11 @@ import { usePatients } from "@/hooks/use-patients"
 import { PROTOCOL_TYPE_LABELS } from "@/lib/constants"
 import { formatDate } from "@/lib/format"
 import { useFoods } from "@/components/foods-provider"
+
+const ProtocolAnalysis = dynamic(
+  () => import("@/components/protocol-analysis").then((mod) => mod.ProtocolAnalysis),
+  { ssr: false, loading: () => <div className="h-[360px] rounded-md bg-muted/40" /> },
+)
 
 export function ProtokollDetailPageClient({
   params,

@@ -37,17 +37,36 @@ function sortSessions(list: CounselingSession[]): CounselingSession[] {
   )
 }
 
-function buildInitial(): CounselingSession[] {
-  return sortSessions(loadFromStorage())
-}
-
 function getLocalOnlySessions(sessions: CounselingSession[]) {
   return sessions.filter(isLocalMigrationCandidate)
 }
 
-export function useCounseling() {
+function buildInitial(initialSessions: CounselingSession[] = []): CounselingSession[] {
+  const localOnly = getLocalOnlySessions(loadFromStorage())
+  const merged = [...initialSessions]
+
+  for (const localSession of localOnly) {
+    const existsRemote = initialSessions.some((remoteSession) =>
+      matchesRecordIdentity(remoteSession, localSession),
+    )
+    if (!existsRemote) {
+      merged.push(localSession)
+    }
+  }
+
+  return sortSessions(merged)
+}
+
+interface UseCounselingOptions {
+  initialSessions?: CounselingSession[]
+}
+
+export function useCounseling(options: UseCounselingOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [sessions, setSessions] = useState<CounselingSession[]>(buildInitial)
+  const initialSessionsRef = useRef(options.initialSessions)
+  const [sessions, setSessions] = useState<CounselingSession[]>(() =>
+    buildInitial(options.initialSessions),
+  )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const migrationRetryCounts = useRef<Record<string, number>>({})
@@ -70,11 +89,13 @@ export function useCounseling() {
 
     let cancelled = false
     let retryTimer: ReturnType<typeof setTimeout> | null = null
-    setIsLoadingRemote(true)
+    const initialRemoteSessions = initialSessionsRef.current
+    setIsLoadingRemote(!initialRemoteSessions)
 
     async function syncSessions() {
       try {
-        const remoteSessions = await fetchCounselingSessionsClient()
+        const remoteSessions = initialRemoteSessions ?? await fetchCounselingSessionsClient()
+        initialSessionsRef.current = undefined
         if (cancelled) return
 
         const localOnly = getLocalOnlySessions(sessionsRef.current)

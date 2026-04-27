@@ -1,21 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  PieChart,
-  Pie,
-  Legend,
-} from "recharts"
-import type { TooltipProps } from "recharts"
 import {
   AlertTriangle,
   Award,
@@ -29,7 +16,7 @@ import {
   Pencil,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { NutrientChart, type NutrientChartDataPoint } from "@/components/nutrient-chart"
+import type { NutrientChartDataPoint } from "@/components/nutrient-chart"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -95,6 +82,30 @@ import { loadBrowserMealPlans } from "@/lib/data/meal-plan-browser-source"
 import { downloadResponseFile } from "@/lib/utils"
 import { usePatients } from "@/hooks/use-patients"
 import { usePatientReports } from "@/hooks/use-patient-reports"
+const ReportNutrientChart = dynamic(
+  () => import("./reports-charts").then((mod) => mod.ReportNutrientChart),
+  { ssr: false, loading: () => <div className="h-[350px] rounded-md bg-muted/40" /> },
+)
+const MacroPieChart = dynamic(
+  () => import("./reports-charts").then((mod) => mod.MacroPieChart),
+  { ssr: false, loading: () => <div className="h-full rounded-md bg-muted/40" /> },
+)
+const MealEnergyChart = dynamic(
+  () => import("./reports-charts").then((mod) => mod.MealEnergyChart),
+  { ssr: false, loading: () => <div className="h-full rounded-md bg-muted/40" /> },
+)
+const FoodContributionChart = dynamic(
+  () => import("./reports-charts").then((mod) => mod.FoodContributionChart),
+  { ssr: false, loading: () => <div className="h-full rounded-md bg-muted/40" /> },
+)
+const PercentCoverageChart = dynamic(
+  () => import("./reports-charts").then((mod) => mod.PercentCoverageChart),
+  { ssr: false, loading: () => <div className="h-[300px] rounded-md bg-muted/40" /> },
+)
+const Co2BySlotChart = dynamic(
+  () => import("./reports-charts").then((mod) => mod.Co2BySlotChart),
+  { ssr: false, loading: () => <div className="h-[180px] rounded-md bg-muted/40" /> },
+)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -278,107 +289,6 @@ function calculatePlanNutrients(
 }
 
 // getReferenceForNutrient is now resolved via refConfig from the hook
-
-function getStatusColor(percent: number): string {
-  if (percent >= 80) return "var(--color-chart-2)" // green
-  if (percent >= 50) return "var(--color-chart-4)" // yellow / amber
-  return "var(--color-chart-5)" // red
-}
-
-// ---------------------------------------------------------------------------
-// Percent Bar Tooltip
-// ---------------------------------------------------------------------------
-
-interface PercentDataPoint {
-  name: string
-  percent: number
-  value: number
-  reference: number
-  unit: string
-}
-
-interface PercentTooltipProps {
-  active?: boolean
-  payload?: Array<{ payload?: PercentDataPoint }>
-  label?: string
-}
-
-function PercentTooltip({ active, payload, label }: PercentTooltipProps) {
-  if (!active || !payload?.length) return null
-  const point = payload[0]?.payload as PercentDataPoint | undefined
-  if (!point) return null
-  return (
-    <div className="bg-background rounded-lg border px-3 py-2 shadow-md">
-      <p className="mb-1 text-sm font-medium">{label}</p>
-      <p className="text-muted-foreground text-sm">
-        Istwert: {formatNumber(point.value, 1)} {point.unit}
-      </p>
-      <p className="text-muted-foreground text-sm">
-        Referenz: {formatNumber(point.reference, 1)} {point.unit}
-      </p>
-      <p className="text-muted-foreground text-sm">
-        Abdeckung: {formatPercent(point.percent)}
-      </p>
-    </div>
-  )
-}
-
-interface SimpleTooltipPayload {
-  name: string
-  energie: number
-}
-
-type ChartTooltipProps<TPayload> = TooltipProps<number, string> & {
-  payload?: Array<{ payload?: TPayload }>
-}
-
-function MealEnergyTooltip({ active, payload }: ChartTooltipProps<SimpleTooltipPayload>) {
-  if (!active || !payload?.length) return null
-  const point = payload[0]?.payload as SimpleTooltipPayload | undefined
-  if (!point) return null
-  return (
-    <div className="bg-background rounded-lg border px-3 py-2 text-xs shadow-sm">
-      <p className="font-medium">{point.name}</p>
-      <p className="text-muted-foreground">
-        {formatNumber(point.energie, 0)} kcal
-      </p>
-    </div>
-  )
-}
-
-interface ContributionPayload {
-  name: string
-  energie: number
-  share: number
-}
-
-function ContributionTooltip({ active, payload }: ChartTooltipProps<ContributionPayload>) {
-  if (!active || !payload?.length) return null
-  const point = payload[0]?.payload as ContributionPayload | undefined
-  if (!point) return null
-  return (
-    <div className="bg-background rounded-lg border px-3 py-2 text-xs shadow-sm">
-      <p className="font-medium">{point.name}</p>
-      <p className="text-muted-foreground">
-        {formatNumber(point.energie, 0)} kcal ({formatPercent(point.share)})
-      </p>
-    </div>
-  )
-}
-
-function MacroPieTooltip({ active, payload }: ChartTooltipProps<{ name: string; value: number; unit: string }>) {
-  if (!active || !payload?.length) return null
-  const point = payload[0]?.payload as { name: string; value: number; unit: string } | undefined
-  if (!point) return null
-  return (
-    <div className="bg-background rounded-lg border px-3 py-2 text-xs shadow-sm">
-      <p className="font-medium">{point.name}</p>
-      <p className="text-muted-foreground">
-        {formatNumber(point.value, 1)} {point.unit}
-      </p>
-    </div>
-  )
-}
 
 function SnapshotMetricTable({
   title,
@@ -1576,7 +1486,7 @@ ${microSentence}`
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <NutrientChart data={macroChartData} />
+                <ReportNutrientChart data={macroChartData} />
               </CardContent>
             </Card>
             <Card>
@@ -1588,24 +1498,7 @@ ${microSentence}`
               </CardHeader>
               <CardContent className="h-[320px]">
                 {macroPieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={macroPieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={3}
-                      >
-                        {macroPieData.map((entry, index) => (
-                          <Cell key={`${entry.name}-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<MacroPieTooltip />} />
-                      <Legend layout="vertical" align="right" verticalAlign="middle" />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <MacroPieChart data={macroPieData} />
                 ) : (
                   <p className="text-muted-foreground text-sm">Keine Makrodaten vorhanden.</p>
                 )}
@@ -1623,15 +1516,7 @@ ${microSentence}`
               </CardHeader>
               <CardContent className="h-[280px]">
                 {mealEnergyData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mealEnergyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="4 3" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} unit=" kcal" />
-                      <Tooltip content={<MealEnergyTooltip />} />
-                      <Bar dataKey="energie" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <MealEnergyChart data={mealEnergyData} />
                 ) : (
                   <p className="text-muted-foreground text-sm">Keine Mahlzeiten im Plan vorhanden.</p>
                 )}
@@ -1646,19 +1531,7 @@ ${microSentence}`
               </CardHeader>
               <CardContent className="h-[280px]">
                 {foodContributionData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={foodContributionData}
-                      layout="vertical"
-                      margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 12 }} unit=" kcal" />
-                      <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={140} />
-                      <Tooltip content={<ContributionTooltip />} />
-                      <Bar dataKey="energie" barSize={16} radius={[0, 4, 4, 0]} fill="var(--color-chart-3)" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <FoodContributionChart data={foodContributionData} />
                 ) : (
                   <p className="text-muted-foreground text-sm">Noch keine Energiequellen erfasst.</p>
                 )}
@@ -1745,31 +1618,7 @@ ${microSentence}`
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer
-                width="100%"
-                height={Math.max(300, vitaminPercentData.length * 50)}
-              >
-                <BarChart
-                  data={vitaminPercentData}
-                  layout="vertical"
-                  margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} unit=" %" />
-                  <YAxis
-                    dataKey="name"
-                    type="category"
-                    tick={{ fontSize: 12 }}
-                    width={75}
-                  />
-                  <Tooltip content={<PercentTooltip />} />
-                  <Bar dataKey="percent" name="% der Referenz" radius={[0, 4, 4, 0]} barSize={18}>
-                    {vitaminPercentData.map((entry, idx) => (
-                      <Cell key={idx} fill={getStatusColor(entry.percent)} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <PercentCoverageChart data={vitaminPercentData} />
             </CardContent>
           </Card>
 
@@ -1824,31 +1673,7 @@ ${microSentence}`
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer
-                width="100%"
-                height={Math.max(300, mineralPercentData.length * 50)}
-              >
-                <BarChart
-                  data={mineralPercentData}
-                  layout="vertical"
-                  margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} unit=" %" />
-                  <YAxis
-                    dataKey="name"
-                    type="category"
-                    tick={{ fontSize: 12 }}
-                    width={75}
-                  />
-                  <Tooltip content={<PercentTooltip />} />
-                  <Bar dataKey="percent" name="% der Referenz" radius={[0, 4, 4, 0]} barSize={18}>
-                    {mineralPercentData.map((entry, idx) => (
-                      <Cell key={idx} fill={getStatusColor(entry.percent)} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <PercentCoverageChart data={mineralPercentData} />
             </CardContent>
           </Card>
 
@@ -2246,15 +2071,7 @@ ${microSentence}`
                     </Badge>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={co2BySlot} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} unit=" kg" />
-                    <Tooltip formatter={(value: number) => `${formatNumber(value as number, 2)} kg`} />
-                    <Bar dataKey="value" fill="var(--color-chart-1)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <Co2BySlotChart data={co2BySlot} />
               </CardContent>
             </Card>
 
