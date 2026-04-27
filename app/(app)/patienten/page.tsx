@@ -64,6 +64,7 @@ export default function PatientenPage() {
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([])
   const [lastBatch, setLastBatch] = useState<{ timestamp: string; count: number; templateName: string } | null>(null)
   const [birthdayWindow, setBirthdayWindow] = useState<string>("30")
+  const [hasMounted, setHasMounted] = useState(false)
   const bodyTextAreaRef = useRef<HTMLTextAreaElement | null>(null)
   const {
     status: egkStatus,
@@ -85,6 +86,10 @@ export default function PatientenPage() {
   } = useEgkInbox()
   const { batches, logBatch, markExported } = useMailMergeHistory()
   const { reminders, markSent } = useBirthdayReminders(patients)
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
 
   const lastSessionMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -370,6 +375,22 @@ export default function PatientenPage() {
         </div>
       </div>
 
+      {filtered.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((patient) => (
+            <PatientCard
+              key={patient.id}
+              patient={patient}
+              lastSessionDate={lastSessionMap.get(patient.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border bg-muted/20 py-10 text-center text-sm text-muted-foreground">
+          Keine Patienten gefunden.
+        </div>
+      )}
+
       <Card className="border-dashed border-primary/40 bg-primary/5">
         <CardHeader className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -425,7 +446,7 @@ export default function PatientenPage() {
           )}
           <div className="space-y-3">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Simulierte Kartenereignisse</p>
-            {egkEvents.length > 0 ? (
+            {hasMounted && egkEvents.length > 0 ? (
               <div className="divide-y rounded-md border">
                 {egkEvents.slice(0, 4).map((event) => {
                   const matchedPatient = event.patientId ? patientMap.get(event.patientId) : null
@@ -712,21 +733,6 @@ export default function PatientenPage() {
         </Card>
       </div>
 
-      {filtered.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((patient) => (
-            <PatientCard
-              key={patient.id}
-              patient={patient}
-              lastSessionDate={lastSessionMap.get(patient.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="py-10 text-center text-sm text-muted-foreground">
-          Keine Patienten gefunden.
-        </div>
-      )}
     </div>
   )
 }

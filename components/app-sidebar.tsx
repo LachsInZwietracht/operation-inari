@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Gauge,
   Ruler,
+  Lock,
 } from "lucide-react"
 import {
   Sidebar,
@@ -46,6 +47,7 @@ interface NavItem {
   label: string
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
   route: string
+  requiresInstitutionAccess?: boolean
 }
 
 interface NavSection {
@@ -82,11 +84,11 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "Institution",
     items: [
-      { label: "Menüpläne", icon: Factory, route: "/institution/menueplaene" },
-      { label: "Produktion", icon: Boxes, route: "/institution/produktion" },
-      { label: "Compliance", icon: ClipboardCheck, route: "/institution/compliance" },
-      { label: "Krankenhaus", icon: Hospital, route: "/institution/krankenhaus" },
-      { label: "Statistiken", icon: PieChart, route: "/institution/statistiken" },
+      { label: "Menüpläne", icon: Factory, route: "/institution/menueplaene", requiresInstitutionAccess: true },
+      { label: "Produktion", icon: Boxes, route: "/institution/produktion", requiresInstitutionAccess: true },
+      { label: "Compliance", icon: ClipboardCheck, route: "/institution/compliance", requiresInstitutionAccess: true },
+      { label: "Krankenhaus", icon: Hospital, route: "/institution/krankenhaus", requiresInstitutionAccess: true },
+      { label: "Statistiken", icon: PieChart, route: "/institution/statistiken", requiresInstitutionAccess: true },
     ],
   },
   {
@@ -109,7 +111,13 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
-export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  canAccessInstitution?: boolean
+}
+
+const INSTITUTION_LOCKED_LABEL = "Institution-Zugriff erforderlich"
+
+export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebarProps) {
   const pathname = usePathname()
 
   return (
@@ -138,15 +146,31 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 {section.items.map((item) => {
                   const isActive =
                     pathname === item.route || pathname.startsWith(`${item.route}/`)
+                  const isLocked = item.requiresInstitutionAccess && !canAccessInstitution
 
                   return (
                     <SidebarMenuItem key={item.route}>
-                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                        <Link href={item.route}>
+                      {isLocked ? (
+                        <SidebarMenuButton
+                          aria-disabled="true"
+                          aria-label={`${item.label}: ${INSTITUTION_LOCKED_LABEL}`}
+                          className="pointer-events-auto cursor-not-allowed text-sidebar-foreground/55 hover:bg-transparent hover:text-sidebar-foreground/55"
+                          title={INSTITUTION_LOCKED_LABEL}
+                          type="button"
+                          tooltip={`${item.label} gesperrt`}
+                        >
                           <item.icon />
                           <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
+                          <Lock className="ml-auto opacity-70 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
+                        </SidebarMenuButton>
+                      ) : (
+                        <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                          <Link href={item.route}>
+                            <item.icon />
+                            <span>{item.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      )}
                     </SidebarMenuItem>
                   )
                 })}

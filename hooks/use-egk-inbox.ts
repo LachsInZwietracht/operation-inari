@@ -35,16 +35,23 @@ interface AddEventPayload {
 }
 
 export function useEgkInbox() {
-  const [events, setEvents] = useState<EgkScanEvent[]>(buildInitialEvents)
+  const [events, setEvents] = useState<EgkScanEvent[]>([])
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   useEffect(() => {
+    setEvents(buildInitialEvents())
+    setHasLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hasLoaded) return
     const custom = events.filter((event) => !EGK_SCAN_EVENTS.find((mock) => mock.id === event.id))
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(custom))
     } catch {
       // Ignore storage errors
     }
-  }, [events])
+  }, [events, hasLoaded])
 
   const addEvent = useCallback(({ card, patientId, source, status = "pending", notes }: AddEventPayload) => {
     const timestamp = new Date().toISOString()

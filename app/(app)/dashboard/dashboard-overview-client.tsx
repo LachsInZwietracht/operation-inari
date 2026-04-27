@@ -243,6 +243,11 @@ export function DashboardOverviewClient() {
       case "invoice": return <FileText className="h-4 w-4 text-amber-600" />
     }
   }
+  const isEmptyWorkspace =
+    patients.length === 0 &&
+    appointments.length === 0 &&
+    invoices.length === 0 &&
+    sessions.length === 0
 
   return (
     <div className="space-y-6">
@@ -251,6 +256,45 @@ export function DashboardOverviewClient() {
         description="Ihre Praxis auf einen Blick"
         helpText="Ihr persönliches Dashboard zeigt die wichtigsten Kennzahlen zu Patienten, Terminen, Beratungen und Abrechnungen auf einen Blick."
       />
+
+      {isEmptyWorkspace && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-base">Arbeitsbereich einrichten</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Starten Sie mit den klinischen Kerndaten, damit Dashboard, Berichte und Termine echte Arbeitslisten zeigen.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <Button asChild>
+                <Link href="/patienten/neu">
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Patient anlegen
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/lebensmittel">
+                  <Search className="mr-2 h-4 w-4" />
+                  BLS durchsuchen
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/rezepte/neu">
+                  <ChefHat className="mr-2 h-4 w-4" />
+                  Rezept erstellen
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/termine">
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                  Termin planen
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -18,15 +18,22 @@ function loadFromStorage(): MailMergeBatch[] {
 }
 
 export function useMailMergeHistory() {
-  const [batches, setBatches] = useState<MailMergeBatch[]>(loadFromStorage)
+  const [batches, setBatches] = useState<MailMergeBatch[]>([])
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   useEffect(() => {
+    setBatches(loadFromStorage())
+    setHasLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hasLoaded) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(batches))
     } catch {
       // Ignore quota errors
     }
-  }, [batches])
+  }, [batches, hasLoaded])
 
   const logBatch = useCallback(
     (payload: {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   Code,
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { API_ENDPOINT_PREVIEWS, INTEGRATION_PREVIEWS, WEBHOOK_EVENT_PREVIEWS } from "@/lib/content/ops-preview"
 import { SUPPORTED_EXPORTS } from "@/lib/exports/constants"
 import { formatDate } from "@/lib/format"
@@ -58,6 +59,7 @@ export default function ApiExportPage() {
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all")
   const [historyFormatFilter, setHistoryFormatFilter] = useState("all")
   const [exportJobs, setExportJobs] = useState<ExportJobRecord[]>([])
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState<Record<ExportFormat, boolean>>({
     CSV: false,
     JSON: false,
@@ -98,8 +100,11 @@ export default function ApiExportPage() {
           parameters: job.parameters ?? undefined,
         })),
       )
+      setHistoryError(null)
     } catch (error) {
-      toast.error((error as Error).message || "Export-Historie konnte nicht geladen werden")
+      const message = (error as Error).message || "Export-Historie konnte nicht geladen werden"
+      setHistoryError(message)
+      toast.error(message)
     }
   }
 
@@ -170,7 +175,7 @@ export default function ApiExportPage() {
       />
 
       <Tabs defaultValue="export" className="space-y-4">
-        <TabsList>
+        <TabsList className="h-auto max-w-full flex-wrap justify-start">
           <TabsTrigger value="export" className="gap-1.5">
             <Download className="h-4 w-4" />
             Export
@@ -190,6 +195,15 @@ export default function ApiExportPage() {
         </TabsList>
 
         <TabsContent value="export" className="space-y-6">
+          {historyError && (
+            <Alert variant="destructive">
+              <AlertTitle>Export-Historie nicht verfügbar</AlertTitle>
+              <AlertDescription>
+                Die Exportfunktionen bleiben nutzbar, aber das Journal konnte nicht geladen werden: {historyError}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid gap-4 md:grid-cols-3">
             {exportSummary.map((item) => (
               <Card key={item.label}>
@@ -312,56 +326,57 @@ export default function ApiExportPage() {
               <CardDescription>Basis-URL und Antwortbeispiele sind Vorschau, keine freigeschaltete externe API.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table data-testid="api-endpoints-table">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[80px]">Methode</TableHead>
-                    <TableHead>Route</TableHead>
-                    <TableHead>Beschreibung</TableHead>
-                    <TableHead className="w-[60px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {API_ENDPOINT_PREVIEWS.map((endpoint) => (
-                    <>
-                      <TableRow
-                        key={endpoint.id}
-                        className="cursor-pointer"
-                        onClick={() => setExpandedEndpoint((current) => (current === endpoint.id ? null : endpoint.id))}
-                      >
-                        <TableCell>
-                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${METHOD_STYLES[endpoint.method] ?? ""}`}>
-                            {endpoint.method}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <code className="text-sm">{endpoint.route}</code>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{endpoint.description}</TableCell>
-                        <TableCell>
-                          {expandedEndpoint === endpoint.id ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                      {expandedEndpoint === endpoint.id ? (
-                        <TableRow key={`${endpoint.id}-sample`}>
-                          <TableCell colSpan={4} className="bg-muted/30 p-0">
-                            <div className="p-4">
-                              <p className="mb-2 text-xs font-medium text-muted-foreground">Beispielantwort (Preview)</p>
-                              <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 text-xs">
-                                {JSON.stringify(endpoint.sampleResponse, null, 2)}
-                              </pre>
-                            </div>
+              <div className="overflow-x-auto">
+                <Table data-testid="api-endpoints-table" className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[80px]">Methode</TableHead>
+                      <TableHead>Route</TableHead>
+                      <TableHead>Beschreibung</TableHead>
+                      <TableHead className="w-[60px]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {API_ENDPOINT_PREVIEWS.map((endpoint) => (
+                      <Fragment key={endpoint.id}>
+                        <TableRow
+                          className="cursor-pointer"
+                          onClick={() => setExpandedEndpoint((current) => (current === endpoint.id ? null : endpoint.id))}
+                        >
+                          <TableCell>
+                            <span className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${METHOD_STYLES[endpoint.method] ?? ""}`}>
+                              {endpoint.method}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-sm">{endpoint.route}</code>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{endpoint.description}</TableCell>
+                          <TableCell>
+                            {expandedEndpoint === endpoint.id ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
                           </TableCell>
                         </TableRow>
-                      ) : null}
-                    </>
-                  ))}
-                </TableBody>
-              </Table>
+                        {expandedEndpoint === endpoint.id ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="bg-muted/30 p-0">
+                              <div className="p-4">
+                                <p className="mb-2 text-xs font-medium text-muted-foreground">Beispielantwort (Preview)</p>
+                                <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 text-xs">
+                                  {JSON.stringify(endpoint.sampleResponse, null, 2)}
+                                </pre>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -403,33 +418,42 @@ export default function ApiExportPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table data-testid="webhook-table">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ereignis</TableHead>
-                    <TableHead>Beschreibung</TableHead>
-                    <TableHead>Zustellung</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {WEBHOOK_EVENT_PREVIEWS.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell>
-                        <code className="text-xs">{event.event}</code>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{event.description}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{event.delivery}</Badge>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table data-testid="webhook-table" className="min-w-[640px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ereignis</TableHead>
+                      <TableHead>Beschreibung</TableHead>
+                      <TableHead>Zustellung</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {WEBHOOK_EVENT_PREVIEWS.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell>
+                          <code className="text-xs">{event.event}</code>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{event.description}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{event.delivery}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="verlauf" className="space-y-4">
+          {historyError && (
+            <Alert variant="destructive">
+              <AlertTitle>Export-Journal konnte nicht geladen werden</AlertTitle>
+              <AlertDescription>{historyError}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row">
             <Select value={historyTypeFilter} onValueChange={setHistoryTypeFilter}>
               <SelectTrigger className="w-full sm:w-[180px]">
@@ -457,50 +481,52 @@ export default function ApiExportPage() {
 
           <Card>
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Typ</TableHead>
-                    <TableHead>Format</TableHead>
-                    <TableHead>Bereich</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Erstellt am</TableHead>
-                    <TableHead>Groesse</TableHead>
-                    <TableHead>Erstellt von</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredHistory.map((job) => {
-                    const meta = STATUS_STYLES[job.status]
-                    return (
-                      <TableRow key={job.id}>
-                        <TableCell>
-                          <Badge variant={job.type === "export" ? "default" : "secondary"}>
-                            {job.type === "export" ? "Export" : "Import"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{job.format}</Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">{job.scope}</TableCell>
-                        <TableCell>
-                          <Badge variant={meta?.variant ?? "secondary"}>{meta?.label ?? job.status}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{formatDate(job.createdAt)}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{job.fileSize ?? "–"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{job.createdBy}</TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {filteredHistory.length === 0 ? (
+              <div className="overflow-x-auto">
+                <Table className="min-w-[760px]">
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                        Keine Eintraege gefunden.
-                      </TableCell>
+                      <TableHead>Typ</TableHead>
+                      <TableHead>Format</TableHead>
+                      <TableHead>Bereich</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Erstellt am</TableHead>
+                      <TableHead>Groesse</TableHead>
+                      <TableHead>Erstellt von</TableHead>
                     </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredHistory.map((job) => {
+                      const meta = STATUS_STYLES[job.status]
+                      return (
+                        <TableRow key={job.id}>
+                          <TableCell>
+                            <Badge variant={job.type === "export" ? "default" : "secondary"}>
+                              {job.type === "export" ? "Export" : "Import"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{job.format}</Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">{job.scope}</TableCell>
+                          <TableCell>
+                            <Badge variant={meta?.variant ?? "secondary"}>{meta?.label ?? job.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{formatDate(job.createdAt)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{job.fileSize ?? "–"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{job.createdBy}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {filteredHistory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                          Keine Eintraege gefunden.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

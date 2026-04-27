@@ -211,6 +211,9 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
   }, [serviceOrders, stationFilter]);
 
   const kitchenSummary = useMemo(() => buildKitchenSummary(kitchenOrders), [kitchenOrders]);
+  const pendingOrderCount = serviceOrders.filter((order) => order.status === "pending").length;
+  const missingOrderCount = Math.max(0, activeStays.length - serviceOrders.length);
+  const kitchenPortionCount = kitchenSummary.reduce((sum, item) => sum + item.totalPortions, 0);
 
   const selectionStay = useMemo(
     () => activeStays.find((stay) => stay.id === selectionStayId) ?? null,
@@ -392,13 +395,36 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
             <ChefHat className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{kitchenSummary.reduce((sum, item) => sum + item.totalPortions, 0)}</div>
+            <div className="text-2xl font-bold">{kitchenPortionCount}</div>
             <p className="text-xs text-muted-foreground">{kitchenSummary.length} Rezeptgruppen im Service</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <div className="grid gap-3 text-sm md:grid-cols-4">
+          <div>
+            <p className="text-xs font-medium uppercase text-muted-foreground">Servicefenster</p>
+            <p className="font-semibold">{getSelectedServiceLabel(selectedDate, selectedMealSlot)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase text-muted-foreground">Station</p>
+            <p className="font-semibold">{stationFilter === "alle" ? "Alle Stationen" : stationFilter}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase text-muted-foreground">Offene Arbeit</p>
+            <p className={pendingOrderCount + missingOrderCount > 0 ? "font-semibold text-amber-700" : "font-semibold text-emerald-700"}>
+              {pendingOrderCount} ausstehend · {missingOrderCount} ohne Bestellung
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase text-muted-foreground">Küche</p>
+            <p className="font-semibold">{kitchenPortionCount} Portionen · {kitchenSummary.length} Gruppen</p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="sticky top-16 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <CardContent className="flex flex-wrap items-end gap-4 pt-6">
           <div className="space-y-2">
             <Label htmlFor="service-date">Datum</Label>
@@ -408,7 +434,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
               list="hospital-service-dates"
-              className="w-[180px]"
+              className="w-full sm:w-[180px]"
             />
             <datalist id="hospital-service-dates">
               {selectableDates.map((date) => (
@@ -419,7 +445,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
           <div className="space-y-2">
             <Label>Mahlzeit</Label>
             <Select value={selectedMealSlot} onValueChange={(value) => setSelectedMealSlot(value as MealSlotType)}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -434,7 +460,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
           <div className="space-y-2">
             <Label>Station</Label>
             <Select value={stationFilter} onValueChange={setStationFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -450,7 +476,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
           <div className="space-y-2">
             <Label>Status</Label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -463,7 +489,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
               </SelectContent>
             </Select>
           </div>
-          <div className="ml-auto flex gap-2">
+          <div className="flex gap-2 sm:ml-auto">
             <Button variant="outline" onClick={openTrayCards}>
               <Printer className="mr-2 h-4 w-4" />
               Tablettenkarten

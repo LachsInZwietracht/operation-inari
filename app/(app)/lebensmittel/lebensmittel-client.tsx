@@ -439,9 +439,10 @@ export function LebensmittelPageClient({
         </TabsList>
 
         <TabsContent value="datenbank" className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-            <div className="space-y-4">
-              <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-w-0 space-y-4">
+              <div className="overflow-x-auto rounded-lg border bg-muted/30 p-1">
+                <div className="flex min-w-max items-center gap-1">
                 <TooltipProvider delayDuration={300}>
                   {SEARCH_MODES.map((mode) => (
                     <Tooltip key={mode.id}>
@@ -466,6 +467,7 @@ export function LebensmittelPageClient({
                     </Tooltip>
                   ))}
                 </TooltipProvider>
+                </div>
               </div>
 
               <div className="flex flex-col gap-4 sm:flex-row">
@@ -561,8 +563,100 @@ export function LebensmittelPageClient({
                 </Card>
               )}
 
-              <div className="rounded-md border">
-                <Table>
+              <div className="grid gap-3 md:hidden">
+                {isLoading ? (
+                  <div className="text-muted-foreground rounded-md border p-6 text-center text-sm">
+                    Ergebnisse werden geladen...
+                  </div>
+                ) : visibleFoods.length === 0 ? (
+                  <div className="text-muted-foreground rounded-md border p-6 text-center text-sm">
+                    Keine Lebensmittel gefunden.
+                  </div>
+                ) : (
+                  visibleFoods.map((food) => {
+                    const displayName = getDisplayName(food.id, food.name) ?? food.name;
+                    const synonyms = getSynonymsForFood(food.id);
+                    const previewSynonyms = synonyms.slice(0, 2);
+                    const primaryCandidate =
+                      preferredSynonymMap[food.id] ??
+                      synonyms.find((synonym) => synonym.isPrimary)?.id ??
+                      null;
+                    const score = foodScores.get(food.id);
+                    const badge = getProdScoreBadge(score);
+
+                    return (
+                      <div key={food.id} className="rounded-md border bg-card p-3 text-card-foreground shadow-xs">
+                        <button
+                          type="button"
+                          className="block w-full text-left"
+                          onClick={() => router.push(`/lebensmittel/${food.id}`)}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-medium">{displayName}</p>
+                              {displayName !== food.name && (
+                                <p className="text-muted-foreground text-xs line-through decoration-dotted">
+                                  {food.name}
+                                </p>
+                              )}
+                            </div>
+                            <Badge className={`${badge.color} shrink-0 border-none px-2 py-0.5 text-[11px] font-semibold`}>
+                              {badge.label}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary">
+                              {categoryMap.get(food.categoryId) ?? food.categoryId}
+                            </Badge>
+                            <Badge variant="outline">{food.source}</Badge>
+                            {food.blsCode && <Badge variant="outline">{food.blsCode}</Badge>}
+                          </div>
+                          {previewSynonyms.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {previewSynonyms.map((synonym) => (
+                                <Badge key={synonym.id} variant="outline" className="text-[10px] font-normal">
+                                  {synonym.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-3 grid grid-cols-4 gap-2 text-sm">
+                            <div>
+                              <p className="text-muted-foreground text-[11px]">kcal</p>
+                              <p className="font-medium">{formatNumber(getNutrientValue(food.nutrients, "energie"))}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-[11px]">Eiweiß</p>
+                              <p className="font-medium">{formatNumber(getNutrientValue(food.nutrients, "eiweiss"), 1)}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-[11px]">Fett</p>
+                              <p className="font-medium">{formatNumber(getNutrientValue(food.nutrients, "fett"), 1)}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-[11px]">KH</p>
+                              <p className="font-medium">{formatNumber(getNutrientValue(food.nutrients, "kohlenhydrate"), 1)}</p>
+                            </div>
+                          </div>
+                        </button>
+                        <div className="mt-2 border-t pt-2">
+                          <FoodSynonymManager
+                            food={food}
+                            synonyms={synonyms}
+                            activeSynonymId={primaryCandidate}
+                            addSynonym={addSynonym}
+                            deleteSynonym={deleteSynonym}
+                            setPrimarySynonym={setPrimarySynonym}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-md border md:block">
+                <Table className="min-w-[920px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
@@ -572,7 +666,7 @@ export function LebensmittelPageClient({
                       <TableHead className="text-right">PRODIscore</TableHead>
                       <TableHead className="text-right">Quelle</TableHead>
                       <TableHead className="text-right">Energie (kcal)</TableHead>
-                      <TableHead className="text-right">Eiweiss (g)</TableHead>
+                      <TableHead className="text-right">Eiweiß (g)</TableHead>
                       <TableHead className="text-right">Fett (g)</TableHead>
                       <TableHead className="text-right">KH (g)</TableHead>
                     </TableRow>

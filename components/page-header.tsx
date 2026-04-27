@@ -16,10 +16,10 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, helpText, children }: PageHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="space-y-1">
+    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="min-w-0 text-2xl font-bold tracking-tight">{title}</h1>
           {helpText && (
             <Popover>
               <PopoverTrigger asChild>
@@ -41,7 +41,7 @@ export function PageHeader({ title, description, helpText, children }: PageHeade
           <p className="text-muted-foreground text-sm">{description}</p>
         )}
       </div>
-      {children && <div className="flex items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2 sm:justify-end">{children}</div>}
     </div>
   )
 }

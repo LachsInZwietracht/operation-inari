@@ -28,13 +28,14 @@ export function PwaStatus() {
     <Badge
       variant={online ? "secondary" : "destructive"}
       className="flex items-center gap-1 text-xs"
+      title={online ? "PWA online" : "Offline verfügbar"}
     >
       {online ? (
         <Wifi className="h-3 w-3" />
       ) : (
         <WifiOff className="h-3 w-3" />
       )}
-      {online ? "PWA online" : "Offline verfügbar"}
+      <span className="hidden sm:inline">{online ? "PWA online" : "Offline verfügbar"}</span>
     </Badge>
   );
 }

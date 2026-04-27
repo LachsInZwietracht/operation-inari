@@ -255,13 +255,13 @@ export function FoodSearchTrigger() {
     <>
       <Button
         variant="outline"
-        className="text-muted-foreground relative w-full justify-start text-sm sm:w-64"
+        className="text-muted-foreground relative min-w-0 justify-start text-sm sm:w-64"
         onClick={() => setOpen(true)}
         onMouseEnter={() => loadIndex()}
         onFocus={() => loadIndex()}
       >
-        <SearchIcon className="mr-2 size-4" />
-        <span>Lebensmittel suchen...</span>
+        <SearchIcon className="mr-2 size-4 shrink-0" />
+        <span className="min-w-0 truncate">Lebensmittel suchen...</span>
         <Sparkles className="mr-1 ml-auto size-3 text-purple-400" />
         <kbd className="bg-muted text-muted-foreground pointer-events-none hidden h-5 select-none items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium sm:flex">
           <span className="text-xs">&#8984;</span>K

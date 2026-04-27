@@ -35,7 +35,7 @@ Agent quick index:
 ## 2. Global Architecture Overview
 - **Rendering:** Next.js 15 with server rendering and `<Suspense>` boundaries for heavier routes.
 - **Caching:** BLS food data is cached via `unstable_cache` where applicable.
-- **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and global search. It is **non-blocking** (search index is lazy-loaded on demand).
+- **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and global search. It is **non-blocking** (search index is lazy-loaded on demand) and keeps the header/search/status row responsive at mobile widths.
 - **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The search index is loaded on first use via `/api/foods/search-index`.
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
@@ -70,13 +70,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
     2. **`DashboardNutritionSection`** (streams in after food fetch) — fetches recipes + meal plans (deduped by React `cache()`), extracts referenced food IDs, then fetches only those foods via `fetchFoodsViaRpc`. Renders `DashboardNutritionClient` with the kcal card, macro ring chart, and meal plan detail.
   - This split avoids blocking the visible header/metrics on the sequential food fetch chain (recipes → extract IDs → foods RPC).
   - **Components:** `dashboard-metrics-client.tsx` (top), `dashboard-nutrition-client.tsx` (bottom).
+  - Empty workspaces show a setup panel with first clinical actions instead of only zero-valued KPI cards.
 
 ### 4.2 Lebensmittel (Foods) (`/lebensmittel`)
 - **Listing + search:** `app/(app)/lebensmittel/page.tsx`
   - Server page calls `fetchFoodsBrowserPage()` for the initial result set and the initial OFF-branded tab payload.
   - Client page (`lebensmittel-client.tsx`) keeps the existing search modes and filters, but fetches page changes through `/api/foods/browser`.
   - Hooks: `useCustomFoods`, `useFoodSynonyms`.
-  - UI: Search mode buttons, filters (source, categories), paginated results table, OFF-branded products tab.
+  - UI: Search mode buttons, filters (source, categories), paginated desktop results table, mobile result cards, OFF-branded products tab.
   - Data: `FOOD_CATEGORIES`, `FOOD_SOURCES`, `FOOD_GROUPS`, `fetchFoodsBrowserPage()`, `/api/foods/browser`.
 - **Group navigation:** `FoodGroupTree` uses `FOOD_GROUPS`; ensure new groups update `getFoodGroupDescendants`.
 - **Search contract:** name-mode search prefers the `search_foods_with_total` RPC and falls back to `search_foods()` if the new migration has not been applied yet. Code/group/browse modes use direct paginated Supabase queries.
@@ -145,6 +146,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.8 Patienten Mail Merge (`/patienten`)
 - **Component:** `app/(app)/patienten/page.tsx`
   - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
+  - **Priority order:** patient search/filter and patient cards render before demo and mailing utilities so the primary patient-management task is first.
   - **eGK demo:** the patient overview and patient creation form expose clearly labeled simulated eGK flows for tests/product demos; the current Web Serial and companion paths still return demo card payloads rather than production connector data.
   - The authoring UI for templates/placeholders is still client-side and reads bundled product defaults from `lib/patient-mailings.ts`.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
@@ -157,6 +159,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Report text templates in `/berichte` are bundled product defaults from `lib/report-templates.ts`, then extended with user-created local templates via `useReportTemplates()`.
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
+  - Failed history loads are shown inline so the export page does not silently degrade when the journal endpoint or schema is unavailable.
   - **Truth model:** Export creation and export history are live. The `REST API` and `Integrationen` tabs are intentionally marked as preview/read-only until API-key issuance, webhook delivery, and integration persistence have real backends.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
@@ -238,6 +241,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Derived data:** `generateProductionList(menuId, week, day)` and `generateShoppingList(menuId, week)` compute ingredient aggregations with category-based cost estimates from the food database.
 - **Client data layer:** `lib/data/menu-plans-client.ts` provides `fetchMenuPlansClient`, `persistMenuPlan`, and `deleteMenuPlanClient` for browser-side Supabase operations.
 - **UI features:**
+  - **Sidebar access state:** Institution navigation entries stay visible for all users; users without `owner`, `admin`, or `institution_admin` roles see locked, non-navigating entries while direct route access remains protected by middleware.
   - **Empty state:** When no menu exists yet, the page shows an explicit onboarding card instead of pre-populated demo plans.
   - **Drag-and-drop planner:** Recipes are dragged from a Sheet sidebar (`Rezeptbibliothek`) into a 7-day × 3-meal grid per diet form tab. Drop triggers a portion count dialog.
   - **Create dialog:** Name, cycle length (1/2/4 weeks), start date, and multi-checkbox diet form selection.
@@ -268,6 +272,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Resolves service candidates for a selected date and meal slot.
   - Blocks options that violate assigned diet forms or patient allergen entries.
 - **Workflow UI:**
+  - A compact operations band summarizes service window, station, open/missing orders, and kitchen portions before the detail tabs.
   - Assign a real patient to station / room / bed with one or more diet forms.
   - Open a staff-side selection dialog for breakfast, lunch, or dinner.
   - Persist exactly one order per inpatient stay and service window.
