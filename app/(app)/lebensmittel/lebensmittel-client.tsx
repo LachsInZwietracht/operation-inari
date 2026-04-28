@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -15,7 +16,6 @@ import {
   TreePine,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { FoodSynonymManager } from "@/components/food-synonym-manager";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -63,8 +63,21 @@ import { getNutrientValue } from "@/lib/nutrients";
 import type { Food, FoodBrowserResult, FoodSourceId, FoodGroupNode } from "@/lib/types";
 
 const categoryMap = new Map(FOOD_CATEGORIES.map((c) => [c.id, c.name]));
-const PAGE_SIZE = 50;
+const FoodSynonymManager = dynamic(
+  () => import("@/components/food-synonym-manager").then((mod) => mod.FoodSynonymManager),
+  { ssr: false },
+);
+
+const PAGE_SIZE = 25;
 const BRAND_PAGE_SIZE = 12;
+
+const EMPTY_BRANDED_RESULT: FoodBrowserResult = {
+  foods: [],
+  totalCount: 0,
+  page: 1,
+  pageSize: BRAND_PAGE_SIZE,
+  hasMore: false,
+};
 
 export type SearchMode = "name" | "code" | "group" | "browse";
 
@@ -228,10 +241,8 @@ function filterLocalCustomFoods(params: {
 
 export function LebensmittelPageClient({
   initialResult,
-  initialBrandedResult,
 }: {
   initialResult: FoodBrowserResult;
-  initialBrandedResult: FoodBrowserResult;
 }) {
   const router = useRouter();
   const [activeSource, setActiveSource] = useState<FoodSourceId | "all">("all");
@@ -242,7 +253,7 @@ export function LebensmittelPageClient({
   const [selectedFoodGroupId, setSelectedFoodGroupId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(initialResult);
-  const [brandsResult, setBrandsResult] = useState(initialBrandedResult);
+  const [brandsResult, setBrandsResult] = useState(EMPTY_BRANDED_RESULT);
   const [isLoading, setIsLoading] = useState(false);
   const [isBrandsLoading, setIsBrandsLoading] = useState(false);
   const deferredQuery = useDeferredValue(searchQuery);
@@ -397,11 +408,17 @@ export function LebensmittelPageClient({
   }, [visibleFoods]);
 
   const resultCount = result.totalCount + (page === 1 ? localCustomMatches.length : 0);
+  const resultCountLabel =
+    result.hasMore && result.totalCount <= result.page * result.pageSize
+      ? `${resultCount}+`
+      : `${resultCount}`;
   const currentSource =
     activeSource === "all"
       ? null
       : FOOD_SOURCES.find((source) => source.id === activeSource);
-  const pageCount = Math.max(1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize));
+  const pageCount = result.hasMore
+    ? Math.max(page + 1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize))
+    : Math.max(1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize));
 
   function handleSearchModeChange(mode: SearchMode) {
     setSearchMode(mode);
@@ -529,7 +546,7 @@ export function LebensmittelPageClient({
                   </SelectContent>
                 </Select>
                 <p className="text-muted-foreground text-sm">
-                  {resultCount} Lebensmittel
+                  {resultCountLabel} Lebensmittel
                   {activeSource !== "all" && currentSource ? ` · ${currentSource.version}` : " · alle Quellen"}
                   {searchQuery.trim() && searchMode === "name" && (
                     <span className="ml-1 text-purple-500">· Fuzzy-Suche aktiv</span>

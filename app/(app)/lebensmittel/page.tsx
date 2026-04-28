@@ -4,15 +4,7 @@ import { fetchFoodsBrowserPage } from "@/lib/data/foods";
 export const dynamic = "force-dynamic";
 
 export default async function LebensmittelPage() {
-  const [initialResult, initialBrandedResult] = await Promise.all([
-    fetchFoodsBrowserPage({ mode: "name", page: 1, pageSize: 50 }),
-    fetchFoodsBrowserPage({ mode: "browse", dataSourceId: "off", page: 1, pageSize: 12 }),
-  ]);
+  const initialResult = await fetchFoodsBrowserPage({ mode: "name", page: 1, pageSize: 25 });
 
-  return (
-    <LebensmittelPageClient
-      initialResult={initialResult}
-      initialBrandedResult={initialBrandedResult}
-    />
-  );
+  return <LebensmittelPageClient initialResult={initialResult} />;
 }

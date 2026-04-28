@@ -17,6 +17,31 @@ import { createClient as createServerSupabaseClient, createServiceClient } from 
 import { withTimeout } from "@/lib/data/utils";
 
 const FALLBACK_CATEGORY_ID = "cat_unbekannt";
+const FOOD_BASE_COLUMNS = [
+  "id",
+  "name",
+  "data_source_id",
+  "source_food_id",
+  "source_version",
+  "bls_code",
+  "food_group_id",
+  "category_id",
+  "manufacturer",
+  "allergens",
+  "additives",
+  "tags",
+  "is_branded",
+  "is_custom",
+  "is_recipe_derived",
+  "co2_per_portion",
+  "sustainability_score",
+  "prod_score",
+  "data_quality_score",
+  "imported_at",
+  "created_at",
+  "updated_at",
+];
+const FOOD_BROWSER_NUTRIENT_IDS = ["energie", "eiweiss", "fett", "kohlenhydrate"];
 
 interface FoodRow {
   id: string;
@@ -186,6 +211,7 @@ export interface FetchFoodByIdOptions {
 export async function fetchFoodsByIds(
   ids: string[],
   supabase?: SupabaseClient,
+  options: { nutrientIds?: string[]; includePortions?: boolean } = {},
 ): Promise<Food[]> {
   if (!ids || ids.length === 0) return [];
   try {
@@ -193,13 +219,27 @@ export async function fetchFoodsByIds(
     const uuidIds = ids.filter(isUuid);
     const legacyIds = ids.filter((id) => !isUuid(id));
     const rows: FoodRowWithRelations[] = [];
+    const selectColumns = [
+      ...FOOD_BASE_COLUMNS,
+      "food_nutrients(nutrient_id, amount, per_amount)",
+    ];
+    if (options.includePortions ?? true) {
+      selectColumns.push("food_portions(label, amount_grams)");
+    }
+    const select = selectColumns.join(",");
 
     if (uuidIds.length > 0) {
+      let query = client
+        .from("foods")
+        .select(select)
+        .in("id", uuidIds);
+
+      if (options.nutrientIds?.length) {
+        query = query.in("food_nutrients.nutrient_id", options.nutrientIds);
+      }
+
       const { data, error } = await withTimeout(
-        client
-          .from("foods")
-          .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
-          .in("id", uuidIds),
+        query,
         10000,
         "Supabase foods lookup timed out"
       );
@@ -209,11 +249,17 @@ export async function fetchFoodsByIds(
     }
 
     if (legacyIds.length > 0) {
+      let query = client
+        .from("foods")
+        .select(select)
+        .in("source_food_id", legacyIds);
+
+      if (options.nutrientIds?.length) {
+        query = query.in("food_nutrients.nutrient_id", options.nutrientIds);
+      }
+
       const { data, error } = await withTimeout(
-        client
-          .from("foods")
-          .select("*, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)")
-          .in("source_food_id", legacyIds),
+        query,
         10000,
         "Supabase foods lookup timed out"
       );
@@ -664,6 +710,7 @@ async function fetchFoodsBrowserPageByName(
     const foods = await fetchFoodsByIds(
       rows.map((row) => row.food_id),
       client,
+      { nutrientIds: FOOD_BROWSER_NUTRIENT_IDS, includePortions: false },
     );
     const byId = new Map(foods.map((food) => [food.id, food]));
     const orderedFoods = rows
@@ -694,36 +741,15 @@ async function fetchFoodsBrowserPageByQuery(
   client: SupabaseClient,
 ): Promise<FoodBrowserResult> {
   try {
-    const withCount = true;
+    const withExactCount = shouldUseExactFoodBrowserCount(query);
     let builder = client
       .from("foods")
       .select(
         [
-          "id",
-          "name",
-          "data_source_id",
-          "source_food_id",
-          "source_version",
-          "bls_code",
-          "food_group_id",
-          "category_id",
-          "manufacturer",
-          "allergens",
-          "additives",
-          "tags",
-          "is_branded",
-          "is_custom",
-          "is_recipe_derived",
-          "co2_per_portion",
-          "sustainability_score",
-          "prod_score",
-          "data_quality_score",
-          "imported_at",
-          "created_at",
-          "updated_at",
+          ...FOOD_BASE_COLUMNS,
           "food_nutrients(nutrient_id,amount,per_amount)",
         ].join(","),
-        { count: withCount ? "exact" : undefined },
+        withExactCount ? { count: "exact" } : undefined,
       )
       .order(query.mode === "code" ? "bls_code" : "name", { ascending: true });
 
@@ -747,6 +773,8 @@ async function fetchFoodsBrowserPageByQuery(
       builder = builder.ilike("name", `%${escaped}%`);
     }
 
+    builder = builder.in("food_nutrients.nutrient_id", FOOD_BROWSER_NUTRIENT_IDS);
+
     builder = builder.range(query.offset, query.offset + query.pageSize - 1);
 
     const { data, error, count } = await withTimeout(
@@ -767,14 +795,14 @@ async function fetchFoodsBrowserPageByQuery(
     }
 
     const foods = ((data ?? []) as unknown as FoodRowWithRelations[]).map(mapFoodRow);
-    const totalCount = count ?? foods.length;
+    const totalCount = count ?? query.offset + foods.length;
 
     return {
       foods,
       totalCount,
       page: query.page,
       pageSize: query.pageSize,
-      hasMore: query.offset + foods.length < totalCount,
+      hasMore: count == null ? foods.length === query.pageSize : query.offset + foods.length < totalCount,
     };
   } catch (error) {
     console.error("fetchFoodsBrowserPageByQuery error:", error);
@@ -786,6 +814,17 @@ async function fetchFoodsBrowserPageByQuery(
       hasMore: false,
     };
   }
+}
+
+function shouldUseExactFoodBrowserCount(query: ReturnType<typeof normalizeFoodBrowserQuery>) {
+  return Boolean(
+    query.page > 1 ||
+      query.q ||
+      query.categoryId ||
+      query.dataSourceId ||
+      query.groupId ||
+      query.mode !== "name",
+  );
 }
 
 export async function fetchFoodsBrowserPage(
