@@ -29,17 +29,36 @@ function sortEntries(items: DigitalProtocolLink[]) {
   return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-function buildInitial(): DigitalProtocolLink[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: DigitalProtocolLink[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useDigitalProtocols() {
+function buildInitial(initialEntries: DigitalProtocolLink[] = []): DigitalProtocolLink[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseDigitalProtocolsOptions {
+  initialLinks?: DigitalProtocolLink[];
+}
+
+export function useDigitalProtocols(options: UseDigitalProtocolsOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [links, setLinks] = useState<DigitalProtocolLink[]>(buildInitial);
+  const initialLinksRef = useRef(options.initialLinks);
+  const [links, setLinks] = useState<DigitalProtocolLink[]>(() =>
+    buildInitial(options.initialLinks),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(links);
@@ -61,11 +80,13 @@ export function useDigitalProtocols() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialLinksRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchDigitalProtocolLinksClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchDigitalProtocolLinksClient();
+        initialLinksRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);

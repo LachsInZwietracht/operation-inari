@@ -15,7 +15,10 @@ import { usePracticeAppointments, usePracticeInvoices } from "@/hooks/use-practi
 import { usePatients } from "@/hooks/use-patients"
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format"
 import type { PracticeAppointment } from "@/lib/types"
-import type { PracticeOverviewData } from "@/lib/data/practice-overview"
+import type {
+  PracticeOverviewData,
+  PracticeStatisticsSummary,
+} from "@/lib/data/practice-overview"
 
 const TYPE_LABELS: Record<PracticeAppointment["type"], string> = {
   beratung: "Beratung",
@@ -90,15 +93,23 @@ const NewPatientsChart = dynamic(
 
 export default function PraxisStatistikenClient({
   initialData,
+  initialSummary,
 }: {
   initialData?: PracticeOverviewData | null
+  initialSummary?: PracticeStatisticsSummary | null
 }) {
+  const hasSummary = Boolean(initialSummary)
   const { appointments } = usePracticeAppointments({
-    initialAppointments: initialData?.appointments,
+    initialAppointments: hasSummary ? [] : initialData?.appointments,
   })
-  const { invoices } = usePracticeInvoices({ initialInvoices: initialData?.invoices })
-  const { patients } = usePatients({ initialPatients: initialData?.patients })
+  const { invoices } = usePracticeInvoices({
+    initialInvoices: hasSummary ? [] : initialData?.invoices,
+  })
+  const { patients } = usePatients({
+    initialPatients: hasSummary ? [] : initialData?.patients,
+  })
   const [timeRange, setTimeRange] = useState<TimeRange>("month")
+  const rangeSummary = initialSummary?.ranges[timeRange]
 
   const now = useMemo(() => new Date(), [])
   const currentMonthStart = useMemo(() => startOfMonth(now), [now])
@@ -106,6 +117,42 @@ export default function PraxisStatistikenClient({
 
   // --- Dynamic KPIs (always current month vs previous month) ---
   const dynamicKpis = useMemo(() => {
+    if (initialSummary) {
+      return [
+        {
+          id: "patients_active",
+          label: "Aktive Patienten",
+          value: `${initialSummary.activePatients}`,
+          trend: getTrend(initialSummary.currentNewPatients, initialSummary.previousNewPatients),
+          helper: `${initialSummary.currentNewPatients} Neuzugänge diesen Monat`,
+        },
+        {
+          id: "sessions_month",
+          label: "Sitzungen (Monat)",
+          value: `${initialSummary.currentMonthAppointments}`,
+          trend: getTrend(
+            initialSummary.currentMonthAppointments,
+            initialSummary.previousMonthAppointments,
+          ),
+          helper: `${initialSummary.previousMonthAppointments} im Vormonat`,
+        },
+        {
+          id: "avg_duration",
+          label: "Ø Sitzungsdauer",
+          value: `${initialSummary.currentAvgDuration} min`,
+          trend: getTrend(initialSummary.currentAvgDuration, initialSummary.previousAvgDuration),
+          helper: `${initialSummary.previousAvgDuration} min im Vormonat`,
+        },
+        {
+          id: "revenue",
+          label: "Umsatz (Monat)",
+          value: formatCurrency(initialSummary.currentRevenue),
+          trend: getTrend(initialSummary.currentRevenue, initialSummary.previousRevenue),
+          helper: `${formatCurrency(initialSummary.previousRevenue)} im Vormonat`,
+        },
+      ]
+    }
+
     const currentMonthAppointments = appointments.filter(
       (a) => new Date(a.date) >= currentMonthStart,
     )
@@ -173,7 +220,7 @@ export default function PraxisStatistikenClient({
         helper: `${formatCurrency(previousRevenue)} im Vormonat`,
       },
     ]
-  }, [appointments, invoices, patients, currentMonthStart, previousMonthStart])
+  }, [appointments, invoices, patients, currentMonthStart, previousMonthStart, initialSummary])
 
   // --- Time-range filtering ---
   const rangeStart = useMemo(() => {
@@ -204,12 +251,22 @@ export default function PraxisStatistikenClient({
     () => filteredAppointments.map(calculateDurationMinutes),
     [filteredAppointments],
   )
-  const durationStats = useMemo(() => computeStats(appointmentDurations), [appointmentDurations])
+  const durationStats = useMemo(
+    () => rangeSummary?.durationStats ?? computeStats(appointmentDurations),
+    [appointmentDurations, rangeSummary],
+  )
 
   const invoiceAmounts = useMemo(() => filteredInvoices.map((invoice) => invoice.amount), [filteredInvoices])
-  const invoiceStats = useMemo(() => computeStats(invoiceAmounts), [invoiceAmounts])
+  const invoiceStats = useMemo(
+    () => rangeSummary?.invoiceStats ?? computeStats(invoiceAmounts),
+    [invoiceAmounts, rangeSummary],
+  )
 
   const appointmentTimeline = useMemo(() => {
+    if (rangeSummary) {
+      return rangeSummary.appointmentTimeline
+    }
+
     const map = new Map<string, { iso: string; label: string; appointments: number; patientSlots: number }>()
     filteredAppointments.forEach((appointment) => {
       if (!map.has(appointment.date)) {
@@ -227,9 +284,13 @@ export default function PraxisStatistikenClient({
       }
     })
     return Array.from(map.values()).sort((a, b) => a.iso.localeCompare(b.iso))
-  }, [filteredAppointments])
+  }, [filteredAppointments, rangeSummary])
 
   const typeBreakdown = useMemo(() => {
+    if (rangeSummary) {
+      return rangeSummary.typeBreakdown
+    }
+
     const counts: Record<PracticeAppointment["type"], { total: number; patientSlots: number }> = {
       beratung: { total: 0, patientSlots: 0 },
       kontrolle: { total: 0, patientSlots: 0 },
@@ -247,7 +308,7 @@ export default function PraxisStatistikenClient({
       termine: value.total,
       patienten: value.patientSlots,
     }))
-  }, [filteredAppointments])
+  }, [filteredAppointments, rangeSummary])
 
   const weekStart = startOfWeek(now, { weekStartsOn: 1 })
   const weekEnd = addDays(weekStart, 6)
@@ -256,23 +317,35 @@ export default function PraxisStatistikenClient({
     return appointmentDate >= weekStart && appointmentDate <= weekEnd
   })
 
-  const slotUtilization = Math.min(100, Math.round((appointmentsThisWeek.length / 20) * 100))
-  const recurringShare = filteredAppointments.length
+  const slotUtilization = initialSummary
+    ? Math.min(100, Math.round((initialSummary.appointmentsThisWeek / 20) * 100))
+    : Math.min(100, Math.round((appointmentsThisWeek.length / 20) * 100))
+  const recurringShare = rangeSummary ? rangeSummary.recurringShare : filteredAppointments.length
     ? Math.round((filteredAppointments.filter((appointment) => appointment.recurring).length / filteredAppointments.length) * 100)
     : 0
 
-  const totalRevenue = invoiceAmounts.reduce((acc, value) => acc + value, 0)
-  const outstandingRevenue = filteredInvoices
+  const totalRevenue = rangeSummary
+    ? rangeSummary.totalRevenue
+    : invoiceAmounts.reduce((acc, value) => acc + value, 0)
+  const outstandingRevenue = rangeSummary ? rangeSummary.outstandingRevenue : filteredInvoices
     .filter((invoice) => invoice.status !== "bezahlt")
     .reduce((acc, invoice) => acc + invoice.amount, 0)
-  const paymentRate = totalRevenue ? Math.round(((totalRevenue - outstandingRevenue) / totalRevenue) * 100) : 0
-  const averageTicket = filteredInvoices.length ? totalRevenue / filteredInvoices.length : 0
+  const paymentRate = rangeSummary
+    ? rangeSummary.paymentRate
+    : totalRevenue
+      ? Math.round(((totalRevenue - outstandingRevenue) / totalRevenue) * 100)
+      : 0
+  const averageTicket = rangeSummary
+    ? rangeSummary.averageTicket
+    : filteredInvoices.length
+      ? totalRevenue / filteredInvoices.length
+      : 0
 
   const performanceIndicators = [
     {
       label: "Slot-Auslastung",
       value: slotUtilization,
-      helper: `${appointmentsThisWeek.length} Termine in der aktuellen Woche (Kapazität 20)`,
+      helper: `${initialSummary?.appointmentsThisWeek ?? appointmentsThisWeek.length} Termine in der aktuellen Woche (Kapazität 20)`,
     },
     {
       label: "Zahlungsquote",
@@ -287,6 +360,10 @@ export default function PraxisStatistikenClient({
   ]
 
   const uniquePatients = useMemo(() => {
+    if (rangeSummary) {
+      return rangeSummary.uniquePatients
+    }
+
     const set = new Set<string>()
     filteredAppointments.forEach((appointment) => {
       if (appointment.patientId) {
@@ -294,9 +371,9 @@ export default function PraxisStatistikenClient({
       }
     })
     return set.size
-  }, [filteredAppointments])
+  }, [filteredAppointments, rangeSummary])
 
-  const overdueInvoices = filteredInvoices.filter((invoice) => {
+  const overdueInvoices = rangeSummary?.overdueInvoices ?? filteredInvoices.filter((invoice) => {
     const dueDate = new Date(invoice.dueDate)
     return invoice.status !== "bezahlt" && dueDate < now
   })
@@ -321,7 +398,7 @@ export default function PraxisStatistikenClient({
       mean: `${uniquePatients}`,
       min: "Ziel 120",
       max: "Kapazität 180",
-      std: `${filteredAppointments.length ? Math.max(1, Math.round(uniquePatients * 0.05)) : 0}`,
+      std: `${rangeSummary ? Math.max(1, Math.round(uniquePatients * 0.05)) : filteredAppointments.length ? Math.max(1, Math.round(uniquePatients * 0.05)) : 0}`,
     },
   ]
 
@@ -334,6 +411,10 @@ export default function PraxisStatistikenClient({
 
   // --- Monthly revenue stacked bar chart data ---
   const monthlyRevenueData = useMemo(() => {
+    if (rangeSummary) {
+      return rangeSummary.monthlyRevenueData
+    }
+
     const map = new Map<string, { month: string; sortKey: string; bezahlt: number; offen: number }>()
     filteredInvoices.forEach((inv) => {
       const d = new Date(inv.dueDate)
@@ -350,10 +431,14 @@ export default function PraxisStatistikenClient({
       }
     })
     return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-  }, [filteredInvoices])
+  }, [filteredInvoices, rangeSummary])
 
   // --- Patient demographics ---
   const genderDistribution = useMemo(() => {
+    if (initialSummary) {
+      return initialSummary.genderDistribution
+    }
+
     const counts: Record<string, number> = {}
     patients.forEach((p) => {
       const key = p.gender || "d"
@@ -363,9 +448,13 @@ export default function PraxisStatistikenClient({
       name: GENDER_LABELS[gender] || gender,
       value: count,
     }))
-  }, [patients])
+  }, [patients, initialSummary])
 
   const topIndikationen = useMemo(() => {
+    if (initialSummary) {
+      return initialSummary.topIndications
+    }
+
     const counts: Record<string, number> = {}
     patients.forEach((p) => {
       if (p.indication) {
@@ -376,9 +465,13 @@ export default function PraxisStatistikenClient({
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([name, count]) => ({ name, count }))
-  }, [patients])
+  }, [patients, initialSummary])
 
   const newPatientsPerMonth = useMemo(() => {
+    if (rangeSummary) {
+      return rangeSummary.newPatientsPerMonth
+    }
+
     const map = new Map<string, { month: string; sortKey: string; count: number }>()
     patients.forEach((p) => {
       if (!p.createdAt) return
@@ -392,7 +485,7 @@ export default function PraxisStatistikenClient({
       map.get(key)!.count += 1
     })
     return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-  }, [patients, rangeStart])
+  }, [patients, rangeStart, rangeSummary])
 
   return (
     <div className="space-y-6">
@@ -477,7 +570,7 @@ export default function PraxisStatistikenClient({
             <CardTitle>Mix der Termine</CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredAppointments.length === 0 ? (
+            {typeBreakdown.every((entry) => entry.termine === 0) ? (
               <p className="text-muted-foreground text-sm">Keine Termine vorhanden.</p>
             ) : (
               <div className="h-[260px]">
@@ -555,7 +648,7 @@ export default function PraxisStatistikenClient({
             <CardTitle>Geschlechterverteilung</CardTitle>
           </CardHeader>
           <CardContent>
-            {patients.length === 0 ? (
+            {genderDistribution.length === 0 ? (
               <p className="text-muted-foreground text-sm">Keine Patientendaten vorhanden.</p>
             ) : (
               <div className="h-[260px]">

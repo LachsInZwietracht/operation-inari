@@ -84,6 +84,7 @@ import {
   type AllergenSeverity,
 } from "@/lib/allergen-constants"
 import { AlertTriangle, Trash2 } from "lucide-react"
+import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
 
 const AnthropometricChart = dynamic(
   () => import("@/components/anthropometric-chart").then((mod) => mod.AnthropometricChart),
@@ -238,79 +239,88 @@ const SGA_QUESTIONS = [
 
 interface PatientTabsProps {
   patient: Patient
+  initialData?: PatientWorkspaceData | null
 }
 
-export function PatientTabs({ patient }: PatientTabsProps) {
+export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const {
     getForPatient: getAnthroForPatient,
     addEntry: addAnthroEntry,
     isLoadingRemote: isLoadingAnthropometric,
-  } = useAnthropometric()
+  } = useAnthropometric({ initialEntries: initialData?.anthropometrics })
   const {
     getForPatient: getDiagnosesForPatient,
     addEntry: addDiagnosis,
     isLoadingRemote: isLoadingDiagnoses,
-  } = useDiagnoses()
+  } = useDiagnoses({ initialEntries: initialData?.diagnoses })
   const {
     getForPatient: getMedicationsForPatient,
     addEntry: addMedication,
     isLoadingRemote: isLoadingMedications,
-  } = useMedications()
+  } = useMedications({ initialEntries: initialData?.medications })
   const {
     getForPatient: getLabValuesForPatient,
     addEntry: addLabValue,
     isLoadingRemote: isLoadingLabValues,
-  } = useLabValues()
+  } = useLabValues({ initialEntries: initialData?.labValues })
   const {
     getForPatient: getActivitiesForPatient,
     addEntry: addActivity,
     isLoadingRemote: isLoadingActivities,
-  } = useActivities()
+  } = useActivities({ initialEntries: initialData?.activities })
   const {
     getForPatient: getTherapiesForPatient,
     upsertSetting,
     isLoadingRemote: isLoadingTherapies,
-  } = useTherapySettings()
+  } = useTherapySettings({ initialEntries: initialData?.therapySettings })
   const {
     getForPatient: getIntegrationsForPatient,
     addIntegration,
     updateIntegration,
     isLoadingRemote: isLoadingIntegrations,
-  } = useTherapyIntegrations()
+  } = useTherapyIntegrations({ initialEntries: initialData?.therapyIntegrations })
   const {
     getForPatient: getScreeningsForPatient,
     addEntry: addScreening,
     isLoadingRemote: isLoadingScreenings,
-  } = useScreenings()
+  } = useScreenings({ initialEntries: initialData?.screenings })
   const {
     getForPatient: getProcamForPatient,
     addResult: addProcam,
     isLoadingRemote: isLoadingProcam,
-  } = useProcam()
+  } = useProcam({ initialEntries: initialData?.procamResults })
   const {
     getForPatient: getDigitalLinksForPatient,
     generateLink,
     updateStatus: updateDigitalLinkStatus,
     isLoadingRemote: isLoadingDigitalProtocols,
-  } = useDigitalProtocols()
-  const { getForPatient: getProtocolsForPatient } = useProtocols()
+  } = useDigitalProtocols({ initialLinks: initialData?.digitalLinks })
+  const { getForPatient: getProtocolsForPatient } = useProtocols([], {
+    initialProtocols: initialData?.protocols,
+  })
   const {
     submissions: digitalSubmissions,
     isLoading: isLoadingSubmissions,
     updateStatus: updateSubmissionStatus,
-  } = useDigitalProtocolSubmissions(patient.id)
+  } = useDigitalProtocolSubmissions(patient.id, {
+    initialSubmissions: initialData?.digitalSubmissions,
+  })
   const {
     getForPatient: getAllergensForPatient,
     addEntry: addAllergen,
     deleteEntry: deleteAllergen,
     isLoadingRemote: isLoadingAllergens,
-  } = usePatientAllergens()
+  } = usePatientAllergens({ initialEntries: initialData?.patientAllergens })
   const {
     sessions: counselingSessions,
     isLoadingRemote: isLoadingCounseling,
-  } = useCounseling()
-  const { appointments } = usePracticeAppointments()
-  const { reports: patientReports } = usePatientReports(patient.id)
+  } = useCounseling({ initialSessions: initialData?.counselingSessions })
+  const { appointments } = usePracticeAppointments({
+    initialAppointments: initialData?.appointments,
+  })
+  const { reports: patientReports } = usePatientReports(patient.id, {
+    initialReports: initialData?.patientReports,
+  })
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)

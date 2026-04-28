@@ -23,19 +23,38 @@ function loadFromStorage(): PatientAllergenEntry[] {
   }
 }
 
-function buildInitialEntries(): PatientAllergenEntry[] {
-  return sortEntries(loadFromStorage());
-}
-
 function sortEntries(items: PatientAllergenEntry[]) {
   return [...items].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 
-export function usePatientAllergens() {
+function buildInitialEntries(initialEntries: PatientAllergenEntry[] = []): PatientAllergenEntry[] {
+  const localOnly = loadFromStorage().filter(isLocalMigrationCandidate);
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UsePatientAllergensOptions {
+  initialEntries?: PatientAllergenEntry[];
+}
+
+export function usePatientAllergens(options: UsePatientAllergensOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<PatientAllergenEntry[]>(buildInitialEntries);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<PatientAllergenEntry[]>(() =>
+    buildInitialEntries(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -59,11 +78,13 @@ export function usePatientAllergens() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchPatientAllergensClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchPatientAllergensClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = entriesRef.current.filter(isLocalMigrationCandidate);

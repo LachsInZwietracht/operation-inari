@@ -27,17 +27,36 @@ function sortEntries(items: MedicationEntry[]) {
   return [...items].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 }
 
-function buildInitial(): MedicationEntry[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: MedicationEntry[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useMedications() {
+function buildInitial(initialEntries: MedicationEntry[] = []): MedicationEntry[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseMedicationsOptions {
+  initialEntries?: MedicationEntry[];
+}
+
+export function useMedications(options: UseMedicationsOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<MedicationEntry[]>(buildInitial);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<MedicationEntry[]>(() =>
+    buildInitial(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -59,11 +78,13 @@ export function useMedications() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchMedicationsClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchMedicationsClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);

@@ -1,8 +1,12 @@
 import { DashboardOverviewClient } from "./dashboard-overview-client"
-import { fetchPracticeOverviewData } from "@/lib/data/practice-overview"
+import {
+  fetchPracticeDashboardSummary,
+  fetchPracticeOverviewData,
+} from "@/lib/data/practice-overview"
 
 export default async function DashboardPage() {
-  const initialData = await fetchPracticeOverviewData()
+  const initialSummary = await fetchPracticeDashboardSummary()
+  const initialData = initialSummary ? null : await fetchPracticeOverviewData()
 
-  return <DashboardOverviewClient initialData={initialData} />
+  return <DashboardOverviewClient initialData={initialData} initialSummary={initialSummary} />
 }

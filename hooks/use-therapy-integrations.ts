@@ -28,17 +28,36 @@ function sortEntries(items: TherapyDeviceIntegration[]) {
   return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-function buildInitial(): TherapyDeviceIntegration[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: TherapyDeviceIntegration[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useTherapyIntegrations() {
+function buildInitial(initialEntries: TherapyDeviceIntegration[] = []): TherapyDeviceIntegration[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseTherapyIntegrationsOptions {
+  initialEntries?: TherapyDeviceIntegration[];
+}
+
+export function useTherapyIntegrations(options: UseTherapyIntegrationsOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<TherapyDeviceIntegration[]>(buildInitial);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<TherapyDeviceIntegration[]>(() =>
+    buildInitial(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -60,11 +79,13 @@ export function useTherapyIntegrations() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchTherapyIntegrationsClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchTherapyIntegrationsClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);

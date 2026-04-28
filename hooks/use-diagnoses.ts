@@ -27,17 +27,36 @@ function sortEntries(items: DiagnosisEntry[]) {
   return [...items].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 }
 
-function buildInitial(): DiagnosisEntry[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: DiagnosisEntry[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useDiagnoses() {
+function buildInitial(initialEntries: DiagnosisEntry[] = []): DiagnosisEntry[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseDiagnosesOptions {
+  initialEntries?: DiagnosisEntry[];
+}
+
+export function useDiagnoses(options: UseDiagnosesOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<DiagnosisEntry[]>(buildInitial);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<DiagnosisEntry[]>(() =>
+    buildInitial(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -59,11 +78,13 @@ export function useDiagnoses() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchDiagnosesClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchDiagnosesClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);

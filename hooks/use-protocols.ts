@@ -8,16 +8,40 @@ import { isLocalMigrationCandidate, matchesRecordIdentity } from "@/lib/data/loc
 import { deleteProtocolClient, fetchProtocolsClient, persistProtocol } from "@/lib/data/protocols-client"
 import { getLocalProtocols, saveLocalProtocols } from "@/lib/data/local-protocols"
 
-function buildInitial(foods: Food[]): NutritionProtocol[] {
-  return getLocalProtocols(foods).sort(
+function sortProtocols(protocols: NutritionProtocol[]) {
+  return [...protocols].sort(
     (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
   )
 }
 
-export function useProtocols(foods: Food[] = []) {
-  const [protocols, setProtocols] = useState<NutritionProtocol[]>(() => buildInitial(foods))
+function buildInitial(foods: Food[], initialProtocols: NutritionProtocol[] = []): NutritionProtocol[] {
+  const localProtocols = getLocalProtocols(foods)
+  const merged = [...initialProtocols]
+
+  for (const local of localProtocols) {
+    const existsRemote = initialProtocols.some((persisted) =>
+      matchesRecordIdentity(persisted, local),
+    )
+    if (!existsRemote) {
+      merged.push(local)
+    }
+  }
+
+  return sortProtocols(merged)
+}
+
+interface UseProtocolsOptions {
+  initialProtocols?: NutritionProtocol[]
+}
+
+export function useProtocols(foods: Food[] = [], options: UseProtocolsOptions = {}) {
+  const [protocols, setProtocols] = useState<NutritionProtocol[]>(() =>
+    buildInitial(foods, options.initialProtocols),
+  )
 
   useEffect(() => {
+    if (options.initialProtocols) return
+
     let cancelled = false
 
     async function loadPersistedProtocols() {
@@ -56,7 +80,7 @@ export function useProtocols(foods: Food[] = []) {
     return () => {
       cancelled = true
     }
-  }, [foods])
+  }, [foods, options.initialProtocols])
 
   useEffect(() => {
     const localOnly = protocols.filter(isLocalMigrationCandidate)

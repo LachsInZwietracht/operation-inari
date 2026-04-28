@@ -11,13 +11,23 @@ import {
 } from "@/lib/data/digital-protocol-submissions-client";
 import { useAuth } from "@/hooks/use-auth";
 
-export function useDigitalProtocolSubmissions(patientId: string) {
+interface UseDigitalProtocolSubmissionsOptions {
+  initialSubmissions?: DigitalProtocolSubmission[]
+}
+
+export function useDigitalProtocolSubmissions(
+  patientId: string,
+  options: UseDigitalProtocolSubmissionsOptions = {},
+) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [submissions, setSubmissions] = useState<DigitalProtocolSubmission[]>([]);
+  const [submissions, setSubmissions] = useState<DigitalProtocolSubmission[]>(
+    options.initialSubmissions ?? [],
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || authLoading) return;
+    if (options.initialSubmissions) return;
 
     let cancelled = false;
     setIsLoading(true);

@@ -27,17 +27,36 @@ function sortEntries(items: AnthropometricEntry[]) {
   return [...items].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 }
 
-function buildInitial(): AnthropometricEntry[] {
-  return sortEntries(loadFromStorage())
-}
-
 function getLocalOnlyEntries(items: AnthropometricEntry[]) {
   return items.filter(isLocalMigrationCandidate)
 }
 
-export function useAnthropometric() {
+function buildInitial(initialEntries: AnthropometricEntry[] = []): AnthropometricEntry[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage())
+  const merged = [...initialEntries]
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    )
+    if (!existsRemote) {
+      merged.push(local)
+    }
+  }
+
+  return sortEntries(merged)
+}
+
+interface UseAnthropometricOptions {
+  initialEntries?: AnthropometricEntry[]
+}
+
+export function useAnthropometric(options: UseAnthropometricOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [entries, setEntries] = useState<AnthropometricEntry[]>(buildInitial)
+  const initialEntriesRef = useRef(options.initialEntries)
+  const [entries, setEntries] = useState<AnthropometricEntry[]>(() =>
+    buildInitial(options.initialEntries),
+  )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const entriesRef = useRef(entries)
@@ -58,11 +77,13 @@ export function useAnthropometric() {
     if (!isAuthenticated || authLoading) return
 
     let cancelled = false
-    setIsLoadingRemote(true)
+    const initialRemoteEntries = initialEntriesRef.current
+    setIsLoadingRemote(!initialRemoteEntries)
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchAnthropometricEntriesClient()
+        const remoteEntries = initialRemoteEntries ?? await fetchAnthropometricEntriesClient()
+        initialEntriesRef.current = undefined
         if (cancelled) return
 
         const localOnly = getLocalOnlyEntries(entriesRef.current)

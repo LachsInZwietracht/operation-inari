@@ -28,17 +28,36 @@ function sortEntries(items: ActivityEntry[]) {
   return [...items].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
-function buildInitial(): ActivityEntry[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: ActivityEntry[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useActivities() {
+function buildInitial(initialEntries: ActivityEntry[] = []): ActivityEntry[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseActivitiesOptions {
+  initialEntries?: ActivityEntry[];
+}
+
+export function useActivities(options: UseActivitiesOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<ActivityEntry[]>(buildInitial);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<ActivityEntry[]>(() =>
+    buildInitial(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -60,11 +79,13 @@ export function useActivities() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchActivitiesClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchActivitiesClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);

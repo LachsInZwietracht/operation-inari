@@ -10,9 +10,16 @@ import {
 } from "@/lib/data/patient-reports-client"
 import { useAuth } from "@/hooks/use-auth"
 
-export function usePatientReports(patientRef?: string) {
+interface UsePatientReportsOptions {
+  initialReports?: PatientReportRecord[]
+}
+
+export function usePatientReports(
+  patientRef?: string,
+  options: UsePatientReportsOptions = {},
+) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [reports, setReports] = useState<PatientReportRecord[]>([])
+  const [reports, setReports] = useState<PatientReportRecord[]>(options.initialReports ?? [])
   const [isLoading, setIsLoading] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -34,8 +41,9 @@ export function usePatientReports(patientRef?: string) {
 
   useEffect(() => {
     if (!isAuthenticated || authLoading) return
+    if (options.initialReports) return
     void refresh()
-  }, [authLoading, isAuthenticated, refresh])
+  }, [authLoading, isAuthenticated, options.initialReports, refresh])
 
   const getReport = useCallback(
     (reportId: string) => reports.find((report) => report.id === reportId),

@@ -128,10 +128,17 @@ function mapProtocolRow(row: ProtocolRow): NutritionProtocol {
 
 export async function fetchProtocolsClient(
   supabase?: SupabaseClient,
+  options: { patientRefs?: string[] } = {},
 ): Promise<NutritionProtocol[]> {
   const client = resolveBrowserClient(supabase);
+  let query = baseProtocolQuery(client);
+  const patientRefs = options.patientRefs?.filter(Boolean);
+  if (patientRefs?.length) {
+    query = query.in("patient_id", patientRefs);
+  }
+
   const { data, error } = await withTimeout(
-    baseProtocolQuery(client),
+    query,
     5000,
     "Supabase protocol request timed out",
   );

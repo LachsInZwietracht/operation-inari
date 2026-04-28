@@ -27,6 +27,23 @@ interface AppointmentRow {
   updated_at: string;
 }
 
+const APPOINTMENT_COLUMNS = [
+  "id",
+  "legacy_id",
+  "user_id",
+  "title",
+  "date",
+  "start_time",
+  "end_time",
+  "patient_id",
+  "location",
+  "type",
+  "recurring",
+  "reminder",
+  "created_at",
+  "updated_at",
+].join(",");
+
 function resolveBrowserClient(supabase?: SupabaseClient) {
   if (supabase) return supabase;
   return createBrowserSupabaseClient();
@@ -60,10 +77,22 @@ function mapAppointmentRow(row: AppointmentRow): PracticeAppointment {
 
 export async function fetchAppointmentsClient(
   supabase?: SupabaseClient,
+  options: { patientRefs?: string[] } = {},
 ): Promise<PracticeAppointment[]> {
   const client = resolveBrowserClient(supabase);
+  let query = client
+    .from("appointments")
+    .select(APPOINTMENT_COLUMNS)
+    .order("date", { ascending: true })
+    .order("start_time", { ascending: true });
+
+  const patientRefs = options.patientRefs?.filter(Boolean);
+  if (patientRefs?.length) {
+    query = query.in("patient_id", patientRefs);
+  }
+
   const { data, error } = await withTimeout(
-    client.from("appointments").select("*").order("date", { ascending: true }).order("start_time", { ascending: true }),
+    query,
     5000,
     "Supabase appointment request timed out",
   );
@@ -109,7 +138,7 @@ export async function persistAppointment(
       },
       { onConflict: canonicalId ? "id" : "legacy_id" },
     )
-    .select("*")
+    .select(APPOINTMENT_COLUMNS)
     .single();
 
   if (error) {

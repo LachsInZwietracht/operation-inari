@@ -32,7 +32,10 @@ import { useCounseling } from "@/hooks/use-counseling"
 import { useBirthdayReminders } from "@/hooks/use-birthday-reminders"
 import { formatCurrency, formatDate } from "@/lib/format"
 import type { PracticeAppointment } from "@/lib/types"
-import type { PracticeOverviewData } from "@/lib/data/practice-overview"
+import type {
+  PracticeDashboardSummary,
+  PracticeOverviewData,
+} from "@/lib/data/practice-overview"
 
 const RevenueChart = dynamic(
   () => import("./revenue-chart").then((mod) => mod.RevenueChart),
@@ -66,16 +69,21 @@ interface ActivityEvent {
 
 export function DashboardOverviewClient({
   initialData,
+  initialSummary,
 }: {
   initialData?: PracticeOverviewData | null
+  initialSummary?: PracticeDashboardSummary | null
 }) {
-  const { patients } = usePatients({ initialPatients: initialData?.patients })
+  const hasSummary = Boolean(initialSummary)
+  const { patients } = usePatients({ initialPatients: hasSummary ? [] : initialData?.patients })
   const { appointments, upcomingAppointments } = usePracticeAppointments({
-    initialAppointments: initialData?.appointments,
+    initialAppointments: hasSummary ? [] : initialData?.appointments,
   })
-  const { invoices } = usePracticeInvoices({ initialInvoices: initialData?.invoices })
+  const { invoices } = usePracticeInvoices({
+    initialInvoices: hasSummary ? [] : initialData?.invoices,
+  })
   const { sessions } = useCounseling({
-    initialSessions: initialData?.counselingSessions,
+    initialSessions: hasSummary ? [] : initialData?.counselingSessions,
   })
   const { reminders } = useBirthdayReminders(patients)
 
@@ -90,6 +98,46 @@ export function DashboardOverviewClient({
 
   // --- KPIs ---
   const kpis = useMemo(() => {
+    if (initialSummary) {
+      return [
+        {
+          id: "patients",
+          label: "Aktive Patienten",
+          value: `${initialSummary.activePatients}`,
+          trend: getTrend(initialSummary.currentNewPatients, initialSummary.previousNewPatients),
+          helper: `${initialSummary.currentNewPatients} Neuzugänge diesen Monat`,
+          icon: Users,
+        },
+        {
+          id: "appointments_7d",
+          label: "Termine (7 Tage)",
+          value: `${initialSummary.next7DaysAppointments}`,
+          trend: "flat" as const,
+          helper: `${initialSummary.upcomingAppointmentsTotal} insgesamt geplant`,
+          icon: Calendar,
+        },
+        {
+          id: "open_invoices",
+          label: "Offene Rechnungen",
+          value: formatCurrency(initialSummary.openInvoicesAmount),
+          trend: initialSummary.openInvoicesCount > 5 ? ("down" as const) : ("flat" as const),
+          helper: `${initialSummary.openInvoicesCount} offene Vorgänge`,
+          icon: FileText,
+        },
+        {
+          id: "counseling_month",
+          label: "Beratungen (Monat)",
+          value: `${initialSummary.currentMonthSessions}`,
+          trend: getTrend(
+            initialSummary.currentMonthSessions,
+            initialSummary.previousMonthSessions,
+          ),
+          helper: `${initialSummary.previousMonthSessions} im Vormonat`,
+          icon: MessageSquare,
+        },
+      ]
+    }
+
     const currentNewPatients = patients.filter(
       (p) => p.createdAt && new Date(p.createdAt) >= currentMonthStart,
     ).length
@@ -150,10 +198,26 @@ export function DashboardOverviewClient({
         icon: MessageSquare,
       },
     ]
-  }, [patients, upcomingAppointments, invoices, sessions, now, currentMonthStart, previousMonthStart])
+  }, [
+    patients,
+    upcomingAppointments,
+    invoices,
+    sessions,
+    now,
+    currentMonthStart,
+    previousMonthStart,
+    initialSummary,
+  ])
 
   // --- Activity Feed ---
   const activityFeed = useMemo(() => {
+    if (initialSummary) {
+      return initialSummary.activityFeed.map((event) => ({
+        ...event,
+        timestamp: new Date(event.timestamp),
+      }))
+    }
+
     const events: ActivityEvent[] = []
 
     patients.forEach((p) => {
@@ -204,10 +268,14 @@ export function DashboardOverviewClient({
     return events
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 8)
-  }, [patients, appointments, sessions, invoices, patientMap])
+  }, [patients, appointments, sessions, invoices, patientMap, initialSummary])
 
   // --- Revenue Chart (last 4 months) ---
   const revenueData = useMemo(() => {
+    if (initialSummary) {
+      return initialSummary.revenueData
+    }
+
     const fourMonthsAgo = startOfMonth(subMonths(now, 3))
     const filtered = invoices.filter((inv) => new Date(inv.dueDate) >= fourMonthsAgo)
 
@@ -227,21 +295,56 @@ export function DashboardOverviewClient({
       }
     })
     return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-  }, [invoices, now])
+  }, [invoices, now, initialSummary])
 
   // --- Upcoming Appointments (next 5) ---
-  const nextAppointments = useMemo(
-    () => upcomingAppointments.slice(0, 5),
-    [upcomingAppointments],
-  )
+  const nextAppointments = useMemo(() => {
+    if (initialSummary) {
+      return initialSummary.nextAppointments
+    }
+
+    return upcomingAppointments.slice(0, 5).map((appt) => {
+      const patient = appt.patientId ? patientMap.get(appt.patientId) : null
+      return {
+        id: appt.id,
+        date: appt.date,
+        startTime: appt.startTime,
+        endTime: appt.endTime,
+        type: appt.type,
+        name: patient ? `${patient.firstName} ${patient.lastName}` : appt.title,
+      }
+    })
+  }, [upcomingAppointments, patientMap, initialSummary])
 
   // --- Birthdays (next 14 days, open only) ---
   const upcomingBirthdays = useMemo(() => {
+    if (initialSummary) {
+      return initialSummary.upcomingBirthdays.map((birthday) => ({
+        id: `birthday_${birthday.patientId}`,
+        patientId: birthday.patientId,
+        dueDate: birthday.dueDate,
+        channel: "mail" as const,
+        status: "open" as const,
+        createdAt: birthday.dueDate,
+        updatedAt: birthday.dueDate,
+        firstName: birthday.firstName,
+        lastName: birthday.lastName,
+      }))
+    }
+
     const limit = addDays(now, 14)
     return reminders
       .filter((r) => r.status === "open" && new Date(r.dueDate) <= limit)
+      .map((reminder) => {
+        const patient = patientMap.get(reminder.patientId)
+        return {
+          ...reminder,
+          firstName: patient?.firstName ?? "",
+          lastName: patient?.lastName ?? "",
+        }
+      })
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-  }, [reminders, now])
+  }, [reminders, now, patientMap, initialSummary])
 
   const activityIcon = (type: ActivityEvent["type"]) => {
     switch (type) {
@@ -252,10 +355,11 @@ export function DashboardOverviewClient({
     }
   }
   const isEmptyWorkspace =
-    patients.length === 0 &&
-    appointments.length === 0 &&
-    invoices.length === 0 &&
-    sessions.length === 0
+    initialSummary?.isEmptyWorkspace ??
+    (patients.length === 0 &&
+      appointments.length === 0 &&
+      invoices.length === 0 &&
+      sessions.length === 0)
 
   return (
     <div className="space-y-6">
@@ -401,14 +505,10 @@ export function DashboardOverviewClient({
               ) : (
                 <div className="space-y-3">
                   {nextAppointments.map((appt) => {
-                    const patient = appt.patientId ? patientMap.get(appt.patientId) : null
-                    const name = patient
-                      ? `${patient.firstName} ${patient.lastName}`
-                      : appt.title
                     return (
                       <div key={appt.id} className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{name}</p>
+                          <p className="text-sm font-medium truncate">{appt.name}</p>
                           <p className="text-muted-foreground text-xs">
                             {formatDate(appt.date)} · {appt.startTime}–{appt.endTime}
                           </p>
@@ -436,14 +536,12 @@ export function DashboardOverviewClient({
               <CardContent>
                 <div className="space-y-3">
                   {upcomingBirthdays.map((reminder) => {
-                    const patient = patientMap.get(reminder.patientId)
-                    if (!patient) return null
                     return (
                       <div key={reminder.id} className="flex items-center gap-3">
                         <Gift className="h-4 w-4 text-pink-500" />
                         <div>
                           <p className="text-sm font-medium">
-                            {patient.firstName} {patient.lastName}
+                            {reminder.firstName} {reminder.lastName}
                           </p>
                           <p className="text-muted-foreground text-xs">
                             {formatDate(reminder.dueDate)}

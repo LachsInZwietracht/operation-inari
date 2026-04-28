@@ -26,6 +26,22 @@ interface InvoiceRow {
   updated_at: string;
 }
 
+const INVOICE_COLUMNS = [
+  "id",
+  "legacy_id",
+  "user_id",
+  "patient_id",
+  "appointment_id",
+  "service",
+  "amount",
+  "status",
+  "due_date",
+  "insurance",
+  "notes",
+  "created_at",
+  "updated_at",
+].join(",");
+
 function resolveBrowserClient(supabase?: SupabaseClient) {
   if (supabase) return supabase;
   return createBrowserSupabaseClient();
@@ -58,10 +74,18 @@ function mapInvoiceRow(row: InvoiceRow): InvoiceEntry {
 
 export async function fetchInvoicesClient(
   supabase?: SupabaseClient,
+  options: { patientRefs?: string[] } = {},
 ): Promise<InvoiceEntry[]> {
   const client = resolveBrowserClient(supabase);
+  let query = client.from("invoices").select(INVOICE_COLUMNS).order("due_date", { ascending: true });
+
+  const patientRefs = options.patientRefs?.filter(Boolean);
+  if (patientRefs?.length) {
+    query = query.in("patient_id", patientRefs);
+  }
+
   const { data, error } = await withTimeout(
-    client.from("invoices").select("*").order("due_date", { ascending: true }),
+    query,
     5000,
     "Supabase invoice request timed out",
   );
@@ -106,7 +130,7 @@ export async function persistInvoice(
       },
       { onConflict: canonicalId ? "id" : "legacy_id" },
     )
-    .select("*")
+    .select(INVOICE_COLUMNS)
     .single();
 
   if (error) {

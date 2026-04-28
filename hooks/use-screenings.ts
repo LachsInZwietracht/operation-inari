@@ -27,17 +27,36 @@ function sortEntries(items: ScreeningResult[]) {
   return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-function buildInitial(): ScreeningResult[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: ScreeningResult[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useScreenings() {
+function buildInitial(initialEntries: ScreeningResult[] = []): ScreeningResult[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseScreeningsOptions {
+  initialEntries?: ScreeningResult[];
+}
+
+export function useScreenings(options: UseScreeningsOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<ScreeningResult[]>(buildInitial);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<ScreeningResult[]>(() =>
+    buildInitial(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -59,11 +78,13 @@ export function useScreenings() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchScreeningsClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchScreeningsClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);

@@ -40,6 +40,36 @@ interface CounselingTemplateRow {
   updated_at: string;
 }
 
+const COUNSELING_SESSION_COLUMNS = [
+  "id",
+  "legacy_id",
+  "patient_id",
+  "session_date",
+  "duration_minutes",
+  "session_type",
+  "indication",
+  "goals",
+  "content",
+  "recommendations",
+  "next_appointment",
+  "timeline",
+  "materials",
+  "progress",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const COUNSELING_TEMPLATE_COLUMNS = [
+  "id",
+  "legacy_id",
+  "name",
+  "session_type",
+  "indication",
+  "content",
+  "created_at",
+  "updated_at",
+].join(",");
+
 interface CounselingSessionPersistInput extends Omit<CounselingSession, "id" | "createdAt" | "updatedAt"> {
   id?: string;
   legacyId?: string;
@@ -123,13 +153,20 @@ function mapCounselingTemplateRow(row: CounselingTemplateRow): CounselingTemplat
 
 export async function fetchCounselingSessionsClient(
   supabase?: SupabaseClient,
+  options: { patientId?: string } = {},
 ): Promise<CounselingSession[]> {
   const client = resolveBrowserClient(supabase);
+  let query = client
+    .from("counseling_sessions")
+    .select(COUNSELING_SESSION_COLUMNS)
+    .order("session_date", { ascending: false });
+
+  if (options.patientId) {
+    query = query.eq("patient_id", options.patientId);
+  }
+
   const { data, error } = await withTimeout(
-    client
-      .from("counseling_sessions")
-      .select("*")
-      .order("session_date", { ascending: false }),
+    query,
     5000,
     "Supabase counseling session request timed out",
   );
@@ -138,7 +175,7 @@ export async function fetchCounselingSessionsClient(
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as CounselingSessionRow[]).map((row) => mapCounselingSessionRow(row));
+  return ((data ?? []) as unknown as CounselingSessionRow[]).map((row) => mapCounselingSessionRow(row));
 }
 
 export async function persistCounselingSession(
@@ -178,14 +215,14 @@ export async function persistCounselingSession(
       },
       { onConflict: canonicalId ? "id" : "legacy_id" },
     )
-    .select("*")
+    .select(COUNSELING_SESSION_COLUMNS)
     .single();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return mapCounselingSessionRow(data as CounselingSessionRow);
+  return mapCounselingSessionRow(data as unknown as CounselingSessionRow);
 }
 
 export async function deleteCounselingSessionClient(
@@ -211,7 +248,7 @@ export async function fetchCounselingTemplatesClient(
   const { data, error } = await withTimeout(
     client
       .from("counseling_templates")
-      .select("*")
+      .select(COUNSELING_TEMPLATE_COLUMNS)
       .order("name", { ascending: true }),
     5000,
     "Supabase counseling template request timed out",
@@ -221,7 +258,7 @@ export async function fetchCounselingTemplatesClient(
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as CounselingTemplateRow[]).map((row) => mapCounselingTemplateRow(row));
+  return ((data ?? []) as unknown as CounselingTemplateRow[]).map((row) => mapCounselingTemplateRow(row));
 }
 
 export async function persistCounselingTemplate(
@@ -252,14 +289,14 @@ export async function persistCounselingTemplate(
       },
       { onConflict: canonicalId ? "id" : "legacy_id" },
     )
-    .select("*")
+    .select(COUNSELING_TEMPLATE_COLUMNS)
     .single();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return mapCounselingTemplateRow(data as CounselingTemplateRow);
+  return mapCounselingTemplateRow(data as unknown as CounselingTemplateRow);
 }
 
 export async function deleteCounselingTemplateClient(

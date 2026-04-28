@@ -32,6 +32,28 @@ interface PatientRow {
   updated_at: string;
 }
 
+const PATIENT_COLUMNS = [
+  "id",
+  "legacy_id",
+  "user_id",
+  "first_name",
+  "last_name",
+  "date_of_birth",
+  "gender",
+  "email",
+  "phone",
+  "street",
+  "zip",
+  "city",
+  "insurance_provider",
+  "insurance_number",
+  "indication",
+  "notes",
+  "amputations",
+  "created_at",
+  "updated_at",
+].join(",");
+
 function resolveBrowserClient(supabase?: SupabaseClient) {
   if (supabase) return supabase;
   return createBrowserSupabaseClient();
@@ -74,7 +96,7 @@ export async function fetchPatientsClient(
 ): Promise<Patient[]> {
   const client = resolveBrowserClient(supabase);
   const { data, error } = await withTimeout(
-    client.from("patients").select("*").order("last_name", { ascending: true }),
+    client.from("patients").select(PATIENT_COLUMNS).order("last_name", { ascending: true }),
     5000,
     "Supabase patient request timed out",
   );
@@ -125,7 +147,7 @@ export async function persistPatient(
       },
       { onConflict: canonicalId ? "id" : "legacy_id" },
     )
-    .select("*")
+    .select(PATIENT_COLUMNS)
     .single();
 
   if (error) {

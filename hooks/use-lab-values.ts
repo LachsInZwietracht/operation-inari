@@ -23,10 +23,6 @@ function loadFromStorage(): LabValueEntry[] {
   return []
 }
 
-function buildInitial(): LabValueEntry[] {
-  return sortEntries(loadFromStorage())
-}
-
 function sortEntries(items: LabValueEntry[]) {
   return [...items].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 }
@@ -35,9 +31,32 @@ function getLocalOnlyEntries(items: LabValueEntry[]) {
   return items.filter(isLocalMigrationCandidate)
 }
 
-export function useLabValues() {
+function buildInitial(initialEntries: LabValueEntry[] = []): LabValueEntry[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage())
+  const merged = [...initialEntries]
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    )
+    if (!existsRemote) {
+      merged.push(local)
+    }
+  }
+
+  return sortEntries(merged)
+}
+
+interface UseLabValuesOptions {
+  initialEntries?: LabValueEntry[]
+}
+
+export function useLabValues(options: UseLabValuesOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [entries, setEntries] = useState<LabValueEntry[]>(buildInitial)
+  const initialEntriesRef = useRef(options.initialEntries)
+  const [entries, setEntries] = useState<LabValueEntry[]>(() =>
+    buildInitial(options.initialEntries),
+  )
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const entriesRef = useRef(entries)
@@ -58,11 +77,13 @@ export function useLabValues() {
     if (!isAuthenticated || authLoading) return
 
     let cancelled = false
-    setIsLoadingRemote(true)
+    const initialRemoteEntries = initialEntriesRef.current
+    setIsLoadingRemote(!initialRemoteEntries)
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchLabValuesClient()
+        const remoteEntries = initialRemoteEntries ?? await fetchLabValuesClient()
+        initialEntriesRef.current = undefined
         if (cancelled) return
 
         const localOnly = getLocalOnlyEntries(entriesRef.current)

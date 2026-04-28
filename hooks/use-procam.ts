@@ -28,17 +28,36 @@ function sortEntries(items: ProcamResult[]) {
   return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-function buildInitial(): ProcamResult[] {
-  return sortEntries(loadFromStorage());
-}
-
 function getLocalOnlyEntries(items: ProcamResult[]) {
   return items.filter(isLocalMigrationCandidate);
 }
 
-export function useProcam() {
+function buildInitial(initialEntries: ProcamResult[] = []): ProcamResult[] {
+  const localOnly = getLocalOnlyEntries(loadFromStorage());
+  const merged = [...initialEntries];
+
+  for (const local of localOnly) {
+    const existsRemote = initialEntries.some((remoteEntry) =>
+      matchesRecordIdentity(remoteEntry, local),
+    );
+    if (!existsRemote) {
+      merged.push(local);
+    }
+  }
+
+  return sortEntries(merged);
+}
+
+interface UseProcamOptions {
+  initialEntries?: ProcamResult[];
+}
+
+export function useProcam(options: UseProcamOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [entries, setEntries] = useState<ProcamResult[]>(buildInitial);
+  const initialEntriesRef = useRef(options.initialEntries);
+  const [entries, setEntries] = useState<ProcamResult[]>(() =>
+    buildInitial(options.initialEntries),
+  );
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const entriesRef = useRef(entries);
@@ -60,11 +79,13 @@ export function useProcam() {
     if (!isAuthenticated || authLoading) return;
 
     let cancelled = false;
-    setIsLoadingRemote(true);
+    const initialRemoteEntries = initialEntriesRef.current;
+    setIsLoadingRemote(!initialRemoteEntries);
 
     async function syncEntries() {
       try {
-        const remoteEntries = await fetchProcamResultsClient();
+        const remoteEntries = initialRemoteEntries ?? await fetchProcamResultsClient();
+        initialEntriesRef.current = undefined;
         if (cancelled) return;
 
         const localOnly = getLocalOnlyEntries(entriesRef.current);
