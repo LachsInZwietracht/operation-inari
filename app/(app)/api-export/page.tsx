@@ -49,6 +49,17 @@ const METHOD_STYLES: Record<string, string> = {
   DELETE: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
 }
 
+function formatHistoryError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error)
+  if (raw.includes("export_jobs")) {
+    return "Das Export-Journal ist nicht konfiguriert. Pruefen Sie, ob die `export_jobs` Migration in dieser Supabase-Umgebung angewendet wurde."
+  }
+  if (raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
+    return "Das Export-Journal konnte nicht erreicht werden. Pruefen Sie die lokale Supabase-/API-Verbindung und laden Sie die Seite neu."
+  }
+  return raw || "Export-Historie konnte nicht geladen werden."
+}
+
 export default function ApiExportPage() {
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null)
   const [exportScopes, setExportScopes] = useState<Record<ExportFormat, ExportScope>>({
@@ -102,7 +113,7 @@ export default function ApiExportPage() {
       )
       setHistoryError(null)
     } catch (error) {
-      const message = (error as Error).message || "Export-Historie konnte nicht geladen werden"
+      const message = formatHistoryError(error)
       setHistoryError(message)
       toast.error(message)
     }
@@ -200,6 +211,8 @@ export default function ApiExportPage() {
               <AlertTitle>Export-Historie nicht verfügbar</AlertTitle>
               <AlertDescription>
                 Die Exportfunktionen bleiben nutzbar, aber das Journal konnte nicht geladen werden: {historyError}
+                <br />
+                Naechster Schritt: Migrationen anwenden oder `/api/export-jobs` in der lokalen Umgebung pruefen.
               </AlertDescription>
             </Alert>
           )}
@@ -450,7 +463,11 @@ export default function ApiExportPage() {
           {historyError && (
             <Alert variant="destructive">
               <AlertTitle>Export-Journal konnte nicht geladen werden</AlertTitle>
-              <AlertDescription>{historyError}</AlertDescription>
+              <AlertDescription>
+                {historyError}
+                <br />
+                Naechster Schritt: Migrationen anwenden oder `/api/export-jobs` in der lokalen Umgebung pruefen.
+              </AlertDescription>
             </Alert>
           )}
 

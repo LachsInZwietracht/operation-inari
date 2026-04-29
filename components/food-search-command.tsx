@@ -255,7 +255,7 @@ export function FoodSearchTrigger() {
     <>
       <Button
         variant="outline"
-        className="text-muted-foreground relative min-w-0 justify-start text-sm sm:w-64"
+        className="text-muted-foreground relative w-full min-w-0 justify-start text-sm sm:w-64"
         onClick={() => setOpen(true)}
         onMouseEnter={() => loadIndex()}
         onFocus={() => loadIndex()}

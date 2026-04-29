@@ -36,6 +36,7 @@ Agent quick index:
 - **Rendering:** Next.js 15 with server rendering and `<Suspense>` boundaries for heavier routes.
 - **Caching:** BLS food data is cached via `unstable_cache` where applicable.
 - **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and global search. It is **non-blocking** (search index is lazy-loaded on demand) and keeps the header/search/status row responsive at mobile widths.
+- **Responsive contract:** Shared layout primitives (`PageHeader`, `SidebarInset`, `Card`, `TabsList`, `Table`, and the global food search trigger) should keep document-level width within the viewport. Wide tables scroll inside their own container rather than widening the page. `tests/responsive-layout.spec.ts` checks 390 px, 768 px, and desktop widths across dashboard, foods, patients, reports, institution, and API/export routes.
 - **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The search index is loaded on first use via `/api/foods/search-index`.
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
@@ -148,6 +149,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
   - **Priority order:** patient search/filter and patient cards render before demo and mailing utilities so the primary patient-management task is first.
   - **eGK demo:** the patient overview and patient creation form expose clearly labeled simulated eGK flows for tests/product demos; the current Web Serial and companion paths still return demo card payloads rather than production connector data.
+  - The patient overview keeps eGK demo reader capability detection mount-stable, so the first client render matches the server render before Web Serial support is detected.
   - The authoring UI for templates/placeholders is still client-side and reads bundled product defaults from `lib/patient-mailings.ts`.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
   - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.
@@ -160,6 +162,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
   - Failed history loads are shown inline so the export page does not silently degrade when the journal endpoint or schema is unavailable.
+  - Export-journal failures include explicit recovery hints for missing `export_jobs` migrations or unavailable `/api/export-jobs` responses.
   - **Truth model:** Export creation and export history are live. The `REST API` and `Integrationen` tabs are intentionally marked as preview/read-only until API-key issuance, webhook delivery, and integration persistence have real backends.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
@@ -168,6 +171,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - The route now reads the live source catalog from `data_sources` through `fetchDataSources()`.
   - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.
   - Database lifecycle events now have a real persistence target in `data_source_events`, surfaced as the `Datenbankhistorie` section. Empty states are honest when no ETL/import job has written events yet.
+  - Missing lifecycle/replacement tables are shown as inline recovery states that name the expected table and point developers to applying migrations instead of silently falling back to static notes.
   - Admins can run a v1 food-reference replacement workflow from the page. `FoodReplacementForm` calls the `replace_food_references` RPC through `app/(app)/datenbank/actions.ts`, replacing the selected source food with the selected target food in the current admin's own recipe ingredients, daily meal-plan food entries, and nutrition protocol entries.
   - Each replacement writes `food_reference_replacements` and, when an organization membership exists, `access_audit_logs`. System/shared recipes and other users' records are intentionally not mutated in v1.
 

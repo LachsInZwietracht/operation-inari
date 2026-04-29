@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { EgkCardData } from "@/lib/types";
 import { EGK_CARDS } from "@/lib/mock-data";
 
@@ -29,12 +29,13 @@ export function useEgkScanner() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [isReading, setIsReading] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
   const serialPortRef = useRef<WebSerialPort | null>(null);
   const companionEndpoint = process.env.NEXT_PUBLIC_EGK_COMPANION_URL ?? "/api/egk";
 
-  const isSupported = useMemo(() =>
-    typeof window !== "undefined" && typeof navigator !== "undefined" && "serial" in navigator,
-  [],);
+  useEffect(() => {
+    setIsSupported(typeof navigator !== "undefined" && "serial" in navigator);
+  }, []);
 
   const connect = useCallback(async () => {
     setIsConnecting(true);

@@ -8,6 +8,18 @@ import { fetchDataSourceEvents, fetchFoodReferenceReplacements } from "@/lib/dat
 import { formatDate, formatNumber } from "@/lib/format"
 import { FoodReplacementForm } from "./food-replacement-form"
 
+function DatabaseLoadError({ title, error, tableName }: { title: string; error: string; tableName: string }) {
+  return (
+    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+      <p className="font-medium text-destructive">{title}</p>
+      <p className="mt-1 text-muted-foreground">{error}</p>
+      <p className="mt-2 text-muted-foreground">
+        Naechster Schritt: Pruefen, ob die Migration fuer `{tableName}` in dieser Supabase-Umgebung angewendet wurde.
+      </p>
+    </div>
+  )
+}
+
 export default async function DatenbankPage() {
   const [
     { sources, error },
@@ -133,9 +145,11 @@ export default async function DatenbankPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {eventsError ? (
-            <div className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
-              {eventsError}
-            </div>
+            <DatabaseLoadError
+              title="Datenbankhistorie nicht verfuegbar"
+              error={eventsError}
+              tableName="data_source_events"
+            />
           ) : null}
           {events.length > 0 ? (
             <div className="space-y-3">
@@ -202,9 +216,11 @@ export default async function DatenbankPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {replacementsError ? (
-            <div className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
-              {replacementsError}
-            </div>
+            <DatabaseLoadError
+              title="Ersetzungsprotokoll nicht verfuegbar"
+              error={replacementsError}
+              tableName="food_reference_replacements"
+            />
           ) : null}
           {replacements.map((replacement) => {
             const total =

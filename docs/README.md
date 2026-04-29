@@ -17,6 +17,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Task area | Read first | Notes |
 |---|---|---|
 | App routes, workflows, components, hooks | `documentation.md` | Use as a map, then verify code. |
+| Open development tasks and next sprint | `docs/development-backlog.md` | Execution backlog; verify code before starting. |
 | Supabase schema, RLS, migrations, ETL, food data | `docs/database-guide.md` | Migrations remain the schema source of truth. |
 | Product scope, roadmap, prioritization | `docs/product-requirements.md` | Product intent, not implementation proof. |
 | Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Strategy input only. |
@@ -32,6 +33,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 - `GEMINI.md` - Gemini wrapper that imports `AGENTS.md`.
 - `AGENT.md` - compatibility pointer only.
 - `documentation.md` - feature implementation guide.
+- `docs/development-backlog.md` - current open development backlog and recommended next sprint.
 - `docs/database-guide.md` - database, ETL, nutrition data, search, and performance guide.
 - `docs/product-requirements.md` - roadmap and requirements direction.
 - `docs/competitive-audit.md` - April 2026 competitor and gap audit.
