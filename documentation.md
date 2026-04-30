@@ -87,9 +87,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Custom foods:** Page 1 still merges local custom-food migration candidates so offline or unauthenticated entries remain visible, but authenticated saves now canonicalize to Supabase IDs immediately and localStorage keeps only unmigrated/offline entries.
 - **Synonyms:** `useFoodSynonyms()` now reads seeded system aliases from Supabase `food_synonyms` via `lib/data/food-synonyms-client.ts` and merges them with local user-created aliases stored in `localStorage`. The foods UI no longer bootstraps synonym seeds from `lib/mock-data`.
 - **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
-- **SFK foods:** Foods with `sourceId === "sfk"` come from the Souci-Fachmann-Kraut database (second primary data source alongside BLS). SFK foods expose expanded nutrient groups — `aminosaeuren` (18 amino acids) and `fettsaeuren` (13 detailed fatty acids) — in the food detail page nutrient breakdown when those values are present.
+- **SFK foods:** Foods with `sourceId === "sfk"` come from the Souci-Fachmann-Kraut database (second primary data source alongside BLS). SFK foods expose expanded nutrient groups — `aminosaeuren` (18 amino acids) and `fettsaeuren` (13 detailed fatty acids) — in the food detail page nutrient breakdown when those values are present. SFK access is gated by `NEXT_PUBLIC_SFK_ENABLED`; when disabled, `canAccessDataSource("sfk")` returns false, SFK foods are filtered from search results and the food search index, and the food detail page shows a `Lizenzhinweis` banner. Entitlement logic lives in `lib/data/entitlements.ts`.
 - **New custom food:** `/lebensmittel/neu` does not hydrate the catalog. It uses `useCustomFoods([])` only for the create/persist flow because submission does not need base foods.
-- **Food comparison:** `/lebensmittel/vergleichen` uses `fetchFoodsForComparison()` for the seven nutrients displayed in the comparison table, plus `fetchBrandedFoods()` for bundled manufacturer examples.
+- **Food comparison:** `/lebensmittel/vergleichen` uses search-based `ComparisonFoodPicker` components that query `/api/foods/browser` on demand instead of loading the full catalog. Branded foods from `fetchBrandedFoods()` are merged client-side for local matches.
 - **Exchange tables:** `/austauschtabellen` does not fetch a server-side `Food[]` catalog. The client loads the shared food search index via `useFoodSearch()` and fetches only the selected/displayed nutrient columns through `useNutrientValueMaps()`.
 
 ### 4.3 Rezepte Overview (`/rezepte`)
@@ -175,7 +175,10 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.
   - Database lifecycle events now have a real persistence target in `data_source_events`, surfaced as the `Datenbankhistorie` section. Empty states are honest when no ETL/import job has written events yet.
   - Missing lifecycle/replacement tables are shown as inline recovery states that name the expected table and point developers to applying migrations instead of silently falling back to static notes.
-  - Admins can run a v1 food-reference replacement workflow from the page. `FoodReplacementForm` calls the `replace_food_references` RPC through `app/(app)/datenbank/actions.ts`, replacing the selected source food with the selected target food in the current admin's own recipe ingredients, daily meal-plan food entries, and nutrition protocol entries.
+  - Admins can run a food-reference replacement workflow from the page. `FoodReplacementForm` calls the `replace_food_references` RPC through `app/(app)/datenbank/actions.ts`, replacing the selected source food with the selected target food in recipe ingredients, daily meal-plan food entries, and nutrition protocol entries. The form supports two scopes: `user_workspace` (own records only) and `organization` (all records in the admin's organization, requires admin/owner role).
+  - `BulkReplacementForm` accepts a CSV file (`source_bls_code;target_bls_code;reason`) and runs multiple replacements sequentially through `/api/foods/replace`. Results are shown inline with success/error status per row.
+  - `NutrientDiffCard` provides a side-by-side nutrient comparison between any two foods (including cross-source). Both pickers use `/api/foods/browser` for search. Differences over 10% are highlighted in color.
+  - `/api/foods/replace` (POST) is a JSON API for individual food replacements, used by the bulk form. Validates with Zod and calls `replaceFoodReferences()`.
   - Each replacement writes `food_reference_replacements` and, when an organization membership exists, `access_audit_logs`. System/shared recipes and other users' records are intentionally not mutated in v1.
 
 ### 4.11 Wissensbibliothek (`/wissen`)
@@ -183,6 +186,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Knowledge cards now come from bundled product content in `lib/content/knowledge-library.ts`, not `lib/mock-data`.
   - The page copy explicitly distinguishes bundled reference content from live runtime analytics.
   - PRODIscore and sustainability sections remain live calculations based on loaded foods, recipes, and meal plans.
+  - The server page extracts referenced food IDs from recipes and meal plans, then fetches only those foods via `fetchFoodsViaRpc()` with a limited nutrient set (`LIST_NUTRIENT_IDS`) instead of loading the full catalog.
 
 ### 4.12 Leistung & Validierung (`/leistung`)
 - **Component:** `app/(app)/leistung/page.tsx`
@@ -334,11 +338,16 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - `server.ts` centralizes file responses and export job creation.
 
 ## 6. Scripts & ETL
-- **BLS Import (`scripts/etl/import-bls.ts`):** Syncs the 7,140 food items from the Excel source to Supabase.
-- **SFK Import (`scripts/etl/import-sfk.ts`):** Imports Souci-Fachmann-Kraut foods and nutrients (requires paid license and `SFK_SOURCE_FILE` env var). Uses `scripts/etl/sfk-shared.ts` for column mapping. Verify with `npm run etl:verify:sfk`. Requires the `20260513000030_sfk_nutrient_definitions.sql` migration for the expanded nutrient groups (`aminosaeuren`, `fettsaeuren`).
-- **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Defaults to German products, paginates up to 500 products, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`.
-- **German Synonyms (`scripts/etl/generate-synonyms.ts`):** Generates regional and colloquial German food name synonyms (Karotte/Möhre, Quark/Topfen, etc.) for improved search. Run with `npm run etl:synonyms`.
-- **Portion Sizes (`scripts/etl/import-portions.ts`):** Imports curated German portion sizes from `lib/reference-data/food-portions.ts`, matching BLS foods by code prefix or food group. Run with `npm run etl:portions`.
+
+All ETL scripts write lifecycle events to `data_source_events` via the shared `scripts/etl/etl-event.ts` helper (`writeDataSourceEvent()`). Events are non-fatal — import succeeds even if event logging fails. These events power the `Datenbankhistorie` section on `/datenbank`.
+
+- **BLS Import (`scripts/etl/import-bls.ts`):** Syncs the 7,140 food items from the Excel source to Supabase. Logs an `import` event with food and nutrient counts.
+- **SFK Import (`scripts/etl/import-sfk.ts`):** Imports Souci-Fachmann-Kraut foods and nutrients (requires paid license and `SFK_SOURCE_FILE` env var). Uses `scripts/etl/sfk-shared.ts` for column mapping. Verify with `npm run etl:verify:sfk`. Requires the `20260513000030_sfk_nutrient_definitions.sql` migration for the expanded nutrient groups (`aminosaeuren`, `fettsaeuren`). Logs an `import` event with food, nutrient, and synonym counts.
+- **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Defaults to German products, paginates up to 500 products, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`. Logs an `import` event with product/staged/promoted counts.
+- **German Synonyms (`scripts/etl/generate-synonyms.ts`):** Generates regional and colloquial German food name synonyms (Karotte/Möhre, Quark/Topfen, etc.) for improved search. Run with `npm run etl:synonyms`. Logs a `change_note` event.
+- **Portion Sizes (`scripts/etl/import-portions.ts`):** Imports curated German portion sizes from `lib/reference-data/food-portions.ts`, matching BLS foods by code prefix or food group. Run with `npm run etl:portions`. Logs a `change_note` event.
+- **Reference Values (`scripts/etl/import-reference-values.ts`):** Imports DGE reference values. Logs an `import` event.
+- **Recipes & Meal Plans (`scripts/etl/import-recipes-and-meal-plans.ts`):** Imports shared recipes and meal plan templates. Logs an `import` event.
 - **Master Orchestrator (`scripts/etl/run-all.ts`):** Runs the full ETL pipeline in order (BLS → verify → synonyms → portions → reference values → recipes → OFF). Supports `--dry-run`, `--skip`, and `--only` flags. Run with `npm run etl:all`.
 - **Scientific Validation (`scripts/validate-nutrient-math.ts`):** Running `npm run validate:nutrients` performs 113+ mathematical assertions to ensure calculation parity with official standards.
 

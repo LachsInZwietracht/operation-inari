@@ -237,6 +237,9 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260506000022_reference_profiles_and_lab_metadata.sql` | Runtime reference-value lookup columns, custom profile tables, user/patient preference tables, and `patient_lab_values.metadata` |
 | `20260511000028_team_rbac.sql` | RBAC foundation: `organizations`, `organization_memberships`, `access_audit_logs`, RLS helper functions, and membership/admin policies |
 | `20260512000029_database_lifecycle.sql` | Database lifecycle events, audited food-reference replacement logs, and the `replace_food_references()` RPC for user-workspace recipes, meal plans, and protocols |
+| `20260513000030_sfk_nutrient_definitions.sql` | 46 SFK-specific nutrient definitions (amino acids, detailed fatty acids, extended vitamins/minerals) and `sfk_column_name` mapping column on `nutrient_definitions` |
+| `20260516000033_cologne_phonetics.sql` | `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, GIN trigram indexes, and phonetic match branch in both `search_foods` and `search_foods_with_total` RPCs |
+| `20260516000034_food_replacement_org_scope.sql` | Extends `food_reference_replacements` to allow `organization` scope, updates `replace_food_references()` with `p_scope` parameter and `is_organization_admin()` check for org-wide replacements |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -265,7 +268,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 | `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
-| `food_reference_replacements` | Audit log for food ID replacement workflows | `actor_user_id`, `organization_id`, `source_food_id`, `target_food_id`, updated-row counts |
+| `food_reference_replacements` | Audit log for food ID replacement workflows. Supports `user_workspace` and `organization` scopes (org scope requires admin role) | `actor_user_id`, `organization_id`, `source_food_id`, `target_food_id`, `scope`, updated-row counts |
 | `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary |
 | `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at` |
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
@@ -687,7 +690,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [x] Replace Admin preview with persisted RBAC membership data; full invitation and role-edit workflows remain deferred.
 - [x] Rework Leistung into a truthful preview/reference surface instead of a fake live operational backend.
 - [x] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
-- [ ] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
+- [x] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
 
 **What was migrated:**
 - Zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in any page or component
@@ -717,13 +720,11 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - Nutrition protocols
 
 **Resolver strategy:**
-- `lib/legacy-food-map.ts` maps old mock IDs to their historical BLS codes.
-- `lib/data/food-reference-normalization.ts` maps those BLS codes to the current Supabase `foods.id` values using the loaded food catalog.
+- `lib/data/food-reference-normalization.ts` resolves legacy food references at load time. It checks the loaded food catalog by ID, then by `legacyId`, then by BLS-code regex pattern (`/^[A-Za-z]\d{3,}/`). The former `lib/legacy-food-map.ts` has been deleted — BLS-code detection replaces the static mapping.
 
 **Implication for future work:**
 - Any remaining legacy-heavy modules should adopt the same boundary-normalization approach.
 - New persisted records must write canonical Supabase food IDs only.
-- Once old mock/local records are migrated, delete `lib/legacy-food-map.ts`.
 
 ### Phase 4: Search Migration — PARTIALLY COMPLETE
 
@@ -731,7 +732,7 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - ✅ `/lebensmittel` now uses a paginated server-backed browser API at `/api/foods/browser` instead of hydrating the full catalog into the client.
 - ✅ Name-mode foods search prefers the `search_foods_with_total()` RPC so the UI can paginate ranked fuzzy matches and display an accurate total count.
 - ✅ The browser falls back to `search_foods()` if `search_foods_with_total()` is not present yet, which keeps older environments usable during rollout.
-- ⏳ Cologne phonetics still only run client-side for the command palette fallback; they have not been ported into Postgres yet.
+- ✅ Cologne phonetics ported to Postgres via migration `20260516000033`. The `cologne_phonetics()` function generates `phonetic_code` columns on `foods` and `food_synonyms`, and both search RPCs include a phonetic match branch (weighted at 0.6x). The client-side fallback in `lib/search/fuzzy-search.ts` remains available for the Cmd+K palette and for environments where the migration has not been applied.
 
 ### Phase 5: localStorage → Supabase (Remaining User Data) — PARTIALLY COMPLETE
 
