@@ -48,13 +48,13 @@ const DIET_TEMPLATES = [
     id: "fodmap",
     title: "Low-FODMAP",
     description: "3 Phasen inkl. Re-Introduction für Reizdarm",
-    nutrients: "55 g Protein · 60 g Fett · 200 g KH",
+    nutrients: "55 g Protein · 60 g Fett · 200 g Kohlenhydrate",
   },
   {
     id: "cardio",
     title: "Herz-Kreislauf",
     description: "Mediterranes Muster, < 10 % gesättigte Fette",
-    nutrients: "80 g Protein · 70 g Fett · 230 g KH",
+    nutrients: "80 g Protein · 70 g Fett · 230 g Kohlenhydrate",
   },
 ]
 
@@ -107,7 +107,7 @@ export function DiabetesAnalyticsCard({ patientName }: DiabetesAnalyticsCardProp
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           <div>
-            <Label>KH-Menge (g)</Label>
+            <Label>Kohlenhydrate (g)</Label>
             <Input value={carbInput} onChange={(event) => setCarbInput(event.target.value)} type="number" />
           </div>
           <div>
@@ -150,7 +150,7 @@ export function KetogenicPlannerCard() {
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <Label>Keto-Ratio (Fett : Eiweiß+KH)</Label>
+            <Label>Keto-Ratio (Fett : Eiweiß + Kohlenhydrate)</Label>
             <Slider value={ratio} min={2} max={4.5} step={0.5} onValueChange={setRatio} className="mt-4" />
             <p className="mt-2 text-sm font-medium">{ratio[0]} : 1</p>
           </div>
@@ -169,7 +169,7 @@ export function KetogenicPlannerCard() {
             <p className="text-2xl font-semibold">{macros.protein} g</p>
           </div>
           <div className="rounded-lg border p-3 text-center">
-            <p className="text-xs uppercase text-muted-foreground">KH</p>
+            <p className="text-xs uppercase text-muted-foreground">Kohlenhydrate</p>
             <p className="text-2xl font-semibold">{macros.carbs} g</p>
           </div>
         </div>

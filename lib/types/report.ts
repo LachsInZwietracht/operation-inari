@@ -54,6 +54,16 @@ export interface PatientReportSnapshot {
   narrative?: string
   badges?: string[]
   specialNotes?: string[]
+  lmivRows?: Array<{
+    label: string
+    value: string
+    reference?: string
+    coverage?: string
+  }>
+  allergenDeclaration?: string[]
+  additiveDeclaration?: string[]
+  retentionPolicyLabel?: string
+  documentPackLabel?: string
 }
 
 export interface PatientReportVersion extends Timestamped {

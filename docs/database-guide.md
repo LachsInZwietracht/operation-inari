@@ -667,7 +667,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
 | Database status/lifecycle | Live `data_sources` catalog, `data_source_events` lifecycle history, and audited food-reference replacement v1 | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/database-lifecycle.ts` |
 | Admin / security | RBAC-backed team membership view with persisted roles; invite/role mutation flows still deferred | `app/(app)/admin/users/page.tsx`, `lib/auth/access.ts`, `lib/auth/rbac.ts` |
-| Pricing / billing | Preview-only UI backed by bundled product catalog data; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
+| Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 
 **How to read the remaining mock data:**

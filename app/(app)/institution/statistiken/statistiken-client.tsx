@@ -334,7 +334,7 @@ export function InstitutionStatistikenClient({ analytics }: InstitutionStatistik
               { label: "Belegte Betten", value: String(analytics.overview.occupiedBeds), icon: BedDouble, desc: `${formatNumber(analytics.overview.occupancyRate, 1)} % Auslastung` },
               { label: "Aktive Kostformen", value: String(analytics.overview.activeDietForms), icon: ClipboardList, desc: "Menü + Stationszuweisungen" },
               { label: "Offene Bestellungen", value: String(analytics.overview.pendingOrders), icon: Utensils, desc: "Status ausstehend" },
-              { label: "Allergenprofile", value: String(analytics.activeAllergenProfileCount), icon: ShieldCheck, desc: "aktive Patient:innen mit Profil" },
+              { label: "Allergenprofile", value: String(analytics.activeAllergenProfileCount), icon: ShieldCheck, desc: "aktive Patienten mit Profil" },
               { label: "Einschränkungen", value: String(analytics.restrictedStayCount), icon: ShieldCheck, desc: "aktive Fälle mit Zusatzregeln" },
               { label: "Compliance-Rate", value: `${formatNumber(analytics.overview.complianceRate, 1)} %`, icon: CheckCircle2, desc: "über den aktiven Zyklus" },
               { label: "Bestellungen mit Regeln", value: String(analytics.ordersWithRestrictions), icon: Star, desc: "inkl. Diät/Allergen-Snapshot" },

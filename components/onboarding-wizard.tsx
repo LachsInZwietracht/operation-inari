@@ -52,7 +52,7 @@ const TIPS = [
     icon: UtensilsCrossed,
     title: "Ernährungspläne erstellen",
     description:
-      "Nutzen Sie die Lebensmittel-Datenbank und den Rezept-Editor, um individuelle Ernährungspläne für Ihre Patient:innen zu erstellen.",
+      "Nutzen Sie die Lebensmittel-Datenbank und den Rezept-Editor, um individuelle Ernährungspläne für Ihre Patienten zu erstellen.",
   },
   {
     icon: FileText,
@@ -125,12 +125,12 @@ export function OnboardingWizard() {
         <DialogHeader>
           <DialogTitle>
             {step === 0 && "Willkommen bei Inari"}
-            {step === 1 && "Erste:n Patient:in anlegen"}
+            {step === 1 && "Ersten Patienten anlegen"}
             {step === 2 && "Schnelltipps"}
           </DialogTitle>
           <DialogDescription>
             {step === 0 && "Richten Sie Ihre Praxis ein, um direkt loszulegen."}
-            {step === 1 && "Legen Sie optional Ihre:n erste:n Patient:in an."}
+            {step === 1 && "Legen Sie optional Ihren ersten Patienten an."}
             {step === 2 && "So holen Sie das Beste aus Inari heraus."}
           </DialogDescription>
         </DialogHeader>
@@ -211,7 +211,7 @@ export function OnboardingWizard() {
           <form onSubmit={patientForm.handleSubmit(handlePatientSubmit)} className="space-y-4">
             <div className="flex items-center gap-2 text-muted-foreground">
               <UserPlus className="h-5 w-5" />
-              <span className="text-sm font-medium">Patient:in anlegen</span>
+              <span className="text-sm font-medium">Patient anlegen</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -292,7 +292,7 @@ export function OnboardingWizard() {
               <Button type="button" variant="link" size="sm" onClick={handleSkipStep}>
                 Überspringen
               </Button>
-              <Button type="submit">Patient:in anlegen & weiter</Button>
+              <Button type="submit">Patient anlegen & weiter</Button>
             </div>
           </form>
         )}

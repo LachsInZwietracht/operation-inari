@@ -654,7 +654,7 @@ export function LebensmittelPageClient({
                               <p className="font-medium">{formatNumber(getNutrientValue(food.nutrients, "fett"), 1)}</p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground text-[11px]">KH</p>
+                              <p className="text-muted-foreground text-[11px]">Kohlenhydrate</p>
                               <p className="font-medium">{formatNumber(getNutrientValue(food.nutrients, "kohlenhydrate"), 1)}</p>
                             </div>
                           </div>
@@ -696,7 +696,7 @@ export function LebensmittelPageClient({
                       <TableHead className="text-right">Energie (kcal)</TableHead>
                       <TableHead className="text-right">Eiweiß (g)</TableHead>
                       <TableHead className="text-right">Fett (g)</TableHead>
-                      <TableHead className="text-right">KH (g)</TableHead>
+                      <TableHead className="text-right">Kohlenhydrate (g)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

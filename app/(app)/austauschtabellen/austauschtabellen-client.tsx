@@ -152,7 +152,7 @@ export function AustauschtabellenPageClient() {
                 <TableHead className="text-right">Energie (kcal)</TableHead>
                 <TableHead className="text-right">Eiweiß (g)</TableHead>
                 <TableHead className="text-right">Fett (g)</TableHead>
-                <TableHead className="text-right">KH (g)</TableHead>
+                <TableHead className="text-right">Kohlenhydrate (g)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -57,7 +57,7 @@ export function ProtocolDayView({ day, foods }: ProtocolDayViewProps) {
             <Badge variant="outline">{formatNumber(dayKcal, 0)} kcal</Badge>
             <Badge variant="secondary">E {formatNumber(dayProtein, 0)} g</Badge>
             <Badge variant="secondary">F {formatNumber(dayFat, 0)} g</Badge>
-            <Badge variant="secondary">KH {formatNumber(dayCarbs, 0)} g</Badge>
+            <Badge variant="secondary">Kohlenhydrate {formatNumber(dayCarbs, 0)} g</Badge>
           </div>
         </div>
       </CardHeader>

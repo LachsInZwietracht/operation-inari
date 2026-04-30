@@ -100,7 +100,7 @@ export const ADMIN_ROLE_MATRIX: RoleDefinition[] = [
   {
     id: "ernaehrungsberater",
     label: "Ernaehrungsfachkraft",
-    description: "Patient:innen betreuen, Plaene erstellen und dokumentieren.",
+    description: "Patienten betreuen, Plaene erstellen und dokumentieren.",
     permissions: [
       { module: "Patientenakten", access: "vollzugriff", critical: true },
       { module: "Lebensmittel & Rezepte", access: "vollzugriff" },

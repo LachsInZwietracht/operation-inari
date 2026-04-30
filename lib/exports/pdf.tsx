@@ -187,12 +187,34 @@ function ReportPdfDocument({ request }: { request: ReportExportRequest }) {
           </View>
         ) : null}
 
+        {request.lmivRows && request.lmivRows.length > 0 ? (
+          <>
+            <MetricTable title="LMIV Nährwertkennzeichnung" rows={request.lmivRows} />
+            <View style={styles.section}>
+              <Text style={styles.h2}>Allergen- und Zusatzstoffdeklaration</Text>
+              <Text style={styles.listItem}>
+                Allergene: {request.allergenDeclaration?.length ? request.allergenDeclaration.join(", ") : "keine Angabe"}
+              </Text>
+              <Text style={styles.listItem}>
+                Zusatzstoffe: {request.additiveDeclaration?.length ? request.additiveDeclaration.join(", ") : "keine Angabe"}
+              </Text>
+            </View>
+          </>
+        ) : null}
+
         {request.specialNotes && request.specialNotes.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.h2}>Zusatzhinweise</Text>
             {request.specialNotes.map((note) => (
               <Text key={note} style={styles.listItem}>{note}</Text>
             ))}
+          </View>
+        ) : null}
+
+        {request.retentionPolicyLabel ? (
+          <View style={styles.section}>
+            <Text style={styles.h2}>Archivierung</Text>
+            <Text style={styles.body}>{request.retentionPolicyLabel}</Text>
           </View>
         ) : null}
 

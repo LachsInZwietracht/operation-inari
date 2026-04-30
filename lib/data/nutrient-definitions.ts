@@ -6,7 +6,7 @@ export const NUTRIENT_DEFINITIONS: NutrientDefinition[] = [
   { id: "energie_kj", name: "Energie (kJ)", shortName: "Energie kJ", unit: "kJ", group: "makronaehrstoffe", sortOrder: 2 },
   { id: "eiweiss", name: "Eiweiß", shortName: "Eiweiß", unit: "g", group: "makronaehrstoffe", sortOrder: 3 },
   { id: "fett", name: "Fett", shortName: "Fett", unit: "g", group: "makronaehrstoffe", sortOrder: 4 },
-  { id: "kohlenhydrate", name: "Kohlenhydrate", shortName: "KH", unit: "g", group: "makronaehrstoffe", sortOrder: 5 },
+  { id: "kohlenhydrate", name: "Kohlenhydrate", shortName: "Kohlenhydrate", unit: "g", group: "makronaehrstoffe", sortOrder: 5 },
   { id: "ballaststoffe", name: "Ballaststoffe", shortName: "Ballastst.", unit: "g", group: "makronaehrstoffe", sortOrder: 6 },
   { id: "zucker", name: "Zucker", shortName: "Zucker", unit: "g", group: "makronaehrstoffe", sortOrder: 7 },
   { id: "gesaettigte_fettsaeuren", name: "Gesättigte Fettsäuren", shortName: "Ges. FS", unit: "g", group: "makronaehrstoffe", sortOrder: 8 },

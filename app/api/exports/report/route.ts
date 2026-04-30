@@ -51,6 +51,21 @@ function buildReportCsv(request: ReportExportRequest) {
     rows.push(["Hinweise", request.notes]);
   }
 
+  if (request.lmivRows?.length) {
+    rows.push([]);
+    rows.push(["LMIV", "Nährstoff", "pro Portion", "pro 100 g", ""]);
+    for (const row of request.lmivRows) {
+      rows.push(["LMIV", row.label, row.value, row.reference ?? "", ""]);
+    }
+    rows.push(["Deklaration", "Allergene", request.allergenDeclaration?.join(", ") ?? "", "", ""]);
+    rows.push(["Deklaration", "Zusatzstoffe", request.additiveDeclaration?.join(", ") ?? "", "", ""]);
+  }
+
+  if (request.retentionPolicyLabel) {
+    rows.push([]);
+    rows.push(["Archivierung", request.retentionPolicyLabel]);
+  }
+
   return toCsv(rows);
 }
 

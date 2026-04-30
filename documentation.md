@@ -144,18 +144,23 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Real exports:** `PDF erstellen` and `CSV/Nährstoffdaten` POST to `/api/exports/report`.
   - **Patient report persistence:** non-inline exports with valid patient + plan context now create or update a `patient_reports` parent record, append an immutable `patient_report_versions` row, and upload the generated file to private Supabase Storage.
   - **Archived mode:** historical report versions render as read-only snapshot views, expose direct file download, and remain readable even if the source meal plan changes later.
+  - **Clinical document packs:** bundled clinic document packs and patient handout templates live in `lib/content/clinical-documentation.ts`; selecting one inserts resolved structured text into report notes.
+  - **LMIV output:** report PDF/CSV payloads include LMIV nutrient rows, allergen declarations, additive declarations, and the current retention-policy label. Archived report versions render the stored LMIV snapshot when present.
+  - **Retention planning:** the route surfaces retention controls and scheduled-export requirements as read-only product requirements; real retention admin controls remain a backend/admin task.
   - **Preview:** `Druckvorschau anzeigen` requests the same PDF payload with inline disposition and opens it in a new tab.
   - **Contract boundary:** the page owns selection and payload assembly; rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
 
 ### 4.8 Patienten Mail Merge (`/patienten`)
 - **Component:** `app/(app)/patienten/page.tsx`
   - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
+  - **Dense worklist:** a compact patient worklist summarizes missing indications, overdue/missing counseling sessions, upcoming birthdays, and open eGK demo events above the patient cards.
   - **Priority order:** patient search/filter and patient cards render before demo and mailing utilities so the primary patient-management task is first.
   - **eGK demo:** the patient overview exposes the simulated card-reader flow inside a secondary `Patientenaufnahme` panel; the patient creation form still exposes clearly labeled simulated eGK flows for tests/product demos. Current Web Serial and companion paths still return demo card payloads rather than production connector data.
   - The patient overview keeps eGK demo reader capability detection mount-stable, so the first client render matches the server render before Web Serial support is detected.
   - The authoring UI for templates/placeholders is still client-side, reads bundled product defaults from `lib/patient-mailings.ts`, and now lives in a secondary `Serienbriefe & Mailings` panel instead of competing with the primary patient list.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
   - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.
+  - **Patient workflow report archive:** `components/patient-workflow-tab.tsx` exposes archived report search and format filtering across stored patient report versions.
 
 ### 4.9 API & Export (`/api-export`)
 - **Component:** `app/(app)/api-export/page.tsx`
@@ -204,6 +209,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/admin/tarife/page.tsx`
 - The route is a preview-only product and contract-planning surface. It has no checkout, subscription mutation, billing provider, invoice download, or live usage backend.
 - Static preview catalog data lives in `lib/content/billing-preview.ts`, not `lib/mock-data`.
+- The page now includes read-only procurement/security notes, PRODI/EBIS migration onboarding steps, guided clinic demo workspace setup, and a buyer readiness checklist covering data sources, audit logs, SSO, exports, retention, support, and deployment assumptions.
 - User actions only mark tariff or add-on interest in the local UI/toast copy; they do not persist subscription state.
 
 ### 4.14 Beratungen (Patient Counseling)
@@ -284,6 +290,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Blocks options that violate assigned diet forms or patient allergen entries.
 - **Workflow UI:**
   - A compact operations band summarizes service window, station, open/missing orders, and kitchen portions before the detail tabs.
+  - A dense service worklist highlights missing orders, pending kitchen approvals, confirmed orders, and delivered meals for the active service window.
   - Assign a real patient to station / room / bed with one or more diet forms.
   - Open a staff-side selection dialog for breakfast, lunch, or dinner.
   - Persist exactly one order per inpatient stay and service window.

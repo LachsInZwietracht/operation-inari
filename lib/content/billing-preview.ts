@@ -222,7 +222,7 @@ export const INVOICE_HISTORY: InvoiceRecord[] = [
 export const USAGE_METRICS: UsageMetric[] = [
   {
     id: "patients",
-    label: "Aktive Patient:innen",
+    label: "Aktive Patienten",
     used: 0,
     limit: 500,
     unit: "Preview",
@@ -241,4 +241,55 @@ export const USAGE_METRICS: UsageMetric[] = [
     limit: 10,
     unit: "Preview",
   },
+];
+
+export const PROCUREMENT_SECURITY_ITEMS = [
+  {
+    id: "data-processing",
+    title: "AVV / DSGVO-Basis",
+    status: "Dokumentierbar",
+    detail: "Rollen, Zweckbindung, TOM-Liste und Auftragsverarbeitung als Beschaffungspaket vorbereiten.",
+  },
+  {
+    id: "access-control",
+    title: "Zugriffsschutz",
+    status: "Teilweise umgesetzt",
+    detail: "Supabase Auth, RBAC-Mitgliedschaften und route-level Schutz sind vorhanden; Audit-Logs werden weiter ausgebaut.",
+  },
+  {
+    id: "export-retention",
+    title: "Berichte & Aufbewahrung",
+    status: "In Umsetzung",
+    detail: "Patientengebundene Berichtsversionen werden archiviert; Retention-Adminsteuerung ist als nächster Backend-Schritt geplant.",
+  },
+  {
+    id: "deployment",
+    title: "Deployment-Annahmen",
+    status: "Zu prüfen",
+    detail: "Mandant, Region, Supportkontakt, SSO/AD-Anbindung und Datenimport werden vor Klinikvertrag festgelegt.",
+  },
+];
+
+export const MIGRATION_ONBOARDING_STEPS = [
+  "PRODI-/EBIS-Exportquellen identifizieren: Rezepte, Patienten, Protokolle, Speisepläne.",
+  "CSV-/Excel-Spalten mit Inari-Zielfeldern mappen und Pflichtfelder markieren.",
+  "Testimport in Demo-Workspace durchführen und Nährstoffsummen stichprobenartig validieren.",
+  "Altdaten nach Klinikfreigabe produktiv importieren und Importjournal sichern.",
+];
+
+export const DEMO_WORKSPACE_SETUP = [
+  "Klinikdemo mit klar gekennzeichneten Beispieldaten anlegen.",
+  "BLS/SFK-Quelle, Beispielpatienten, Menüzyklus, Küchencharge und Berichtshistorie vorbefüllen.",
+  "Demo-Nutzerrollen für Ernährungsberatung, Küche, Stationskoordination und Admin trennen.",
+  "Reset-Prozess dokumentieren, damit Sales-Demos reproduzierbar bleiben.",
+];
+
+export const CLINIC_BUYER_CHECKLIST = [
+  "Datenquellen und Lizenzen",
+  "Audit-Logs für Patientenzugriffe und Exporte",
+  "SSO/OIDC oder SAML-Anforderungen",
+  "Exportformate und Archivfristen",
+  "Supportkontakte und SLA",
+  "Hostingregion und Deployment-Annahmen",
+  "Migrationsumfang aus PRODI/EBIS",
 ];

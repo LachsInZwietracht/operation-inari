@@ -214,6 +214,36 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
   const pendingOrderCount = serviceOrders.filter((order) => order.status === "pending").length;
   const missingOrderCount = Math.max(0, activeStays.length - serviceOrders.length);
   const kitchenPortionCount = kitchenSummary.reduce((sum, item) => sum + item.totalPortions, 0);
+  const criticalWorklist = useMemo(() => {
+    const confirmedCount = serviceOrders.filter((order) => order.status === "confirmed").length;
+    const deliveredCount = serviceOrders.filter((order) => order.status === "delivered").length;
+    return [
+      {
+        label: "Ohne Bestellung",
+        value: missingOrderCount,
+        helper: "aktive Betten",
+        className: missingOrderCount > 0 ? "text-amber-700" : "text-emerald-700",
+      },
+      {
+        label: "Ausstehend",
+        value: pendingOrderCount,
+        helper: "Küchenfreigabe",
+        className: pendingOrderCount > 0 ? "text-amber-700" : "text-emerald-700",
+      },
+      {
+        label: "Bestätigt",
+        value: confirmedCount,
+        helper: "bereit für Ausgabe",
+        className: "text-blue-700",
+      },
+      {
+        label: "Ausgeliefert",
+        value: deliveredCount,
+        helper: "abgeschlossen",
+        className: "text-emerald-700",
+      },
+    ];
+  }, [serviceOrders, missingOrderCount, pendingOrderCount]);
 
   const selectionStay = useMemo(
     () => activeStays.find((stay) => stay.id === selectionStayId) ?? null,
@@ -277,7 +307,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
       status: "discharged",
       dischargeDate: selectedDate,
     });
-    toast.success("Patient:in entlassen");
+    toast.success("Patient entlassen");
   }
 
   function openSelectionDialog(stay: InpatientStay) {
@@ -348,11 +378,11 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
       <PageHeader
         title="Krankenhausverwaltung"
         description="Inpatient-Zuordnung, sichere Essensauswahl und Stationsausgabe"
-        helpText="Pflege oder Ernährungsberatung ordnet Patient:innen Betten zu, wählt sichere Menüoptionen je Servicefenster aus und erstellt Küchen- sowie Tablettenausgaben."
+        helpText="Pflege oder Ernährungsberatung ordnet Patienten Betten zu, wählt sichere Menüoptionen je Servicefenster aus und erstellt Küchen- sowie Tablettenausgaben."
       >
         <Button onClick={() => openAssignmentDialog()}>
           <UserPlus className="mr-2 h-4 w-4" />
-          Patient:in zuweisen
+          Patient zuweisen
         </Button>
       </PageHeader>
 
@@ -495,6 +525,24 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
               Tablettenkarten
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Dichte Arbeitsliste</CardTitle>
+          <CardDescription>Operative Aufgaben für das aktuelle Servicefenster.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {criticalWorklist.map((item) => (
+            <div key={item.label} className="rounded-md border px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{item.label}</span>
+                <span className={`text-xl font-semibold ${item.className}`}>{item.value}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{item.helper}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
@@ -723,7 +771,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
                   <TableRow>
                     <TableHead>Rezept</TableHead>
                     <TableHead>Portionen</TableHead>
-                    <TableHead>Patient:innen</TableHead>
+                    <TableHead>Patienten</TableHead>
                     <TableHead>Sonderhinweise</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -754,14 +802,14 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
       <Dialog open={assignmentOpen} onOpenChange={setAssignmentOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editingStay ? "Stationszuordnung bearbeiten" : "Patient:in zuweisen"}</DialogTitle>
+            <DialogTitle>{editingStay ? "Stationszuordnung bearbeiten" : "Patient zuweisen"}</DialogTitle>
             <DialogDescription>
-              Verknüpfen Sie eine reale Patient:innenakte mit Station, Bett und Kostform.
+              Verknüpfen Sie eine reale Patientenakte mit Station, Bett und Kostform.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
-              <Label>Patient:in</Label>
+              <Label>Patient</Label>
               <Select
                 value={stayForm.patientId}
                 onValueChange={(value) => setStayForm((prev) => ({ ...prev, patientId: value }))}

@@ -59,7 +59,7 @@ export const ROLE_MATRIX: RoleDefinition[] = [
   {
     id: "ernaehrungsberater",
     label: "Ernährungsfachkraft",
-    description: "Patient:innen betreuen, Pläne erstellen und dokumentieren",
+    description: "Patienten betreuen, Pläne erstellen und dokumentieren",
     permissions: [
       { module: "Patientenakten", access: "vollzugriff", critical: true },
       { module: "Lebensmittel & Rezepte", access: "vollzugriff" },

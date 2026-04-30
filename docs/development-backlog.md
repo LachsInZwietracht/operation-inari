@@ -78,12 +78,12 @@ Start here unless product priorities have changed:
 
 ## P2: Clinical Documentation
 
-- [ ] Build clinic document packs for Ernährungsbericht, Arztbrief, Übergabe Küche, Verlaufsbericht, and Qualitätsbericht.
-- [ ] Add patient handout templates tied to counseling sessions and meal plans.
-- [ ] Add LMIV/allergen declaration output to recipe and menu PDFs.
+- [x] Build clinic document packs for Ernährungsbericht, Arztbrief, Übergabe Küche, Verlaufsbericht, and Qualitätsbericht.
+- [x] Add patient handout templates tied to counseling sessions and meal plans.
+- [x] Add LMIV/allergen declaration output to recipe and menu PDFs.
 - [ ] Add report retention policy fields and admin controls.
-- [ ] Improve archived report search and filtering inside patient records.
-- [ ] Add scheduled export requirements after the report-retention model is clear.
+- [x] Improve archived report search and filtering inside patient records.
+- [x] Add scheduled export requirements after the report-retention model is clear.
 
 ## P2: UX Rework For Core Workflows
 
@@ -94,16 +94,16 @@ Start here unless product priorities have changed:
 - [x] Move mail merge into a dedicated `Serienbriefe` route or a secondary workflow.
 - [x] Add dashboard setup/onboarding actions when workspaces are empty.
 - [x] Add clinical design tokens for nutrient gaps, source trust, allergen risk, order safety, and report status.
-- [ ] Create dense worklist patterns for institution and patient workflows.
-- [ ] Standardize German clinical terminology across labels, including `Eiweiß`, `Kohlenhydrate`/`KH`, and patient wording.
+- [x] Create dense worklist patterns for institution and patient workflows.
+- [x] Standardize German clinical terminology across labels, including `Eiweiß`, `Kohlenhydrate`/`KH`, and patient wording.
 
 ## P2: Commercial Readiness
 
-- [ ] Replace `/admin/tarife` preview with a real clinic contract/subscription model, or keep the route explicitly read-only until implemented.
-- [ ] Add procurement-ready security documentation in-app or as exportable docs.
-- [ ] Build migration onboarding for PRODI/EBIS-style exports: recipes, patients, protocols, and meal plans.
-- [ ] Add guided demo workspace setup with realistic but clearly labeled demo data.
-- [ ] Create a clinic buyer readiness checklist covering data sources, audit logs, SSO, exports, retention, support contacts, and deployment assumptions.
+- [x] Replace `/admin/tarife` preview with a real clinic contract/subscription model, or keep the route explicitly read-only until implemented.
+- [x] Add procurement-ready security documentation in-app or as exportable docs.
+- [x] Build migration onboarding for PRODI/EBIS-style exports: recipes, patients, protocols, and meal plans.
+- [x] Add guided demo workspace setup with realistic but clearly labeled demo data.
+- [x] Create a clinic buyer readiness checklist covering data sources, audit logs, SSO, exports, retention, support contacts, and deployment assumptions.
 
 ## P3: Product Expansion
 

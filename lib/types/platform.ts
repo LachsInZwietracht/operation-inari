@@ -335,6 +335,11 @@ export interface ReportExportRequest {
   narrative?: string;
   badges?: string[];
   specialNotes?: string[];
+  lmivRows?: ReportExportMetric[];
+  allergenDeclaration?: string[];
+  additiveDeclaration?: string[];
+  retentionPolicyLabel?: string;
+  documentPackLabel?: string;
 }
 
 export interface PatientMailMergeDocumentRequest {

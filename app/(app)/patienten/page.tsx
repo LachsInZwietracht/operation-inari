@@ -302,7 +302,7 @@ export default function PatientenPage() {
         count: batch.recipientCount,
         templateName: batch.templateName,
       })
-      toast.success(`Serienbrief für ${documents.length} Patient:innen erzeugt`)
+      toast.success(`Serienbrief für ${documents.length} Patienten erzeugt`)
     } catch (error) {
       toast.error((error as Error).message || "Serienbrief konnte nicht erstellt werden")
     }
@@ -334,6 +334,22 @@ export default function PatientenPage() {
       .filter((entry) => entry.daysUntil >= 0 && entry.daysUntil <= windowDays)
       .sort((a, b) => a.daysUntil - b.daysUntil)
   }, [patients, birthdayWindow, reminderMap])
+
+  const patientWorklist = useMemo(() => {
+    const today = new Date()
+    const withoutIndication = patients.filter((patient) => !patient.indication).length
+    const staleOrMissingSessions = patients.filter((patient) => {
+      const lastSession = lastSessionMap.get(patient.id)
+      if (!lastSession) return true
+      return differenceInCalendarDays(today, parseISO(lastSession)) > 90
+    }).length
+    return [
+      { label: "Ohne Indikation", value: withoutIndication, tone: withoutIndication > 0 ? "text-amber-700" : "text-emerald-700" },
+      { label: "Beratung fällig", value: staleOrMissingSessions, tone: staleOrMissingSessions > 0 ? "text-amber-700" : "text-emerald-700" },
+      { label: "Geburtstage", value: upcomingBirthdays.length, tone: upcomingBirthdays.length > 0 ? "text-blue-700" : "text-muted-foreground" },
+      { label: "Offene Kartenereignisse", value: egkEvents.filter((event) => event.status !== "matched").length, tone: "text-muted-foreground" },
+    ]
+  }, [patients, lastSessionMap, upcomingBirthdays.length, egkEvents])
 
   return (
     <div className="space-y-6">
@@ -379,6 +395,17 @@ export default function PatientenPage() {
           </Select>
         </div>
       </div>
+
+      <Card>
+        <CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
+          {patientWorklist.map((item) => (
+            <div key={item.label} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+              <span className="text-muted-foreground">{item.label}</span>
+              <span className={`text-lg font-semibold ${item.tone}`}>{item.value}</span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       {filtered.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

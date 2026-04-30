@@ -9,7 +9,7 @@ const HOSPITAL_HEADER = {
   title: "Krankenhausverwaltung",
   description: "Inpatient-Zuordnung, sichere Essensauswahl und Stationsausgabe",
   helpText:
-    "Pflege oder Ernährungsberatung ordnet Patient:innen Betten zu, wählt sichere Menüoptionen je Servicefenster aus und erstellt Küchen- sowie Tablettenausgaben.",
+    "Pflege oder Ernährungsberatung ordnet Patienten Betten zu, wählt sichere Menüoptionen je Servicefenster aus und erstellt Küchen- sowie Tablettenausgaben.",
 };
 
 async function HospitalContent() {

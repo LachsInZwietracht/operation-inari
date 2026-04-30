@@ -11,10 +11,14 @@ const ONBOARDING_KEYS = [
 ];
 
 async function clearOnboardingState(page: import("@playwright/test").Page) {
+  await page.addInitScript((keys) => {
+    for (const key of keys) localStorage.removeItem(key);
+  }, ONBOARDING_KEYS);
   await page.goto("/dashboard");
   await page.evaluate((keys) => {
     for (const key of keys) localStorage.removeItem(key);
   }, ONBOARDING_KEYS);
+  await page.reload();
 }
 
 test.describe("Onboarding Wizard", () => {
@@ -40,7 +44,7 @@ test.describe("Onboarding Wizard", () => {
 
     await wizard.getByRole("button", { name: "Weiter" }).click();
 
-    await expect(wizard.getByText("Erste:n Patient:in anlegen")).toBeVisible();
+    await expect(wizard.getByText("Ersten Patienten anlegen")).toBeVisible();
   });
 
   test("can skip patient creation step", async ({ page }) => {
@@ -52,7 +56,7 @@ test.describe("Onboarding Wizard", () => {
     // Fill practice info first
     await wizard.getByLabel("Praxisname *").fill("Testpraxis");
     await wizard.getByRole("button", { name: "Weiter" }).click();
-    await expect(wizard.getByText("Erste:n Patient:in anlegen")).toBeVisible();
+    await expect(wizard.getByText("Ersten Patienten anlegen")).toBeVisible();
 
     // Skip patient step
     await wizard.getByRole("button", { name: "Überspringen" }).click();

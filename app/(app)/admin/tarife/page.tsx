@@ -21,6 +21,10 @@ import {
   BILLING_SUMMARY,
   INVOICE_HISTORY,
   USAGE_METRICS,
+  PROCUREMENT_SECURITY_ITEMS,
+  MIGRATION_ONBOARDING_STEPS,
+  DEMO_WORKSPACE_SETUP,
+  CLINIC_BUYER_CHECKLIST,
 } from "@/lib/content/billing-preview"
 import type { TierComparisonRow } from "@/lib/types"
 
@@ -80,9 +84,9 @@ export default function TarifePage() {
 
       <Alert>
         <Shield className="h-4 w-4" />
-        <AlertTitle>Billing-Preview</AlertTitle>
+        <AlertTitle>Read-only Vertrags- und Billing-Preview</AlertTitle>
         <AlertDescription>
-          Diese Seite ist eine Produkt- und Vertragsplanungsansicht. Tarifauswahl, Add-ons, Nutzung und Rechnungen sind nicht mit einem Zahlungsanbieter verbunden.
+          Diese Seite ist eine Produkt- und Vertragsplanungsansicht. Tarifauswahl, Add-ons, Nutzung und Rechnungen sind nicht mit einem Zahlungsanbieter verbunden und ändern keinen Vertrag.
         </AlertDescription>
       </Alert>
 
@@ -125,6 +129,76 @@ export default function TarifePage() {
               <p className="text-sm">Preview-Kalkulation</p>
             </div>
             <Switch checked={billingCycle === "annual"} onCheckedChange={(checked) => setBillingCycle(checked ? "annual" : "monthly")} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="h-5 w-5 text-muted-foreground" />
+              Beschaffungs- und Sicherheitsunterlagen
+            </CardTitle>
+            <CardDescription>Read-only Status für Klinik-Einkauf, Datenschutz und IT-Prüfung</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {PROCUREMENT_SECURITY_ITEMS.map((item) => (
+              <div key={item.id} className="rounded-lg border p-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-semibold">{item.title}</p>
+                  <Badge variant="outline">{item.status}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{item.detail}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Klinik-Buyer-Checklist</CardTitle>
+            <CardDescription>Pflichtpunkte vor einem belastbaren Klinikvertrag</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {CLINIC_BUYER_CHECKLIST.map((item) => (
+              <div key={item} className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Migration aus PRODI/EBIS</CardTitle>
+            <CardDescription>Onboarding-Plan für Rezepte, Patienten, Protokolle und Speisepläne</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {MIGRATION_ONBOARDING_STEPS.map((step, index) => (
+              <div key={step} className="flex gap-3 rounded-lg border p-3 text-sm">
+                <Badge variant="secondary" className="mt-0.5 h-6 w-6 justify-center p-0">{index + 1}</Badge>
+                <p>{step}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Geführter Demo-Workspace</CardTitle>
+            <CardDescription>Realistische, aber klar gekennzeichnete Demo-Daten für Klinikgespräche</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {DEMO_WORKSPACE_SETUP.map((step, index) => (
+              <div key={step} className="flex gap-3 rounded-lg border p-3 text-sm">
+                <Badge variant="secondary" className="mt-0.5 h-6 w-6 justify-center p-0">{index + 1}</Badge>
+                <p>{step}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

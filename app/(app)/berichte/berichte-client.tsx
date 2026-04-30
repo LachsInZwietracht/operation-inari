@@ -82,6 +82,12 @@ import { loadBrowserMealPlans } from "@/lib/data/meal-plan-browser-source"
 import { downloadResponseFile } from "@/lib/utils"
 import { usePatients } from "@/hooks/use-patients"
 import { usePatientReports } from "@/hooks/use-patient-reports"
+import {
+  CLINIC_DOCUMENT_PACKS,
+  PATIENT_HANDOUT_TEMPLATES,
+  REPORT_RETENTION_PREVIEW,
+  SCHEDULED_EXPORT_REQUIREMENTS,
+} from "@/lib/content/clinical-documentation"
 const ReportNutrientChart = dynamic(
   () => import("./reports-charts").then((mod) => mod.ReportNutrientChart),
   { ssr: false, loading: () => <div className="h-[350px] rounded-md bg-muted/40" /> },
@@ -480,6 +486,39 @@ function ArchivedReportView({
           </CardHeader>
           <CardContent>
             <p className="whitespace-pre-line text-sm">{snapshot.notes || "Keine zusätzlichen Hinweise gespeichert."}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {snapshot.lmivRows?.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">LMIV- und Deklarationssnapshot</CardTitle>
+            <CardDescription>{snapshot.retentionPolicyLabel ?? "Archivierte Deklarationsdaten"}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nährstoff</TableHead>
+                  <TableHead className="text-right">pro Portion</TableHead>
+                  <TableHead className="text-right">pro 100 g</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {snapshot.lmivRows.map((row) => (
+                  <TableRow key={`archived-lmiv-${row.label}`}>
+                    <TableCell>{row.label}</TableCell>
+                    <TableCell className="text-right">{row.value}</TableCell>
+                    <TableCell className="text-right">{row.reference ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="text-sm text-muted-foreground">
+              <p>Allergene: {snapshot.allergenDeclaration?.length ? snapshot.allergenDeclaration.join(", ") : "keine Angabe"}</p>
+              <p>Zusatzstoffe: {snapshot.additiveDeclaration?.length ? snapshot.additiveDeclaration.join(", ") : "keine Angabe"}</p>
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -968,6 +1007,16 @@ ${microSentence}`
     return [...rows, saltRow]
   }, [planNutrients, per100Factor, saltValue])
 
+  const lmivExportRows = useMemo(
+    () =>
+      lmivRows.map((row) => ({
+        label: row.label,
+        value: `${formatNumber(row.perPortion, 1)} ${row.unit}`,
+        reference: `${formatNumber(row.per100, 1)} ${row.unit}`,
+      })),
+    [lmivRows],
+  )
+
   const energyKj = energieValue * 4.186
 
   const foodGroupCounts = useMemo(() => {
@@ -1127,7 +1176,12 @@ ${microSentence}`
         `CO₂ gesamt: ${formatNumber(totalCo2, 1)} kg`,
         `PRODIscore: ${prodiScoreValue} (${prodiLabel})`,
         `Health Claims: ${healthClaimResults.filter((claim) => claim.met).length}/${healthClaimResults.length}`,
+        `LMIV-Deklaration: ${aggregatedAllergens.length} Allergene, ${aggregatedAdditives.length} Zusatzstoffe`,
       ],
+      lmivRows: lmivExportRows,
+      allergenDeclaration: aggregatedAllergens,
+      additiveDeclaration: aggregatedAdditives,
+      retentionPolicyLabel: REPORT_RETENTION_PREVIEW.label,
     }
   }, [
     activeReportId,
@@ -1161,6 +1215,9 @@ ${microSentence}`
     prodiScoreValue,
     prodiLabel,
     healthClaimResults,
+    aggregatedAllergens,
+    aggregatedAdditives,
+    lmivExportRows,
   ])
 
   const handleSectionToggle = (sectionId: ReportSectionId) => {
@@ -1240,6 +1297,14 @@ ${microSentence}`
 
   const handleAdoptNarrative = () => {
     setCustomNotes((prev) => (prev ? `${prev}\n${analysisNarrative}` : analysisNarrative))
+  }
+
+  const handleApplyClinicalText = (template: string) => {
+    const resolved = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, token) => {
+      const key = token.trim()
+      return placeholderValues[key as keyof typeof placeholderValues] ?? match
+    })
+    setCustomNotes((prev) => (prev ? `${prev}\n\n${resolved}` : resolved))
   }
 
   const handleInsertPlaceholder = (token: string) => {
@@ -2025,6 +2090,100 @@ ${microSentence}`
               </p>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Klinische Dokumentenpakete</CardTitle>
+              <CardDescription>
+                Vorstrukturierte Pakete für Klinikberichte, Arztkommunikation, Küche und Qualitätsarbeit.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {CLINIC_DOCUMENT_PACKS.map((pack) => (
+                <div key={pack.id} className="rounded-lg border p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{pack.name}</p>
+                      <p className="text-xs text-muted-foreground">{pack.audience}</p>
+                    </div>
+                    <Badge variant="outline">{pack.sections.length} Abschnitte</Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{pack.purpose}</p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {pack.sections.slice(0, 4).map((section) => (
+                      <Badge key={`${pack.id}-${section}`} variant="secondary" className="text-[11px]">
+                        {section}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-3"
+                    onClick={() => handleApplyClinicalText(pack.template)}
+                  >
+                    Text übernehmen
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Patienten-Handouts</CardTitle>
+                <CardDescription>An Beratung oder Ernährungsplan gekoppelte Vorlagen.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {PATIENT_HANDOUT_TEMPLATES.map((handout) => (
+                  <div key={handout.id} className="rounded-lg border p-3 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{handout.name}</p>
+                        <p className="text-xs text-muted-foreground">{handout.trigger}</p>
+                      </div>
+                      <Badge variant="outline">
+                        {handout.tiedTo === "both" ? "Beratung + Plan" : handout.tiedTo === "meal_plan" ? "Plan" : "Beratung"}
+                      </Badge>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2"
+                      onClick={() => handleApplyClinicalText(handout.template)}
+                    >
+                      Einfügen
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Archivierung & geplante Exporte</CardTitle>
+                <CardDescription>{REPORT_RETENTION_PREVIEW.label}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="space-y-1">
+                  {REPORT_RETENTION_PREVIEW.controls.map((control) => (
+                    <p key={control}>• {control}</p>
+                  ))}
+                </div>
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <p className="mb-2 font-medium text-foreground">Anforderungen vor Scheduler-Implementierung</p>
+                  {SCHEDULED_EXPORT_REQUIREMENTS.map((requirement) => (
+                    <p key={requirement}>• {requirement}</p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         <Card>
