@@ -214,6 +214,17 @@ async function main() {
   }
 
   console.log(`\nInserted ${inserted} German synonyms`);
+
+  const { writeDataSourceEvent } = await import("./etl-event");
+  await writeDataSourceEvent({
+    dataSourceId: "bls",
+    eventType: "change_note",
+    title: "Deutsche Synonyme generiert",
+    summary: `${inserted} Synonyme aus ${foods.length} BLS-Lebensmitteln abgeleitet.`,
+    recordCount: inserted,
+    metadata: { totalGenerated: synonymRows.length, sourceFoods: foods.length },
+  });
+
   console.log("=== Synonym generation complete ===");
 }
 

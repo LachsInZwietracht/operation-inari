@@ -28,7 +28,7 @@ Precedence:
 Current operational notes:
 - The app is designed around a hosted Supabase project. Local Supabase is optional for development.
 - Push schema changes with `supabase db push`.
-- Core ETL commands are `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:reference-values`, `npm run etl:recipes`, `npm run etl:off`, `npm run etl:synonyms`, and `npm run etl:portions`.
+- Core ETL commands are `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:sfk`, `npm run etl:verify:sfk`, `npm run etl:reference-values`, `npm run etl:recipes`, `npm run etl:off`, `npm run etl:synonyms`, and `npm run etl:portions`.
 - **Full pipeline:** `npm run etl:all` runs all steps in the correct order. Supports `--dry-run`, `--skip=bls,off`, and `--only=synonyms,portions` flags.
 - ETL scripts require server-side Supabase credentials such as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Do not use `NEXT_PUBLIC_*` variables for ETL.
 - BLS import and verification are expected to run together. The verifier checks imported counts against the source workbook.
@@ -78,7 +78,7 @@ The app already has well-structured types that support multi-source food data:
 
 ### Core Nutrient IDs (28 nutrients displayed in UI)
 
-These are the IDs used throughout the entire app — every component, calculation, and display depends on them. The database stores 42 nutrient definitions total (28 core + 14 additional from BLS 4.0), but the UI currently only renders these 28:
+These are the IDs used throughout the entire app — every component, calculation, and display depends on them. The database stores 88 nutrient definitions total (28 core + 14 additional from BLS 4.0 + 46 from SFK including aminosaeuren and fettsaeuren groups), but the UI currently only renders these 28:
 
 **Macronutrients:** `energie` (kcal), `eiweiss` (g), `fett` (g), `kohlenhydrate` (g), `ballaststoffe` (g), `zucker` (g), `gesaettigte_fettsaeuren` (g), `ungesaettigte_fettsaeuren` (g), `wasser` (ml)
 
@@ -213,7 +213,7 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 
 ### Tier 4 — Commercial (Only After Revenue)
 
-- **Souci-Fachmann-Kraut (SFK):** ~800 foods, 300+ nutrients — requires paid license[^3]
+- **Souci-Fachmann-Kraut (SFK):** ~1,800 foods, 320+ nutrients (including aminosaeuren and fettsaeuren groups) — ETL pipeline implemented (`npm run etl:sfk`, `npm run etl:verify:sfk`); requires paid license[^3]
 - **Heseker tables:** Simplified profiles — proprietary
 - **Manufacturer data modules:** Bilateral agreements per brand
 
@@ -238,7 +238,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260511000028_team_rbac.sql` | RBAC foundation: `organizations`, `organization_memberships`, `access_audit_logs`, RLS helper functions, and membership/admin policies |
 | `20260512000029_database_lifecycle.sql` | Database lifecycle events, audited food-reference replacement logs, and the `replace_food_references()` RPC for user-workspace recipes, meal plans, and protocols |
 
-**Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0), 54 DGE reference values (adults 25–51, gender-stratified).
+**Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
 ### Table Overview
 
@@ -298,6 +298,13 @@ The full schema is defined in Supabase migration files under `supabase/migration
   - `/api/exports/datasets`
 - Current history consumer:
   - `/api/export-jobs`
+
+### Performance RPC Notes
+
+- `get_practice_dashboard_summary()` returns a compact authenticated JSON summary for `/dashboard` (KPIs, recent activity, revenue buckets, next appointments, upcoming birthdays). It is read-only, scoped to `auth.uid()`, and should stay aligned with `PracticeDashboardSummary` in `lib/data/practice-overview.ts`.
+- `get_practice_statistics_summary()` returns compact authenticated aggregates for `/praxis-statistiken` (KPI comparisons, time-range chart buckets, invoice health, demographic buckets, top indications, overdue invoice warnings). It is scoped to `auth.uid()` and should stay aligned with `PracticeStatisticsSummary` in `lib/data/practice-overview.ts`.
+- The dashboard and practice-statistics server loaders try their RPCs first and fall back to row-based loaders if a function is not deployed yet, so rollout is non-breaking.
+- Keep mutation/local migration flows in the existing hooks; summary RPCs are for first paint and aggregate display data, not canonical write state.
 
 ### Database Lifecycle Notes
 
@@ -411,15 +418,15 @@ These nutrients were added to `nutrient_definitions` (via seed.sql) and are mapp
 - `chlorid` — Chloride (mg)
 - `salz` — Salt / NaCl (g)
 
-### Nutrients Still Missing (not yet in NUTRIENT_MAP)
+### Nutrients Still Missing from BLS (not yet in BLS NUTRIENT_MAP)
 
-BLS 4.0 provides ~138 nutrients total. The ETL currently maps 34 (28 original + 6 new). Clinically relevant nutrients still unmapped:
+BLS 4.0 provides ~138 nutrients total. The ETL currently maps 34 (28 original + 6 new). Clinically relevant nutrients still unmapped in BLS (but now available via the SFK ETL):
 
-- `mehrfach_ungesaettigte_fettsaeuren` — Polyunsaturated fatty acids (FAPU, g) — currently only used as part of the `ungesaettigte_fettsaeuren` sum
+- `mehrfach_ungesaettigte_fettsaeuren` — Polyunsaturated fatty acids (FAPU, g) — currently only used as part of the `ungesaettigte_fettsaeuren` sum in BLS
 - `einfach_ungesaettigte_fettsaeuren` — Monounsaturated fatty acids (FAMS, g) — same
-- `selen` — Selenium (µg) — not in current BLS NUTRIENT_MAP
-- `omega_3` / `omega_6` — if available in the BLS columns (check headers)
-- Various amino acids, fatty acid breakdown, organic acids, etc.
+- `selen` — Selenium (µg) — not in BLS NUTRIENT_MAP; covered by SFK (`selen`)
+- `omega_3_gesamt` / `omega_6_gesamt` — covered by SFK (`omega_3_gesamt`, `omega_6_gesamt`)
+- Detailed amino acids and fatty acids — now covered by the 46 new SFK nutrient definitions (`aminosaeuren`, `fettsaeuren` groups)
 
 ---
 
@@ -586,6 +593,29 @@ ETL Pipeline:
 | 1087 | Calcium | `calcium` |
 | 1089 | Iron | `eisen` |
 
+### 5.5 Souci-Fachmann-Kraut (SFK) ETL
+
+**Implementation:**
+- `scripts/etl/import-sfk.ts` — main ETL script
+- `scripts/etl/sfk-shared.ts` — shared module (column mapping, `SFK_NUTRIENT_MAP`, parsing helpers) reused by importer and verifier
+- `scripts/etl/verify-sfk-import.ts` — post-import verifier
+
+**Input:** SFK data file (path configured via `SFK_SOURCE_FILE` env var). Requires a paid SFK license.
+
+**Output:** Rows in `foods` + `food_nutrients` (data_source_id = `'sfk'`)
+
+**Run commands:**
+```bash
+npm run etl:sfk          # import SFK data
+npm run etl:verify:sfk   # verify row counts
+```
+
+**Schema dependency:** Requires `20260513000030_sfk_nutrient_definitions.sql` to be applied first. This migration adds 46 new nutrient definitions covering `aminosaeuren` (18 amino acids), `fettsaeuren` (13 detailed fatty acids), extended vitamins/minerals, and other SFK-specific nutrients, plus the `sfk_column_name` mapping column on `nutrient_definitions`.
+
+**Watch out for:**
+- SFK requires a commercial license — do not commit raw SFK data files to the repo
+- `sfk_column_name` on `nutrient_definitions` is the canonical column mapping; update `sfk-shared.ts` when adding new nutrient mappings
+
 ---
 
 ## 6. Migration Strategy — Mock Data to Real Data
@@ -600,6 +630,7 @@ ETL Pipeline:
 1. ~~Run BLS ETL script~~ — 7,140 foods + ~265k nutrient rows + English synonyms imported
 2. ~~Verify import~~ — `npm run etl:verify:bls` confirms row counts match Excel source
 3. ~~Generate food_group and category mappings~~ — `deriveFoodGroupFromBlsCode()` resolves subgroup IDs + UI categories
+4. ~~SFK ETL pipeline implemented~~ — `npm run etl:sfk` / `npm run etl:verify:sfk` available; 46 additional nutrient definitions (aminosaeuren, fettsaeuren groups) added via migration `20260513000030_sfk_nutrient_definitions.sql`; data import requires paid SFK license
 
 ### Phase 3: App Migration (Mock → Supabase) — COMPLETE
 
@@ -759,7 +790,21 @@ The paginated foods browser adds `search_foods_with_total()` in `supabase/migrat
 
 **Important rollout note:** apply `20260503000019_search_foods_with_total.sql` before expecting accurate paginated totals in `/lebensmittel`. Without it, the UI falls back to `search_foods()` and still works, but total counts are approximate.
 
-**Future:** Port Cologne phonetics to a Postgres function for server-side German sound matching.
+### Search RPC Migration Path
+
+The client code in `fetchFoodsBrowserPageByName()` (`lib/data/foods.ts`) uses a three-tier fallback chain:
+
+1. **`search_foods_with_total()`** (migration `20260503000019`) — trigram + ILIKE + Cologne phonetics (migration `20260516000033`), returns `total_count` for pagination.
+2. **`search_foods()`** (migration `20260412000006`) — same matching logic, no `total_count`. Pagination uses an estimated count (current offset + returned rows).
+3. **Empty results** — if both RPCs fail (e.g., table doesn't exist), the UI renders an empty list without crashing.
+
+What's lost at each tier:
+- Without `search_foods_with_total`: total counts are approximate, page navigation may be inaccurate.
+- Without `search_foods`: name-mode search returns no results; code/group/browse modes still work via direct Supabase queries.
+
+**Cologne phonetics** (migration `20260516000033`) adds a `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, and a phonetic match branch in both RPCs. If only the older search migrations are applied, phonetic matching is unavailable server-side but the client fallback in `lib/search/fuzzy-search.ts` still provides it for the Cmd+K palette.
+
+**Checking migration status:** Query `SELECT proname FROM pg_proc WHERE proname = 'search_foods_with_total'` or inspect `data_source_events` for recent import events (present only after migration `20260512000029`).
 
 ---
 
@@ -809,7 +854,7 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 
 - Do not reintroduce runtime `foodId -> blsCode -> food` fallback logic in shared utilities or UI components.
 - If a workflow still receives `food_*` mock IDs, normalize them at ingestion/load time via `lib/data/food-reference-normalization.ts`.
-- `lib/legacy-food-map.ts` is transitional migration support only, not an application-level lookup layer.
+- The legacy mock-ID-to-BLS-code map is now inlined in `scripts/etl/import-recipes-and-meal-plans.ts` (seed-time only). Runtime normalization resolves via `legacyId` and `blsCode` fields on the `foods` table.
 
 ### Performance Considerations
 

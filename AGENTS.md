@@ -56,6 +56,8 @@ Notable repo facts:
 - `npm run validate:nutrients` - nutrient math validation.
 - `npm run etl:bls` - import BLS data.
 - `npm run etl:verify:bls` - verify BLS import.
+- `npm run etl:sfk` - import Souci-Fachmann-Kraut data.
+- `npm run etl:verify:sfk` - verify SFK import.
 - `npm run etl:reference-values` - import reference values.
 - `npm run etl:recipes` - import shared recipes and meal plan templates.
 - `npm run etl:off` - import Open Food Facts data.

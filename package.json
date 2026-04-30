@@ -17,6 +17,8 @@
     "etl:off": "npx tsx -r dotenv/config scripts/etl/import-off.ts dotenv_config_path=.env.local",
     "etl:synonyms": "npx tsx scripts/etl/generate-synonyms.ts",
     "etl:portions": "npx tsx scripts/etl/import-portions.ts",
+    "etl:sfk": "npx tsx scripts/etl/import-sfk.ts",
+    "etl:verify:sfk": "npx tsx scripts/etl/verify-sfk-import.ts",
     "etl:all": "npx tsx scripts/etl/run-all.ts"
   },
   "dependencies": {

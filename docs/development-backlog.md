@@ -43,15 +43,15 @@ Start here unless product priorities have changed:
 
 ## P1: Strengthen Food And Scientific Credibility
 
-- [ ] Port Cologne phonetics into Postgres search so German sound matching works server-side, not only through the client fallback.
-- [ ] Keep `search_foods_with_total()` rollout documented and ensure environments without the migration degrade clearly.
-- [ ] Continue replacing all-catalog hook patterns with paginated or server-backed reads where route behavior allows it.
-- [ ] Fetch full nutrient and portion payloads lazily only when the selected workflow needs full detail.
-- [ ] Add nutrient/source diff UI for database updates.
-- [ ] Expand database lifecycle events so ETL jobs write real release/import history to `data_source_events`.
-- [ ] Add broader database version migration tooling beyond the current v1 user-workspace food replacement flow.
-- [ ] Remove `lib/legacy-food-map.ts` after old `food_*` references have been fully migrated.
-- [ ] Prepare the SFK rollout path: license check, import verification, source/version display, and deterministic test fixtures.
+- [x] Port Cologne phonetics into Postgres search so German sound matching works server-side, not only through the client fallback.
+- [x] Keep `search_foods_with_total()` rollout documented and ensure environments without the migration degrade clearly.
+- [x] Continue replacing all-catalog hook patterns with paginated or server-backed reads where route behavior allows it.
+- [x] Fetch full nutrient and portion payloads lazily only when the selected workflow needs full detail.
+- [x] Add nutrient/source diff UI for database updates.
+- [x] Expand database lifecycle events so ETL jobs write real release/import history to `data_source_events`.
+- [x] Add broader database version migration tooling beyond the current v1 user-workspace food replacement flow.
+- [x] Remove `lib/legacy-food-map.ts` after old `food_*` references have been fully migrated.
+- [x] Prepare the SFK rollout path: license check, import verification, source/version display, and deterministic test fixtures.
 
 ## P1: Clinic IT Readiness
 
@@ -87,13 +87,13 @@ Start here unless product priorities have changed:
 
 ## P2: UX Rework For Core Workflows
 
-- [ ] Redesign `/lebensmittel` mobile results as cards with source, category, kcal, protein/fat/KH, and PRODIscore.
-- [ ] Move secondary food-list actions, such as alias management, into row menus or detail drawers on mobile.
-- [ ] Reorder `/patienten` so patient search/list and intake actions come before demo and mail-merge tooling.
-- [ ] Move the eGK demo into a dedicated intake panel, drawer, or route.
-- [ ] Move mail merge into a dedicated `Serienbriefe` route or a secondary workflow.
-- [ ] Add dashboard setup/onboarding actions when workspaces are empty.
-- [ ] Add clinical design tokens for nutrient gaps, source trust, allergen risk, order safety, and report status.
+- [x] Redesign `/lebensmittel` mobile results as cards with source, category, kcal, protein/fat/KH, and PRODIscore.
+- [x] Move secondary food-list actions, such as alias management, into row menus or detail drawers on mobile.
+- [x] Reorder `/patienten` so patient search/list and intake actions come before demo and mail-merge tooling.
+- [x] Move the eGK demo into a dedicated intake panel, drawer, or route.
+- [x] Move mail merge into a dedicated `Serienbriefe` route or a secondary workflow.
+- [x] Add dashboard setup/onboarding actions when workspaces are empty.
+- [x] Add clinical design tokens for nutrient gaps, source trust, allergen risk, order safety, and report status.
 - [ ] Create dense worklist patterns for institution and patient workflows.
 - [ ] Standardize German clinical terminology across labels, including `Eiweiß`, `Kohlenhydrate`/`KH`, and patient wording.
 

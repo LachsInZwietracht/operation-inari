@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Clock3, Database, FileClock, Globe, Scale, TestTube2 } from "lucide-react"
+import { ArrowRightLeft, Clock3, Database, FileClock, GitCompareArrows, Globe, Scale, TestTube2, Upload } from "lucide-react"
 
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { fetchDataSources } from "@/lib/data/data-sources"
 import { fetchDataSourceEvents, fetchFoodReferenceReplacements } from "@/lib/data/database-lifecycle"
 import { formatDate, formatNumber } from "@/lib/format"
+import { BulkReplacementForm } from "./bulk-replacement-form"
 import { FoodReplacementForm } from "./food-replacement-form"
+import { NutrientDiffCard } from "./nutrient-diff-card"
 
 function DatabaseLoadError({ title, error, tableName }: { title: string; error: string; tableName: string }) {
   return (
@@ -188,6 +190,24 @@ export default async function DatenbankPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <CardTitle className="flex items-center gap-2">
+              <GitCompareArrows className="h-5 w-5 text-muted-foreground" />
+              Naehrstoffvergleich
+            </CardTitle>
+            <Badge variant="secondary">Diff</Badge>
+          </div>
+          <CardDescription>
+            Zwei Lebensmittel (auch quellenuebergreifend) vergleichen. Abweichungen ueber 10% werden farblich hervorgehoben.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NutrientDiffCard />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
               <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
               Lebensmittelreferenzen ersetzen
             </CardTitle>
@@ -200,6 +220,24 @@ export default async function DatenbankPage() {
         </CardHeader>
         <CardContent>
           <FoodReplacementForm />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5 text-muted-foreground" />
+              Massen-Ersetzung
+            </CardTitle>
+            <Badge variant="secondary">CSV</Badge>
+          </div>
+          <CardDescription>
+            Mehrere Lebensmittelreferenzen auf einmal per CSV-Datei ersetzen. Format: source_bls_code;target_bls_code;reason.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BulkReplacementForm />
         </CardContent>
       </Card>
 

@@ -19,11 +19,11 @@ Product direction:
 ## 1. Food & Nutrient Database
 
 ### 1.1 Food Composition Data
-**Status:** Partially implemented. BLS 4.0 is imported to Supabase; broader multi-dataset coverage is still roadmap.
+**Status:** Partially implemented. BLS 4.0 is imported to Supabase; SFK ETL pipeline is implemented (expanded nutrient definitions including aminosaeuren and fettsaeuren groups); broader multi-dataset coverage is still roadmap.
 - Comprehensive food database with **14,000+ foods** from official sources
 - Support for multiple food composition databases:
   - **BLS** (Bundeslebensmittelschluessel) — German standard
-  - **Souci-Fachmann-Kraut (SFK)** — detailed reference work (**Scientific Gold Standard; critical for research parity**)
+  - **Souci-Fachmann-Kraut (SFK)** — detailed reference work (**Scientific Gold Standard; critical for research parity**) — ETL pipeline implemented; data import requires paid license
   - **Austrian Food Data (ÖNWT)** — for the Austrian market
   - **Swiss Nutrient Database** — for the Swiss market
   - **USDA National Nutrient Database** — for international / English-speaking clients
@@ -196,7 +196,7 @@ Roadmap notes:
 - Individual items may already be partially or fully implemented ahead of their listed phase.
 
 ### MVP (Phase 1) - Core Platform & Scientific Precision
-1. Food database with phonetic/fuzzy search (BLS + SFK).
+1. Food database with phonetic/fuzzy search (BLS + SFK). BLS fully imported; SFK ETL pipeline implemented (expanded nutrient definitions — aminosaeuren, fettsaeuren groups); SFK data import requires paid license.
 2. **Mathematical Validation:** Verify calculation logic against DGE/Hohenheim standards.
 3. Recipe creation with structured rows and water loss factors.
 

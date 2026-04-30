@@ -17,6 +17,8 @@ export const NUTRIENT_GROUP_LABELS: Record<NutrientGroup, string> = {
   makronaehrstoffe: "Makronährstoffe",
   vitamine: "Vitamine",
   mineralstoffe: "Mineralstoffe",
+  aminosaeuren: "Aminosäuren",
+  fettsaeuren: "Fettsäuren (Detail)",
   sonstige: "Sonstige",
 };
 

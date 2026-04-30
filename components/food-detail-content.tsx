@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { NutrientBar } from "@/components/nutrient-bar";
 import { ReferenceProfileSelector } from "@/components/reference-profile-selector";
+import { canAccessDataSource } from "@/lib/data/entitlements";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
@@ -190,7 +191,19 @@ export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentP
         {food.isCustom && <Badge variant="outline">Custom</Badge>}
         {food.isRecipeDerived && <Badge variant="outline">Aus Rezept</Badge>}
         {food.sourceId === "off" && <Badge variant="outline">Open Food Facts</Badge>}
+        {food.sourceId === "sfk" && <Badge variant="outline">SFK</Badge>}
       </PageHeader>
+
+      {food.sourceId === "sfk" && !canAccessDataSource("sfk") ? (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Lizenzhinweis</AlertTitle>
+          <AlertDescription>
+            Dieses Lebensmittel stammt aus der Souci-Fachmann-Kraut-Datenbank. Der Zugriff auf SFK-Daten erfordert eine
+            aktive Plus-Datenbank-Lizenz.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>

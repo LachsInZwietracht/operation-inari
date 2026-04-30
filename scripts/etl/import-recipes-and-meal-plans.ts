@@ -2,8 +2,22 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { RECIPES } from "@/lib/mock-data/recipes";
 import { MEAL_PLANS } from "@/lib/mock-data/meal-plans";
-import { LEGACY_FOOD_ID_TO_BLS_CODE } from "@/lib/legacy-food-map";
+import { FOODS } from "@/lib/mock-data";
 import type { Recipe, MealEntry, MealSlot, DailyMealPlan } from "@/lib/types";
+
+/**
+ * Inline legacy mock-ID-to-BLS-code map. Only needed at seed time to resolve
+ * mock food references (e.g., "food_apfel") to real BLS codes.
+ */
+const LEGACY_FOOD_ID_TO_BLS_CODE: Record<string, string> = FOODS.reduce(
+  (acc, food) => {
+    if (food.id && food.blsCode) {
+      acc[food.id] = food.blsCode;
+    }
+    return acc;
+  },
+  {} as Record<string, string>,
+);
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -321,6 +335,17 @@ async function main() {
 
   const recipeIdMap = await upsertRecipes(codeToFoodId);
   await upsertMealPlans(codeToFoodId, recipeIdMap);
+
+  const { writeDataSourceEvent } = await import("./etl-event");
+  await writeDataSourceEvent({
+    dataSourceId: "bls",
+    eventType: "import",
+    title: "Rezepte & Tagesplaene Seed",
+    summary: `${RECIPES.length} Rezepte und ${MEAL_PLANS.length} Tagesplaene importiert.`,
+    recordCount: RECIPES.length + MEAL_PLANS.length,
+    metadata: { recipes: RECIPES.length, mealPlans: MEAL_PLANS.length },
+  });
+
   console.log("Recipe + meal plan import completed.");
 }
 

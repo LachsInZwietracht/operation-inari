@@ -1,4 +1,3 @@
-import { LEGACY_FOOD_ID_TO_BLS_CODE } from "@/lib/legacy-food-map";
 import type { DailyMealPlan, Food, NutritionProtocol, Recipe } from "@/lib/types";
 
 function createFoodResolver(foods: Food[]) {
@@ -20,16 +19,18 @@ function createFoodResolver(foods: Food[]) {
       return foodId;
     }
 
+    // Resolve via legacyId (populated during BLS import)
     if (foodsByLegacyId.has(foodId)) {
       return foodsByLegacyId.get(foodId) ?? foodId;
     }
 
-    const blsCode = LEGACY_FOOD_ID_TO_BLS_CODE[foodId];
-    if (!blsCode) {
-      return foodId;
+    // If the reference looks like a BLS code, try direct lookup
+    if (/^[A-Za-z]\d{3,}/.test(foodId)) {
+      const resolved = foodsByBlsCode.get(foodId.toUpperCase());
+      if (resolved) return resolved;
     }
 
-    return foodsByBlsCode.get(blsCode) ?? blsCode;
+    return foodId;
   };
 }
 

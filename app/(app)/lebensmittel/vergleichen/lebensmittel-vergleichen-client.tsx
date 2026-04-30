@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Search } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import {
   Card,
@@ -8,13 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import {
   Table,
@@ -25,11 +21,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useCustomFoods } from "@/hooks/use-custom-foods";
-import type { Food } from "@/lib/types";
-import { useFoods } from "@/components/foods-provider";
+import type { Food, FoodBrowserResult } from "@/lib/types";
 import { scaleNutrients, getNutrientValue } from "@/lib/nutrients";
 import { formatNumber } from "@/lib/format";
+
 interface LebensmittelVergleichPageClientProps {
   brandedFoods: Food[];
 }
@@ -44,28 +39,150 @@ const NUTRIENTS_TO_COMPARE = [
   { id: "kalium", label: "Kalium", unit: "mg" },
 ];
 
-function scale(food: Food | undefined, amount: number) {
+function scale(food: Food | null, amount: number) {
   if (!food) return [];
   return scaleNutrients(food.nutrients, food.baseAmount, amount);
 }
 
-export function LebensmittelVergleichPageClient({ brandedFoods }: LebensmittelVergleichPageClientProps) {
-  const foods = useFoods();
-  const { customFoods } = useCustomFoods(foods);
-  const mergedFoods = useMemo<Food[]>(() => {
-    const uniqueFoods = new Map<string, Food>();
-    for (const food of [...foods, ...brandedFoods, ...customFoods]) {
-      uniqueFoods.set(food.id, food);
+function ComparisonFoodPicker({
+  label,
+  food,
+  onSelect,
+  brandedFoods,
+}: {
+  label: string;
+  food: Food | null;
+  onSelect: (food: Food) => void;
+  brandedFoods: Food[];
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Food[]>([]);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      return;
     }
-    return Array.from(uniqueFoods.values());
-  }, [foods, brandedFoods, customFoods]);
-  const [leftId, setLeftId] = useState(() => mergedFoods[0]?.id ?? "");
-  const [rightId, setRightId] = useState(() => mergedFoods[1]?.id ?? mergedFoods[0]?.id ?? "");
+
+    // Check branded foods first for local matches
+    const lowerQuery = query.toLowerCase();
+    const localMatches = brandedFoods.filter((f) =>
+      f.name.toLowerCase().includes(lowerQuery),
+    ).slice(0, 3);
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      startTransition(async () => {
+        try {
+          const params = new URLSearchParams({
+            q: query,
+            mode: "name",
+            page: "1",
+            pageSize: "8",
+          });
+          const response = await fetch(`/api/foods/browser?${params.toString()}`, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) throw new Error("Suche fehlgeschlagen");
+          const result = (await response.json()) as FoodBrowserResult;
+
+          // Merge server results with local branded matches (deduplicated)
+          const merged = new Map<string, Food>();
+          for (const f of [...localMatches, ...result.foods]) {
+            merged.set(f.id, f);
+          }
+          setResults(Array.from(merged.values()));
+        } catch {
+          if (!controller.signal.aborted) {
+            setResults(localMatches);
+          }
+        }
+      });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, brandedFoods]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{label}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div>
+          <Label className="sr-only">{label} suchen</Label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Lebensmittel suchen"
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        {query.trim().length >= 2 ? (
+          <div className="max-h-48 overflow-y-auto rounded-md border divide-y">
+            {isPending ? (
+              <div className="p-3 text-sm text-muted-foreground">Suche laeuft...</div>
+            ) : results.length === 0 ? (
+              <div className="p-3 text-sm text-muted-foreground">Keine Treffer gefunden.</div>
+            ) : (
+              results.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => {
+                    onSelect(f);
+                    setQuery("");
+                    setResults([]);
+                  }}
+                >
+                  <span className="font-medium">{f.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {f.sourceId?.toUpperCase()}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+
+        {food ? (
+          <>
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{food.name}</p>
+              <p className="text-xs text-muted-foreground">{food.source ?? food.sourceId?.toUpperCase() ?? "–"}</p>
+            </div>
+            <div className="rounded-md bg-muted/50 p-3">
+              <p className="text-xs text-muted-foreground">Energie</p>
+              <p className="text-2xl font-semibold">
+                {formatNumber(getNutrientValue(food.nutrients, "energie"), 0)} kcal
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            Lebensmittel suchen und auswaehlen
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function LebensmittelVergleichPageClient({ brandedFoods }: LebensmittelVergleichPageClientProps) {
+  const [leftFood, setLeftFood] = useState<Food | null>(null);
+  const [rightFood, setRightFood] = useState<Food | null>(null);
   const [portionLeft, setPortionLeft] = useState(100);
   const [portionRight, setPortionRight] = useState(100);
-
-  const leftFood = mergedFoods.find((food) => food.id === leftId);
-  const rightFood = mergedFoods.find((food) => food.id === rightId);
 
   const scaledLeft = useMemo(() => scale(leftFood, portionLeft), [leftFood, portionLeft]);
   const scaledRight = useMemo(() => scale(rightFood, portionRight), [rightFood, portionRight]);
@@ -79,91 +196,90 @@ export function LebensmittelVergleichPageClient({ brandedFoods }: LebensmittelVe
       />
 
       <div className="grid gap-4 md:grid-cols-2">
-        {[{ side: "left", food: leftFood, setId: setLeftId, portion: portionLeft, setPortion: setPortionLeft }, { side: "right", food: rightFood, setId: setRightId, portion: portionRight, setPortion: setPortionRight }].map((slot) => (
-          <Card key={slot.side}>
-            <CardHeader>
-              <CardTitle className="text-base">{slot.side === "left" ? "Vergleich 1" : "Vergleich 2"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Select value={slot.food?.id ?? slot.side} onValueChange={slot.setId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Lebensmittel wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mergedFoods.map((food) => (
-                    <SelectItem key={food.id} value={food.id}>
-                      {food.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Portion ({slot.portion} g)</span>
-                  <span>{slot.food?.source ?? "–"}</span>
-                </div>
-                <Slider
-                  value={[slot.portion]}
-                  min={20}
-                  max={400}
-                  step={5}
-                  onValueChange={(value) => slot.setPortion(value[0] ?? 100)}
-                />
-              </div>
-              {slot.food && (
-                <div className="rounded-md bg-muted/50 p-3">
-                  <p className="text-xs text-muted-foreground">Energie</p>
-                  <p className="text-2xl font-semibold">
-                    {formatNumber(getNutrientValue(scale(slot.food, slot.portion), "energie"), 0)} kcal
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+        <ComparisonFoodPicker
+          label="Vergleich 1"
+          food={leftFood}
+          onSelect={setLeftFood}
+          brandedFoods={brandedFoods}
+        />
+        <ComparisonFoodPicker
+          label="Vergleich 2"
+          food={rightFood}
+          onSelect={setRightFood}
+          brandedFoods={brandedFoods}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Nährstoffvergleich</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nährstoff</TableHead>
-                <TableHead className="text-right">{leftFood?.name ?? "Lebensmittel 1"}</TableHead>
-                <TableHead className="text-right">{rightFood?.name ?? "Lebensmittel 2"}</TableHead>
-                <TableHead className="text-right">Differenz</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {NUTRIENTS_TO_COMPARE.map((nutrient) => {
-                const leftValue = getNutrientValue(scaledLeft, nutrient.id);
-                const rightValue = getNutrientValue(scaledRight, nutrient.id);
-                const diff = leftValue - rightValue;
-                return (
-                  <TableRow key={nutrient.id}>
-                    <TableCell className="font-medium">{nutrient.label}</TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(leftValue, nutrient.id === "energie" ? 0 : 1)} {nutrient.unit}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(rightValue, nutrient.id === "energie" ? 0 : 1)} {nutrient.unit}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant={diff >= 0 ? "secondary" : "outline"}>
-                        {diff >= 0 ? "+" : ""}
-                        {formatNumber(diff, 1)} {nutrient.unit}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {leftFood || rightFood ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            { food: leftFood, portion: portionLeft, setPortion: setPortionLeft, label: "Vergleich 1" },
+            { food: rightFood, portion: portionRight, setPortion: setPortionRight, label: "Vergleich 2" },
+          ].map((slot) =>
+            slot.food ? (
+              <Card key={slot.label}>
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Portion ({slot.portion} g)</span>
+                    <span>{slot.food.name}</span>
+                  </div>
+                  <Slider
+                    value={[slot.portion]}
+                    min={20}
+                    max={400}
+                    step={5}
+                    onValueChange={(value) => slot.setPortion(value[0] ?? 100)}
+                  />
+                </CardContent>
+              </Card>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+
+      {leftFood && rightFood ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Naehrstoffvergleich</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Naehrstoff</TableHead>
+                  <TableHead className="text-right">{leftFood.name}</TableHead>
+                  <TableHead className="text-right">{rightFood.name}</TableHead>
+                  <TableHead className="text-right">Differenz</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {NUTRIENTS_TO_COMPARE.map((nutrient) => {
+                  const leftValue = getNutrientValue(scaledLeft, nutrient.id);
+                  const rightValue = getNutrientValue(scaledRight, nutrient.id);
+                  const diff = leftValue - rightValue;
+                  return (
+                    <TableRow key={nutrient.id}>
+                      <TableCell className="font-medium">{nutrient.label}</TableCell>
+                      <TableCell className="text-right">
+                        {formatNumber(leftValue, nutrient.id === "energie" ? 0 : 1)} {nutrient.unit}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatNumber(rightValue, nutrient.id === "energie" ? 0 : 1)} {nutrient.unit}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={diff >= 0 ? "secondary" : "outline"}>
+                          {diff >= 0 ? "+" : ""}
+                          {formatNumber(diff, 1)} {nutrient.unit}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

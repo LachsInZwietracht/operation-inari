@@ -25,6 +25,8 @@ interface PipelineStep {
 const STEPS: PipelineStep[] = [
   { id: "bls", label: "Import BLS 4.0 foods + nutrients", command: "npm run etl:bls" },
   { id: "verify", label: "Verify BLS import", command: "npm run etl:verify:bls" },
+  { id: "sfk", label: "Import SFK foods + nutrients", command: "npm run etl:sfk", optional: true },
+  { id: "verify-sfk", label: "Verify SFK import", command: "npm run etl:verify:sfk", optional: true },
   { id: "synonyms", label: "Generate German synonyms", command: "npm run etl:synonyms" },
   { id: "portions", label: "Import portion sizes", command: "npm run etl:portions" },
   { id: "reference-values", label: "Import DGE/ÖGE/SGE reference values", command: "npm run etl:reference-values" },

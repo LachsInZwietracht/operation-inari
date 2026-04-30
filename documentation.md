@@ -37,6 +37,7 @@ Agent quick index:
 - **Caching:** BLS food data is cached via `unstable_cache` where applicable.
 - **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and global search. It is **non-blocking** (search index is lazy-loaded on demand) and keeps the header/search/status row responsive at mobile widths.
 - **Responsive contract:** Shared layout primitives (`PageHeader`, `SidebarInset`, `Card`, `TabsList`, `Table`, and the global food search trigger) should keep document-level width within the viewport. Wide tables scroll inside their own container rather than widening the page. `tests/responsive-layout.spec.ts` checks 390 px, 768 px, and desktop widths across dashboard, foods, patients, reports, institution, and API/export routes.
+- **Clinical status tokens:** `lib/clinical-status.ts` defines reusable tone classes for source trust, review, risk, and success states. Use these instead of one-off color choices when a badge communicates clinical meaning.
 - **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The search index is loaded on first use via `/api/foods/search-index`.
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/prodi-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
@@ -79,12 +80,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Client page (`lebensmittel-client.tsx`) keeps the existing search modes and filters, but fetches page changes through `/api/foods/browser`.
   - Hooks: `useCustomFoods`, `useFoodSynonyms`.
   - UI: Search mode buttons, filters (source, categories), paginated desktop results table, mobile result cards, OFF-branded products tab.
+  - Mobile food cards prioritize identification and nutrient scanning: name, source/category badges, kcal, Eiweiß, Fett, KH, and PRODIscore. Alias management is available as a secondary expandable action so lookup cards stay compact.
   - Data: `FOOD_CATEGORIES`, `FOOD_SOURCES`, `FOOD_GROUPS`, `fetchFoodsBrowserPage()`, `/api/foods/browser`.
 - **Group navigation:** `FoodGroupTree` uses `FOOD_GROUPS`; ensure new groups update `getFoodGroupDescendants`.
 - **Search contract:** name-mode search prefers the `search_foods_with_total` RPC and falls back to `search_foods()` if the new migration has not been applied yet. Code/group/browse modes use direct paginated Supabase queries.
 - **Custom foods:** Page 1 still merges local custom-food migration candidates so offline or unauthenticated entries remain visible, but authenticated saves now canonicalize to Supabase IDs immediately and localStorage keeps only unmigrated/offline entries.
 - **Synonyms:** `useFoodSynonyms()` now reads seeded system aliases from Supabase `food_synonyms` via `lib/data/food-synonyms-client.ts` and merges them with local user-created aliases stored in `localStorage`. The foods UI no longer bootstraps synonym seeds from `lib/mock-data`.
 - **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
+- **SFK foods:** Foods with `sourceId === "sfk"` come from the Souci-Fachmann-Kraut database (second primary data source alongside BLS). SFK foods expose expanded nutrient groups — `aminosaeuren` (18 amino acids) and `fettsaeuren` (13 detailed fatty acids) — in the food detail page nutrient breakdown when those values are present.
 - **New custom food:** `/lebensmittel/neu` does not hydrate the catalog. It uses `useCustomFoods([])` only for the create/persist flow because submission does not need base foods.
 - **Food comparison:** `/lebensmittel/vergleichen` uses `fetchFoodsForComparison()` for the seven nutrients displayed in the comparison table, plus `fetchBrandedFoods()` for bundled manufacturer examples.
 - **Exchange tables:** `/austauschtabellen` does not fetch a server-side `Food[]` catalog. The client loads the shared food search index via `useFoodSearch()` and fetches only the selected/displayed nutrient columns through `useNutrientValueMaps()`.
@@ -148,9 +151,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/patienten/page.tsx`
   - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
   - **Priority order:** patient search/filter and patient cards render before demo and mailing utilities so the primary patient-management task is first.
-  - **eGK demo:** the patient overview and patient creation form expose clearly labeled simulated eGK flows for tests/product demos; the current Web Serial and companion paths still return demo card payloads rather than production connector data.
+  - **eGK demo:** the patient overview exposes the simulated card-reader flow inside a secondary `Patientenaufnahme` panel; the patient creation form still exposes clearly labeled simulated eGK flows for tests/product demos. Current Web Serial and companion paths still return demo card payloads rather than production connector data.
   - The patient overview keeps eGK demo reader capability detection mount-stable, so the first client render matches the server render before Web Serial support is detected.
-  - The authoring UI for templates/placeholders is still client-side and reads bundled product defaults from `lib/patient-mailings.ts`.
+  - The authoring UI for templates/placeholders is still client-side, reads bundled product defaults from `lib/patient-mailings.ts`, and now lives in a secondary `Serienbriefe & Mailings` panel instead of competing with the primary patient list.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
   - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.
 
@@ -332,6 +335,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ## 6. Scripts & ETL
 - **BLS Import (`scripts/etl/import-bls.ts`):** Syncs the 7,140 food items from the Excel source to Supabase.
+- **SFK Import (`scripts/etl/import-sfk.ts`):** Imports Souci-Fachmann-Kraut foods and nutrients (requires paid license and `SFK_SOURCE_FILE` env var). Uses `scripts/etl/sfk-shared.ts` for column mapping. Verify with `npm run etl:verify:sfk`. Requires the `20260513000030_sfk_nutrient_definitions.sql` migration for the expanded nutrient groups (`aminosaeuren`, `fettsaeuren`).
 - **OFF Integration (`scripts/etl/import-off.ts`):** Implements the "Quarantine Pipeline" for branded products from Open Food Facts. Defaults to German products, paginates up to 500 products, stages raw rows in `off_staging`, validates them, computes a `data_quality_score`, and promotes valid rows to `foods` + `food_nutrients`.
 - **German Synonyms (`scripts/etl/generate-synonyms.ts`):** Generates regional and colloquial German food name synonyms (Karotte/Möhre, Quark/Topfen, etc.) for improved search. Run with `npm run etl:synonyms`.
 - **Portion Sizes (`scripts/etl/import-portions.ts`):** Imports curated German portion sizes from `lib/reference-data/food-portions.ts`, matching BLS foods by code prefix or food group. Run with `npm run etl:portions`.

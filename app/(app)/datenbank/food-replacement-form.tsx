@@ -129,6 +129,7 @@ export function FoodReplacementForm() {
   const [state, formAction, pending] = useActionState(replaceFoodReferencesAction, INITIAL_STATE);
   const [sourceFood, setSourceFood] = useState<Food | null>(null);
   const [targetFood, setTargetFood] = useState<Food | null>(null);
+  const [scope, setScope] = useState<"user_workspace" | "organization">("user_workspace");
 
   const canSubmit = useMemo(
     () => Boolean(sourceFood && targetFood && sourceFood.id !== targetFood.id),
@@ -155,6 +156,40 @@ export function FoodReplacementForm() {
           value={targetFood}
           onChange={setTargetFood}
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Geltungsbereich</Label>
+        <input type="hidden" name="scope" value={scope} />
+        <div className="flex gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="scope_radio"
+              value="user_workspace"
+              checked={scope === "user_workspace"}
+              onChange={() => setScope("user_workspace")}
+              className="accent-primary"
+            />
+            Eigener Arbeitsbereich
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="scope_radio"
+              value="organization"
+              checked={scope === "organization"}
+              onChange={() => setScope("organization")}
+              className="accent-primary"
+            />
+            Organisation
+          </label>
+        </div>
+        {scope === "organization" ? (
+          <p className="text-xs text-muted-foreground">
+            Ersetzt Referenzen in allen Rezepten, Plaenen und Protokollen der Organisation. Erfordert Admin- oder Owner-Rolle.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2">

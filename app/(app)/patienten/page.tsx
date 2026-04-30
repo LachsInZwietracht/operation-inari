@@ -11,7 +11,7 @@ import {
   parseISO,
   setYear,
 } from "date-fns"
-import { Cable, CreditCard, Gift, Inbox, Plus, Search, Sparkles } from "lucide-react"
+import { Cable, ChevronDown, CreditCard, FileText, Gift, Inbox, Plus, Search, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/page-header"
@@ -30,6 +30,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Table,
   TableBody,
@@ -391,136 +396,164 @@ export default function PatientenPage() {
         </div>
       )}
 
-      <Card className="border-dashed border-primary/40 bg-primary/5">
-        <CardHeader className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" /> eGK-Demo
-            </CardTitle>
-            <CardDescription>Simulierte eGK-Daten für Tests und Produktdemos.</CardDescription>
-          </div>
-          <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={egkStatus === "ready" || isEgkConnecting}
-              onClick={() => void connectEgk()}
-            >
-              {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={egkStatus !== "ready" || isEgkReading}
-              onClick={() => void handleEgkIntake("serial")}
-            >
-              <Cable className="mr-2 h-4 w-4" />
-              {isEgkReading ? "Lese Demo..." : "Demo-Karte einlesen"}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => void handleEgkIntake("companion")}>
-              <Inbox className="mr-2 h-4 w-4" /> Demo-Companion
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => void handleEgkIntake("demo")}>
-              Demo-Karte
-            </Button>
-          </div>
-          {!egkSupported && (
-            <p className="text-sm text-muted-foreground">
-              Browser unterstützt keine Demo-Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche.
-            </p>
-          )}
-          {egkError && <p className="text-sm text-destructive">{egkError}</p>}
-          {lastEgkCard && (
-            <div className="rounded-md border bg-background p-3 text-sm">
-              <p className="font-medium">
-                Zuletzt simuliert: {lastEgkCard.firstName} {lastEgkCard.lastName}
-              </p>
-              <p className="text-muted-foreground">
-                {lastEgkCard.street}, {lastEgkCard.zip} {lastEgkCard.city} · {lastEgkCard.insuranceProvider}
-              </p>
-            </div>
-          )}
-          <div className="space-y-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Simulierte Kartenereignisse</p>
-            {hasMounted && egkEvents.length > 0 ? (
-              <div className="divide-y rounded-md border">
-                {egkEvents.slice(0, 4).map((event) => {
-                  const matchedPatient = event.patientId ? patientMap.get(event.patientId) : null
-                  return (
-                    <div key={event.id} className="space-y-2 p-3 text-sm">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-semibold">
-                            {event.card.lastName}, {event.card.firstName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {event.card.insuranceProvider} · {event.card.insuranceNumber}
-                          </p>
-                        </div>
-                        <Badge variant={event.status === "matched" ? "secondary" : "outline"}>
-                          {event.status === "matched" ? "Zugeordnet" : "Offen"}
-                        </Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Select
-                          value={matchedPatient?.id ?? UNASSIGNED_EGK_VALUE}
-                          onValueChange={(value) => {
-                            if (value === UNASSIGNED_EGK_VALUE) return
-                            handleAssignEgkEvent(event.id, value)
-                          }}
-                        >
-                          <SelectTrigger className="w-[220px]">
-                            <SelectValue placeholder="Patient verknüpfen" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={UNASSIGNED_EGK_VALUE}>Unzugeordnet</SelectItem>
-                            {patients.map((patient) => (
-                              <SelectItem key={`egk_select_${patient.id}`} value={patient.id}>
-                                {patient.lastName}, {patient.firstName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => archiveEgkEvent(event.id)}
-                        >
-                          Archivieren
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Noch keine eingelesenen Karten.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Sekundäre Workflows</p>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Serienbriefe & Mailings</CardTitle>
-              <CardDescription>
-                Personalisierte Schreiben mit Platzhaltern und PDF-Generator vorbereiten.
-              </CardDescription>
-            </div>
-            {lastBatch && (
-              <Badge variant="secondary">
-                Zuletzt erstellt: {format(parseISO(lastBatch.timestamp), "dd.MM.yyyy HH:mm")}
-              </Badge>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <Card className="border-dashed">
+          <Collapsible>
+            <CardHeader className="gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <CreditCard className="h-5 w-5" /> Patientenaufnahme: eGK-Demo
+                  </CardTitle>
+                  <CardDescription>Simulierte eGK-Daten für Tests und Produktdemos.</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      Öffnen
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={egkStatus === "ready" || isEgkConnecting}
+                    onClick={() => void connectEgk()}
+                  >
+                    {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={egkStatus !== "ready" || isEgkReading}
+                    onClick={() => void handleEgkIntake("serial")}
+                  >
+                    <Cable className="mr-2 h-4 w-4" />
+                    {isEgkReading ? "Lese Demo..." : "Demo-Karte einlesen"}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void handleEgkIntake("companion")}>
+                    <Inbox className="mr-2 h-4 w-4" /> Demo-Companion
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => void handleEgkIntake("demo")}>
+                    Demo-Karte
+                  </Button>
+                </div>
+                {!egkSupported && (
+                  <p className="text-sm text-muted-foreground">
+                    Browser unterstützt keine Demo-Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche.
+                  </p>
+                )}
+                {egkError && <p className="text-sm text-destructive">{egkError}</p>}
+                {lastEgkCard && (
+                  <div className="rounded-md border bg-background p-3 text-sm">
+                    <p className="font-medium">
+                      Zuletzt simuliert: {lastEgkCard.firstName} {lastEgkCard.lastName}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {lastEgkCard.street}, {lastEgkCard.zip} {lastEgkCard.city} · {lastEgkCard.insuranceProvider}
+                    </p>
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Simulierte Kartenereignisse</p>
+                  {hasMounted && egkEvents.length > 0 ? (
+                    <div className="divide-y rounded-md border">
+                      {egkEvents.slice(0, 4).map((event) => {
+                        const matchedPatient = event.patientId ? patientMap.get(event.patientId) : null
+                        return (
+                          <div key={event.id} className="space-y-2 p-3 text-sm">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="font-semibold">
+                                  {event.card.lastName}, {event.card.firstName}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {event.card.insuranceProvider} · {event.card.insuranceNumber}
+                                </p>
+                              </div>
+                              <Badge variant={event.status === "matched" ? "secondary" : "outline"}>
+                                {event.status === "matched" ? "Zugeordnet" : "Offen"}
+                              </Badge>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Select
+                                value={matchedPatient?.id ?? UNASSIGNED_EGK_VALUE}
+                                onValueChange={(value) => {
+                                  if (value === UNASSIGNED_EGK_VALUE) return
+                                  handleAssignEgkEvent(event.id, value)
+                                }}
+                              >
+                                <SelectTrigger className="w-[220px]">
+                                  <SelectValue placeholder="Patient verknüpfen" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={UNASSIGNED_EGK_VALUE}>Unzugeordnet</SelectItem>
+                                  {patients.map((patient) => (
+                                    <SelectItem key={`egk_select_${patient.id}`} value={patient.id}>
+                                      {patient.lastName}, {patient.firstName}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => archiveEgkEvent(event.id)}
+                              >
+                                Archivieren
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Noch keine eingelesenen Karten.</p>
+                  )}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
+
+        <Card className="border-dashed">
+          <Collapsible>
+            <CardHeader className="gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText className="h-5 w-5" /> Serienbriefe & Mailings
+                  </CardTitle>
+                  <CardDescription>Personalisierte Schreiben mit Platzhaltern und PDF-Generator vorbereiten.</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {lastBatch && (
+                    <Badge variant="secondary">
+                      Zuletzt erstellt: {format(parseISO(lastBatch.timestamp), "dd.MM.yyyy HH:mm")}
+                    </Badge>
+                  )}
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      Öffnen
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-3">
                 <div className="grid gap-2">
@@ -657,9 +690,13 @@ export default function PatientenPage() {
                 </div>
               </div>
             )}
-          </CardContent>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
         </Card>
+      </div>
 
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>

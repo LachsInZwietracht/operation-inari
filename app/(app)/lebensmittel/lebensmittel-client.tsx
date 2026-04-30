@@ -57,6 +57,7 @@ import {
 } from "@/lib/data/food-groups";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
 import { formatNumber } from "@/lib/format";
+import { getClinicalStatusClass, getFoodSourceTrustTone } from "@/lib/clinical-status";
 import { calculateProdScore, getProdScoreBadge } from "@/lib/prodi-score";
 import { fuzzySearchFoods, normalizeText } from "@/lib/search";
 import { getNutrientValue } from "@/lib/nutrients";
@@ -625,7 +626,9 @@ export function LebensmittelPageClient({
                             <Badge variant="secondary">
                               {categoryMap.get(food.categoryId) ?? food.categoryId}
                             </Badge>
-                            <Badge variant="outline">{food.source}</Badge>
+                            <Badge variant="outline" className={getClinicalStatusClass(getFoodSourceTrustTone(food.sourceId))}>
+                              {food.source}
+                            </Badge>
                             {food.blsCode && <Badge variant="outline">{food.blsCode}</Badge>}
                           </div>
                           {previewSynonyms.length > 0 && (
@@ -656,16 +659,24 @@ export function LebensmittelPageClient({
                             </div>
                           </div>
                         </button>
-                        <div className="mt-2 border-t pt-2">
-                          <FoodSynonymManager
-                            food={food}
-                            synonyms={synonyms}
-                            activeSynonymId={primaryCandidate}
-                            addSynonym={addSynonym}
-                            deleteSynonym={deleteSynonym}
-                            setPrimarySynonym={setPrimarySynonym}
-                          />
-                        </div>
+                        <Collapsible className="mt-2 border-t pt-2">
+                          <CollapsibleTrigger asChild>
+                            <Button type="button" variant="ghost" size="sm" className="group h-8 px-0 text-xs text-muted-foreground">
+                              Aliase verwalten
+                              <ChevronRight className="ml-1 h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-90" />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="pt-2">
+                            <FoodSynonymManager
+                              food={food}
+                              synonyms={synonyms}
+                              activeSynonymId={primaryCandidate}
+                              addSynonym={addSynonym}
+                              deleteSynonym={deleteSynonym}
+                              setPrimarySynonym={setPrimarySynonym}
+                            />
+                          </CollapsibleContent>
+                        </Collapsible>
                       </div>
                     );
                   })
@@ -797,8 +808,10 @@ export function LebensmittelPageClient({
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">
-                              {food.source}
+                            <TableCell className="text-right text-xs">
+                              <Badge variant="outline" className={getClinicalStatusClass(getFoodSourceTrustTone(food.sourceId))}>
+                                {food.source}
+                              </Badge>
                             </TableCell>
                             <TableCell className="text-right">
                               {formatNumber(getNutrientValue(food.nutrients, "energie"))}

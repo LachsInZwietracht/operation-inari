@@ -3,6 +3,7 @@ import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
+import { getBlockedSourceIds } from "@/lib/data/entitlements";
 import { getFoodGroupDescendants } from "@/lib/data/food-groups";
 import { BRANDED_FOODS } from "@/lib/mock-data/branded-foods";
 import type {
@@ -644,6 +645,14 @@ function normalizeFoodBrowserQuery(query: FoodBrowserQuery) {
   };
 }
 
+/**
+ * Name-mode search via Postgres RPCs with three-tier fallback:
+ * 1. search_foods_with_total — trigram + phonetic + ILIKE, with pagination count
+ * 2. search_foods — same matching, no total count (estimated from offset + rows)
+ * 3. Empty result — if both RPCs are unavailable
+ *
+ * See docs/database-guide.md "Search RPC Migration Path" for details.
+ */
 async function fetchFoodsBrowserPageByName(
   query: ReturnType<typeof normalizeFoodBrowserQuery>,
   client: SupabaseClient,
@@ -834,11 +843,23 @@ export async function fetchFoodsBrowserPage(
   const normalized = normalizeFoodBrowserQuery(query);
   const client = await resolveClient(supabase);
 
+  let result: FoodBrowserResult;
   if (normalized.mode === "name" && normalized.q) {
-    return fetchFoodsBrowserPageByName(normalized, client);
+    result = await fetchFoodsBrowserPageByName(normalized, client);
+  } else {
+    result = await fetchFoodsBrowserPageByQuery(normalized, client);
   }
 
-  return fetchFoodsBrowserPageByQuery(normalized, client);
+  // Filter out blocked data sources (e.g., SFK without license)
+  const blocked = new Set(getBlockedSourceIds());
+  if (blocked.size > 0) {
+    result = {
+      ...result,
+      foods: result.foods.filter((f) => !blocked.has(f.sourceId as FoodSourceId)),
+    };
+  }
+
+  return result;
 }
 
 /* ─── Chunked caching (keeps each unstable_cache entry under 2 MB) ─── */
@@ -1026,13 +1047,16 @@ export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> =>
           is_custom: boolean;
         };
 
-        return ((data ?? []) as SearchRow[]).map((row) => ({
-          id: row.id,
-          name: row.name,
-          categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
-          sourceId: row.data_source_id as FoodSourceId,
-          isCustom: row.is_custom,
-        }));
+        const blocked = new Set(getBlockedSourceIds());
+        return ((data ?? []) as SearchRow[])
+          .filter((row) => !blocked.has(row.data_source_id as FoodSourceId))
+          .map((row) => ({
+            id: row.id,
+            name: row.name,
+            categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
+            sourceId: row.data_source_id as FoodSourceId,
+            isCustom: row.is_custom,
+          }));
       } catch (error) {
         console.error("fetchFoodSearchIndex error:", error);
         return [];

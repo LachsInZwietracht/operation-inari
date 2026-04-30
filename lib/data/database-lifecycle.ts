@@ -176,6 +176,7 @@ export async function replaceFoodReferences(params: {
   sourceFoodId: string;
   targetFoodId: string;
   reason?: string;
+  scope?: "user_workspace" | "organization";
   supabase?: SupabaseClient;
 }): Promise<FoodReferenceReplacementResult> {
   const client = params.supabase ?? await createClient();
@@ -183,6 +184,7 @@ export async function replaceFoodReferences(params: {
     p_source_food_id: params.sourceFoodId,
     p_target_food_id: params.targetFoodId,
     p_reason: params.reason ?? null,
+    p_scope: params.scope ?? "user_workspace",
   });
 
   if (error) throw new Error(error.message);

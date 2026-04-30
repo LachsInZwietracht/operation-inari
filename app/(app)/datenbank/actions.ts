@@ -17,6 +17,7 @@ const replacementSchema = z.object({
   sourceFoodId: z.string().uuid("Ausgangs-Lebensmittel fehlt."),
   targetFoodId: z.string().uuid("Ziel-Lebensmittel fehlt."),
   reason: z.string().trim().max(500, "Die Begruendung darf hoechstens 500 Zeichen enthalten.").optional(),
+  scope: z.enum(["user_workspace", "organization"]).default("user_workspace"),
 }).refine((value) => value.sourceFoodId !== value.targetFoodId, {
   path: ["targetFoodId"],
   message: "Ausgangs- und Ziel-Lebensmittel muessen unterschiedlich sein.",
@@ -44,6 +45,7 @@ export async function replaceFoodReferencesAction(
     sourceFoodId: formData.get("sourceFoodId"),
     targetFoodId: formData.get("targetFoodId"),
     reason: formData.get("reason") || undefined,
+    scope: formData.get("scope") || "user_workspace",
   });
 
   if (!parsed.success) {
@@ -82,6 +84,20 @@ export async function replaceFoodReferencesAction(
       return {
         status: "error",
         message: "Nur Owner und Administratoren koennen globale Lebensmittelreferenzen ersetzen.",
+      };
+    }
+
+    if (message === "NO_ORGANIZATION") {
+      return {
+        status: "error",
+        message: "Sie gehoeren keiner Organisation an. Der Scope 'Organisation' ist nicht verfuegbar.",
+      };
+    }
+
+    if (message === "ORG_ADMIN_REQUIRED") {
+      return {
+        status: "error",
+        message: "Nur Administratoren und Owner koennen organisationsweite Ersetzungen durchfuehren.",
       };
     }
 

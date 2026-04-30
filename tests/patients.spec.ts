@@ -448,6 +448,7 @@ test.describe("Patient Management", () => {
       await openPatientList(page);
 
       const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
+      await mailMergeCard.getByRole("button", { name: /Öffnen/i }).click();
       const templateSelect = mailMergeCard.getByRole("combobox").first();
       await expect(templateSelect).toContainText("Termin-Nachverfolgung");
       await templateSelect.click();
@@ -951,9 +952,11 @@ test.describe("Patient Management", () => {
       await openPatientList(page);
       await expect(patientCard(page, patient)).toBeVisible();
 
+      const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
+      await mailMergeCard.getByRole("button", { name: /Öffnen/i }).click();
       const download = page.waitForEvent("download");
-      await page.getByRole("button", { name: "Alle" }).click();
-      await page.getByRole("button", { name: /Dokumente erzeugen/i }).click();
+      await mailMergeCard.getByRole("button", { name: "Alle" }).click();
+      await mailMergeCard.getByRole("button", { name: /Dokumente erzeugen/i }).click();
       const file = await download;
       expect(await file.suggestedFilename()).toMatch(/Serienbrief-.*\.pdf/);
     } finally {

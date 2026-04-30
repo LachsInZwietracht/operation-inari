@@ -12,8 +12,8 @@ export const FOOD_SOURCES: FoodSourceDefinition[] = [
   {
     id: "sfk",
     name: "Souci-Fachmann-Kraut",
-    version: "2025 Q4",
-    updatedAt: "2025-12-15",
+    version: "2024",
+    updatedAt: "2026-04-27",
     description: "Detailliertes Nachschlagewerk mit Fokus auf Mikronährstoffe.",
     coverage: "1.800 Lebensmittel / 320 Nährstoffe",
   },
