@@ -3,7 +3,10 @@ import { Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ADMIN_ROLES, ROLE_LABELS, hasAnyRole } from "@/lib/auth/rbac";
 import {
@@ -14,8 +17,10 @@ import {
   fetchOrganizationMemberships,
   requireRole,
 } from "@/lib/auth/access";
+import { getOrCreateReportRetentionPolicy } from "@/lib/data/report-retention";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole, MembershipStatus } from "@/lib/types";
+import { updateReportRetentionPolicyAction } from "./actions";
 
 const STATUS_BADGES: Record<MembershipStatus, string> = {
   active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
@@ -64,6 +69,13 @@ export default async function AdminUsersPage() {
     fetchCurrentOrganization(supabase, currentMembership.organizationId),
     fetchOrganizationMemberships(supabase, currentMembership.organizationId),
   ]);
+  let retentionPolicy = null;
+  let retentionPolicyError: string | null = null;
+  try {
+    retentionPolicy = await getOrCreateReportRetentionPolicy(supabase, currentMembership.organizationId);
+  } catch (error) {
+    retentionPolicyError = (error as Error).message;
+  }
 
   const activeCount = memberships.filter((membership) => membership.status === "active").length;
   const adminCount = memberships.filter((membership) => hasAnyRole(membership.role, ADMIN_ROLES)).length;
@@ -149,6 +161,94 @@ export default async function AdminUsersPage() {
               ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Berichtsaufbewahrung</CardTitle>
+          <CardDescription>
+            Admin-Steuerung fuer patientengebundene Berichtsversionen. Neue PDF-/CSV-Exporte erhalten diese Policy als Aufbewahrungsfrist und Archivmetadaten.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {retentionPolicyError ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+              Retention-Policy konnte nicht geladen werden. Bitte Migration `20260517000035_report_retention_policies.sql` anwenden. Fehler: {retentionPolicyError}
+            </div>
+          ) : (
+            <form action={updateReportRetentionPolicyAction} className="grid gap-4 lg:grid-cols-[1fr_160px]">
+              <input type="hidden" name="policyId" value={retentionPolicy?.id ?? ""} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="retention-name">Policy-Name</Label>
+                  <Input
+                    id="retention-name"
+                    name="name"
+                    defaultValue={retentionPolicy?.name ?? "Standard-Aufbewahrung"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="retention-years">Aufbewahrung in Jahren</Label>
+                  <Input
+                    id="retention-years"
+                    name="retentionYears"
+                    type="number"
+                    min={1}
+                    max={30}
+                    defaultValue={retentionPolicy?.retentionYears ?? 10}
+                  />
+                </div>
+                <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                  <input
+                    name="requireAdminApproval"
+                    type="checkbox"
+                    defaultChecked={retentionPolicy?.requireAdminApproval ?? true}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-medium">Admin-Freigabe vor Loeschung</span>
+                    <span className="text-xs text-muted-foreground">Abgelaufene Berichte gehen zuerst in die Loeschpruefung.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                  <input
+                    name="autoDeleteEnabled"
+                    type="checkbox"
+                    defaultChecked={retentionPolicy?.autoDeleteEnabled ?? false}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-medium">Automatische Loeschpruefung</span>
+                    <span className="text-xs text-muted-foreground">Aktiviert nur die Policy-Markierung; ein Scheduler bleibt separat.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                  <input
+                    name="legalHoldEnabled"
+                    type="checkbox"
+                    defaultChecked={retentionPolicy?.legalHoldEnabled ?? false}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-medium">Legal Hold aktivierbar</span>
+                    <span className="text-xs text-muted-foreground">Neue Berichtsversionen werden mit Sperrstatus archiviert.</span>
+                  </span>
+                </label>
+                <div className="space-y-2">
+                  <Label htmlFor="retention-notes">Hinweise</Label>
+                  <Input
+                    id="retention-notes"
+                    name="notes"
+                    defaultValue={retentionPolicy?.notes ?? "Standard fuer patientengebundene Berichte."}
+                  />
+                </div>
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" className="w-full">Policy speichern</Button>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
 

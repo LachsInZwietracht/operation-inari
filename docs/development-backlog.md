@@ -81,7 +81,7 @@ Start here unless product priorities have changed:
 - [x] Build clinic document packs for Ernährungsbericht, Arztbrief, Übergabe Küche, Verlaufsbericht, and Qualitätsbericht.
 - [x] Add patient handout templates tied to counseling sessions and meal plans.
 - [x] Add LMIV/allergen declaration output to recipe and menu PDFs.
-- [ ] Add report retention policy fields and admin controls.
+- [x] Add report retention policy fields and admin controls.
 - [x] Improve archived report search and filtering inside patient records.
 - [x] Add scheduled export requirements after the report-retention model is clear.
 

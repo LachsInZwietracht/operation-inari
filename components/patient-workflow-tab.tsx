@@ -773,6 +773,12 @@ export function PatientWorkflowTab({
                         <p className="text-sm text-muted-foreground">
                           Version {version.versionNumber} · {version.snapshot.planDateLabel} · {version.format} · exportiert {formatDate(version.exportedAt)}
                         </p>
+                        {version.retentionUntil ? (
+                          <p className="text-xs text-muted-foreground">
+                            Aufbewahrung bis {formatDate(version.retentionUntil)}
+                            {version.retentionStatus ? ` · ${version.retentionStatus}` : ""}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex gap-2">
                         <Badge variant="outline">{version.snapshot.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>

@@ -1,6 +1,20 @@
 import { ID, Timestamped } from "./common"
 import type { ReportExportSectionState } from "./platform"
 
+export interface ReportRetentionPolicy extends Timestamped {
+  id: ID
+  userId: ID
+  organizationId?: ID
+  name: string
+  retentionYears: number
+  autoDeleteEnabled: boolean
+  requireAdminApproval: boolean
+  legalHoldEnabled: boolean
+  notes?: string
+}
+
+export type ReportRetentionStatus = "active" | "legal_hold" | "deletion_review" | "expired"
+
 export interface ReportTemplate extends Timestamped {
   id: ID
   name: string
@@ -85,6 +99,10 @@ export interface PatientReportVersion extends Timestamped {
   snapshot: PatientReportSnapshot
   exportedAt: string
   userId?: ID
+  retentionPolicyId?: ID
+  retentionUntil?: string
+  retentionStatus?: ReportRetentionStatus
+  retentionNotes?: string
 }
 
 export interface PatientReportRecord extends Timestamped {
@@ -106,4 +124,8 @@ export interface PatientReportRecord extends Timestamped {
   latestVersionNumber?: number
   versions?: PatientReportVersion[]
   userId?: ID
+  retentionPolicyId?: ID
+  retentionUntil?: string
+  retentionStatus?: ReportRetentionStatus
+  retentionNotes?: string
 }

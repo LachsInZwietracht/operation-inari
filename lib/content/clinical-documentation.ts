@@ -95,7 +95,7 @@ export const PATIENT_HANDOUT_TEMPLATES: PatientHandoutTemplate[] = [
 ]
 
 export const REPORT_RETENTION_PREVIEW = {
-  label: "Aufbewahrung: 10 Jahre, organisationsweit konfigurierbar geplant",
+  label: "Aufbewahrung: 10 Jahre, ueber Admin & Sicherheit konfigurierbar",
   controls: [
     "Standardfrist je Organisation",
     "Archivstatus pro patientengebundener Berichtsversion",

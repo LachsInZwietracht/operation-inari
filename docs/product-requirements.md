@@ -129,7 +129,7 @@ Product direction:
 - Counseling templates persist per user and can be inserted into the session authoring flow instead of remaining browser-only.
 
 ### 5.3 Reports & Exports
-**Status:** Implemented for investor-demo scope (real PDF/CSV generation, patient-bound immutable report history, archived reopen, and export audit logging).
+**Status:** Implemented for investor-demo scope (real PDF/CSV generation, patient-bound immutable report history, archived reopen, export audit logging, and admin-configured report retention metadata).
 - **Clinical report export** — `/berichte` generates real server-side PDF and CSV files from the selected meal plan analysis, supports patient-aware workflow handoff via optional context query params, and now creates versioned patient-bound report records on export.
 - **Patient document export** — `/patienten` mail merge creates branded PDF bundles with placeholder substitution.
 - **Export journal** — `/api-export` persists real export history in Supabase via `export_jobs`.

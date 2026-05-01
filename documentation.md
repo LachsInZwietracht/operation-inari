@@ -146,7 +146,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Archived mode:** historical report versions render as read-only snapshot views, expose direct file download, and remain readable even if the source meal plan changes later.
   - **Clinical document packs:** bundled clinic document packs and patient handout templates live in `lib/content/clinical-documentation.ts`; selecting one inserts resolved structured text into report notes.
   - **LMIV output:** report PDF/CSV payloads include LMIV nutrient rows, allergen declarations, additive declarations, and the current retention-policy label. Archived report versions render the stored LMIV snapshot when present.
-  - **Retention planning:** the route surfaces retention controls and scheduled-export requirements as read-only product requirements; real retention admin controls remain a backend/admin task.
+  - **Retention metadata:** patient-bound exports use the admin retention policy from `report_retention_policies`; parent reports and immutable versions store `retention_policy_id`, `retention_until`, `retention_status`, and retention notes.
   - **Preview:** `Druckvorschau anzeigen` requests the same PDF payload with inline disposition and opens it in a new tab.
   - **Contract boundary:** the page owns selection and payload assembly; rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
 
@@ -203,6 +203,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/admin/users/page.tsx`
 - The route is now backed by persisted Supabase RBAC membership records.
 - It requires an `owner` or `admin` membership and lists active organization members, roles, and status values from `organization_memberships`.
+- It includes admin controls for the default patient-report retention policy. The form writes `report_retention_policies`, and new patient-bound report exports copy that policy onto `patient_reports` and `patient_report_versions`.
 - Invitation, role-change, MFA reset, and team-wide patient sharing workflows remain deferred; RBAC v1 only establishes the protected route and persisted role foundation.
 
 ### 4.13.1 Admin Tarife (`/admin/tarife`)

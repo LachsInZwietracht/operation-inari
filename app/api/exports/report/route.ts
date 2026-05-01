@@ -6,6 +6,11 @@ import { toCsv } from "@/lib/exports/csv";
 import { renderReportPdfBuffer } from "@/lib/exports/pdf";
 import { buildFileResponse, createExportJob } from "@/lib/exports/server";
 import {
+  calculateReportRetentionUntil,
+  getOrCreateReportRetentionPolicy,
+  getReportRetentionLabel,
+} from "@/lib/data/report-retention";
+import {
   PATIENT_REPORT_FILES_BUCKET,
   persistPatientReportRecord,
   persistPatientReportVersion,
@@ -89,6 +94,15 @@ export async function POST(request: Request) {
     Boolean(body.patientId && body.planId && body.patientName);
   let patientReportId: string | undefined;
   let patientReportVersionId: string | undefined;
+  const retentionPolicy = shouldPersistPatientReport
+    ? await getOrCreateReportRetentionPolicy(supabase)
+    : null;
+  const retentionUntil = retentionPolicy
+    ? calculateReportRetentionUntil(new Date(), retentionPolicy.retentionYears)
+    : undefined;
+  const retentionPolicyLabel = retentionPolicy
+    ? getReportRetentionLabel(retentionPolicy)
+    : body.retentionPolicyLabel;
 
   async function persistPatientReport(
     format: "PDF" | "CSV",
@@ -116,6 +130,10 @@ export async function POST(request: Request) {
         notes: body.notes,
         lastFormat: format,
         lastFileName: fileName,
+        retentionPolicyId: retentionPolicy?.id,
+        retentionUntil,
+        retentionStatus: retentionPolicy?.legalHoldEnabled ? "legal_hold" : "active",
+        retentionNotes: retentionPolicyLabel,
       },
       supabase,
     );
@@ -157,7 +175,12 @@ export async function POST(request: Request) {
           snapshot: {
             ...body,
             format,
+            retentionPolicyLabel,
           },
+          retentionPolicyId: retentionPolicy?.id,
+          retentionUntil,
+          retentionStatus: retentionPolicy?.legalHoldEnabled ? "legal_hold" : "active",
+          retentionNotes: retentionPolicyLabel,
         },
         supabase,
       );

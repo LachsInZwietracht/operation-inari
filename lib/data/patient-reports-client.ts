@@ -26,6 +26,10 @@ interface PatientReportRow {
   last_file_name: string | null
   latest_version_id: string | null
   latest_version_number: number | null
+  retention_policy_id: string | null
+  retention_until: string | null
+  retention_status: PatientReportRecord["retentionStatus"]
+  retention_notes: string | null
   created_at: string
   updated_at: string
 }
@@ -49,6 +53,10 @@ interface PatientReportVersionRow {
   storage_path: string
   snapshot: PatientReportSnapshot
   exported_at: string
+  retention_policy_id: string | null
+  retention_until: string | null
+  retention_status: PatientReportVersion["retentionStatus"]
+  retention_notes: string | null
   created_at: string
   updated_at: string
 }
@@ -73,6 +81,10 @@ interface PersistPatientReportVersionInput {
   storageBucket?: string
   storagePath: string
   snapshot: PatientReportSnapshot
+  retentionPolicyId?: string
+  retentionUntil?: string
+  retentionStatus?: PatientReportVersion["retentionStatus"]
+  retentionNotes?: string
 }
 
 function isUuid(value: string): boolean {
@@ -113,6 +125,10 @@ function mapPatientReportVersionRow(row: PatientReportVersionRow): PatientReport
     storagePath: row.storage_path,
     snapshot: row.snapshot,
     exportedAt: row.exported_at,
+    retentionPolicyId: row.retention_policy_id ?? undefined,
+    retentionUntil: row.retention_until ?? undefined,
+    retentionStatus: row.retention_status ?? undefined,
+    retentionNotes: row.retention_notes ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -146,6 +162,10 @@ function mapPatientReportRow(
     lastFileName: row.last_file_name ?? undefined,
     latestVersionId: row.latest_version_id ?? undefined,
     latestVersionNumber: row.latest_version_number ?? undefined,
+    retentionPolicyId: row.retention_policy_id ?? undefined,
+    retentionUntil: row.retention_until ?? undefined,
+    retentionStatus: row.retention_status ?? undefined,
+    retentionNotes: row.retention_notes ?? undefined,
     versions,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -298,6 +318,10 @@ export async function persistPatientReportRecord(
         last_file_name: report.lastFileName ?? null,
         latest_version_id: report.latestVersionId ?? null,
         latest_version_number: report.latestVersionNumber ?? 0,
+        retention_policy_id: report.retentionPolicyId ?? null,
+        retention_until: report.retentionUntil ?? null,
+        retention_status: report.retentionStatus ?? "active",
+        retention_notes: report.retentionNotes ?? null,
       },
       canonicalId ? { onConflict: "id" } : undefined,
     )
@@ -357,6 +381,10 @@ export async function persistPatientReportVersion(
       storage_bucket: input.storageBucket ?? PATIENT_REPORT_FILES_BUCKET,
       storage_path: input.storagePath,
       snapshot: input.snapshot,
+      retention_policy_id: input.retentionPolicyId ?? null,
+      retention_until: input.retentionUntil ?? null,
+      retention_status: input.retentionStatus ?? "active",
+      retention_notes: input.retentionNotes ?? null,
     })
     .select("*")
     .single()
@@ -384,6 +412,10 @@ export async function persistPatientReportVersion(
       last_file_name: input.fileName,
       latest_version_id: version.id,
       latest_version_number: version.versionNumber,
+      retention_policy_id: input.retentionPolicyId ?? null,
+      retention_until: input.retentionUntil ?? null,
+      retention_status: input.retentionStatus ?? "active",
+      retention_notes: input.retentionNotes ?? null,
     })
     .eq("id", input.patientReportId)
 

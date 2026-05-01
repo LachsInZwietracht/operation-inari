@@ -494,7 +494,11 @@ function ArchivedReportView({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">LMIV- und Deklarationssnapshot</CardTitle>
-            <CardDescription>{snapshot.retentionPolicyLabel ?? "Archivierte Deklarationsdaten"}</CardDescription>
+            <CardDescription>
+              {snapshot.retentionPolicyLabel ?? "Archivierte Deklarationsdaten"}
+              {version.retentionUntil ? ` · Aufbewahrung bis ${formatDate(version.retentionUntil)}` : ""}
+              {version.retentionStatus ? ` · Status ${version.retentionStatus}` : ""}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Table>

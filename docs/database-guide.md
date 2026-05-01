@@ -269,8 +269,9 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 | `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
 | `food_reference_replacements` | Audit log for food ID replacement workflows. Supports `user_workspace` and `organization` scopes (org scope requires admin role) | `actor_user_id`, `organization_id`, `source_food_id`, `target_food_id`, `scope`, updated-row counts |
-| `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary |
-| `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at` |
+| `report_retention_policies` | Admin-controlled default retention policy for patient-bound reports | `user_id`, `organization_id`, `retention_years`, `auto_delete_enabled`, `require_admin_approval`, `legal_hold_enabled` |
+| `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary, retention metadata |
+| `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at`, retention metadata |
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
 | `organizations` | Team/organization boundary for RBAC | `name`, `created_by` |
 | `organization_memberships` | Persisted user roles | `organization_id`, `user_id`, `email`, `role`, `status` |
@@ -292,6 +293,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
   - persist a stable parent record in `patient_reports`
   - append immutable export versions to `patient_report_versions`
   - store the original PDF/CSV file in the private Supabase bucket `patient-report-files`
+  - copy the current `report_retention_policies` values into report/version retention fields for traceable retention decisions
 - RLS is user-scoped:
   - users can read their own export rows
   - users can insert their own export rows
