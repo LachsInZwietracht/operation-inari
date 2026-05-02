@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Ops Surfaces", () => {
-  test("shows admin page as preview instead of live team management", async ({ page }) => {
+  test("shows live admin team and retention controls", async ({ page }) => {
     await page.goto("/admin/users");
 
     await expect(page.getByRole("heading", { name: "Admin & Sicherheit" })).toBeVisible();
-    await expect(page.getByText("Kein produktives RBAC-/Teammanagement-Backend")).toBeVisible();
-    await expect(page.getByText("Rollenmatrix & Berechtigungen")).toBeVisible();
+    await expect(page.getByText("Teammitglied einladen")).toBeVisible();
+    await expect(page.getByText("Teammitglieder")).toBeVisible();
+    await expect(page.getByText("Berichtsaufbewahrung")).toBeVisible();
   });
 
   test("loads live data source catalog on datenbank page", async ({ page }) => {

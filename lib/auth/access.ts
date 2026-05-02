@@ -12,6 +12,9 @@ type MembershipRow = {
   role: AppRole;
   status: OrganizationMembership["status"];
   invited_by: string | null;
+  invitation_sent_at: string | null;
+  invitation_expires_at: string | null;
+  revoked_at: string | null;
   joined_at: string | null;
   created_at: string;
   updated_at: string;
@@ -47,6 +50,9 @@ function mapMembership(row: MembershipRow): OrganizationMembership {
     role: row.role,
     status: row.status,
     invitedBy: row.invited_by ?? undefined,
+    invitationSentAt: row.invitation_sent_at ?? undefined,
+    invitationExpiresAt: row.invitation_expires_at ?? undefined,
+    revokedAt: row.revoked_at ?? undefined,
     joinedAt: row.joined_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

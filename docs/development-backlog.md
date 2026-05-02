@@ -24,7 +24,7 @@ Start here unless product priorities have changed:
 5. Done: Harden `/api-export` and `/datenbank` error states so missing schema/API failures show clear inline recovery messages.
 6. Port Cologne phonetics into Postgres search so German fuzzy matching works server-side.
 7. Continue paginated and on-demand food loading where full-catalog hooks remain.
-8. Implement real invitation and role-change flows in `/admin/users`.
+8. Continue `/admin/users`: invitations are implemented; role-change flows remain.
 9. Add role-change audit logs and access-event audit logs for sensitive patient/report actions.
 10. Improve institution workflow hierarchy with sticky service/station/status controls and clearer unsafe-order handling.
 11. Add production batch states for institution kitchen workflows.
@@ -55,7 +55,7 @@ Start here unless product priorities have changed:
 
 ## P1: Clinic IT Readiness
 
-- [ ] Implement real invitation flows in `/admin/users`.
+- [x] Implement real invitation flows in `/admin/users`.
 - [ ] Implement role-change flows in `/admin/users` with RBAC checks.
 - [ ] Add role-change audit logs.
 - [ ] Add access-event audit logs for sensitive patient, report, export, and institution actions.

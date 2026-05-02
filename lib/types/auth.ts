@@ -29,6 +29,9 @@ export interface OrganizationMembership {
   role: AppRole;
   status: MembershipStatus;
   invitedBy?: string;
+  invitationSentAt?: string;
+  invitationExpiresAt?: string;
+  revokedAt?: string;
   joinedAt?: string;
   createdAt: string;
   updatedAt: string;

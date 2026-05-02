@@ -110,8 +110,9 @@ test.describe("RBAC route guards", () => {
 
     await page.goto("/admin/users");
     await expect(page.getByRole("heading", { name: "Admin & Sicherheit" })).toBeVisible();
+    await expect(page.getByText("Teammitglied einladen")).toBeVisible();
     await expect(page.getByText("Teammitglieder")).toBeVisible();
-    await expect(page.getByText(email)).toBeVisible();
+    await expect(page.getByRole("cell", { name: email })).toBeVisible();
   });
 
   test("blocks regular dietitian users from admin pages", async ({ page }) => {

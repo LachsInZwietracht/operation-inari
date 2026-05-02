@@ -20,7 +20,12 @@ import {
 import { getOrCreateReportRetentionPolicy } from "@/lib/data/report-retention";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole, MembershipStatus } from "@/lib/types";
-import { updateReportRetentionPolicyAction } from "./actions";
+import {
+  inviteTeamMemberAction,
+  resendTeamInvitationAction,
+  revokeTeamInvitationAction,
+  updateReportRetentionPolicyAction,
+} from "./actions";
 
 const STATUS_BADGES: Record<MembershipStatus, string> = {
   active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
@@ -36,7 +41,26 @@ const ROLE_BADGES: Record<AppRole, string> = {
   institution_admin: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200",
 };
 
-export default async function AdminUsersPage() {
+const INVITABLE_ROLE_OPTIONS: Array<{ value: Exclude<AppRole, "owner">; label: string }> = [
+  { value: "admin", label: ROLE_LABELS.admin },
+  { value: "dietitian", label: ROLE_LABELS.dietitian },
+  { value: "assistant", label: ROLE_LABELS.assistant },
+  { value: "institution_admin", label: ROLE_LABELS.institution_admin },
+];
+
+function getSearchParamValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const successMessage = getSearchParamValue(resolvedSearchParams.success);
+  const errorMessage = getSearchParamValue(resolvedSearchParams.error);
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return (
       <div className="space-y-6">
@@ -88,6 +112,18 @@ export default async function AdminUsersPage() {
         helpText="Diese Ansicht liest Rollen aus Supabase-Teammitgliedschaften. Patientendaten bleiben in dieser RBAC-v1 weiterhin pro Benutzer ueber bestehende RLS-Regeln abgegrenzt."
       />
 
+      {successMessage ? (
+        <Card className="border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <CardContent className="pt-6 text-sm text-emerald-900 dark:text-emerald-100">{successMessage}</CardContent>
+        </Card>
+      ) : null}
+
+      {errorMessage ? (
+        <Card className="border-destructive/40 bg-destructive/10">
+          <CardContent className="pt-6 text-sm text-destructive">{errorMessage}</CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center justify-between gap-4 pt-4">
@@ -129,6 +165,50 @@ export default async function AdminUsersPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Teammitglied einladen</CardTitle>
+          <CardDescription>
+            Einladungen nutzen die Supabase Admin API, legen einen eingeladenen Auth-Benutzer an und persistieren die Mitgliedschaft mit Status `invited`.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={inviteTeamMemberAction} className="grid gap-4 lg:grid-cols-[1fr_1fr_220px_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">E-Mail</Label>
+              <Input id="invite-email" name="email" type="email" placeholder="name@klinik.de" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-display-name">Name</Label>
+              <Input id="invite-display-name" name="displayName" placeholder="Optionaler Anzeigename" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Rolle</Label>
+              <select
+                id="invite-role"
+                name="role"
+                defaultValue="dietitian"
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+              >
+                {INVITABLE_ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <Button type="submit">Einladen</Button>
+            </div>
+          </form>
+          {!process.env.SUPABASE_SERVICE_ROLE_KEY ? (
+            <p className="mt-3 text-xs text-amber-700">
+              `SUPABASE_SERVICE_ROLE_KEY` fehlt. Das Formular bleibt sichtbar, aber Einladungen koennen erst mit Server-Schluessel versendet werden.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Teammitglieder</CardTitle>
           <CardDescription>
             Persistierte Rollenbasis fuer Route- und API-Zugriff. Einladung und Rollenwechsel werden auf dieser Grundlage als naechster Schritt umgesetzt.
@@ -143,6 +223,8 @@ export default async function AdminUsersPage() {
                 <TableHead>Rolle</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Seit</TableHead>
+                <TableHead>Einladung</TableHead>
+                <TableHead className="text-right">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -157,6 +239,38 @@ export default async function AdminUsersPage() {
                     <Badge className={STATUS_BADGES[membership.status]}>{membership.status}</Badge>
                   </TableCell>
                   <TableCell>{new Date(membership.joinedAt ?? membership.createdAt).toLocaleDateString("de-DE")}</TableCell>
+                  <TableCell>
+                    {membership.invitationSentAt ? (
+                      <div className="text-sm">
+                        <p>{new Date(membership.invitationSentAt).toLocaleDateString("de-DE")}</p>
+                        {membership.invitationExpiresAt ? (
+                          <p className="text-xs text-muted-foreground">
+                            bis {new Date(membership.invitationExpiresAt).toLocaleDateString("de-DE")}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {membership.status !== "active" ? (
+                      <div className="flex justify-end gap-2">
+                        <form action={resendTeamInvitationAction}>
+                          <input type="hidden" name="membershipId" value={membership.id} />
+                          <Button type="submit" size="sm" variant="outline">Erneut senden</Button>
+                        </form>
+                        {membership.status === "invited" ? (
+                          <form action={revokeTeamInvitationAction}>
+                            <input type="hidden" name="membershipId" value={membership.id} />
+                            <Button type="submit" size="sm" variant="ghost">Widerrufen</Button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
