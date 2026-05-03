@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { buildFileResponse } from "@/lib/exports/server"
 import { fetchPatientReportVersionByIdClient } from "@/lib/data/patient-reports-client"
 import { createClient } from "@/lib/supabase/server"
+import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 
 interface RouteContext {
   params: Promise<{
@@ -71,6 +72,20 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const payload = Buffer.from(await data.arrayBuffer())
+
+  await writeAccessAuditLog(supabase, {
+    action: "patient_report_version_downloaded",
+    targetType: "patient_report_version",
+    targetId: version.id,
+    metadata: {
+      patientId: version.patientRef,
+      patientReportId: version.patientReportId,
+      format: version.format,
+      fileName: version.fileName,
+      storageBucket: version.storageBucket,
+      fileSize: version.fileSize,
+    },
+  })
 
   return buildFileResponse(payload, {
     contentType: version.contentType,

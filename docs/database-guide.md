@@ -285,6 +285,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/admin/*` is limited to `owner` and `admin`; `/institution/*` is limited to `owner`, `admin`, and `institution_admin`.
 - `/admin/users` invitations require `SUPABASE_SERVICE_ROLE_KEY` so the server can call the Supabase Admin API, create/reuse Auth users, persist `invited` memberships, and write `access_audit_logs` entries.
 - `/admin/users` role/status changes are performed server-side against `organization_memberships`, enforce Owner-only Owner changes plus last-active-Owner and self-lockout guards, and write `team_membership_updated` rows to `access_audit_logs`.
+- Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, patient report exports/downloads, export history and dataset exports, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
 - New authenticated users can be bootstrapped into a default organization/membership by the server access helper; Playwright setup creates an `owner` membership for the test user.
 
@@ -671,7 +672,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Pediatric percentiles / lab parameter catalog | Bundled static clinical reference data | `lib/reference-data/growth-percentiles.ts`, `lib/reference-data/lab-parameters.ts`, `components/patient-tabs.tsx` |
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
 | Database status/lifecycle | Live `data_sources` catalog, `data_source_events` lifecycle history, and audited food-reference replacement v1 | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/database-lifecycle.ts` |
-| Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status changes, and report-retention controls | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts` |
+| Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, and report-retention controls | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts` |
 | Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 

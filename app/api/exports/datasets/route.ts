@@ -17,6 +17,7 @@ import { isSupportedExport } from "@/lib/exports/constants";
 import { toCsv } from "@/lib/exports/csv";
 import { renderMailMergePdfBuffer, renderReportPdfBuffer } from "@/lib/exports/pdf";
 import { buildFileResponse, createExportJob } from "@/lib/exports/server";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 function serializeMealPlans(mealPlans: Awaited<ReturnType<typeof fetchMealPlans>>) {
   return mealPlans.map((plan) => ({
@@ -223,6 +224,18 @@ export async function POST(request: Request) {
     fileName,
     sizeBytes,
     parameters: { scope: body.scope, format: body.format },
+  });
+
+  await writeAccessAuditLog(supabase, {
+    action: "dataset_export_created",
+    targetType: "export_job",
+    targetId: fileName,
+    metadata: {
+      scope: body.scope,
+      format: body.format,
+      fileName,
+      sizeBytes,
+    },
   });
 
   return buildFileResponse(payload, {

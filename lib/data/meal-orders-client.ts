@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MealOrder } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -179,7 +180,24 @@ export async function persistMealOrder(
     throw new Error(error.message);
   }
 
-  return mapMealOrderRow(data as unknown as MealOrderRow);
+  const result = mapMealOrderRow(data as unknown as MealOrderRow);
+  await writeAccessAuditLog(client, {
+    action: canonicalId ? "meal_order_updated" : "meal_order_created",
+    targetType: "meal_order",
+    targetId: result.id,
+    metadata: {
+      patientId,
+      inpatientStayId,
+      serviceDate: result.date,
+      mealSlot: result.mealSlot,
+      station: result.station,
+      status: result.status,
+      allergenSnapshotCount: result.allergenIdsSnapshot.length,
+      dietFormSnapshotCount: result.dietFormIdsSnapshot.length,
+    },
+  });
+
+  return result;
 }
 
 export async function deleteMealOrderClient(
@@ -193,4 +211,13 @@ export async function deleteMealOrderClient(
   if (error) {
     throw new Error(error.message);
   }
+
+  await writeAccessAuditLog(client, {
+    action: "meal_order_deleted",
+    targetType: "meal_order",
+    targetId: orderId,
+    metadata: {
+      lookupColumn: column,
+    },
+  });
 }

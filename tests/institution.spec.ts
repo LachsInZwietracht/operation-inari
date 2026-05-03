@@ -293,6 +293,19 @@ async function cleanupInstitutionFixture() {
   await clearInstitutionData(userId);
 }
 
+async function fetchLatestInstitutionAuditLog(action: string) {
+  const { data, error } = await admin
+    .from("access_audit_logs")
+    .select("action,target_type,target_id,metadata")
+    .eq("action", action)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 test.describe("Institution Features", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -350,6 +363,12 @@ test.describe("Institution Features", () => {
     await page.getByRole("tab", { name: /Einkauf/i }).click();
     await expect(page.getByText(/Positionen/).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /CSV exportieren/i })).toBeVisible();
+
+    await visitInstitutionPage(page, "/institution/produktion", "Produktionsmanagement");
+    await expect(page.getByText("Chargenstatus")).toBeVisible();
+    await expect(page.getByText("Geplant").first()).toBeVisible();
+    await page.getByRole("button", { name: /^Start$/ }).first().click();
+    await expect(page.getByText("In Vorbereitung").first()).toBeVisible();
   });
 
   test("shows empty analytics states when no institution data exists", async ({ page }) => {
@@ -423,6 +442,10 @@ test.describe("Institution Features", () => {
     await expect(page.getByRole("heading", { name: "Tablettenkarten" })).toBeVisible();
     await expect(page.getByText(fixture.mariaName)).toBeVisible();
     await expect(page.getByText("Kartoffelsuppe")).toBeVisible();
+    await expect(page.getByText("Zimmer 101-A")).toBeVisible();
+    await expect(page.getByText("Bestätigt")).toBeVisible();
+    await expect(page.getByText("VK")).toBeVisible();
+    await expect(page.getByText("Bitte ohne Petersilie anrichten")).toBeVisible();
   });
 
   test("blocks unsafe hospital meal options without falling back to canned recipes", async ({ page }) => {
@@ -437,6 +460,25 @@ test.describe("Institution Features", () => {
     await expect(page.getByText("Kartoffelsuppe")).toBeVisible();
     await expect(page.getByText(/Allergenkonflikt: Sellerie/i)).toBeVisible();
     await expect(page.getByText("Geblockt").first()).toBeVisible();
-    await page.getByRole("button", { name: /Abbrechen/i }).click();
+
+    await page.getByRole("dialog").getByRole("button", { name: /Kartoffelsuppe/i }).click();
+    await expect(page.getByText("Unsichere Auswahl dokumentieren")).toBeVisible();
+    await page.getByLabel("Override-Grund").fill("Ärztlich freigegeben und Allergenwarnung mit Küche geprüft");
+    await page.getByRole("button", { name: /Bestellung speichern/i }).click();
+
+    await page.getByRole("tab", { name: /Bestellungen/i }).click();
+    await expect(page.getByText(fixture.annaName)).toBeVisible();
+    await expect(page.getByText("Override: Ärztlich freigegeben")).toBeVisible();
+
+    await expect.poll(async () => fetchLatestInstitutionAuditLog("diet_order_override_logged")).toMatchObject({
+      action: "diet_order_override_logged",
+      target_type: "meal_order",
+      metadata: expect.objectContaining({
+        patientName: fixture.annaName,
+        recipeName: "Kartoffelsuppe",
+        overrideReason: "Ärztlich freigegeben und Allergenwarnung mit Küche geprüft",
+        blockedReasons: expect.arrayContaining([expect.stringMatching(/Allergenkonflikt: Sellerie/)]),
+      }),
+    });
   });
 });

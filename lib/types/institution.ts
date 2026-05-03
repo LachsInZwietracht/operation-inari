@@ -88,6 +88,8 @@ export interface ProductionItem {
   ingredients: ProductionIngredient[];
 }
 
+export type ProductionBatchStatus = "planned" | "in_preparation" | "ready" | "served" | "held";
+
 export interface ProductionList extends Timestamped {
   id: ID;
   menuId: ID;

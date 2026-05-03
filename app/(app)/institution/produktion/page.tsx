@@ -6,6 +6,8 @@ import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMenuPlans } from "@/lib/data/menu-plans";
 import { FoodsProvider } from "@/components/foods-provider";
 import { PageHeader } from "@/components/page-header";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
+import { createClient } from "@/lib/supabase/server";
 
 const PRODUCTION_HEADER = {
   title: "Produktionsmanagement",
@@ -15,11 +17,19 @@ const PRODUCTION_HEADER = {
 };
 
 async function ProductionContent() {
+  const supabase = await createClient();
+  const auditLog = writeAccessAuditLog(supabase, {
+    action: "institution_workspace_accessed",
+    targetType: "institution_workspace",
+    targetId: "produktion",
+    metadata: { route: "/institution/produktion" },
+  });
   const [foods, recipes, menus] = await Promise.all([
     fetchFoodsForInstitution(),
     fetchRecipes(),
     fetchMenuPlans(),
   ]);
+  await auditLog;
   return (
     <FoodsProvider foods={foods}>
       <ProduktionPageClient recipes={recipes} initialMenus={menus} />

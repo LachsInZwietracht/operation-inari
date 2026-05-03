@@ -15,6 +15,7 @@ import {
   persistPatientReportRecord,
   persistPatientReportVersion,
 } from "@/lib/data/patient-reports-client";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 function buildReportCsv(request: ReportExportRequest) {
   const rows: string[][] = [
@@ -207,6 +208,24 @@ export async function POST(request: Request) {
         sections: body.activeSectionLabels,
       },
     });
+    await writeAccessAuditLog(supabase, {
+      action: "report_export_created",
+      targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
+      targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+      metadata: {
+        format: "PDF",
+        disposition: body.disposition ?? "attachment",
+        patientId: body.patientId,
+        planId: body.planId,
+        protocolId: body.protocolId,
+        reportId: patientReportId,
+        reportVersionId: patientReportVersionId,
+        reportLength: body.reportLength,
+        sectionCount: body.activeSectionLabels.length,
+        fileName,
+        sizeBytes: pdfBuffer.length,
+      },
+    });
     return buildFileResponse(pdfBuffer, {
       contentType: "application/pdf",
       fileName,
@@ -241,6 +260,24 @@ export async function POST(request: Request) {
       planDateLabel: body.planDateLabel,
       reportLength: body.reportLength,
       sections: body.activeSectionLabels,
+    },
+  });
+  await writeAccessAuditLog(supabase, {
+    action: "report_export_created",
+    targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
+    targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+    metadata: {
+      format: "CSV",
+      disposition: body.disposition ?? "attachment",
+      patientId: body.patientId,
+      planId: body.planId,
+      protocolId: body.protocolId,
+      reportId: patientReportId,
+      reportVersionId: patientReportVersionId,
+      reportLength: body.reportLength,
+      sectionCount: body.activeSectionLabels.length,
+      fileName,
+      sizeBytes: Buffer.byteLength(csv, "utf8"),
     },
   });
   return buildFileResponse(csv, {

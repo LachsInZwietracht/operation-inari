@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 const submissionSchema = z.object({
   linkId: z.string().uuid(),
@@ -82,16 +83,18 @@ export async function POST(request: Request) {
   }
 
   // Insert submission
-  const { error: insertError } = await supabase
+  const { data: submission, error: insertError } = await supabase
     .from("digital_protocol_submissions")
     .insert({
       link_id: linkId,
       patient_id: patientId,
       days,
       notes: notes ?? null,
-    });
+    })
+    .select("id")
+    .single();
 
-  if (insertError) {
+  if (insertError || !submission) {
     console.error("Failed to insert protocol submission:", insertError);
     return NextResponse.json(
       { error: "Fehler beim Speichern der Einreichung" },
@@ -108,6 +111,23 @@ export async function POST(request: Request) {
   if (updateError) {
     console.error("Failed to update link status:", updateError);
   }
+
+  await writeAccessAuditLog(
+    supabase,
+    {
+      action: "digital_protocol_submission_received",
+      targetType: "digital_protocol_submission",
+      targetId: submission.id,
+      metadata: {
+        patientId,
+        linkId,
+        dayCount: days.length,
+        entryCount: days.reduce((total, day) => total + day.entries.length, 0),
+        submittedBy: "patient_portal",
+      },
+    },
+    { actorUserId: link.user_id },
+  );
 
   return NextResponse.json({ success: true });
 }

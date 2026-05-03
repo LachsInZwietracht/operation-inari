@@ -6,6 +6,8 @@ import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMenuPlans } from "@/lib/data/menu-plans";
 import { FoodsProvider } from "@/components/foods-provider";
 import { PageHeader } from "@/components/page-header";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
+import { createClient } from "@/lib/supabase/server";
 
 const MENU_HEADER = {
   title: "Menüplanung",
@@ -15,11 +17,19 @@ const MENU_HEADER = {
 };
 
 async function MenuPlansContent() {
+  const supabase = await createClient();
+  const auditLog = writeAccessAuditLog(supabase, {
+    action: "institution_workspace_accessed",
+    targetType: "institution_workspace",
+    targetId: "menueplaene",
+    metadata: { route: "/institution/menueplaene" },
+  });
   const [foods, recipes, menus] = await Promise.all([
     fetchFoodsForInstitution(),
     fetchRecipes(),
     fetchMenuPlans(),
   ]);
+  await auditLog;
   return (
     <FoodsProvider foods={foods}>
       <MenueplaenePageClient recipes={recipes} initialMenus={menus} />

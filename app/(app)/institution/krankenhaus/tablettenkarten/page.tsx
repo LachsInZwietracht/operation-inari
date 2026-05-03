@@ -10,7 +10,29 @@ import { Badge } from "@/components/ui/badge";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { ALLERGEN_MAP } from "@/lib/allergen-constants";
 import { useMealOrders } from "@/hooks/use-meal-orders";
-import type { MealSlotType } from "@/lib/types";
+import { DIET_FORMS } from "@/lib/reference-data/institution";
+import type { MealOrder, MealSlotType } from "@/lib/types";
+
+const DIET_FORM_MAP = new Map(DIET_FORMS.map((dietForm) => [dietForm.id, dietForm]));
+
+const ORDER_STATUS_CONFIG: Record<MealOrder["status"], { label: string; className: string }> = {
+  pending: {
+    label: "Ausstehend",
+    className: "border-yellow-300 text-yellow-800",
+  },
+  confirmed: {
+    label: "Bestätigt",
+    className: "border-blue-300 text-blue-800",
+  },
+  delivered: {
+    label: "Ausgeliefert",
+    className: "border-green-300 text-green-800",
+  },
+  cancelled: {
+    label: "Storniert",
+    className: "border-slate-300 text-slate-700",
+  },
+};
 
 export default function TablettenkartenPage() {
   const searchParams = useSearchParams();
@@ -63,7 +85,12 @@ export default function TablettenkartenPage() {
                     {order.station} · Zimmer {order.room}-{order.bed}
                   </p>
                 </div>
-                <Badge variant="outline">{MEAL_SLOT_LABELS[order.mealSlot]}</Badge>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge variant="outline">{MEAL_SLOT_LABELS[order.mealSlot]}</Badge>
+                  <Badge variant="outline" className={ORDER_STATUS_CONFIG[order.status].className}>
+                    {ORDER_STATUS_CONFIG[order.status].label}
+                  </Badge>
+                </div>
               </div>
 
               <div className="mt-4 space-y-2">
@@ -71,10 +98,21 @@ export default function TablettenkartenPage() {
                 <p className="text-xl font-semibold">{order.recipeName}</p>
               </div>
 
+              <div className="mt-4 grid grid-cols-2 gap-3 rounded-md border border-slate-200 p-3 text-sm">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Datum</p>
+                  <p>{order.date}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bett</p>
+                  <p>{order.room}-{order.bed}</p>
+                </div>
+              </div>
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {order.dietFormIdsSnapshot.map((dietFormId) => (
                   <Badge key={dietFormId} variant="outline">
-                    {dietFormId}
+                    {DIET_FORM_MAP.get(dietFormId)?.shortName ?? dietFormId}
                   </Badge>
                 ))}
                 {order.allergenIdsSnapshot.map((allergenId) => (
@@ -87,6 +125,17 @@ export default function TablettenkartenPage() {
               {order.specialInstructions && (
                 <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
                   {order.specialInstructions}
+                </div>
+              )}
+
+              {order.restrictionSummary.length > 0 && (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide">Prüfhinweise</p>
+                  <ul className="list-inside list-disc space-y-1">
+                    {order.restrictionSummary.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

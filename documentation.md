@@ -205,8 +205,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - It requires an `owner` or `admin` membership and lists active organization members, roles, and status values from `organization_memberships`.
 - It implements Supabase Admin API invitations for `admin`, `dietitian`, `assistant`, and `institution_admin` roles. Invite, resend, and revoke actions persist `invited`/`disabled` membership state, invitation timestamps, expiry metadata, and `access_audit_logs` entries.
 - It supports role/status changes for existing memberships with server-side RBAC checks: only Owners can modify Owner memberships, the last active Owner cannot be demoted or disabled, and users cannot deactivate or remove their own admin access. Each successful change writes a `team_membership_updated` audit event.
+- Sensitive access events now write `access_audit_logs` entries through `lib/audit/access-audit.ts`: patient workspace opens, patient create/update/delete, patient report exports/downloads, export history/dataset exports, digital protocol receipt/conversion, inpatient stays, and meal orders.
 - It includes admin controls for the default patient-report retention policy. The form writes `report_retention_policies`, and new patient-bound report exports copy that policy onto `patient_reports` and `patient_report_versions`.
-- MFA reset and team-wide patient sharing workflows remain deferred; RBAC v1 establishes route protection, persisted roles, invitations, audited role changes, and report retention controls.
+- MFA reset and team-wide patient sharing workflows remain deferred; RBAC v1 establishes route protection, persisted roles, invitations, audited role/access events, and report retention controls.
 
 ### 4.13.1 Admin Tarife (`/admin/tarife`)
 - **Component:** `app/(app)/admin/tarife/page.tsx`
@@ -293,14 +294,22 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Blocks options that violate assigned diet forms or patient allergen entries.
 - **Workflow UI:**
   - A compact operations band summarizes service window, station, open/missing orders, and kitchen portions before the detail tabs.
+  - A safety panel promotes blocked menu options, allergen cases, missing orders, pending kitchen approvals, and cancelled orders before the general worklist.
   - A dense service worklist highlights missing orders, pending kitchen approvals, confirmed orders, and delivered meals for the active service window.
   - Assign a real patient to station / room / bed with one or more diet forms.
   - Open a staff-side selection dialog for breakfast, lunch, or dinner.
+  - Unsafe diet-form or allergen selections can be overridden only with a documented reason. The order stores the override note in its special instructions and writes a `diet_order_override_logged` audit event with patient, recipe, service window, blocked reasons, and override reason.
   - Persist exactly one order per inpatient stay and service window.
   - Update order state from `pending` to `confirmed` to `delivered`.
 - **Empty state behavior:** Without an active menu or active stays, the route shows explicit empty states and disables meal selection instead of synthesizing demo service options.
 - **Kitchen output:** The `Küche` tab aggregates saved service orders by recipe, patient list, and special instructions instead of relying on planned menu portions alone.
-- **Tray cards:** `/institution/krankenhaus/tablettenkarten` renders a print view from saved `meal_orders` using `date`, `mealSlot`, and `station` query params.
+- **Tray cards:** `/institution/krankenhaus/tablettenkarten` renders a print view from saved `meal_orders` using `date`, `mealSlot`, and `station` query params. Cards include patient, station, room/bed, meal slot, kitchen status, diet-form labels, allergen labels, special instructions, and restriction summaries.
+
+### 4.18.1 Einrichtung – Produktion (`/institution/produktion`)
+- **Route:** `app/(app)/institution/produktion/page.tsx` (server) → `produktion-client.tsx` (client).
+- **Data:** Uses the active institution menu, recipes, and food context from `useInstitutionMenu(initialMenus, recipes)`.
+- **Workflow UI:** Production items are grouped by meal slot and diet form. Each batch has an operational state: `planned`, `in_preparation`, `ready`, `served`, or `held`. The page summarizes batch counts by state and exposes row actions for start, ready, serve, and hold.
+- **Shopping UI:** The shopping tab remains category-grouped with portion scaling and CSV export.
 
 ### 4.19 Einrichtung – Nährstoff-Compliance (`/institution/compliance`)
 - **Route:** `app/(app)/institution/compliance/page.tsx` (server) → `compliance-client.tsx` (client).
@@ -319,6 +328,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - `Kostformen` shows real diet-form distribution from active inpatient stays.
   - `Menüwahl` shows most-ordered recipes plus real order-fulfillment status analytics instead of mock recipe ratings.
   - `Kosten` charts cycle-wide daily cost and per-portion cost from menu-derived shopping math.
+  - Restriction/readiness metrics include active allergen profiles, restricted inpatient stays, and orders carrying restriction snapshots from saved meal orders.
   - `Übersicht` summarizes restriction-heavy cases, allergen profiles, pending orders, and cycle status from the same shared dataset.
 - **Fallback behavior:** The pages no longer own local mock analytics datasets or server-side canned institution records. They render from shared derived data and show an empty state when no active cycle is available.
 

@@ -6,10 +6,19 @@ import { fetchPatientAllergens } from "@/lib/data/patient-allergens";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { buildInstitutionAnalytics, collectActiveMenuFoodIds } from "@/lib/institution-analytics";
 import { ComplianceClient } from "./compliance-client";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompliancePage() {
+  const supabase = await createClient();
+  const auditLog = writeAccessAuditLog(supabase, {
+    action: "institution_analytics_accessed",
+    targetType: "institution_analytics",
+    targetId: "compliance",
+    metadata: { route: "/institution/compliance" },
+  });
   const [menus, recipes, stays, orders, patientAllergens] = await Promise.all([
     fetchMenuPlans(),
     fetchRecipes(),
@@ -17,6 +26,7 @@ export default async function CompliancePage() {
     fetchMealOrders(),
     fetchPatientAllergens(),
   ]);
+  await auditLog;
   const foods = await fetchFoodsByIds(collectActiveMenuFoodIds(menus, recipes));
 
   const analytics = buildInstitutionAnalytics({

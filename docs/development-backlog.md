@@ -25,7 +25,7 @@ Start here unless product priorities have changed:
 6. Port Cologne phonetics into Postgres search so German fuzzy matching works server-side.
 7. Continue paginated and on-demand food loading where full-catalog hooks remain.
 8. Done: `/admin/users` now supports audited invitations plus role/status changes with Owner lockout checks.
-9. Add access-event audit logs for sensitive patient/report/export/institution actions.
+9. Done: Add access-event audit logs for sensitive patient, report, export, and institution actions.
 10. Improve institution workflow hierarchy with sticky service/station/status controls and clearer unsafe-order handling.
 11. Add production batch states for institution kitchen workflows.
 
@@ -58,7 +58,7 @@ Start here unless product priorities have changed:
 - [x] Implement real invitation flows in `/admin/users`.
 - [x] Implement role-change flows in `/admin/users` with RBAC checks.
 - [x] Add role-change audit logs.
-- [ ] Add access-event audit logs for sensitive patient, report, export, and institution actions.
+- [x] Add access-event audit logs for sensitive patient, report, export, and institution actions.
 - [ ] Add SSO foundation: organization-level OIDC/SAML configuration, login routing, and provider metadata storage.
 - [ ] Define LDAP/Active Directory mapping requirements for clinic deployments.
 - [ ] Implement API key issuance for the currently preview-only API surfaces.
@@ -68,13 +68,13 @@ Start here unless product priorities have changed:
 
 ## P1: Patient-To-Kitchen Workflow
 
-- [ ] Improve institution workflow hierarchy with a compact sticky operations bar for service window, station, and status.
-- [ ] Promote unsafe orders, missing diet forms, allergen conflicts, and pending kitchen actions above general institution counts.
-- [ ] Add production batch states: planned, in preparation, ready, served, and held.
-- [ ] Expand tray-card generation with diet form, allergens, room/bed, notes, and kitchen status.
-- [ ] Add diet-order override logging for allergen and diet-form conflicts.
-- [ ] Derive institution analytics from persisted menu cycles, meal orders, inpatient stays, and restriction snapshots.
-- [ ] Add clearer kitchen readiness and tray-card readiness indicators.
+- [x] Improve institution workflow hierarchy with a compact sticky operations bar for service window, station, and status.
+- [x] Promote unsafe orders, missing diet forms, allergen conflicts, and pending kitchen actions above general institution counts.
+- [x] Add production batch states: planned, in preparation, ready, served, and held.
+- [x] Expand tray-card generation with diet form, allergens, room/bed, notes, and kitchen status.
+- [x] Add diet-order override logging for allergen and diet-form conflicts.
+- [x] Derive institution analytics from persisted menu cycles, meal orders, inpatient stays, and restriction snapshots.
+- [x] Add clearer kitchen readiness and tray-card readiness indicators.
 
 ## P2: Clinical Documentation
 

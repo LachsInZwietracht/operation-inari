@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Patient } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -154,7 +155,19 @@ export async function persistPatient(
     throw new Error(error.message);
   }
 
-  return mapPatientRow(persistedPatient as unknown as PatientRow);
+  const result = mapPatientRow(persistedPatient as unknown as PatientRow);
+  await writeAccessAuditLog(client, {
+    action: canonicalId ? "patient_record_updated" : "patient_record_created",
+    targetType: "patient",
+    targetId: result.id,
+    metadata: {
+      source: "patients-client",
+      legacyId,
+      changedFields: Object.keys(patient).filter((key) => !["id", "legacyId", "createdAt", "updatedAt"].includes(key)),
+    },
+  });
+
+  return result;
 }
 
 export async function deletePatientClient(
@@ -171,4 +184,14 @@ export async function deletePatientClient(
   if (error) {
     throw new Error(error.message);
   }
+
+  await writeAccessAuditLog(client, {
+    action: "patient_record_deleted",
+    targetType: "patient",
+    targetId: patientId,
+    metadata: {
+      source: "patients-client",
+      lookupColumn: column,
+    },
+  });
 }

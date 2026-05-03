@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 const conversionSchema = z.object({
   submissionId: z.string().uuid(),
@@ -91,6 +92,17 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+
+  await writeAccessAuditLog(supabase, {
+    action: "digital_protocol_submission_converted",
+    targetType: "digital_protocol_submission",
+    targetId: updatedSubmission.id,
+    metadata: {
+      patientId: submission.patient_id,
+      linkId: submission.link_id,
+      protocolId,
+    },
+  });
 
   return NextResponse.json({ submission: updatedSubmission });
 }

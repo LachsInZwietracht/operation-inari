@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 export async function GET() {
   const supabase = await createClient();
@@ -24,6 +25,14 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAccessAuditLog(supabase, {
+    action: "export_history_accessed",
+    targetType: "export_jobs",
+    metadata: {
+      resultCount: (data ?? []).length,
+    },
+  });
 
   return NextResponse.json(data ?? []);
 }

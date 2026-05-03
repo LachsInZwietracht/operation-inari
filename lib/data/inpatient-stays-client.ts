@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InpatientStay } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -138,7 +139,20 @@ export async function persistInpatientStay(
     throw new Error(error.message);
   }
 
-  return mapInpatientStayRow(data as unknown as InpatientStayRow);
+  const result = mapInpatientStayRow(data as unknown as InpatientStayRow);
+  await writeAccessAuditLog(client, {
+    action: canonicalId ? "inpatient_stay_updated" : "inpatient_stay_created",
+    targetType: "inpatient_stay",
+    targetId: result.id,
+    metadata: {
+      patientId,
+      station: result.station,
+      status: result.status,
+      dietFormCount: result.dietFormIds.length,
+    },
+  });
+
+  return result;
 }
 
 export async function deleteInpatientStayClient(
@@ -152,4 +166,13 @@ export async function deleteInpatientStayClient(
   if (error) {
     throw new Error(error.message);
   }
+
+  await writeAccessAuditLog(client, {
+    action: "inpatient_stay_deleted",
+    targetType: "inpatient_stay",
+    targetId: stayId,
+    metadata: {
+      lookupColumn: column,
+    },
+  });
 }

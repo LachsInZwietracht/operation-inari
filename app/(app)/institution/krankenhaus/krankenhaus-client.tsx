@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   BedDouble,
   CheckCircle2,
   ChefHat,
@@ -62,6 +63,8 @@ import {
   getTrayCardPrintUrl,
 } from "@/lib/hospital-workflow";
 import { formatDate } from "@/lib/format";
+import { writeAccessAuditLog } from "@/lib/audit/access-audit";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { usePatients } from "@/hooks/use-patients";
 import { usePatientAllergens } from "@/hooks/use-patient-allergens";
 import { useInpatientStays } from "@/hooks/use-inpatient-stays";
@@ -158,6 +161,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
   const [selectionStayId, setSelectionStayId] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
   const [specialInstructions, setSpecialInstructions] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
   const [selectionCandidates, setSelectionCandidates] = useState<MealCandidate[]>([]);
   const [selectionAllergens, setSelectionAllergens] = useState<ReturnType<typeof getForPatient>>([]);
 
@@ -214,6 +218,54 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
   const pendingOrderCount = serviceOrders.filter((order) => order.status === "pending").length;
   const missingOrderCount = Math.max(0, activeStays.length - serviceOrders.length);
   const kitchenPortionCount = kitchenSummary.reduce((sum, item) => sum + item.totalPortions, 0);
+  const safetyEscalations = useMemo(() => {
+    const blockedStays = activeStays.filter((stay) => {
+      const candidates = buildMealCandidates({
+        stay,
+        recipes: recipeSource,
+        menu: activeMenu,
+        date: selectedDate,
+        mealSlot: selectedMealSlot,
+        allergens: getForPatient(stay.patientId),
+      });
+      return activeMenu && candidates.length > 0 && !candidates.some((candidate) => candidate.isSelectable);
+    });
+    const allergenStays = activeStays.filter((stay) => getForPatient(stay.patientId).length > 0);
+    const heldOrCancelledOrders = serviceOrders.filter((order) => order.status === "cancelled");
+
+    return [
+      {
+        label: "Keine sichere Menüoption",
+        value: blockedStays.length,
+        helper: "Kostform/Allergen blockiert alle Optionen",
+        className: blockedStays.length > 0 ? "border-red-300 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+      },
+      {
+        label: "Allergenhinweis",
+        value: allergenStays.length,
+        helper: "aktive Belegungen mit Allergien",
+        className: allergenStays.length > 0 ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+      },
+      {
+        label: "Ohne Bestellung",
+        value: missingOrderCount,
+        helper: "aktive Betten im Servicefenster",
+        className: missingOrderCount > 0 ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+      },
+      {
+        label: "Küchenfreigabe offen",
+        value: pendingOrderCount,
+        helper: "Bestellungen noch ausstehend",
+        className: pendingOrderCount > 0 ? "border-blue-300 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+      },
+      {
+        label: "Storniert",
+        value: heldOrCancelledOrders.length,
+        helper: "muss vor Ausgabe geklärt werden",
+        className: heldOrCancelledOrders.length > 0 ? "border-red-300 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+      },
+    ];
+  }, [activeMenu, activeStays, getForPatient, missingOrderCount, pendingOrderCount, recipeSource, selectedDate, selectedMealSlot, serviceOrders]);
   const criticalWorklist = useMemo(() => {
     const confirmedCount = serviceOrders.filter((order) => order.status === "confirmed").length;
     const deliveredCount = serviceOrders.filter((order) => order.status === "delivered").length;
@@ -324,6 +376,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
     setSelectionStayId(stay.id);
     setSelectedCandidateId(existingOrder?.recipeId ?? "");
     setSpecialInstructions(existingOrder?.specialInstructions ?? "");
+    setOverrideReason("");
     setSelectionAllergens(nextAllergens);
     setSelectionCandidates(nextCandidates);
   }
@@ -332,6 +385,7 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
     setSelectionStayId(null);
     setSelectedCandidateId("");
     setSpecialInstructions("");
+    setOverrideReason("");
     setSelectionAllergens([]);
     setSelectionCandidates([]);
   }
@@ -343,11 +397,23 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
     }
 
     const candidate = selectionCandidates.find((item) => item.recipeId === selectedCandidateId);
-    if (!candidate || !candidate.isSelectable) {
-      toast.error("Bitte eine sichere Menüoption auswählen.");
+    if (!candidate) {
+      toast.error("Bitte eine Menüoption auswählen.");
       return;
     }
 
+    if (!candidate.isSelectable && overrideReason.trim().length < 8) {
+      toast.error("Bitte den Override mit einem nachvollziehbaren Grund dokumentieren.");
+      return;
+    }
+
+    const overrideNotes = !candidate.isSelectable
+      ? [
+          specialInstructions.trim(),
+          `Override: ${overrideReason.trim()}`,
+          `Konflikte: ${candidate.blockedReasons.join("; ")}`,
+        ].filter(Boolean).join("\n")
+      : specialInstructions;
     const orderPayload = buildMealOrder({
       existingOrder: selectionOrder,
       stay: selectionStay,
@@ -356,10 +422,28 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
       date: selectedDate,
       mealSlot: selectedMealSlot,
       allergens: selectionAllergens,
-      specialInstructions,
+      specialInstructions: overrideNotes,
     });
 
     upsertOrder(orderPayload);
+    if (!candidate.isSelectable) {
+      void writeAccessAuditLog(createBrowserSupabaseClient(), {
+        action: "diet_order_override_logged",
+        targetType: "meal_order",
+        targetId: selectionOrder?.id ?? `${selectionStay.id}:${selectedDate}:${selectedMealSlot}`,
+        metadata: {
+          patientId: selectionStay.patientId,
+          inpatientStayId: selectionStay.id,
+          patientName: `${selectionPatient.firstName} ${selectionPatient.lastName}`,
+          recipeId: candidate.recipeId,
+          recipeName: candidate.recipeName,
+          date: selectedDate,
+          mealSlot: selectedMealSlot,
+          blockedReasons: candidate.blockedReasons,
+          overrideReason: overrideReason.trim(),
+        },
+      });
+    }
     toast.success("Stationsbestellung gespeichert");
     closeSelectionDialog();
   }
@@ -525,6 +609,29 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
               Tablettenkarten
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/10">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertTriangle className="h-4 w-4 text-amber-700" />
+            Sicherheits- und Küchenlage
+          </CardTitle>
+          <CardDescription>
+            Kritische Punkte für das aktuelle Servicefenster stehen vor der allgemeinen Bettenliste.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {safetyEscalations.map((item) => (
+            <div key={item.label} className={`rounded-md border px-3 py-2 text-sm ${item.className}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">{item.label}</span>
+                <span className="text-xl font-semibold tabular-nums">{item.value}</span>
+              </div>
+              <p className="mt-1 text-xs opacity-80">{item.helper}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
@@ -927,7 +1034,6 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
                           ? "border-primary bg-primary/5"
                           : "border-border"
                       } ${candidate.isSelectable ? "hover:border-primary/50" : "opacity-70"}`}
-                      disabled={!candidate.isSelectable}
                       onClick={() => setSelectedCandidateId(candidate.recipeId)}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -960,6 +1066,23 @@ export function KrankenhausPageClient({ recipes, initialMenus }: KrankenhausPage
                   ))}
                 </div>
               )}
+              {selectionCandidates.find((candidate) => candidate.recipeId === selectedCandidateId && !candidate.isSelectable) ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-medium">Unsichere Auswahl dokumentieren</p>
+                  <p className="mt-1 text-xs">
+                    Diese Bestellung verletzt Kostform- oder Allergenregeln. Speichern ist nur mit dokumentiertem Override-Grund möglich.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <Label htmlFor="meal-override-reason">Override-Grund</Label>
+                    <Textarea
+                      id="meal-override-reason"
+                      value={overrideReason}
+                      onChange={(event) => setOverrideReason(event.target.value)}
+                      placeholder="z. B. ärztlich freigegeben, Allergenwarnung geprüft, alternative Ausgabe abgestimmt ..."
+                    />
+                  </div>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="meal-special-instructions">Besondere Hinweise</Label>
                 <Textarea

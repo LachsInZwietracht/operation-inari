@@ -148,6 +148,20 @@ async function removeStoredReportFiles(paths: string[]) {
   if (error) throw new Error(error.message);
 }
 
+async function fetchLatestAccessAuditLog(action: string, targetId: string) {
+  const { data, error } = await admin
+    .from("access_audit_logs")
+    .select("action,target_type,target_id,metadata")
+    .eq("action", action)
+    .eq("target_id", targetId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 test.describe("Berichte", () => {
   test("shows patient context and preselects a requested plan", async ({ page }) => {
     const fixture = await createReportPlanFixture();
@@ -251,6 +265,17 @@ test.describe("Berichte", () => {
       expect(version.snapshot.notes).toContain("Follow-up Fokus");
       expect(version.file_name).toMatch(/\.pdf$/);
 
+      await expect.poll(async () => fetchLatestAccessAuditLog("report_export_created", version.id)).toMatchObject({
+        action: "report_export_created",
+        target_type: "patient_report_version",
+        target_id: version.id,
+        metadata: expect.objectContaining({
+          format: "PDF",
+          patientId: patient.id,
+          reportVersionId: version.id,
+        }),
+      });
+
       await page.goto(`/berichte?reportVersionId=${version.id}`);
       await expect(page.getByText("Archivierte Berichtsversion")).toBeVisible();
       await expect(page.getByText(`Bericht für ${patient.firstName} ${patient.lastName}`)).toBeVisible();
@@ -261,6 +286,17 @@ test.describe("Berichte", () => {
       await page.getByRole("link", { name: "PDF herunterladen" }).click();
       const archivedFile = await archivedDownload;
       expect(await archivedFile.suggestedFilename()).toMatch(/prodi-bericht-.*\.pdf/);
+
+      await expect.poll(async () => fetchLatestAccessAuditLog("patient_report_version_downloaded", version.id)).toMatchObject({
+        action: "patient_report_version_downloaded",
+        target_type: "patient_report_version",
+        target_id: version.id,
+        metadata: expect.objectContaining({
+          format: "PDF",
+          patientId: patient.id,
+          patientReportId: report.id,
+        }),
+      });
     } finally {
       await deleteReportPlanFixture(fixture.planId);
       await deletePatientFixture(patient.id);

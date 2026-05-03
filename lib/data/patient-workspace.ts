@@ -37,6 +37,7 @@ import { fetchScreeningsClient } from "@/lib/data/patient-screenings-client"
 import { fetchSubmissionsForPatientClient } from "@/lib/data/digital-protocol-submissions-client"
 import { fetchTherapyIntegrationsClient } from "@/lib/data/patient-therapy-integrations-client"
 import { fetchTherapySettingsClient } from "@/lib/data/patient-therapy-settings-client"
+import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 
 export interface PatientWorkspaceData {
   patient: Patient | null
@@ -135,6 +136,27 @@ export async function fetchPatientWorkspaceData(
   }
 
   const patientRefs = [patient.id, patient.legacyId].filter(Boolean) as string[]
+
+  await writeAccessAuditLog(supabase, {
+    action: "patient_record_accessed",
+    targetType: "patient",
+    targetId: patient.id,
+    metadata: {
+      patientRef,
+      sections: [
+        "activities",
+        "anthropometrics",
+        "appointments",
+        "counseling",
+        "diagnoses",
+        "labs",
+        "medications",
+        "protocols",
+        "reports",
+        "screenings",
+      ],
+    },
+  })
 
   const [
     activities,

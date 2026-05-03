@@ -6,6 +6,9 @@ import {
   ChevronRight,
   ClipboardList,
   Download,
+  PackageCheck,
+  PauseCircle,
+  Play,
   Printer,
   ShoppingCart,
   UtensilsCrossed,
@@ -44,6 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { ProductionBatchStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,6 +87,33 @@ const MEAL_SLOT_ORDER: MealSlotType[] = [
   "abendessen",
 ];
 
+const BATCH_STATUS_CONFIG: Record<ProductionBatchStatus, { label: string; className: string }> = {
+  planned: {
+    label: "Geplant",
+    className: "border-slate-300 bg-slate-50 text-slate-700",
+  },
+  in_preparation: {
+    label: "In Vorbereitung",
+    className: "border-blue-300 bg-blue-50 text-blue-700",
+  },
+  ready: {
+    label: "Bereit",
+    className: "border-emerald-300 bg-emerald-50 text-emerald-700",
+  },
+  served: {
+    label: "Ausgegeben",
+    className: "border-green-300 bg-green-50 text-green-700",
+  },
+  held: {
+    label: "Zurückgestellt",
+    className: "border-amber-300 bg-amber-50 text-amber-800",
+  },
+};
+
+function getBatchKey(item: ProductionItem) {
+  return `${item.mealSlot}:${item.recipeId}:${item.dietFormId}`;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -100,6 +131,7 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
   const [selectedDay, setSelectedDay] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [portionScale, setPortionScale] = useState<number>(1);
+  const [batchStatuses, setBatchStatuses] = useState<Record<string, ProductionBatchStatus>>({});
 
   // --- Production data (generated from active menu) -------------------------
   const productionItems: ProductionItem[] = useMemo(() => {
@@ -130,6 +162,23 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
     );
     return { totalRecipes, totalPortions, totalIngredients };
   }, [productionItems]);
+
+  const batchSummary = useMemo(() => {
+    return productionItems.reduce(
+      (summary, item) => {
+        const status = batchStatuses[getBatchKey(item)] ?? "planned";
+        summary[status] += 1;
+        return summary;
+      },
+      {
+        planned: 0,
+        in_preparation: 0,
+        ready: 0,
+        served: 0,
+        held: 0,
+      } satisfies Record<ProductionBatchStatus, number>,
+    );
+  }, [batchStatuses, productionItems]);
 
   // --- Shopping data (generated from active menu) ---------------------------
   const shoppingItems: ShoppingItem[] = useMemo(() => {
@@ -165,6 +214,13 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
       if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
+  }
+
+  function setBatchStatus(item: ProductionItem, status: ProductionBatchStatus) {
+    setBatchStatuses((prev) => ({
+      ...prev,
+      [getBatchKey(item)]: status,
+    }));
   }
 
   // ---------------------------------------------------------------------------
@@ -295,6 +351,25 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                 </Card>
               </div>
 
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <PackageCheck className="h-4 w-4 text-muted-foreground" />
+                    Chargenstatus
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {(Object.keys(BATCH_STATUS_CONFIG) as ProductionBatchStatus[]).map((status) => (
+                    <div key={status} className={`rounded-md border px-3 py-2 text-sm ${BATCH_STATUS_CONFIG[status].className}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">{BATCH_STATUS_CONFIG[status].label}</span>
+                        <span className="text-xl font-semibold tabular-nums">{batchSummary[status]}</span>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
               {/* Empty state */}
               {productionItems.length === 0 && (
                 <Card>
@@ -326,12 +401,15 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                           <TableHead>Kostform</TableHead>
                           <TableHead className="text-right">Portionen</TableHead>
                           <TableHead className="text-right">Zutaten</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Aktionen</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {group.items.map((item) => {
                           const rowKey = `${item.recipeId}_${item.dietFormId}_${item.mealSlot}`;
                           const isOpen = expandedRows.has(rowKey);
+                          const batchStatus = batchStatuses[getBatchKey(item)] ?? "planned";
 
                           return (
                             <TableRow
@@ -359,6 +437,70 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                               </TableCell>
                               <TableCell className="text-right">
                                 {item.ingredients.length}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={BATCH_STATUS_CONFIG[batchStatus].className}>
+                                  {BATCH_STATUS_CONFIG[batchStatus].label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex flex-wrap justify-end gap-2">
+                                  {batchStatus === "planned" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setBatchStatus(item, "in_preparation");
+                                      }}
+                                    >
+                                      <Play className="mr-1 h-3.5 w-3.5" />
+                                      Start
+                                    </Button>
+                                  ) : null}
+                                  {batchStatus === "in_preparation" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setBatchStatus(item, "ready");
+                                      }}
+                                    >
+                                      <PackageCheck className="mr-1 h-3.5 w-3.5" />
+                                      Bereit
+                                    </Button>
+                                  ) : null}
+                                  {batchStatus === "ready" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setBatchStatus(item, "served");
+                                      }}
+                                    >
+                                      Ausgeben
+                                    </Button>
+                                  ) : null}
+                                  {batchStatus !== "served" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setBatchStatus(item, "held");
+                                      }}
+                                    >
+                                      <PauseCircle className="mr-1 h-3.5 w-3.5" />
+                                      Halten
+                                    </Button>
+                                  ) : null}
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
