@@ -204,8 +204,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - The route is now backed by persisted Supabase RBAC membership records.
 - It requires an `owner` or `admin` membership and lists active organization members, roles, and status values from `organization_memberships`.
 - It implements Supabase Admin API invitations for `admin`, `dietitian`, `assistant`, and `institution_admin` roles. Invite, resend, and revoke actions persist `invited`/`disabled` membership state, invitation timestamps, expiry metadata, and `access_audit_logs` entries.
+- It supports role/status changes for existing memberships with server-side RBAC checks: only Owners can modify Owner memberships, the last active Owner cannot be demoted or disabled, and users cannot deactivate or remove their own admin access. Each successful change writes a `team_membership_updated` audit event.
 - It includes admin controls for the default patient-report retention policy. The form writes `report_retention_policies`, and new patient-bound report exports copy that policy onto `patient_reports` and `patient_report_versions`.
-- Role-change, MFA reset, and team-wide patient sharing workflows remain deferred; RBAC v1 establishes route protection, persisted roles, invitations, and report retention controls.
+- MFA reset and team-wide patient sharing workflows remain deferred; RBAC v1 establishes route protection, persisted roles, invitations, audited role changes, and report retention controls.
 
 ### 4.13.1 Admin Tarife (`/admin/tarife`)
 - **Component:** `app/(app)/admin/tarife/page.tsx`

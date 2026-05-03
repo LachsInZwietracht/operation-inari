@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { ADMIN_ROLES } from "@/lib/auth/rbac"
+import { ADMIN_ROLES, hasAnyRole } from "@/lib/auth/rbac"
 import { ensureCurrentMembership, requireRole } from "@/lib/auth/access"
 import { upsertReportRetentionPolicy } from "@/lib/data/report-retention"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import type { AppRole, OrganizationMembership } from "@/lib/types"
 
+const MEMBERSHIP_ROLES = ["owner", "admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly AppRole[]
+const MEMBERSHIP_STATUSES = ["active", "invited", "disabled"] as const
 const INVITABLE_ROLES = ["admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly AppRole[]
 const INVITE_TTL_DAYS = 14
 
@@ -28,6 +30,16 @@ function normalizeEmail(value: string) {
 function parseInviteRole(value: string): (typeof INVITABLE_ROLES)[number] | null {
   return INVITABLE_ROLES.includes(value as (typeof INVITABLE_ROLES)[number])
     ? value as (typeof INVITABLE_ROLES)[number]
+    : null
+}
+
+function parseMembershipRole(value: string): AppRole | null {
+  return MEMBERSHIP_ROLES.includes(value as AppRole) ? value as AppRole : null
+}
+
+function parseMembershipStatus(value: string): OrganizationMembership["status"] | null {
+  return MEMBERSHIP_STATUSES.includes(value as OrganizationMembership["status"])
+    ? value as OrganizationMembership["status"]
     : null
 }
 
@@ -200,6 +212,105 @@ export async function inviteTeamMemberAction(formData: FormData) {
       ? `Einladung an ${email} wurde versendet.`
       : `${email} wurde als Einladung vorgemerkt; der Auth-Benutzer existierte bereits.`,
   )
+}
+
+export async function updateTeamMemberAccessAction(formData: FormData) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    adminUsersRedirect("error", "SUPABASE_SERVICE_ROLE_KEY fehlt. Rollenwechsel benoetigen serverseitige Admin-Rechte.")
+  }
+
+  const supabase = await createClient()
+  await requireRole(ADMIN_ROLES, supabase)
+  const currentMembership = await ensureCurrentMembership(supabase)
+
+  const membershipId = getString(formData, "membershipId")
+  const nextRole = parseMembershipRole(getString(formData, "role"))
+  const nextStatus = parseMembershipStatus(getString(formData, "status"))
+
+  if (!membershipId) adminUsersRedirect("error", "Teammitglied wurde nicht angegeben.")
+  if (!nextRole) adminUsersRedirect("error", "Bitte eine gueltige Rolle waehlen.")
+  if (!nextStatus) adminUsersRedirect("error", "Bitte einen gueltigen Status waehlen.")
+
+  const serviceClient = await createServiceClient()
+  const { data: membership, error } = await serviceClient
+    .from("organization_memberships")
+    .select("*")
+    .eq("id", membershipId)
+    .eq("organization_id", currentMembership.organizationId)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  if (!membership) adminUsersRedirect("error", "Teammitglied wurde nicht gefunden.")
+
+  const previousRole = parseMembershipRole(String(membership.role))
+  const previousStatus = parseMembershipStatus(String(membership.status))
+  if (!previousRole || !previousStatus) {
+    adminUsersRedirect("error", "Die bestehende Mitgliedschaft enthaelt eine unbekannte Rolle oder einen unbekannten Status.")
+  }
+
+  if (nextStatus === "invited" && previousStatus !== "invited") {
+    adminUsersRedirect("error", "Aktive oder deaktivierte Teammitglieder koennen nicht ohne neue Einladung auf eingeladen gesetzt werden.")
+  }
+
+  const isOwnerActor = currentMembership.role === "owner"
+  const touchesOwnerRole = previousRole === "owner" || nextRole === "owner"
+  if (touchesOwnerRole && !isOwnerActor) {
+    adminUsersRedirect("error", "Nur Owner koennen Owner-Mitgliedschaften aendern.")
+  }
+
+  const targetIsCurrentUser = String(membership.user_id) === currentMembership.userId
+  if (targetIsCurrentUser && (!hasAnyRole(nextRole, ADMIN_ROLES) || nextStatus !== "active")) {
+    adminUsersRedirect("error", "Die eigene Admin-Berechtigung kann nicht entzogen oder deaktiviert werden.")
+  }
+
+  if (previousRole === "owner" && previousStatus === "active" && (nextRole !== "owner" || nextStatus !== "active")) {
+    const { count, error: countError } = await serviceClient
+      .from("organization_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", currentMembership.organizationId)
+      .eq("role", "owner")
+      .eq("status", "active")
+
+    if (countError) throw new Error(countError.message)
+    if ((count ?? 0) <= 1) {
+      adminUsersRedirect("error", "Der letzte aktive Owner kann nicht herabgestuft oder deaktiviert werden.")
+    }
+  }
+
+  if (previousRole === nextRole && previousStatus === nextStatus) {
+    adminUsersRedirect("success", "Keine Aenderung notwendig.")
+  }
+
+  const now = new Date().toISOString()
+  const membershipUpdate: Record<string, unknown> = {
+    role: nextRole,
+    status: nextStatus,
+    joined_at: nextStatus === "active" ? membership.joined_at ?? now : membership.joined_at,
+  }
+
+  if (nextStatus === "disabled") {
+    membershipUpdate.revoked_at = now
+  } else if (Object.prototype.hasOwnProperty.call(membership, "revoked_at")) {
+    membershipUpdate.revoked_at = null
+  }
+
+  const { error: updateError } = await serviceClient
+    .from("organization_memberships")
+    .update(membershipUpdate)
+    .eq("id", membership.id)
+
+  if (updateError) throw new Error(updateError.message)
+
+  await writeAdminAudit(serviceClient, currentMembership, "team_membership_updated", membership.id, {
+    email: membership.email,
+    previousRole,
+    nextRole,
+    previousStatus,
+    nextStatus,
+  })
+
+  revalidatePath("/admin/users")
+  adminUsersRedirect("success", `Zugriff fuer ${membership.email} wurde aktualisiert.`)
 }
 
 export async function resendTeamInvitationAction(formData: FormData) {

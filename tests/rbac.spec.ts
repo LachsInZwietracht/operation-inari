@@ -84,7 +84,32 @@ async function ensureUser(email: string, role: TestRole) {
 
   if (membershipError) throw new Error(membershipError.message);
 
-  return user;
+  return { user, organizationId: organizationId as string };
+}
+
+async function ensureMembershipInOrganization(email: string, role: TestRole, organizationId: string) {
+  const { user } = await ensureUser(email, role);
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("organization_memberships")
+    .upsert(
+      {
+        organization_id: organizationId,
+        user_id: user.id,
+        email,
+        display_name: `RBAC ${role}`,
+        role,
+        status: "active",
+        joined_at: now,
+        updated_at: now,
+      },
+      { onConflict: "organization_id,user_id" },
+    )
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data.id as string;
 }
 
 async function login(page: Page, email: string) {
@@ -113,6 +138,51 @@ test.describe("RBAC route guards", () => {
     await expect(page.getByText("Teammitglied einladen")).toBeVisible();
     await expect(page.getByText("Teammitglieder")).toBeVisible();
     await expect(page.getByRole("cell", { name: email })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Speichern" }).first()).toBeVisible();
+  });
+
+  test("lets owners change team roles and writes an audit log", async ({ page }) => {
+    const ownerEmail = "rbac-owner-role-change@prodi.local";
+    const targetEmail = "rbac-role-target@prodi.local";
+    const { organizationId } = await ensureUser(ownerEmail, "owner");
+    const membershipId = await ensureMembershipInOrganization(targetEmail, "dietitian", organizationId);
+
+    await login(page, ownerEmail);
+
+    await page.goto("/admin/users");
+    const targetRow = page.getByRole("row", { name: new RegExp(targetEmail) });
+    await targetRow.getByLabel(`Rolle fuer ${targetEmail}`).selectOption("institution_admin");
+    await targetRow.getByRole("button", { name: "Speichern" }).click();
+    await expect(page.getByText(`Zugriff fuer ${targetEmail} wurde aktualisiert.`)).toBeVisible();
+
+    const { data: membership, error: membershipError } = await admin
+      .from("organization_memberships")
+      .select("role,status")
+      .eq("id", membershipId)
+      .single();
+
+    if (membershipError) throw new Error(membershipError.message);
+    expect(membership).toMatchObject({ role: "institution_admin", status: "active" });
+
+    const { data: auditLog, error: auditError } = await admin
+      .from("access_audit_logs")
+      .select("action,target_id,metadata")
+      .eq("action", "team_membership_updated")
+      .eq("target_id", membershipId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (auditError) throw new Error(auditError.message);
+    expect(auditLog).toMatchObject({
+      action: "team_membership_updated",
+      target_id: membershipId,
+      metadata: expect.objectContaining({
+        email: targetEmail,
+        previousRole: "dietitian",
+        nextRole: "institution_admin",
+      }),
+    });
   });
 
   test("blocks regular dietitian users from admin pages", async ({ page }) => {

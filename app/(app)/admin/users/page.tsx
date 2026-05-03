@@ -25,6 +25,7 @@ import {
   resendTeamInvitationAction,
   revokeTeamInvitationAction,
   updateReportRetentionPolicyAction,
+  updateTeamMemberAccessAction,
 } from "./actions";
 
 const STATUS_BADGES: Record<MembershipStatus, string> = {
@@ -47,6 +48,27 @@ const INVITABLE_ROLE_OPTIONS: Array<{ value: Exclude<AppRole, "owner">; label: s
   { value: "assistant", label: ROLE_LABELS.assistant },
   { value: "institution_admin", label: ROLE_LABELS.institution_admin },
 ];
+
+const ROLE_OPTIONS: Array<{ value: AppRole; label: string }> = [
+  { value: "owner", label: ROLE_LABELS.owner },
+  ...INVITABLE_ROLE_OPTIONS,
+];
+
+const STATUS_LABELS: Record<MembershipStatus, string> = {
+  active: "Aktiv",
+  invited: "Eingeladen",
+  disabled: "Deaktiviert",
+};
+
+const STATUS_OPTIONS: Array<{ value: MembershipStatus; label: string }> = [
+  { value: "active", label: STATUS_LABELS.active },
+  { value: "invited", label: STATUS_LABELS.invited },
+  { value: "disabled", label: STATUS_LABELS.disabled },
+];
+
+function getEditableStatusOptions(status: MembershipStatus) {
+  return STATUS_OPTIONS.filter((option) => option.value !== "invited" || status === "invited");
+}
 
 function getSearchParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -103,6 +125,9 @@ export default async function AdminUsersPage({
 
   const activeCount = memberships.filter((membership) => membership.status === "active").length;
   const adminCount = memberships.filter((membership) => hasAnyRole(membership.role, ADMIN_ROLES)).length;
+  const editableRoleOptions = currentMembership.role === "owner"
+    ? ROLE_OPTIONS
+    : ROLE_OPTIONS.filter((option) => option.value !== "owner");
 
   return (
     <div className="space-y-6">
@@ -211,7 +236,7 @@ export default async function AdminUsersPage({
         <CardHeader>
           <CardTitle className="text-base">Teammitglieder</CardTitle>
           <CardDescription>
-            Persistierte Rollenbasis fuer Route- und API-Zugriff. Einladung und Rollenwechsel werden auf dieser Grundlage als naechster Schritt umgesetzt.
+            Persistierte Rollenbasis fuer Route- und API-Zugriff. Rollen- und Statuswechsel werden auditiert und gegen Owner-Lockout geprueft.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -228,51 +253,88 @@ export default async function AdminUsersPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {memberships.map((membership) => (
-                <TableRow key={membership.id}>
-                  <TableCell className="font-medium">{membership.displayName ?? "Ohne Namen"}</TableCell>
-                  <TableCell>{membership.email}</TableCell>
-                  <TableCell>
-                    <Badge className={ROLE_BADGES[membership.role]}>{ROLE_LABELS[membership.role]}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={STATUS_BADGES[membership.status]}>{membership.status}</Badge>
-                  </TableCell>
-                  <TableCell>{new Date(membership.joinedAt ?? membership.createdAt).toLocaleDateString("de-DE")}</TableCell>
-                  <TableCell>
-                    {membership.invitationSentAt ? (
-                      <div className="text-sm">
-                        <p>{new Date(membership.invitationSentAt).toLocaleDateString("de-DE")}</p>
-                        {membership.invitationExpiresAt ? (
-                          <p className="text-xs text-muted-foreground">
-                            bis {new Date(membership.invitationExpiresAt).toLocaleDateString("de-DE")}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {membership.status !== "active" ? (
-                      <div className="flex justify-end gap-2">
-                        <form action={resendTeamInvitationAction}>
-                          <input type="hidden" name="membershipId" value={membership.id} />
-                          <Button type="submit" size="sm" variant="outline">Erneut senden</Button>
-                        </form>
-                        {membership.status === "invited" ? (
-                          <form action={revokeTeamInvitationAction}>
+              {memberships.map((membership) => {
+                const protectedOwnerRow = membership.role === "owner" && currentMembership.role !== "owner";
+                const editableStatusOptions = getEditableStatusOptions(membership.status);
+
+                return (
+                  <TableRow key={membership.id}>
+                    <TableCell className="font-medium">{membership.displayName ?? "Ohne Namen"}</TableCell>
+                    <TableCell>{membership.email}</TableCell>
+                    <TableCell>
+                      <Badge className={ROLE_BADGES[membership.role]}>{ROLE_LABELS[membership.role]}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={STATUS_BADGES[membership.status]}>{STATUS_LABELS[membership.status]}</Badge>
+                    </TableCell>
+                    <TableCell>{new Date(membership.joinedAt ?? membership.createdAt).toLocaleDateString("de-DE")}</TableCell>
+                    <TableCell>
+                      {membership.invitationSentAt ? (
+                        <div className="text-sm">
+                          <p>{new Date(membership.invitationSentAt).toLocaleDateString("de-DE")}</p>
+                          {membership.invitationExpiresAt ? (
+                            <p className="text-xs text-muted-foreground">
+                              bis {new Date(membership.invitationExpiresAt).toLocaleDateString("de-DE")}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="min-w-[360px]">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {protectedOwnerRow ? (
+                          <span className="self-center text-sm text-muted-foreground">Owner geschuetzt</span>
+                        ) : (
+                          <form action={updateTeamMemberAccessAction} className="flex flex-wrap justify-end gap-2">
                             <input type="hidden" name="membershipId" value={membership.id} />
-                            <Button type="submit" size="sm" variant="ghost">Widerrufen</Button>
+                            <select
+                              name="role"
+                              defaultValue={membership.role}
+                              aria-label={`Rolle fuer ${membership.email}`}
+                              className="border-input bg-background h-9 w-[170px] rounded-md border px-3 text-sm shadow-xs"
+                            >
+                              {editableRoleOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              name="status"
+                              defaultValue={membership.status}
+                              aria-label={`Status fuer ${membership.email}`}
+                              className="border-input bg-background h-9 w-[130px] rounded-md border px-3 text-sm shadow-xs"
+                            >
+                              {editableStatusOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <Button type="submit" size="sm">Speichern</Button>
                           </form>
+                        )}
+                        {membership.status !== "active" ? (
+                          <>
+                            <form action={resendTeamInvitationAction}>
+                              <input type="hidden" name="membershipId" value={membership.id} />
+                              <Button type="submit" size="sm" variant="outline">Erneut senden</Button>
+                            </form>
+                            {membership.status === "invited" ? (
+                              <form action={revokeTeamInvitationAction}>
+                                <input type="hidden" name="membershipId" value={membership.id} />
+                                <Button type="submit" size="sm" variant="ghost">Widerrufen</Button>
+                              </form>
+                            ) : null}
+                          </>
                         ) : null}
                       </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
