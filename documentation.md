@@ -183,6 +183,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
   - **Audit:** SSO create/update/disable flows write `sso_config_created`, `sso_config_updated`, and `sso_config_disabled` rows to `access_audit_logs`.
   - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff.
+  - **Integration contracts:** LDAP/AD group mapping, HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
 
 ### 4.11 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`

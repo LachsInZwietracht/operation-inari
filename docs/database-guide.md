@@ -291,6 +291,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/admin/users` role/status changes are performed server-side against `organization_memberships`, enforce Owner-only Owner changes plus last-active-Owner and self-lockout guards, and write `team_membership_updated` rows to `access_audit_logs`.
 - `/admin/users` stores organization-level SSO configuration in `organization_sso_configs`: OIDC/SAML provider type, domains, provider metadata URLs/XML, client/entity identifiers, status, and login-hint parameter. Create/update/disable actions write `sso_config_*` audit rows.
 - `/api/sso/resolve` is the public login-routing resolver. It accepts an email address, matches active SSO configs by domain through a service-role lookup, and returns only minimal routing metadata. It does not perform provider handoff yet.
+- LDAP/Active Directory group-to-role mapping requirements are defined in `docs/clinic-it-integration-plan.md`. Direct LDAP bind/sync is intentionally out of scope for v1; groups should arrive through verified OIDC/SAML claims.
 - Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, patient report exports/downloads, export history and dataset exports, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
 - New authenticated users can be bootstrapped into a default organization/membership by the server access helper; Playwright setup creates an `owner` membership for the test user.
@@ -332,6 +333,14 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `get_practice_statistics_summary()` returns compact authenticated aggregates for `/praxis-statistiken` (KPI comparisons, time-range chart buckets, invoice health, demographic buckets, top indications, overdue invoice warnings). It is scoped to `auth.uid()` and should stay aligned with `PracticeStatisticsSummary` in `lib/data/practice-overview.ts`.
 - The dashboard and practice-statistics server loaders try their RPCs first and fall back to row-based loaders if a function is not deployed yet, so rollout is non-breaking.
 - Keep mutation/local migration flows in the existing hooks; summary RPCs are for first paint and aggregate display data, not canonical write state.
+
+### Clinic Integration Notes
+
+- `docs/clinic-it-integration-plan.md` defines the remaining clinic IT integration contracts:
+  - LDAP/Active Directory claim/group-to-role mapping on top of `organization_sso_configs`
+  - HL7 v2 MVP for `PID`, `MSH`, `OBR`, and numeric `OBX` imports into `patients` and `patient_lab_values`
+  - first FHIR boundary for inbound `Patient` and lab `Observation` sync after HL7 import/review is stable
+- HL7/FHIR implementation should add import job/result tables before mutating patient or lab data. Raw messages/resources must not be written to logs or API error bodies.
 
 ### Database Lifecycle Notes
 

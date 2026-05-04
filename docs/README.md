@@ -21,6 +21,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Supabase schema, RLS, migrations, ETL, food data | `docs/database-guide.md` | Migrations remain the schema source of truth. |
 | Product scope, roadmap, prioritization | `docs/product-requirements.md` | Product intent, not implementation proof. |
 | Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Strategy input only. |
+| Clinic IT integrations: LDAP/AD, HL7, FHIR | `docs/clinic-it-integration-plan.md` | P1 integration contracts and implementation boundaries. |
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
 | Billing/subscription work | `.agent/docs/billing.md` | Billing is preview-only unless code proves otherwise. |
 | Claude phase commands | `.claude/commands/*` | Workflow prompts for Claude Code sessions. |
@@ -37,6 +38,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 - `docs/database-guide.md` - database, ETL, nutrition data, search, and performance guide.
 - `docs/product-requirements.md` - roadmap and requirements direction.
 - `docs/competitive-audit.md` - April 2026 competitor and gap audit.
+- `docs/clinic-it-integration-plan.md` - LDAP/AD mapping, HL7 MVP, and first FHIR sync boundary.
 - `docs/debinet-import.md` - planning notes for a future DEBInet import workflow.
 
 ## Maintenance Rules

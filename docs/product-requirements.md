@@ -180,14 +180,15 @@ Product direction:
 ### 7.1 Authentication & Authorization
 - **Implementation note:** Local development may bypass auth temporarily in `middleware.ts`. Do not treat that as the intended production model.
 - **SSO foundation:** Organization admins can persist OIDC/SAML provider metadata and email domains. The login page resolves active SSO configs by email domain and shows the prepared SSO path; actual provider handoff remains a follow-up integration step.
-- **LDAP/Active Directory mapping:** Still required after the SSO foundation so hospital IT can define group-to-role mappings and lifecycle rules.
+- **LDAP/Active Directory mapping:** Requirements are defined for group/claim-to-role mapping on top of verified OIDC/SAML claims. Direct LDAP bind/sync is deferred.
 
 ---
 
 ## 8. Technical Requirements
 
 ### 8.1 Integrations
-- **HL7 message import** — HL7 v2.x parser to map segments (PID, OBX, ORC) to patient and lab models. This covers legacy systems where FHIR is not yet available.
+- **HL7 message import** — MVP boundary defined for ADT/ORU messages using `MSH`, `PID`, `OBR`, and numeric `OBX` segments mapped to `patients` and `patient_lab_values` with import review/audit jobs.
+- **FHIR sync** — first boundary defined for inbound `Patient` and lab `Observation` sync after HL7 import/review is stable; write-back and broader resources are deferred.
 - **Web Serial/WebUSB** — for medical device and eGK card reader communication.
 
 ---
@@ -211,12 +212,12 @@ Roadmap notes:
 
 ### Phase 3 - Expert & Institutional Features
 1. Lab values, Diabetes module, and Medication management.
-2. **SSO Integration:** OIDC/SAML configuration and login-domain routing foundation implemented; LDAP/Active Directory group mapping remains next.
+2. **SSO Integration:** OIDC/SAML configuration and login-domain routing foundation implemented; LDAP/Active Directory group mapping requirements defined.
 3. **Bedside Optimized UI:** Tablet-first ward assistant with QR scanning.
 4. PROCAM score and medical calculations (Creatinine clearance, MNA, SGA).
 
 ### Phase 4 - Full Clinical Integration
-1. **HL7/FHIR Sync:** Bidirectional HIS integration.
+1. **HL7/FHIR Sync:** HL7 import MVP and first FHIR Patient/Observation boundary defined; bidirectional HIS integration remains later.
 2. Kitchen production and tray card generation.
 3. Quality report generation (Qualitätsbericht).
 
