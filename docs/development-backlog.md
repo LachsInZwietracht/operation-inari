@@ -1,6 +1,6 @@
 # Development Backlog
 
-Last updated: 2026-04-29
+Last updated: 2026-05-04
 
 Purpose:
 - Track currently open development tasks for the next engineer or agent.
@@ -17,17 +17,20 @@ Priority guide:
 
 Start here unless product priorities have changed:
 
-1. Done: Fix mobile/tablet overflow across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
-2. Done: Make `PageHeader`, app header, global search, and `PwaStatus` responsive.
-3. Done: Add visual regression checks for 390 px, 768 px, and desktop widths.
-4. Done: Fix the `/patienten` hydration mismatch around eGK event rendering.
-5. Done: Harden `/api-export` and `/datenbank` error states so missing schema/API failures show clear inline recovery messages.
-6. Port Cologne phonetics into Postgres search so German fuzzy matching works server-side.
-7. Continue paginated and on-demand food loading where full-catalog hooks remain.
-8. Done: `/admin/users` now supports audited invitations plus role/status changes with Owner lockout checks.
-9. Done: Add access-event audit logs for sensitive patient, report, export, and institution actions.
-10. Improve institution workflow hierarchy with sticky service/station/status controls and clearer unsafe-order handling.
-11. Add production batch states for institution kitchen workflows.
+1. Add a persisted Playwright happy path for digital protocol link creation, public submission, practitioner review, conversion, and converted-state tracking. Start from `components/patient-workflow-tab.tsx`, `app/protokoll/[linkId]`, `app/api/protokoll/submit/route.ts`, and `app/api/digital-protocol-submissions/convert/route.ts`.
+2. Add a patient report archive/export fixture that proves `patient_reports`, `patient_report_versions`, private `patient-report-files` storage download, `export_jobs`, and `access_audit_logs` all line up with `/berichte` behavior.
+3. Create a seeded demo-workspace fixture or script for the full buyer story in `docs/clinic-demo-runbook.md`: patient intake -> protocol -> counseling/report -> inpatient stay -> safe order -> tray card -> production/analytics.
+4. Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
+5. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
+6. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
+
+Recently completed sprint work:
+- Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
+- Responsive `PageHeader`, app header, global search, and `PwaStatus`.
+- Visual regression checks for 390 px, 768 px, and desktop widths.
+- `/patienten` eGK hydration mismatch fix.
+- Inline recovery states for `/api-export` and `/datenbank`.
+- Server-side Cologne phonetics, paginated/on-demand food loading, RBAC invitations/role edits, access-event audit logs, institution workflow hierarchy, and production batch states.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -63,8 +66,10 @@ Start here unless product priorities have changed:
 - [x] Define LDAP/Active Directory mapping requirements for clinic deployments.
 - [x] Implement API key issuance for the currently preview-only API surfaces.
 - [x] Persist webhook endpoints, delivery attempts, and failures for integration workflows.
-- [x] Define HL7 v2 import MVP: parse `PID`, `OBX`, and basic patient/lab mapping into existing patient/lab tables.
+- [x] Define HL7 v2 import MVP for `PID`, `OBX`, and basic patient/lab mapping into existing patient/lab tables.
+- [ ] Implement HL7 v2 import MVP with job/result persistence, review states, idempotency, patient/lab mutations, and audit events.
 - [x] Define the first FHIR sync boundary after HL7 import is stable.
+- [ ] Implement SSO group/claim-to-role mappings for verified SSO principals.
 
 ## P1: Patient-To-Kitchen Workflow
 
@@ -84,6 +89,7 @@ Start here unless product priorities have changed:
 - [x] Add report retention policy fields and admin controls.
 - [x] Improve archived report search and filtering inside patient records.
 - [x] Add scheduled export requirements after the report-retention model is clear.
+- [ ] Add patient report export/archive Playwright coverage for immutable versions, storage download, export journal, and audit logs.
 
 ## P2: UX Rework For Core Workflows
 
@@ -96,6 +102,8 @@ Start here unless product priorities have changed:
 - [x] Add clinical design tokens for nutrient gaps, source trust, allergen risk, order safety, and report status.
 - [x] Create dense worklist patterns for institution and patient workflows.
 - [x] Standardize German clinical terminology across labels, including `Eiweiß`, `Kohlenhydrate`/`KH`, and patient wording.
+- [ ] Add persisted digital-protocol happy-path coverage for public submission, practitioner review, conversion, and converted-state tracking.
+- [ ] Add a seeded full clinic demo fixture or script for the patient-to-kitchen runbook.
 
 ## P2: Commercial Readiness
 

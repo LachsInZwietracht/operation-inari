@@ -356,7 +356,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Aggregates a compact patient timeline from digital submissions, protocols, counseling milestones, and follow-up appointments.
 - **Report history:** The workflow now lists patient-bound report records from `patient_reports`. The `Report` stage becomes `done` once a report record exists and deep-links back into `/berichte?reportId=...`.
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
-- **Implementation note:** Patient report records are metadata-only in v1. Reports are rebuilt from current source data on reopen; PDF/CSV binaries are not retained.
+- **Implementation note:** Patient-bound report exports now retain both an immutable snapshot in `patient_report_versions` and the generated PDF/CSV file in private Supabase Storage. Reopening `reportVersionId` renders the archived snapshot, while `reportId` reopens the latest report context for continued work.
 
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
