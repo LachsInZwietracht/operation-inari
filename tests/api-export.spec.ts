@@ -62,13 +62,14 @@ test.describe("API & Export", () => {
     await expect(page.getByText(/Import-Backend ist .* noch nicht implementiert/)).toBeVisible();
   });
 
-  test("shows REST API as preview with expandable endpoint examples", async ({ page }) => {
+  test("shows live API key management with expandable endpoint examples", async ({ page }) => {
     await page.goto("/api-export");
 
     await page.getByRole("tab", { name: "REST API" }).click();
 
-    await expect(page.getByText("REST API Vorschau")).toBeVisible();
-    await expect(page.getByText("Keine live verwalteten API-Schluessel")).toBeVisible();
+    await expect(page.getByText("REST API Schluessel")).toBeVisible();
+    await expect(page.getByText("Live verwaltete API-Schluessel")).toBeVisible();
+    await expect(page.getByTestId("api-keys-table")).toBeVisible();
 
     const apiEndpointsTable = page.locator('[data-testid="api-endpoints-table"]');
     const foodsRow = apiEndpointsTable.getByRole("row", { name: /\/api\/v1\/foods\s/ });
@@ -79,6 +80,49 @@ test.describe("API & Export", () => {
     await foodsRow.click();
     await expect(page.getByText("Beispielantwort (Preview)")).toBeVisible();
     await expect(page.getByText('"food_karotte"')).toBeVisible();
+  });
+
+  test("creates, uses, and revokes an API key for food dataset exports", async ({ page, request }) => {
+    await page.goto("/api-export");
+    await page.getByRole("tab", { name: "REST API" }).click();
+
+    const keyName = `Playwright Export Key ${Date.now()}`;
+    await page.getByLabel("Name").fill(keyName);
+    await page.getByRole("button", { name: "Schluessel erstellen" }).click();
+
+    const tokenLocator = page.getByTestId("created-api-key-token");
+    await expect(tokenLocator).toBeVisible();
+    const token = (await tokenLocator.textContent())?.trim();
+    expect(token).toMatch(/^prodi_/);
+
+    const exportResponse = await request.post("/api/exports/datasets", {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      data: {
+        format: "CSV",
+        scope: "Lebensmittel",
+      },
+    });
+    expect(exportResponse.status(), await exportResponse.text()).toBe(200);
+    expect(exportResponse.headers()["content-type"]).toContain("text/csv");
+
+    const apiKeyRow = page.getByRole("row", { name: new RegExp(keyName) }).first();
+    const revokeButton = apiKeyRow.getByRole("button", { name: "Widerrufen" }).first();
+    await revokeButton.click();
+    await expect(revokeButton).toBeDisabled();
+
+    const revokedResponse = await request.post("/api/exports/datasets", {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      data: {
+        format: "CSV",
+        scope: "Lebensmittel",
+      },
+    });
+    expect(revokedResponse.status()).toBe(401);
+    expect(await revokedResponse.json()).toEqual({ error: "API_KEY_INVALID" });
   });
 
   test("shows integrations and webhook events as preview", async ({ page }) => {

@@ -5,11 +5,14 @@ import { toast } from "sonner"
 import {
   Code,
   Clock,
+  Copy,
   Download,
   FileJson,
   FileSpreadsheet,
   FileText,
   Key,
+  ShieldCheck,
+  Trash2,
   Upload,
   Webhook,
   ChevronDown,
@@ -20,6 +23,8 @@ import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -33,7 +38,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { API_ENDPOINT_PREVIEWS, INTEGRATION_PREVIEWS, WEBHOOK_EVENT_PREVIEWS } from "@/lib/content/ops-preview"
 import { SUPPORTED_EXPORTS } from "@/lib/exports/constants"
 import { formatDate } from "@/lib/format"
-import type { ExportFormat, ExportJobRecord, ExportScope } from "@/lib/types"
+import type { ApiKeyRecord, ExportFormat, ExportJobRecord, ExportScope } from "@/lib/types"
 import { downloadResponseFile } from "@/lib/utils"
 
 const STATUS_STYLES: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
@@ -60,6 +65,20 @@ function formatHistoryError(error: unknown) {
   return raw || "Export-Historie konnte nicht geladen werden."
 }
 
+function formatApiKeyError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error)
+  if (raw.includes("api_keys")) {
+    return "API-Schluessel sind in dieser Supabase-Umgebung noch nicht konfiguriert. Wenden Sie die `api_keys` Migration an."
+  }
+  if (raw.includes("FORBIDDEN")) {
+    return "Nur Owner und Administrator:innen koennen API-Schluessel verwalten."
+  }
+  if (raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
+    return "API-Schluessel konnten nicht geladen werden. Pruefen Sie die lokale Supabase-/API-Verbindung."
+  }
+  return raw || "API-Schluessel konnten nicht geladen werden."
+}
+
 export default function ApiExportPage() {
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null)
   const [exportScopes, setExportScopes] = useState<Record<ExportFormat, ExportScope>>({
@@ -70,7 +89,14 @@ export default function ApiExportPage() {
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all")
   const [historyFormatFilter, setHistoryFormatFilter] = useState("all")
   const [exportJobs, setExportJobs] = useState<ExportJobRecord[]>([])
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([])
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null)
+  const [newApiKeyName, setNewApiKeyName] = useState("Klinik Export")
+  const [newApiKeyExpiresAt, setNewApiKeyExpiresAt] = useState("")
+  const [createdApiKeyToken, setCreatedApiKeyToken] = useState<string | null>(null)
+  const [isCreatingApiKey, setIsCreatingApiKey] = useState(false)
+  const [revokingApiKeyId, setRevokingApiKeyId] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState<Record<ExportFormat, boolean>>({
     CSV: false,
     JSON: false,
@@ -119,8 +145,24 @@ export default function ApiExportPage() {
     }
   }
 
+  async function loadApiKeys() {
+    try {
+      const response = await fetch("/api/api-keys", { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      setApiKeys((await response.json()) as ApiKeyRecord[])
+      setApiKeyError(null)
+    } catch (error) {
+      const message = formatApiKeyError(error)
+      setApiKeyError(message)
+      toast.error(message)
+    }
+  }
+
   useEffect(() => {
     void loadExportJobs()
+    void loadApiKeys()
   }, [])
 
   async function handleExport(format: ExportFormat) {
@@ -142,6 +184,62 @@ export default function ApiExportPage() {
     } finally {
       setIsExporting((prev) => ({ ...prev, [format]: false }))
     }
+  }
+
+  async function handleCreateApiKey() {
+    setIsCreatingApiKey(true)
+    try {
+      const response = await fetch("/api/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: newApiKeyName,
+          scopes: ["exports:datasets:read"],
+          expiresAt: newApiKeyExpiresAt || null,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const data = (await response.json()) as { apiKey: ApiKeyRecord; token: string }
+      setCreatedApiKeyToken(data.token)
+      setApiKeys((current) => [data.apiKey, ...current])
+      setNewApiKeyName("Klinik Export")
+      setNewApiKeyExpiresAt("")
+      setApiKeyError(null)
+      toast.success("API-Schluessel erstellt", {
+        description: "Der Token wird nur jetzt vollstaendig angezeigt.",
+      })
+    } catch (error) {
+      const message = formatApiKeyError(error)
+      setApiKeyError(message)
+      toast.error(message)
+    } finally {
+      setIsCreatingApiKey(false)
+    }
+  }
+
+  async function handleRevokeApiKey(keyId: string) {
+    setRevokingApiKeyId(keyId)
+    try {
+      const response = await fetch(`/api/api-keys/${keyId}/revoke`, { method: "POST" })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const revokedKey = (await response.json()) as ApiKeyRecord
+      setApiKeys((current) => current.map((apiKey) => (apiKey.id === keyId ? revokedKey : apiKey)))
+      toast.success("API-Schluessel widerrufen")
+    } catch (error) {
+      toast.error(formatApiKeyError(error))
+    } finally {
+      setRevokingApiKeyId(null)
+    }
+  }
+
+  async function handleCopyToken() {
+    if (!createdApiKeyToken) return
+    await navigator.clipboard.writeText(createdApiKeyToken)
+    toast.success("Token kopiert")
   }
 
   const filteredHistory = useMemo(() => {
@@ -299,32 +397,32 @@ export default function ApiExportPage() {
               <div className="flex items-center gap-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Key className="h-5 w-5 text-muted-foreground" />
-                  REST API Vorschau
+                  REST API Schluessel
                 </CardTitle>
-                <Badge variant="secondary">Preview</Badge>
+                <Badge variant="default">Live</Badge>
               </div>
               <CardDescription>
-                Export- und Berichtspipelines sind live, aber API-Key-Ausgabe und externer REST-Zugriff werden hier
-                noch nicht produktiv verwaltet.
+                Owner und Administrator:innen koennen Tokens fuer den ersten produktiven REST-Endpunkt ausstellen,
+                ueberwachen und widerrufen.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-3">
               <div className="rounded-lg border p-4">
-                <p className="text-sm font-semibold">Keine live verwalteten API-Schluessel</p>
+                <p className="text-sm font-semibold">Live verwaltete API-Schluessel</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Token-Erstellung, Rotation und Widerruf werden erst mit einem echten Key-Backend freigeschaltet.
+                  Token-Erstellung, letzte Nutzung, Ablaufdatum und Widerruf laufen ueber Supabase.
                 </p>
               </div>
               <div className="rounded-lg border p-4">
-                <p className="text-sm font-semibold">Schema-Vorschau verfuegbar</p>
+                <p className="text-sm font-semibold">Begrenzter Export-Scope</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Die untenstehenden Endpunkte zeigen das geplante Shape fuer künftige Integrationen.
+                  `exports:datasets:read` erlaubt aktuell nur Lebensmittel-Datasets ohne benutzereigene Sonderdaten.
                 </p>
               </div>
               <div className="rounded-lg border p-4">
-                <p className="text-sm font-semibold">Kein externer Supportvertrag</p>
+                <p className="text-sm font-semibold">Auditpflichtig</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Monitoring, Rate Limits und Mandantenmodell sind fuer die externe API noch nicht produktiv finalisiert.
+                  Erstellung, Widerruf und API-Exporte landen im Zugriffsjournal der Organisation.
                 </p>
               </div>
             </CardContent>
@@ -333,10 +431,131 @@ export default function ApiExportPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Code className="h-5 w-5 text-muted-foreground" />
-                Geplante Endpunkte
+                <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+                Schluesselverwaltung
               </CardTitle>
-              <CardDescription>Basis-URL und Antwortbeispiele sind Vorschau, keine freigeschaltete externe API.</CardDescription>
+              <CardDescription>Der vollstaendige Token wird nur direkt nach der Erstellung angezeigt.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {apiKeyError && (
+                <Alert variant="destructive">
+                  <AlertTitle>API-Schluessel nicht verfügbar</AlertTitle>
+                  <AlertDescription>{apiKeyError}</AlertDescription>
+                </Alert>
+              )}
+
+              {createdApiKeyToken && (
+                <Alert>
+                  <Key className="h-4 w-4" />
+                  <AlertTitle>Neuer Token</AlertTitle>
+                  <AlertDescription>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <code data-testid="created-api-key-token" className="break-all rounded bg-muted px-2 py-1 text-xs">
+                        {createdApiKeyToken}
+                      </code>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void handleCopyToken()}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        Kopieren
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="api-key-name">Name</Label>
+                  <Input
+                    id="api-key-name"
+                    value={newApiKeyName}
+                    onChange={(event) => setNewApiKeyName(event.target.value)}
+                    placeholder="KIS Export"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="api-key-expires">Ablaufdatum</Label>
+                  <Input
+                    id="api-key-expires"
+                    type="date"
+                    value={newApiKeyExpiresAt}
+                    onChange={(event) => setNewApiKeyExpiresAt(event.target.value)}
+                  />
+                </div>
+                <Button type="button" onClick={() => void handleCreateApiKey()} disabled={isCreatingApiKey || !newApiKeyName.trim()}>
+                  <Key className="mr-2 h-4 w-4" />
+                  {isCreatingApiKey ? "Erstellt..." : "Schluessel erstellen"}
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table data-testid="api-keys-table" className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Prefix</TableHead>
+                      <TableHead>Scopes</TableHead>
+                      <TableHead>Ablauf</TableHead>
+                      <TableHead>Letzte Nutzung</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Aktion</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {apiKeys.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                          Noch keine API-Schluessel erstellt.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      apiKeys.map((apiKey) => {
+                        const isRevoked = Boolean(apiKey.revokedAt)
+                        return (
+                          <TableRow key={apiKey.id}>
+                            <TableCell className="font-medium">{apiKey.name}</TableCell>
+                            <TableCell>
+                              <code className="text-xs">{apiKey.tokenPrefix}...</code>
+                            </TableCell>
+                            <TableCell className="text-xs">{apiKey.scopes.join(", ")}</TableCell>
+                            <TableCell>{apiKey.expiresAt ? formatDate(apiKey.expiresAt) : "Kein Ablauf"}</TableCell>
+                            <TableCell>{apiKey.lastUsedAt ? formatDate(apiKey.lastUsedAt) : "Noch nicht genutzt"}</TableCell>
+                            <TableCell>
+                              <Badge variant={isRevoked ? "secondary" : "default"}>
+                                {isRevoked ? "Widerrufen" : "Aktiv"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleRevokeApiKey(apiKey.id)}
+                                disabled={isRevoked || revokingApiKeyId === apiKey.id}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {revokingApiKeyId === apiKey.id ? "Widerruft..." : "Widerrufen"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Code className="h-5 w-5 text-muted-foreground" />
+                Endpunkte
+              </CardTitle>
+              <CardDescription>
+                `/api/exports/datasets` akzeptiert `Authorization: Bearer prodi_...` fuer Lebensmittel-Exporte.
+                Weitere Endpunkte bleiben als Integrationsvorschau dokumentiert.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

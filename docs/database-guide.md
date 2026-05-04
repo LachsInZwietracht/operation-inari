@@ -292,7 +292,13 @@ The full schema is defined in Supabase migration files under `supabase/migration
 ### Export Job Notes
 
 - `export_jobs` stores **metadata only** and is still not the patient document source of truth.
-- Export APIs now require an authenticated user before creating files or audit rows.
+- App-session export APIs require an authenticated user before creating files or audit rows.
+- `api_keys` stores organization-scoped API tokens for external integrations:
+  - only the token prefix and SHA-256 hash are persisted
+  - owner/admin users can list, create, and revoke keys through `/api/api-keys`
+  - the only current scope is `exports:datasets:read`
+  - API-key dataset exports are limited to non-custom Lebensmittel rows via `/api/exports/datasets`
+  - create, revoke, and dataset-export actions write `access_audit_logs`
 - Patient-bound report exports additionally:
   - persist a stable parent record in `patient_reports`
   - append immutable export versions to `patient_report_versions`

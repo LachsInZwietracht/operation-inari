@@ -171,7 +171,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
   - Failed history loads are shown inline so the export page does not silently degrade when the journal endpoint or schema is unavailable.
   - Export-journal failures include explicit recovery hints for missing `export_jobs` migrations or unavailable `/api/export-jobs` responses.
-  - **Truth model:** Export creation and export history are live. The `REST API` and `Integrationen` tabs are intentionally marked as preview/read-only until API-key issuance, webhook delivery, and integration persistence have real backends.
+  - **API keys:** Owner/admin users can issue, list, and revoke live API keys from the REST API tab. Tokens are stored only as SHA-256 hashes in `api_keys`, the full token is shown once, and create/revoke events are written to `access_audit_logs`.
+  - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. The first live API-key surface is intentionally limited to Lebensmittel CSV/JSON exports over non-custom food rows; patient, meal-plan, recipe, and report scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
+  - **Truth model:** Export creation, export history, and API-key issuance are live. The `Integrationen` tab remains preview/read-only until webhook delivery and integration persistence have real backends.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
 ### 4.10 Datenbankstatus (`/datenbank`)

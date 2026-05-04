@@ -254,6 +254,23 @@ export interface ApiKey {
   status: "aktiv" | "widerrufen";
 }
 
+export type ApiKeyScope = "exports:datasets:read";
+
+export interface ApiKeyRecord {
+  id: ID;
+  organizationId: ID;
+  userId: ID;
+  name: string;
+  tokenPrefix: string;
+  scopes: ApiKeyScope[];
+  expiresAt?: string;
+  lastUsedAt?: string;
+  lastUsedIp?: string;
+  revokedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WebhookConfig {
   id: ID;
   url: string;
