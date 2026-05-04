@@ -179,7 +179,8 @@ Product direction:
 
 ### 7.1 Authentication & Authorization
 - **Implementation note:** Local development may bypass auth temporarily in `middleware.ts`. Do not treat that as the intended production model.
-- **SSO (Active Directory/LDAP):** Mandatory for clinical sales to allow hospital IT to manage user access centrally.
+- **SSO foundation:** Organization admins can persist OIDC/SAML provider metadata and email domains. The login page resolves active SSO configs by email domain and shows the prepared SSO path; actual provider handoff remains a follow-up integration step.
+- **LDAP/Active Directory mapping:** Still required after the SSO foundation so hospital IT can define group-to-role mappings and lifecycle rules.
 
 ---
 
@@ -210,7 +211,7 @@ Roadmap notes:
 
 ### Phase 3 - Expert & Institutional Features
 1. Lab values, Diabetes module, and Medication management.
-2. **SSO Integration:** Support for LDAP/Active Directory.
+2. **SSO Integration:** OIDC/SAML configuration and login-domain routing foundation implemented; LDAP/Active Directory group mapping remains next.
 3. **Bedside Optimized UI:** Tablet-first ward assistant with QR scanning.
 4. PROCAM score and medical calculations (Creatinine clearance, MNA, SGA).
 

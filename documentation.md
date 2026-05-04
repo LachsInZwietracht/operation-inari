@@ -177,7 +177,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, and queued delivery attempts are live. FHIR/DEBInet/BI connector activation and outbound retry delivery remain future integration work.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
-### 4.10 Datenbankstatus (`/datenbank`)
+### 4.10 Admin & Sicherheit (`/admin/users`)
+- **Component:** `app/(app)/admin/users/page.tsx`
+  - Team membership, invitations, role/status changes, report retention, and SSO configuration are backed by Supabase.
+  - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
+  - **Audit:** SSO create/update/disable flows write `sso_config_created`, `sso_config_updated`, and `sso_config_disabled` rows to `access_audit_logs`.
+  - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff.
+
+### 4.11 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`
   - The route now reads the live source catalog from `data_sources` through `fetchDataSources()`.
   - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.
@@ -189,7 +196,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - `/api/foods/replace` (POST) is a JSON API for individual food replacements, used by the bulk form. Validates with Zod and calls `replaceFoodReferences()`.
   - Each replacement writes `food_reference_replacements` and, when an organization membership exists, `access_audit_logs`. System/shared recipes and other users' records are intentionally not mutated in v1.
 
-### 4.11 Wissensbibliothek (`/wissen`)
+### 4.12 Wissensbibliothek (`/wissen`)
 - **Component:** `app/(app)/wissen/wissen-client.tsx`
   - Knowledge cards now come from bundled product content in `lib/content/knowledge-library.ts`, not `lib/mock-data`.
   - The page copy explicitly distinguishes bundled reference content from live runtime analytics.

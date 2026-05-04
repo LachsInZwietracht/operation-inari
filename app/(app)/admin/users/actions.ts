@@ -7,13 +7,16 @@ import { redirect } from "next/navigation"
 import { ADMIN_ROLES, hasAnyRole } from "@/lib/auth/rbac"
 import { ensureCurrentMembership, requireRole } from "@/lib/auth/access"
 import { upsertReportRetentionPolicy } from "@/lib/data/report-retention"
+import { disableSsoConfig, upsertSsoConfig } from "@/lib/data/sso"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
-import type { AppRole, OrganizationMembership } from "@/lib/types"
+import type { AppRole, OrganizationMembership, SsoConfigStatus, SsoProviderType } from "@/lib/types"
 
 const MEMBERSHIP_ROLES = ["owner", "admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly AppRole[]
 const MEMBERSHIP_STATUSES = ["active", "invited", "disabled"] as const
 const INVITABLE_ROLES = ["admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly AppRole[]
 const INVITE_TTL_DAYS = 14
+const SSO_PROVIDER_TYPES = ["oidc", "saml"] as const satisfies readonly SsoProviderType[]
+const SSO_STATUSES = ["draft", "active", "disabled"] as const satisfies readonly SsoConfigStatus[]
 
 function adminUsersRedirect(status: "success" | "error", message: string): never {
   redirect(`/admin/users?${status}=${encodeURIComponent(message)}`)
@@ -41,6 +44,21 @@ function parseMembershipStatus(value: string): OrganizationMembership["status"] 
   return MEMBERSHIP_STATUSES.includes(value as OrganizationMembership["status"])
     ? value as OrganizationMembership["status"]
     : null
+}
+
+function parseSsoProviderType(value: string): SsoProviderType | null {
+  return SSO_PROVIDER_TYPES.includes(value as SsoProviderType) ? value as SsoProviderType : null
+}
+
+function parseSsoStatus(value: string): SsoConfigStatus | null {
+  return SSO_STATUSES.includes(value as SsoConfigStatus) ? value as SsoConfigStatus : null
+}
+
+function parseDomainList(value: string) {
+  return value
+    .split(/[\s,;]+/)
+    .map((domain) => domain.trim())
+    .filter(Boolean)
 }
 
 async function getInviteRedirectTo() {
@@ -126,6 +144,64 @@ export async function updateReportRetentionPolicyAction(formData: FormData) {
   )
 
   revalidatePath("/admin/users")
+}
+
+export async function upsertSsoConfigAction(formData: FormData) {
+  const supabase = await createClient()
+  await requireRole(ADMIN_ROLES, supabase)
+
+  const providerType = parseSsoProviderType(getString(formData, "providerType"))
+  const status = parseSsoStatus(getString(formData, "status"))
+
+  if (!providerType) adminUsersRedirect("error", "Bitte einen gueltigen SSO-Provider waehlen.")
+  if (!status) adminUsersRedirect("error", "Bitte einen gueltigen SSO-Status waehlen.")
+
+  try {
+    await upsertSsoConfig(
+      {
+        id: getString(formData, "configId") || undefined,
+        providerType,
+        status,
+        displayName: getString(formData, "displayName"),
+        domains: parseDomainList(getString(formData, "domains")),
+        issuerUrl: getString(formData, "issuerUrl"),
+        metadataUrl: getString(formData, "metadataUrl"),
+        metadataXml: getString(formData, "metadataXml"),
+        clientId: getString(formData, "clientId"),
+        entityId: getString(formData, "entityId"),
+        ssoUrl: getString(formData, "ssoUrl"),
+        loginHintParameter: getString(formData, "loginHintParameter") || "login_hint",
+      },
+      supabase,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const translated = message === "SSO_DISPLAY_NAME_REQUIRED"
+      ? "Bitte einen Namen fuer die SSO-Konfiguration angeben."
+      : message === "SSO_DOMAIN_REQUIRED"
+        ? "Bitte mindestens eine E-Mail-Domain angeben."
+        : message === "SSO_OIDC_ISSUER_REQUIRED"
+          ? "OIDC benoetigt mindestens Issuer URL oder Metadata URL."
+          : message === "SSO_SAML_METADATA_REQUIRED"
+            ? "SAML benoetigt Metadata URL, Metadata XML oder SSO URL."
+            : message
+    adminUsersRedirect("error", translated)
+  }
+
+  revalidatePath("/admin/users")
+  adminUsersRedirect("success", "SSO-Konfiguration wurde gespeichert.")
+}
+
+export async function disableSsoConfigAction(formData: FormData) {
+  const supabase = await createClient()
+  await requireRole(ADMIN_ROLES, supabase)
+  const configId = getString(formData, "configId")
+  if (!configId) adminUsersRedirect("error", "SSO-Konfiguration wurde nicht angegeben.")
+
+  await disableSsoConfig(configId, supabase)
+
+  revalidatePath("/admin/users")
+  adminUsersRedirect("success", "SSO-Konfiguration wurde deaktiviert.")
 }
 
 export async function inviteTeamMemberAction(formData: FormData) {

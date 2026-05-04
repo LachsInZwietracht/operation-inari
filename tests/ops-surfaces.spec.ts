@@ -7,6 +7,7 @@ test.describe("Ops Surfaces", () => {
     await expect(page.getByRole("heading", { name: "Admin & Sicherheit" })).toBeVisible();
     await expect(page.getByText("Teammitglied einladen")).toBeVisible();
     await expect(page.getByText("Teammitglieder")).toBeVisible();
+    await expect(page.getByRole("button", { name: "SSO-Konfiguration speichern" })).toBeVisible();
     await expect(page.getByText("Berichtsaufbewahrung")).toBeVisible();
   });
 

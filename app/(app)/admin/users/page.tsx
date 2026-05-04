@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
+import { KeyRound, Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { ADMIN_ROLES, ROLE_LABELS, hasAnyRole } from "@/lib/auth/rbac";
 import {
   AuthRequiredError,
@@ -18,12 +19,15 @@ import {
   requireRole,
 } from "@/lib/auth/access";
 import { getOrCreateReportRetentionPolicy } from "@/lib/data/report-retention";
+import { listSsoConfigs } from "@/lib/data/sso";
 import { createClient } from "@/lib/supabase/server";
-import type { AppRole, MembershipStatus } from "@/lib/types";
+import type { AppRole, MembershipStatus, OrganizationSsoConfigRecord, SsoConfigStatus, SsoProviderType } from "@/lib/types";
 import {
+  disableSsoConfigAction,
   inviteTeamMemberAction,
   resendTeamInvitationAction,
   revokeTeamInvitationAction,
+  upsertSsoConfigAction,
   updateReportRetentionPolicyAction,
   updateTeamMemberAccessAction,
 } from "./actions";
@@ -65,6 +69,23 @@ const STATUS_OPTIONS: Array<{ value: MembershipStatus; label: string }> = [
   { value: "invited", label: STATUS_LABELS.invited },
   { value: "disabled", label: STATUS_LABELS.disabled },
 ];
+
+const SSO_PROVIDER_LABELS: Record<SsoProviderType, string> = {
+  oidc: "OIDC",
+  saml: "SAML",
+};
+
+const SSO_STATUS_LABELS: Record<SsoConfigStatus, string> = {
+  draft: "Entwurf",
+  active: "Aktiv",
+  disabled: "Deaktiviert",
+};
+
+const SSO_STATUS_BADGES: Record<SsoConfigStatus, string> = {
+  draft: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+  active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+  disabled: "bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-200",
+};
 
 function getEditableStatusOptions(status: MembershipStatus) {
   return STATUS_OPTIONS.filter((option) => option.value !== "invited" || status === "invited");
@@ -117,11 +138,19 @@ export default async function AdminUsersPage({
   ]);
   let retentionPolicy = null;
   let retentionPolicyError: string | null = null;
+  let ssoConfigs: OrganizationSsoConfigRecord[] = [];
+  let ssoConfigError: string | null = null;
   try {
     retentionPolicy = await getOrCreateReportRetentionPolicy(supabase, currentMembership.organizationId);
   } catch (error) {
     retentionPolicyError = (error as Error).message;
   }
+  try {
+    ssoConfigs = await listSsoConfigs(supabase);
+  } catch (error) {
+    ssoConfigError = (error as Error).message;
+  }
+  const primarySsoConfig = ssoConfigs[0];
 
   const activeCount = memberships.filter((membership) => membership.status === "active").length;
   const adminCount = memberships.filter((membership) => hasAnyRole(membership.role, ADMIN_ROLES)).length;
@@ -337,6 +366,164 @@ export default async function AdminUsersPage({
               })}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <KeyRound className="h-5 w-5 text-muted-foreground" />
+            SSO-Konfiguration
+          </CardTitle>
+          <CardDescription>
+            Persistiert OIDC-/SAML-Metadaten und E-Mail-Domains fuer Klinik-Login-Routing. Der Provider-Handoff selbst bleibt bewusst separat.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {ssoConfigError ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+              SSO-Konfigurationen konnten nicht geladen werden. Bitte Migration `20260521000039_sso_configs.sql` anwenden. Fehler: {ssoConfigError}
+            </div>
+          ) : null}
+
+          <form action={upsertSsoConfigAction} className="space-y-4">
+            <input type="hidden" name="configId" value={primarySsoConfig?.id ?? ""} />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="sso-display-name">Anzeigename</Label>
+                <Input
+                  id="sso-display-name"
+                  name="displayName"
+                  defaultValue={primarySsoConfig?.displayName ?? "Klinik SSO"}
+                  placeholder="Azure AD Klinik"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sso-provider-type">Provider</Label>
+                <select
+                  id="sso-provider-type"
+                  name="providerType"
+                  defaultValue={primarySsoConfig?.providerType ?? "oidc"}
+                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+                >
+                  <option value="oidc">OIDC</option>
+                  <option value="saml">SAML</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sso-status">Status</Label>
+                <select
+                  id="sso-status"
+                  name="status"
+                  defaultValue={primarySsoConfig?.status ?? "draft"}
+                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+                >
+                  <option value="draft">Entwurf</option>
+                  <option value="active">Aktiv</option>
+                  <option value="disabled">Deaktiviert</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sso-login-hint">Login-Hint Parameter</Label>
+                <Input
+                  id="sso-login-hint"
+                  name="loginHintParameter"
+                  defaultValue={primarySsoConfig?.loginHintParameter ?? "login_hint"}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="sso-domains">E-Mail-Domains</Label>
+                <Textarea
+                  id="sso-domains"
+                  name="domains"
+                  defaultValue={primarySsoConfig?.domains.join("\n") ?? "klinik.example"}
+                  placeholder="klinik.de&#10;partner-klinik.de"
+                  required
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="sso-issuer-url">Issuer URL</Label>
+                  <Input id="sso-issuer-url" name="issuerUrl" defaultValue={primarySsoConfig?.issuerUrl ?? ""} placeholder="https://login.microsoftonline.com/..." />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-metadata-url">Metadata URL</Label>
+                  <Input id="sso-metadata-url" name="metadataUrl" defaultValue={primarySsoConfig?.metadataUrl ?? ""} placeholder="https://..." />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-client-id">Client ID</Label>
+                  <Input id="sso-client-id" name="clientId" defaultValue={primarySsoConfig?.clientId ?? ""} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-entity-id">Entity ID</Label>
+                  <Input id="sso-entity-id" name="entityId" defaultValue={primarySsoConfig?.entityId ?? ""} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="sso-url">SAML SSO URL</Label>
+                  <Input id="sso-url" name="ssoUrl" defaultValue={primarySsoConfig?.ssoUrl ?? ""} placeholder="https://idp.example/sso" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sso-metadata-xml">SAML Metadata XML</Label>
+              <Textarea
+                id="sso-metadata-xml"
+                name="metadataXml"
+                defaultValue={primarySsoConfig?.metadataXml ?? ""}
+                placeholder="<EntityDescriptor ...>"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">SSO-Konfiguration speichern</Button>
+              {primarySsoConfig && primarySsoConfig.status !== "disabled" ? (
+                <Button type="submit" variant="outline" form="disable-sso-config-form">SSO deaktivieren</Button>
+              ) : null}
+            </div>
+          </form>
+          {primarySsoConfig && primarySsoConfig.status !== "disabled" ? (
+            <form id="disable-sso-config-form" action={disableSsoConfigAction}>
+              <input type="hidden" name="configId" value={primarySsoConfig.id} />
+            </form>
+          ) : null}
+
+          {ssoConfigs.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Domains</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Aktualisiert</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ssoConfigs.map((config) => (
+                    <TableRow key={config.id}>
+                      <TableCell className="font-medium">{config.displayName}</TableCell>
+                      <TableCell>{SSO_PROVIDER_LABELS[config.providerType]}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{config.domains.join(", ")}</TableCell>
+                      <TableCell>
+                        <Badge className={SSO_STATUS_BADGES[config.status]}>{SSO_STATUS_LABELS[config.status]}</Badge>
+                      </TableCell>
+                      <TableCell>{new Date(config.updatedAt).toLocaleDateString("de-DE")}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Noch keine SSO-Konfiguration gespeichert.
+            </p>
+          )}
         </CardContent>
       </Card>
 

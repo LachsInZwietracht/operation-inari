@@ -241,6 +241,9 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260516000033_cologne_phonetics.sql` | `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, GIN trigram indexes, and phonetic match branch in both `search_foods` and `search_foods_with_total` RPCs |
 | `20260516000034_food_replacement_org_scope.sql` | Extends `food_reference_replacements` to allow `organization` scope, updates `replace_food_references()` with `p_scope` parameter and `is_organization_admin()` check for org-wide replacements |
 | `20260518000036_team_invitations.sql` | Adds invitation timestamps/expiry/revoke metadata to `organization_memberships` and permits admin-created invited memberships |
+| `20260519000037_api_keys.sql` | Organization-scoped hashed API keys for the first external dataset export boundary |
+| `20260520000038_webhooks.sql` | Organization-scoped webhook endpoints plus persisted delivery attempts for export/report/protocol events |
+| `20260521000039_sso_configs.sql` | Organization-scoped OIDC/SAML SSO configuration, provider metadata storage, and domain-based login routing foundation |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -276,6 +279,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
 | `organizations` | Team/organization boundary for RBAC | `name`, `created_by` |
 | `organization_memberships` | Persisted user roles and invitations | `organization_id`, `user_id`, `email`, `role`, `status`, `invitation_sent_at`, `invitation_expires_at`, `revoked_at` |
+| `organization_sso_configs` | Admin-managed OIDC/SAML SSO routing config | `organization_id`, `provider_type`, `status`, `domains`, `issuer_url`, `metadata_url`, `metadata_xml`, `client_id`, `entity_id`, `sso_url` |
 | `access_audit_logs` | Foundation for access/security audit events | `organization_id`, `actor_user_id`, `action`, `target_type`, `metadata` |
 
 ### Auth & RBAC Notes
@@ -285,6 +289,8 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/admin/*` is limited to `owner` and `admin`; `/institution/*` is limited to `owner`, `admin`, and `institution_admin`.
 - `/admin/users` invitations require `SUPABASE_SERVICE_ROLE_KEY` so the server can call the Supabase Admin API, create/reuse Auth users, persist `invited` memberships, and write `access_audit_logs` entries.
 - `/admin/users` role/status changes are performed server-side against `organization_memberships`, enforce Owner-only Owner changes plus last-active-Owner and self-lockout guards, and write `team_membership_updated` rows to `access_audit_logs`.
+- `/admin/users` stores organization-level SSO configuration in `organization_sso_configs`: OIDC/SAML provider type, domains, provider metadata URLs/XML, client/entity identifiers, status, and login-hint parameter. Create/update/disable actions write `sso_config_*` audit rows.
+- `/api/sso/resolve` is the public login-routing resolver. It accepts an email address, matches active SSO configs by domain through a service-role lookup, and returns only minimal routing metadata. It does not perform provider handoff yet.
 - Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, patient report exports/downloads, export history and dataset exports, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
 - New authenticated users can be bootstrapped into a default organization/membership by the server access helper; Playwright setup creates an `owner` membership for the test user.
@@ -684,7 +690,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Pediatric percentiles / lab parameter catalog | Bundled static clinical reference data | `lib/reference-data/growth-percentiles.ts`, `lib/reference-data/lab-parameters.ts`, `components/patient-tabs.tsx` |
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
 | Database status/lifecycle | Live `data_sources` catalog, `data_source_events` lifecycle history, and audited food-reference replacement v1 | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/database-lifecycle.ts` |
-| Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, and report-retention controls | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts` |
+| Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, report-retention controls, and organization SSO configuration | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts`, `lib/data/sso.ts` |
 | Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 

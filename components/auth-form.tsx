@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, ShieldCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import type { UserRole } from "@/lib/types"
+import type { SsoDomainResolution } from "@/lib/types"
 
 const authSchema = z.object({
   email: z.string().email("Ungültige E-Mail-Adresse"),
@@ -51,6 +52,8 @@ interface AuthFormProps {
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [ssoLoading, setSsoLoading] = useState(false)
+  const [ssoResolution, setSsoResolution] = useState<SsoDomainResolution | null>(null)
   const isRegister = mode === "register"
 
   const form = useForm<AuthFormValues>({
@@ -109,6 +112,37 @@ export function AuthForm({ mode }: AuthFormProps) {
     }
   }
 
+  async function resolveSso() {
+    const email = form.getValues("email").trim()
+    if (!email || !email.includes("@")) {
+      form.setError("email", { message: "Bitte zuerst eine gueltige E-Mail-Adresse eingeben." })
+      return
+    }
+
+    setSsoLoading(true)
+    setSsoResolution(null)
+    try {
+      const response = await fetch(`/api/sso/resolve?email=${encodeURIComponent(email)}`, {
+        headers: { accept: "application/json" },
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const resolution = (await response.json()) as SsoDomainResolution
+      setSsoResolution(resolution)
+      if (!resolution.matched) {
+        toast.info("Fuer diese Domain ist noch kein aktiver SSO-Provider hinterlegt.")
+      }
+    } catch (error) {
+      toast.error((error as Error).message || "SSO-Pruefung fehlgeschlagen.")
+    } finally {
+      setSsoLoading(false)
+    }
+  }
+
+  function handleSsoIntent() {
+    if (!ssoResolution?.matched) return
+    toast.info("SSO-Konfiguration gefunden. Der Provider-Handoff wird im naechsten Integrationsschritt aktiviert.")
+  }
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -156,6 +190,36 @@ export function AuthForm({ mode }: AuthFormProps) {
             </FormItem>
           )}
         />
+
+        {!isRegister && (
+          <div className="rounded-md border p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm">
+                <p className="font-medium">Klinik-SSO</p>
+                <p className="text-xs text-muted-foreground">Domain pruefen und vorbereiteten OIDC-/SAML-Pfad anzeigen.</p>
+              </div>
+              <Button type="button" variant="outline" onClick={() => void resolveSso()} disabled={ssoLoading}>
+                {ssoLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                SSO pruefen
+              </Button>
+            </div>
+            {ssoResolution?.matched ? (
+              <div className="mt-3 rounded-md bg-muted p-3 text-sm">
+                <p className="font-medium">{ssoResolution.displayName} gefunden</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {ssoResolution.organizationName ?? "Organisation"} · {ssoResolution.providerType?.toUpperCase()} · Domain {ssoResolution.domain}
+                </p>
+                <Button type="button" className="mt-3 w-full" variant="secondary" onClick={handleSsoIntent}>
+                  Mit SSO anmelden
+                </Button>
+              </div>
+            ) : ssoResolution ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Fuer diese Domain ist kein aktiver SSO-Provider konfiguriert. Passwortlogin bleibt verfuegbar.
+              </p>
+            ) : null}
+          </div>
+        )}
 
         <FormField
           control={form.control}

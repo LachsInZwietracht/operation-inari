@@ -327,6 +327,40 @@ export interface WebhookDeliveryAttemptRecord {
   updatedAt: string;
 }
 
+export type SsoProviderType = "oidc" | "saml";
+export type SsoConfigStatus = "draft" | "active" | "disabled";
+
+export interface OrganizationSsoConfigRecord {
+  id: ID;
+  organizationId: ID;
+  createdBy?: ID;
+  providerType: SsoProviderType;
+  status: SsoConfigStatus;
+  displayName: string;
+  domains: string[];
+  issuerUrl?: string;
+  metadataUrl?: string;
+  metadataXml?: string;
+  clientId?: string;
+  entityId?: string;
+  ssoUrl?: string;
+  loginHintParameter: string;
+  disabledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SsoDomainResolution {
+  matched: boolean;
+  domain?: string;
+  organizationId?: ID;
+  organizationName?: string;
+  providerType?: SsoProviderType;
+  displayName?: string;
+  status?: SsoConfigStatus;
+  loginHintParameter?: string;
+}
+
 export interface ExportJob {
   id: ID;
   type: "export" | "import";

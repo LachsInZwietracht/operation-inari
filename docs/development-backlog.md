@@ -59,7 +59,7 @@ Start here unless product priorities have changed:
 - [x] Implement role-change flows in `/admin/users` with RBAC checks.
 - [x] Add role-change audit logs.
 - [x] Add access-event audit logs for sensitive patient, report, export, and institution actions.
-- [ ] Add SSO foundation: organization-level OIDC/SAML configuration, login routing, and provider metadata storage.
+- [x] Add SSO foundation: organization-level OIDC/SAML configuration, login routing, and provider metadata storage.
 - [ ] Define LDAP/Active Directory mapping requirements for clinic deployments.
 - [x] Implement API key issuance for the currently preview-only API surfaces.
 - [x] Persist webhook endpoints, delivery attempts, and failures for integration workflows.
