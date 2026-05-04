@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>E-Mail-Adresse bestaetigen</title>
+  </head>
+  <body style="margin:0; padding:0; background:#f4f6f8; color:#17202a; font-family:Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f8; margin:0; padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+            <tr>
+              <td style="padding:28px 32px 20px 32px; border-bottom:1px solid #e2e8f0;">
+                <p style="margin:0 0 8px 0; color:#64748b; font-size:13px; letter-spacing:.04em; text-transform:uppercase;">Inari</p>
+                <h1 style="margin:0; color:#0f172a; font-size:24px; line-height:1.25; font-weight:700;">E-Mail-Adresse best&auml;tigen</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 8px 32px;">
+                <p style="margin:0 0 16px 0; font-size:16px; line-height:1.6;">Guten Tag,</p>
+                <p style="margin:0 0 16px 0; font-size:16px; line-height:1.6;">
+                  f&uuml;r Ihr Inari-Konto wurde diese E-Mail-Adresse registriert:
+                  <strong>{{ .Email }}</strong>
+                </p>
+                <p style="margin:0 0 24px 0; font-size:16px; line-height:1.6;">
+                  Bitte best&auml;tigen Sie die Adresse, damit Sie sich anmelden und Ihren gesch&uuml;tzten Arbeitsbereich nutzen k&ouml;nnen.
+                </p>
+                <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 24px 0;">
+                  <tr>
+                    <td bgcolor="#0f766e" style="border-radius:8px;">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block; padding:13px 22px; color:#ffffff; font-size:16px; font-weight:700; text-decoration:none; border-radius:8px;">
+                        E-Mail-Adresse best&auml;tigen
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 12px 0; color:#475569; font-size:14px; line-height:1.6;">
+                  Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren Browser:
+                </p>
+                <p style="margin:0 0 24px 0; word-break:break-all; color:#0f766e; font-size:13px; line-height:1.5;">
+                  <a href="{{ .ConfirmationURL }}" style="color:#0f766e;">{{ .ConfirmationURL }}</a>
+                </p>
+                <p style="margin:0 0 16px 0; color:#475569; font-size:14px; line-height:1.6;">
+                  Wenn Sie dieses Konto nicht selbst erstellt haben, k&ouml;nnen Sie diese Nachricht ignorieren.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px 28px 32px; border-top:1px solid #e2e8f0;">
+                <p style="margin:0; color:#64748b; font-size:13px; line-height:1.6;">
+                  Inari ist eine klinische Ern&auml;hrungsplattform f&uuml;r Beratung, Dokumentation und institutionelle Versorgungsprozesse.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
