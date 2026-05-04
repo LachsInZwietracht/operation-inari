@@ -7,6 +7,7 @@ import {
   Clock,
   Copy,
   Download,
+  ExternalLink,
   FileJson,
   FileSpreadsheet,
   FileText,
@@ -23,6 +24,7 @@ import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -38,7 +40,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { API_ENDPOINT_PREVIEWS, INTEGRATION_PREVIEWS, WEBHOOK_EVENT_PREVIEWS } from "@/lib/content/ops-preview"
 import { SUPPORTED_EXPORTS } from "@/lib/exports/constants"
 import { formatDate } from "@/lib/format"
-import type { ApiKeyRecord, ExportFormat, ExportJobRecord, ExportScope } from "@/lib/types"
+import type {
+  ApiKeyRecord,
+  ExportFormat,
+  ExportJobRecord,
+  ExportScope,
+  WebhookDeliveryAttemptRecord,
+  WebhookEndpointRecord,
+  WebhookEvent,
+} from "@/lib/types"
 import { downloadResponseFile } from "@/lib/utils"
 
 const STATUS_STYLES: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
@@ -53,6 +63,12 @@ const METHOD_STYLES: Record<string, string> = {
   PUT: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
   DELETE: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
 }
+
+const WEBHOOK_EVENT_OPTIONS: Array<{ event: WebhookEvent; label: string }> = [
+  { event: "dataset_export_created", label: "Dataset-Export erstellt" },
+  { event: "report_export_created", label: "Bericht exportiert" },
+  { event: "digital_protocol_submission_received", label: "Digitales Protokoll eingereicht" },
+]
 
 function formatHistoryError(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error)
@@ -79,6 +95,20 @@ function formatApiKeyError(error: unknown) {
   return raw || "API-Schluessel konnten nicht geladen werden."
 }
 
+function formatWebhookError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error)
+  if (raw.includes("webhook_endpoints") || raw.includes("webhook_delivery_attempts")) {
+    return "Webhooks sind in dieser Supabase-Umgebung noch nicht konfiguriert. Wenden Sie die `webhooks` Migration an."
+  }
+  if (raw.includes("WEBHOOK_URL_HTTPS_REQUIRED")) return "Webhook-URLs muessen HTTPS verwenden."
+  if (raw.includes("WEBHOOK_URL_INVALID")) return "Bitte eine gueltige Webhook-URL angeben."
+  if (raw.includes("FORBIDDEN")) return "Nur Owner und Administrator:innen koennen Webhooks verwalten."
+  if (raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
+    return "Webhooks konnten nicht geladen werden. Pruefen Sie die lokale Supabase-/API-Verbindung."
+  }
+  return raw || "Webhooks konnten nicht geladen werden."
+}
+
 export default function ApiExportPage() {
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null)
   const [exportScopes, setExportScopes] = useState<Record<ExportFormat, ExportScope>>({
@@ -90,13 +120,22 @@ export default function ApiExportPage() {
   const [historyFormatFilter, setHistoryFormatFilter] = useState("all")
   const [exportJobs, setExportJobs] = useState<ExportJobRecord[]>([])
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([])
+  const [webhookEndpoints, setWebhookEndpoints] = useState<WebhookEndpointRecord[]>([])
+  const [webhookAttempts, setWebhookAttempts] = useState<WebhookDeliveryAttemptRecord[]>([])
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
+  const [webhookError, setWebhookError] = useState<string | null>(null)
   const [newApiKeyName, setNewApiKeyName] = useState("Klinik Export")
   const [newApiKeyExpiresAt, setNewApiKeyExpiresAt] = useState("")
+  const [newWebhookName, setNewWebhookName] = useState("KIS Webhook")
+  const [newWebhookUrl, setNewWebhookUrl] = useState("https://example.org/prodi/webhook")
+  const [newWebhookEvents, setNewWebhookEvents] = useState<WebhookEvent[]>(["dataset_export_created"])
   const [createdApiKeyToken, setCreatedApiKeyToken] = useState<string | null>(null)
+  const [createdWebhookSecret, setCreatedWebhookSecret] = useState<string | null>(null)
   const [isCreatingApiKey, setIsCreatingApiKey] = useState(false)
+  const [isCreatingWebhook, setIsCreatingWebhook] = useState(false)
   const [revokingApiKeyId, setRevokingApiKeyId] = useState<string | null>(null)
+  const [disablingWebhookId, setDisablingWebhookId] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState<Record<ExportFormat, boolean>>({
     CSV: false,
     JSON: false,
@@ -160,9 +199,28 @@ export default function ApiExportPage() {
     }
   }
 
+  async function loadWebhooks() {
+    try {
+      const [endpointsResponse, attemptsResponse] = await Promise.all([
+        fetch("/api/webhooks", { cache: "no-store" }),
+        fetch("/api/webhooks/attempts", { cache: "no-store" }),
+      ])
+      if (!endpointsResponse.ok) throw new Error(await endpointsResponse.text())
+      if (!attemptsResponse.ok) throw new Error(await attemptsResponse.text())
+      setWebhookEndpoints((await endpointsResponse.json()) as WebhookEndpointRecord[])
+      setWebhookAttempts((await attemptsResponse.json()) as WebhookDeliveryAttemptRecord[])
+      setWebhookError(null)
+    } catch (error) {
+      const message = formatWebhookError(error)
+      setWebhookError(message)
+      toast.error(message)
+    }
+  }
+
   useEffect(() => {
     void loadExportJobs()
     void loadApiKeys()
+    void loadWebhooks()
   }, [])
 
   async function handleExport(format: ExportFormat) {
@@ -176,6 +234,7 @@ export default function ApiExportPage() {
       })
       await downloadResponseFile(response, `${scope.toLowerCase()}.${format.toLowerCase()}`)
       await loadExportJobs()
+      await loadWebhooks()
       toast.success(`${format}-Export erstellt`, {
         description: `${scope} wurde erfolgreich exportiert.`,
       })
@@ -240,6 +299,71 @@ export default function ApiExportPage() {
     if (!createdApiKeyToken) return
     await navigator.clipboard.writeText(createdApiKeyToken)
     toast.success("Token kopiert")
+  }
+
+  function toggleWebhookEvent(event: WebhookEvent, enabled: boolean) {
+    setNewWebhookEvents((current) => {
+      if (enabled) return Array.from(new Set([...current, event]))
+      const next = current.filter((item) => item !== event)
+      return next.length > 0 ? next : current
+    })
+  }
+
+  async function handleCreateWebhook() {
+    setIsCreatingWebhook(true)
+    try {
+      const response = await fetch("/api/webhooks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: newWebhookName,
+          url: newWebhookUrl,
+          events: newWebhookEvents,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const data = (await response.json()) as { endpoint: WebhookEndpointRecord; secret: string }
+      setWebhookEndpoints((current) => [data.endpoint, ...current])
+      setCreatedWebhookSecret(data.secret)
+      setNewWebhookName("KIS Webhook")
+      setNewWebhookUrl("https://example.org/prodi/webhook")
+      setNewWebhookEvents(["dataset_export_created"])
+      setWebhookError(null)
+      toast.success("Webhook-Endpunkt erstellt", {
+        description: "Das Signing Secret wird nur jetzt vollstaendig angezeigt.",
+      })
+    } catch (error) {
+      const message = formatWebhookError(error)
+      setWebhookError(message)
+      toast.error(message)
+    } finally {
+      setIsCreatingWebhook(false)
+    }
+  }
+
+  async function handleDisableWebhook(endpointId: string) {
+    setDisablingWebhookId(endpointId)
+    try {
+      const response = await fetch(`/api/webhooks/${endpointId}/disable`, { method: "POST" })
+      if (!response.ok) throw new Error(await response.text())
+      const disabledEndpoint = (await response.json()) as WebhookEndpointRecord
+      setWebhookEndpoints((current) =>
+        current.map((endpoint) => (endpoint.id === endpointId ? disabledEndpoint : endpoint)),
+      )
+      toast.success("Webhook-Endpunkt deaktiviert")
+    } catch (error) {
+      toast.error(formatWebhookError(error))
+    } finally {
+      setDisablingWebhookId(null)
+    }
+  }
+
+  async function handleCopyWebhookSecret() {
+    if (!createdWebhookSecret) return
+    await navigator.clipboard.writeText(createdWebhookSecret)
+    toast.success("Signing Secret kopiert")
   }
 
   const filteredHistory = useMemo(() => {
@@ -619,13 +743,13 @@ export default function ApiExportPage() {
               <div className="flex items-center gap-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Webhook className="h-5 w-5 text-muted-foreground" />
-                  Integrationsvorschau
+                  Integrationen
                 </CardTitle>
-                <Badge variant="secondary">Preview</Badge>
+                <Badge variant="default">Webhooks live</Badge>
               </div>
               <CardDescription>
-                Diese Oberflaeche dokumentiert das Zielbild. Aktivierung, Webhook-Zustellung und Credential-Verwaltung
-                sind noch kein produktiver Backend-Workflow.
+                Webhook-Endpunkte, Signing Secrets und Delivery Attempts werden persistiert. FHIR, DEBInet und BI bleiben
+                als naechste Integrationsziele sichtbar.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-3">
@@ -643,13 +767,153 @@ export default function ApiExportPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Webhook-Ereignisse</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Webhook className="h-5 w-5 text-muted-foreground" />
+                Webhook-Endpunkte
+              </CardTitle>
               <CardDescription>
-                Ereignisnamen und Payload-Richtung sind dokumentiert, aber noch nicht an eine persistierte
-                Webhook-Verwaltung gekoppelt.
+                Delivery Attempts werden beim passenden Ereignis als `queued` erfasst; echte HTTP-Auslieferung und Retry-Worker folgen separat.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {webhookError && (
+                <Alert variant="destructive">
+                  <AlertTitle>Webhooks nicht verfügbar</AlertTitle>
+                  <AlertDescription>{webhookError}</AlertDescription>
+                </Alert>
+              )}
+
+              {createdWebhookSecret && (
+                <Alert>
+                  <Webhook className="h-4 w-4" />
+                  <AlertTitle>Neues Signing Secret</AlertTitle>
+                  <AlertDescription>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <code data-testid="created-webhook-secret" className="break-all rounded bg-muted px-2 py-1 text-xs">
+                        {createdWebhookSecret}
+                      </code>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void handleCopyWebhookSecret()}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        Kopieren
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] lg:items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="webhook-name">Name</Label>
+                  <Input
+                    id="webhook-name"
+                    value={newWebhookName}
+                    onChange={(event) => setNewWebhookName(event.target.value)}
+                    placeholder="KIS Webhook"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="webhook-url">HTTPS-URL</Label>
+                  <Input
+                    id="webhook-url"
+                    value={newWebhookUrl}
+                    onChange={(event) => setNewWebhookUrl(event.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => void handleCreateWebhook()}
+                  disabled={isCreatingWebhook || !newWebhookName.trim() || !newWebhookUrl.trim()}
+                >
+                  <Webhook className="mr-2 h-4 w-4" />
+                  {isCreatingWebhook ? "Erstellt..." : "Webhook erstellen"}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {WEBHOOK_EVENT_OPTIONS.map((option) => (
+                  <label key={option.event} className="flex items-center gap-2 rounded-lg border p-3 text-sm">
+                    <Checkbox
+                      checked={newWebhookEvents.includes(option.event)}
+                      onCheckedChange={(checked) => toggleWebhookEvent(option.event, checked === true)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table data-testid="webhook-endpoints-table" className="min-w-[900px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>URL</TableHead>
+                      <TableHead>Events</TableHead>
+                      <TableHead>Secret</TableHead>
+                      <TableHead>Letzter Erfolg</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Aktion</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {webhookEndpoints.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                          Noch keine Webhook-Endpunkte erstellt.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      webhookEndpoints.map((endpoint) => {
+                        const isDisabled = endpoint.status === "disabled"
+                        return (
+                          <TableRow key={endpoint.id}>
+                            <TableCell className="font-medium">{endpoint.name}</TableCell>
+                            <TableCell>
+                              <div className="flex max-w-[260px] items-center gap-2 truncate text-sm">
+                                <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{endpoint.url}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs">{endpoint.events.join(", ")}</TableCell>
+                            <TableCell>
+                              <code className="text-xs">{endpoint.secretPrefix}...</code>
+                            </TableCell>
+                            <TableCell>{endpoint.lastSuccessAt ? formatDate(endpoint.lastSuccessAt) : "Noch keiner"}</TableCell>
+                            <TableCell>
+                              <Badge variant={isDisabled ? "secondary" : "default"}>
+                                {isDisabled ? "Deaktiviert" : "Aktiv"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleDisableWebhook(endpoint.id)}
+                                disabled={isDisabled || disablingWebhookId === endpoint.id}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {disablingWebhookId === endpoint.id ? "Deaktiviert..." : "Deaktivieren"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Webhook-Ereignisse & Delivery Attempts</CardTitle>
+              <CardDescription>
+                Ereignisse sind produktiv abonnierbar; die Tabelle zeigt die letzten gespeicherten Queue-Eintraege.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="overflow-x-auto">
                 <Table data-testid="webhook-table" className="min-w-[640px]">
                   <TableHeader>
@@ -671,6 +935,49 @@ export default function ApiExportPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="overflow-x-auto">
+                <Table data-testid="webhook-attempts-table" className="min-w-[860px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Zeit</TableHead>
+                      <TableHead>Endpunkt</TableHead>
+                      <TableHead>Ereignis</TableHead>
+                      <TableHead>Ziel</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Fehler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {webhookAttempts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-sm text-muted-foreground">
+                          Noch keine Delivery Attempts gespeichert.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      webhookAttempts.map((attempt) => (
+                        <TableRow key={attempt.id}>
+                          <TableCell>{formatDate(attempt.queuedAt)}</TableCell>
+                          <TableCell>{attempt.webhookEndpointName ?? attempt.webhookEndpointId}</TableCell>
+                          <TableCell>
+                            <code className="text-xs">{attempt.event}</code>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {attempt.targetType}
+                            {attempt.targetId ? ` · ${attempt.targetId}` : ""}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={attempt.status === "failed" ? "destructive" : "secondary"}>
+                              {attempt.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{attempt.errorMessage ?? "-"}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>

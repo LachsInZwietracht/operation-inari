@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
+import { queueWebhookDeliveryAttempts } from "@/lib/data/webhooks";
 
 const submissionSchema = z.object({
   linkId: z.string().uuid(),
@@ -119,6 +120,22 @@ export async function POST(request: Request) {
       targetType: "digital_protocol_submission",
       targetId: submission.id,
       metadata: {
+        patientId,
+        linkId,
+        dayCount: days.length,
+        entryCount: days.reduce((total, day) => total + day.entries.length, 0),
+        submittedBy: "patient_portal",
+      },
+    },
+    { actorUserId: link.user_id },
+  );
+
+  await queueWebhookDeliveryAttempts(
+    {
+      event: "digital_protocol_submission_received",
+      targetType: "digital_protocol_submission",
+      targetId: submission.id,
+      payload: {
         patientId,
         linkId,
         dayCount: days.length,

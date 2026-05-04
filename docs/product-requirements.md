@@ -129,11 +129,12 @@ Product direction:
 - Counseling templates persist per user and can be inserted into the session authoring flow instead of remaining browser-only.
 
 ### 5.3 Reports & Exports
-**Status:** Implemented for investor-demo scope (real PDF/CSV generation, patient-bound immutable report history, archived reopen, export audit logging, admin-configured report retention metadata, and live API-key issuance for the first external food-export boundary).
+**Status:** Implemented for investor-demo scope (real PDF/CSV generation, patient-bound immutable report history, archived reopen, export audit logging, admin-configured report retention metadata, live API-key issuance for the first external food-export boundary, and persisted webhook endpoint/queue management).
 - **Clinical report export** — `/berichte` generates real server-side PDF and CSV files from the selected meal plan analysis, supports patient-aware workflow handoff via optional context query params, and now creates versioned patient-bound report records on export.
 - **Patient document export** — `/patienten` mail merge creates branded PDF bundles with placeholder substitution.
 - **Export journal** — `/api-export` persists real export history in Supabase via `export_jobs`.
 - **API keys** — owner/admin users can issue and revoke hashed `prodi_` tokens for `exports:datasets:read`; API-key access is currently limited to non-custom Lebensmittel dataset exports.
+- **Webhooks** — owner/admin users can create/disable HTTPS endpoints and inspect queued delivery attempts for export, report, and digital-protocol events.
 - **Patient report history** — patient detail/workflow now surfaces immutable report versions with archived reopen and direct file download instead of relying only on the generic export journal.
 - **Remaining deferred scope:** scheduled exports, advanced backend print pipelines, and document-retention policies beyond patient report exports.
 

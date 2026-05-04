@@ -19,6 +19,7 @@ import { renderMailMergePdfBuffer, renderReportPdfBuffer } from "@/lib/exports/p
 import { buildFileResponse, createExportJob, createExportJobForUser } from "@/lib/exports/server";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 import { hasApiKeyAuthorization, verifyApiKeyRequest } from "@/lib/data/api-keys";
+import { queueWebhookDeliveryAttempts } from "@/lib/data/webhooks";
 
 type PublicFoodExportRow = {
   id: string;
@@ -305,6 +306,22 @@ export async function POST(request: Request) {
       ...(apiKeyMetadata ?? {}),
     },
   }, actorUserId ? { actorUserId } : {});
+
+  await queueWebhookDeliveryAttempts(
+    {
+      event: "dataset_export_created",
+      targetType: "export_job",
+      targetId: fileName,
+      payload: {
+        scope: body.scope,
+        format: body.format,
+        fileName,
+        sizeBytes,
+        ...(apiKeyMetadata ?? {}),
+      },
+    },
+    actorUserId ? { actorUserId } : {},
+  );
 
   return buildFileResponse(payload, {
     contentType,

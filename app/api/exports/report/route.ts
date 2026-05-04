@@ -16,6 +16,7 @@ import {
   persistPatientReportVersion,
 } from "@/lib/data/patient-reports-client";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
+import { queueWebhookDeliveryAttempts } from "@/lib/data/webhooks";
 
 function buildReportCsv(request: ReportExportRequest) {
   const rows: string[][] = [
@@ -226,6 +227,24 @@ export async function POST(request: Request) {
         sizeBytes: pdfBuffer.length,
       },
     });
+    await queueWebhookDeliveryAttempts(
+      {
+        event: "report_export_created",
+        targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
+        targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+        payload: {
+          format: "PDF",
+          patientId: body.patientId,
+          planId: body.planId,
+          protocolId: body.protocolId,
+          reportId: patientReportId,
+          reportVersionId: patientReportVersionId,
+          fileName,
+          sizeBytes: pdfBuffer.length,
+        },
+      },
+      { actorUserId: userId },
+    );
     return buildFileResponse(pdfBuffer, {
       contentType: "application/pdf",
       fileName,
@@ -280,6 +299,24 @@ export async function POST(request: Request) {
       sizeBytes: Buffer.byteLength(csv, "utf8"),
     },
   });
+  await queueWebhookDeliveryAttempts(
+    {
+      event: "report_export_created",
+      targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
+      targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+      payload: {
+        format: "CSV",
+        patientId: body.patientId,
+        planId: body.planId,
+        protocolId: body.protocolId,
+        reportId: patientReportId,
+        reportVersionId: patientReportVersionId,
+        fileName,
+        sizeBytes: Buffer.byteLength(csv, "utf8"),
+      },
+    },
+    { actorUserId: userId },
+  );
   return buildFileResponse(csv, {
     contentType: "text/csv;charset=utf-8",
     fileName,

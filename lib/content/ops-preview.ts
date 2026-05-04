@@ -67,19 +67,19 @@ export const WEBHOOK_EVENT_PREVIEWS = [
     id: "patient.created",
     event: "patient.created",
     description: "Patient wurde angelegt oder aus einer Demo-Quelle uebernommen.",
-    delivery: "Noch keine produktive Auslieferung",
+    delivery: "Noch nicht abonnierbar",
   },
   {
     id: "protocol.submitted",
     event: "protocol.submitted",
     description: "Digitales Protokoll wurde ueber den oeffentlichen Link eingereicht.",
-    delivery: "Preview-Schema",
+    delivery: "Queue wird persistiert",
   },
   {
     id: "export.completed",
     event: "export.completed",
     description: "Exportdatei wurde erzeugt und im Audit-Journal erfasst.",
-    delivery: "Geplante Auslieferung nach API-Key-/Webhook-Backend",
+    delivery: "Queue wird persistiert",
   },
 ] as const;
 

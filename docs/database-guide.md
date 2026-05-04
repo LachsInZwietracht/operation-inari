@@ -299,6 +299,12 @@ The full schema is defined in Supabase migration files under `supabase/migration
   - the only current scope is `exports:datasets:read`
   - API-key dataset exports are limited to non-custom Lebensmittel rows via `/api/exports/datasets`
   - create, revoke, and dataset-export actions write `access_audit_logs`
+- `webhook_endpoints` and `webhook_delivery_attempts` store the first durable integration queue:
+  - only HTTPS endpoints are accepted
+  - endpoint signing secrets are stored as prefixes plus SHA-256 hashes
+  - owner/admin users manage endpoints through `/api/webhooks`
+  - delivery attempts are queued for `dataset_export_created`, `report_export_created`, and `digital_protocol_submission_received`
+  - outbound HTTP delivery and retry workers are intentionally deferred; the current contract persists queue/failure state for the operations UI
 - Patient-bound report exports additionally:
   - persist a stable parent record in `patient_reports`
   - append immutable export versions to `patient_report_versions`

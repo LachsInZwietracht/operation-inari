@@ -62,7 +62,7 @@ Start here unless product priorities have changed:
 - [ ] Add SSO foundation: organization-level OIDC/SAML configuration, login routing, and provider metadata storage.
 - [ ] Define LDAP/Active Directory mapping requirements for clinic deployments.
 - [x] Implement API key issuance for the currently preview-only API surfaces.
-- [ ] Persist webhook endpoints, delivery attempts, and failures for integration workflows.
+- [x] Persist webhook endpoints, delivery attempts, and failures for integration workflows.
 - [ ] Define HL7 v2 import MVP: parse `PID`, `OBX`, and basic patient/lab mapping into existing patient/lab tables.
 - [ ] Define the first FHIR sync boundary after HL7 import is stable.
 
