@@ -22,6 +22,11 @@ export type ClinicDemoDigitalProtocolLink = {
   url: string;
 };
 
+export type ClinicDemoFood = {
+  id: string;
+  name: string;
+};
+
 export type ClinicDemoReportPlan = {
   planId: string;
   planDate: string;
@@ -148,6 +153,33 @@ export async function createClinicDemoProtocol(
   if (error) throw new Error(error.message);
 
   return protocolId;
+}
+
+export async function fetchClinicDemoFoodForSmartMatch(): Promise<ClinicDemoFood> {
+  const { data, error } = await admin
+    .from("foods")
+    .select("id,name")
+    .order("name", { ascending: true })
+    .limit(1)
+    .single();
+
+  if (error) throw new Error(error.message);
+  if (!data?.id || !data.name) throw new Error("No food available for Smart-Match fixture");
+
+  return { id: data.id, name: data.name };
+}
+
+export async function fetchClinicDemoProtocol(protocolId: string) {
+  const { data, error } = await admin
+    .from("nutrition_protocols")
+    .select(
+      "id,patient_id,title,type,start_date,end_date,notes,metadata,nutrition_protocol_entries(id,food_id,amount,meal_slot,entry_time)",
+    )
+    .eq("id", protocolId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 export async function deleteClinicDemoPatient(patientId: string) {

@@ -67,7 +67,7 @@ Implementation references:
 - `hooks/use-digital-protocol-submissions.ts`
 
 Validation reference:
-- `tests/digital-protocol.spec.ts` covers public-route shell behavior, API validation, and the persisted happy path from public submission through link status update, submission audit row, authenticated conversion API, converted-state tracking, and conversion audit row.
+- `tests/digital-protocol.spec.ts` covers public-route shell behavior, API validation, and the persisted happy path from public submission through link status update, submission audit row, authenticated conversion API, converted-state tracking, conversion audit row, and the practitioner Smart-Match review/protocol-form save flow.
 - Shared Supabase setup for this path lives in `tests/fixtures/clinic-demo.ts` alongside the report and institution demo fixtures.
 
 ### 3. Assessment And Counseling
@@ -200,7 +200,7 @@ Recommended checks before a demo:
 
 P0 demo hardening:
 - `npm run seed:clinic-demo` now seeds the full patient-to-kitchen buyer story for a selected Supabase Auth user.
-- Extend the current digital-protocol happy-path test to drive the practitioner Smart-Match review sheet and protocol form once a stable test food fixture is available across environments.
+- Digital protocol coverage now includes the practitioner Smart-Match review sheet and saved internal protocol path.
 - Keep `tests/fixtures/clinic-demo.ts` aligned with the deployed seed story as report, institution, and digital-protocol coverage expands.
 
 P1 clinic readiness:

@@ -17,10 +17,9 @@ Priority guide:
 
 Start here unless product priorities have changed:
 
-1. Extend the digital protocol happy path to drive the practitioner Smart-Match review sheet and protocol form once a stable test food fixture is available across environments.
-2. Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
-3. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
-4. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
+1. Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
+2. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
+3. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
 
 Recently completed sprint work:
 - Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
@@ -33,6 +32,7 @@ Recently completed sprint work:
 - Patient report export/archive coverage already verifies immutable versions, storage download, missing-file warnings, export journal behavior, and audit rows.
 - `npm run seed:clinic-demo` now creates a refreshable Supabase demo workspace for the full patient intake -> protocol -> counseling/report -> inpatient stay -> safe order -> tray card path.
 - `tests/fixtures/clinic-demo.ts` now centralizes Supabase admin setup, demo patient creation, digital protocol links, report plan/archive cleanup, institution menus/stays/orders, and audit lookup for digital, report, and institution specs.
+- Digital protocol coverage now drives the practitioner Smart-Match review sheet into the protocol form, saves the internal nutrition protocol, verifies converted submission state, and checks the conversion audit row.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -106,7 +106,7 @@ Recently completed sprint work:
 - [x] Standardize German clinical terminology across labels, including `Eiweiß`, `Kohlenhydrate`/`KH`, and patient wording.
 - [x] Add persisted digital-protocol happy-path coverage for public submission, conversion API, audit rows, and converted-state tracking.
 - [x] Consolidate report, institution, and digital-protocol test setup around `tests/fixtures/clinic-demo.ts`.
-- [ ] Extend digital-protocol happy-path coverage through the practitioner Smart-Match review sheet and protocol form.
+- [x] Extend digital-protocol happy-path coverage through the practitioner Smart-Match review sheet and protocol form.
 - [x] Add a seeded full clinic demo fixture or script for the patient-to-kitchen runbook via `scripts/seed-clinic-demo.ts` and `npm run seed:clinic-demo`.
 
 ## P2: Commercial Readiness

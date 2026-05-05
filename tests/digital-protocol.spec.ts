@@ -5,6 +5,8 @@ import {
   createClinicDemoPatient,
   createClinicDemoProtocol,
   deleteClinicDemoPatient,
+  fetchClinicDemoFoodForSmartMatch,
+  fetchClinicDemoProtocol,
   fetchDigitalProtocolLink,
   fetchDigitalProtocolSubmissionByLink,
   fetchLatestAccessAuditLog,
@@ -197,6 +199,106 @@ test.describe("Digital Protocol Public Entry", () => {
         id: submission.id,
         status: "converted",
         converted_protocol_id: protocolId,
+      });
+
+      await expect
+        .poll(async () => fetchLatestAccessAuditLog("digital_protocol_submission_converted", submission.id))
+        .toMatchObject({
+          action: "digital_protocol_submission_converted",
+          target_type: "digital_protocol_submission",
+          target_id: submission.id,
+          metadata: expect.objectContaining({
+            patientId: patient.id,
+            linkId: link.id,
+            protocolId,
+          }),
+        });
+    } finally {
+      await deleteClinicDemoPatient(patient.id);
+    }
+  });
+
+  test("drives Smart-Match practitioner review into a saved protocol", async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const food = await fetchClinicDemoFoodForSmartMatch();
+    const patient = await createClinicDemoPatient({
+      firstName: "Smart",
+      lastName: "Match",
+      indication: "Diabetes mellitus Typ 2",
+    });
+    const link = await createClinicDemoDigitalProtocolLink(patient);
+
+    try {
+      await page.goto(`/protokoll/${link.id}`, {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await page.waitForLoadState("networkidle");
+
+      await page
+        .getByRole("textbox", { name: "Was haben Sie gegessen und getrunken?" })
+        .first()
+        .fill(food.name);
+      await page.getByLabel("Uhrzeit (optional)").first().fill("09:10");
+      await page
+        .getByPlaceholder(/Besonderheiten/i)
+        .fill("Smart-Match E2E: exakt benanntes Lebensmittel aus der Datenbank.");
+      await page.getByRole("button", { name: "Absenden" }).click();
+      await expect(page.getByRole("heading", { name: "Vielen Dank!" })).toBeVisible({ timeout: 30_000 });
+
+      const submission = await fetchDigitalProtocolSubmissionByLink(link.id);
+      expect(submission).toBeTruthy();
+      expect(submission.status).toBe("new");
+
+      await page.goto(`/patienten/${patient.id}/protokolle/neu?digitalSubmission=${submission.id}`, {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+
+      await expect(page.getByRole("heading", { name: "Smart-Match Überprüfung" })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByText(food.name).first()).toBeVisible();
+      await page.getByRole("button", { name: /Übernehmen \(/ }).click();
+
+      await expect(page.getByRole("heading", { name: "Digitales Protokoll uebernehmen" })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByLabel("Titel")).toHaveValue(/Digitales Protokoll vom/);
+      await expect(page.getByText(food.name).first()).toBeVisible();
+
+      await page.getByRole("button", { name: "Protokoll erstellen" }).click();
+      await expect(page.getByRole("heading", { name: "Einreichung bereits uebernommen" })).toBeVisible({
+        timeout: 30_000,
+      });
+      const protocolHref = await page.getByRole("link", { name: "Protokoll oeffnen" }).getAttribute("href");
+      expect(protocolHref).toMatch(/\/patienten\/[^/]+\/protokolle\/[0-9a-f-]{36}$/i);
+
+      const protocolId = protocolHref?.split("/").pop();
+      expect(protocolId).toMatch(/^[0-9a-f-]{36}$/i);
+
+      const convertedSubmission = await fetchDigitalProtocolSubmissionByLink(link.id);
+      expect(convertedSubmission).toMatchObject({
+        id: submission.id,
+        status: "converted",
+        converted_protocol_id: protocolId,
+      });
+
+      const protocol = await fetchClinicDemoProtocol(protocolId!);
+      expect(protocol).toMatchObject({
+        id: protocolId,
+        patient_id: patient.id,
+        type: "ernaehrungsprotokoll",
+      });
+      expect(protocol?.metadata).toMatchObject({
+        source: "digital_protocol_submission",
+        sourceSubmissionId: submission.id,
+      });
+      expect(protocol?.nutrition_protocol_entries?.[0]).toMatchObject({
+        food_id: food.id,
+        meal_slot: "fruehstueck",
+        entry_time: "09:10",
       });
 
       await expect
