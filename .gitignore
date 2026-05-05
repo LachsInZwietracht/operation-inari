@@ -51,3 +51,6 @@ node_modules/
 /playwright/.cache/
 .playwright-mcp/
 tests/.auth/
+
+# Agent workflow scratch files
+.agent/phase/
