@@ -19,7 +19,8 @@
     "etl:portions": "npx tsx scripts/etl/import-portions.ts",
     "etl:sfk": "npx tsx scripts/etl/import-sfk.ts",
     "etl:verify:sfk": "npx tsx scripts/etl/verify-sfk-import.ts",
-    "etl:all": "npx tsx scripts/etl/run-all.ts"
+    "etl:all": "npx tsx scripts/etl/run-all.ts",
+    "seed:clinic-demo": "npx tsx scripts/seed-clinic-demo.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

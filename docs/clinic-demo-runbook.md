@@ -67,7 +67,8 @@ Implementation references:
 - `hooks/use-digital-protocol-submissions.ts`
 
 Validation reference:
-- `tests/digital-protocol.spec.ts` covers public-route shell behavior and API validation. It does not yet cover a full persisted happy-path submission fixture.
+- `tests/digital-protocol.spec.ts` covers public-route shell behavior, API validation, and the persisted happy path from public submission through link status update, submission audit row, authenticated conversion API, converted-state tracking, and conversion audit row.
+- Shared Supabase setup for this path lives in `tests/fixtures/clinic-demo.ts` alongside the report and institution demo fixtures.
 
 ### 3. Assessment And Counseling
 
@@ -150,6 +151,8 @@ Implementation references:
 
 Validation reference:
 - `tests/institution.spec.ts` covers explicit institution fixtures, safe order save, blocked allergen override logging, production status, analytics, and tray-card rendering.
+- `tests/reports.spec.ts` covers patient-bound report export/archive behavior, including `patient_reports`, `patient_report_versions`, storage-backed archive downloads, missing-file warnings, and report/download audit rows.
+- Both specs now use `tests/fixtures/clinic-demo.ts` for shared patient, menu, report, storage cleanup, and audit helpers.
 
 ### 6. Kitchen Production And Institution Analytics
 
@@ -177,8 +180,12 @@ Important boundary:
 Environment:
 - Supabase must be configured for persistence, auth, storage, and RLS-backed features.
 - Apply migrations through the current head in `supabase/migrations/`.
-- Seed enough foods, recipes, patients, menu cycles, inpatient stays, and allergies to avoid empty-state-only demos.
-- Ensure `patient-report-files` storage exists and is private.
+- Run a food ETL first, such as `npm run etl:bls`, so demo recipes and protocol entries can reference real `foods` rows.
+- Seed the full buyer-story workspace with `DEMO_USER_EMAIL=<account-email> SUPABASE_SERVICE_ROLE_KEY=<service-role-key> npm run seed:clinic-demo`.
+- Add `DEMO_USER_PASSWORD=<password>` only when the demo auth user does not exist yet and the script should create a confirmed user.
+- Use `npm run seed:clinic-demo -- --dry-run` to verify credentials, user lookup, and food availability without writing rows.
+- The seed command creates or refreshes only `clinic-demo-*` records for the target user: patients, protocol intake, counseling, report archive, menu cycle, inpatient stays, meal orders, and audit/export rows.
+- Ensure `patient-report-files` storage exists and is private; the seed command also attempts to create/update the bucket before uploading the archived demo report.
 - Use `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` only for local testing, never as a production or sales-deployment claim.
 
 Recommended checks before a demo:
@@ -192,9 +199,9 @@ Recommended checks before a demo:
 ## Open Demo Hardening Work
 
 P0 demo hardening:
-- Add a persisted happy-path Playwright fixture for digital protocol link creation, public submission, practitioner review, conversion, and converted-state tracking.
-- Add a patient report export/archive Playwright fixture that verifies `patient_reports`, `patient_report_versions`, private storage download, and audit rows.
-- Add a concise seeded demo-workspace script or documented seed fixture for the full patient-to-kitchen path.
+- `npm run seed:clinic-demo` now seeds the full patient-to-kitchen buyer story for a selected Supabase Auth user.
+- Extend the current digital-protocol happy-path test to drive the practitioner Smart-Match review sheet and protocol form once a stable test food fixture is available across environments.
+- Keep `tests/fixtures/clinic-demo.ts` aligned with the deployed seed story as report, institution, and digital-protocol coverage expands.
 
 P1 clinic readiness:
 - Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
@@ -205,4 +212,3 @@ P2 product depth:
 - Extend patient portal/PWA beyond diary entry to report delivery, reminders, meal-plan feedback, and secure messages.
 - Persist user-created food synonyms fully in Supabase instead of keeping a local overlay.
 - Add direct clinical manufacturer feeds after OFF promotion and source trust workflows are stable.
-

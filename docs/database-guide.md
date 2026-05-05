@@ -31,6 +31,7 @@ Current operational notes:
 - Core ETL commands are `npm run etl:bls`, `npm run etl:verify:bls`, `npm run etl:sfk`, `npm run etl:verify:sfk`, `npm run etl:reference-values`, `npm run etl:recipes`, `npm run etl:off`, `npm run etl:synonyms`, and `npm run etl:portions`.
 - **Full pipeline:** `npm run etl:all` runs all steps in the correct order. Supports `--dry-run`, `--skip=bls,off`, and `--only=synonyms,portions` flags.
 - ETL scripts require server-side Supabase credentials such as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Do not use `NEXT_PUBLIC_*` variables for ETL.
+- The clinic demo seed uses the same service-role pattern: `DEMO_USER_EMAIL=<account-email> SUPABASE_SERVICE_ROLE_KEY=<service-role-key> npm run seed:clinic-demo`. It refreshes only `clinic-demo-*` workspace records for that user and supports `--dry-run`.
 - BLS import and verification are expected to run together. The verifier checks imported counts against the source workbook.
 - Category mapping in `scripts/etl/import-bls.ts` must stay aligned with UI category definitions such as `lib/mock-data/categories.ts`.
 - Shared recipes and meal plan templates are seeded separately from BLS foods through `npm run etl:recipes`.

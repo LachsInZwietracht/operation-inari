@@ -380,6 +380,7 @@ All ETL scripts write lifecycle events to `data_source_events` via the shared `s
 - **Reference Values (`scripts/etl/import-reference-values.ts`):** Imports DGE reference values. Logs an `import` event.
 - **Recipes & Meal Plans (`scripts/etl/import-recipes-and-meal-plans.ts`):** Imports shared recipes and meal plan templates. Logs an `import` event.
 - **Master Orchestrator (`scripts/etl/run-all.ts`):** Runs the full ETL pipeline in order (BLS → verify → synonyms → portions → reference values → recipes → OFF). Supports `--dry-run`, `--skip`, and `--only` flags. Run with `npm run etl:all`.
+- **Clinic Demo Seed (`scripts/seed-clinic-demo.ts`):** Refreshes the full buyer-story demo workspace for a selected Supabase Auth user. Run with `DEMO_USER_EMAIL=<account-email> SUPABASE_SERVICE_ROLE_KEY=<service-role-key> npm run seed:clinic-demo`; add `-- --dry-run` for credential and food availability checks without writes.
 - **Scientific Validation (`scripts/validate-nutrient-math.ts`):** Running `npm run validate:nutrients` performs 113+ mathematical assertions to ensure calculation parity with official standards.
 
 ## 7. Verification Checklist

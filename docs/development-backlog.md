@@ -17,12 +17,10 @@ Priority guide:
 
 Start here unless product priorities have changed:
 
-1. Add a persisted Playwright happy path for digital protocol link creation, public submission, practitioner review, conversion, and converted-state tracking. Start from `components/patient-workflow-tab.tsx`, `app/protokoll/[linkId]`, `app/api/protokoll/submit/route.ts`, and `app/api/digital-protocol-submissions/convert/route.ts`.
-2. Add a patient report archive/export fixture that proves `patient_reports`, `patient_report_versions`, private `patient-report-files` storage download, `export_jobs`, and `access_audit_logs` all line up with `/berichte` behavior.
-3. Create a seeded demo-workspace fixture or script for the full buyer story in `docs/clinic-demo-runbook.md`: patient intake -> protocol -> counseling/report -> inpatient stay -> safe order -> tray card -> production/analytics.
-4. Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
-5. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
-6. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
+1. Extend the digital protocol happy path to drive the practitioner Smart-Match review sheet and protocol form once a stable test food fixture is available across environments.
+2. Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
+3. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
+4. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
 
 Recently completed sprint work:
 - Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
@@ -31,6 +29,10 @@ Recently completed sprint work:
 - `/patienten` eGK hydration mismatch fix.
 - Inline recovery states for `/api-export` and `/datenbank`.
 - Server-side Cologne phonetics, paginated/on-demand food loading, RBAC invitations/role edits, access-event audit logs, institution workflow hierarchy, and production batch states.
+- Digital protocol public submission now has persisted happy-path coverage through authenticated conversion and audit rows.
+- Patient report export/archive coverage already verifies immutable versions, storage download, missing-file warnings, export journal behavior, and audit rows.
+- `npm run seed:clinic-demo` now creates a refreshable Supabase demo workspace for the full patient intake -> protocol -> counseling/report -> inpatient stay -> safe order -> tray card path.
+- `tests/fixtures/clinic-demo.ts` now centralizes Supabase admin setup, demo patient creation, digital protocol links, report plan/archive cleanup, institution menus/stays/orders, and audit lookup for digital, report, and institution specs.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -89,7 +91,7 @@ Recently completed sprint work:
 - [x] Add report retention policy fields and admin controls.
 - [x] Improve archived report search and filtering inside patient records.
 - [x] Add scheduled export requirements after the report-retention model is clear.
-- [ ] Add patient report export/archive Playwright coverage for immutable versions, storage download, export journal, and audit logs.
+- [x] Add patient report export/archive Playwright coverage for immutable versions, storage download, export journal, and audit logs.
 
 ## P2: UX Rework For Core Workflows
 
@@ -102,8 +104,10 @@ Recently completed sprint work:
 - [x] Add clinical design tokens for nutrient gaps, source trust, allergen risk, order safety, and report status.
 - [x] Create dense worklist patterns for institution and patient workflows.
 - [x] Standardize German clinical terminology across labels, including `Eiweiß`, `Kohlenhydrate`/`KH`, and patient wording.
-- [ ] Add persisted digital-protocol happy-path coverage for public submission, practitioner review, conversion, and converted-state tracking.
-- [ ] Add a seeded full clinic demo fixture or script for the patient-to-kitchen runbook.
+- [x] Add persisted digital-protocol happy-path coverage for public submission, conversion API, audit rows, and converted-state tracking.
+- [x] Consolidate report, institution, and digital-protocol test setup around `tests/fixtures/clinic-demo.ts`.
+- [ ] Extend digital-protocol happy-path coverage through the practitioner Smart-Match review sheet and protocol form.
+- [x] Add a seeded full clinic demo fixture or script for the patient-to-kitchen runbook via `scripts/seed-clinic-demo.ts` and `npm run seed:clinic-demo`.
 
 ## P2: Commercial Readiness
 
