@@ -1,6 +1,6 @@
 # Development Backlog
 
-Last updated: 2026-05-04
+Last updated: 2026-05-05
 
 Purpose:
 - Track currently open development tasks for the next engineer or agent.
@@ -17,9 +17,9 @@ Priority guide:
 
 Start here unless product priorities have changed:
 
-1. Implement the HL7 v2 MVP from `docs/clinic-it-integration-plan.md`: import job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency, and audit events.
-2. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
-3. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
+1. Add SSO group/claim-to-role mapping on top of the existing organization SSO configuration foundation.
+2. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
+3. Add an HL7 import review/admin surface for `hl7_import_jobs`, `hl7_import_results`, and lab parameter mappings.
 
 Recently completed sprint work:
 - Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
@@ -33,6 +33,7 @@ Recently completed sprint work:
 - `npm run seed:clinic-demo` now creates a refreshable Supabase demo workspace for the full patient intake -> protocol -> counseling/report -> inpatient stay -> safe order -> tray card path.
 - `tests/fixtures/clinic-demo.ts` now centralizes Supabase admin setup, demo patient creation, digital protocol links, report plan/archive cleanup, institution menus/stays/orders, and audit lookup for digital, report, and institution specs.
 - Digital protocol coverage now drives the practitioner Smart-Match review sheet into the protocol form, saves the internal nutrition protocol, verifies converted submission state, and checks the conversion audit row.
+- HL7 v2 import MVP now has persisted job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency by `MSH-10`, API-key scope `integrations:hl7:write`, audit events, and Playwright coverage.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -69,7 +70,8 @@ Recently completed sprint work:
 - [x] Implement API key issuance for the currently preview-only API surfaces.
 - [x] Persist webhook endpoints, delivery attempts, and failures for integration workflows.
 - [x] Define HL7 v2 import MVP for `PID`, `OBX`, and basic patient/lab mapping into existing patient/lab tables.
-- [ ] Implement HL7 v2 import MVP with job/result persistence, review states, idempotency, patient/lab mutations, and audit events.
+- [x] Implement HL7 v2 import MVP with job/result persistence, review states, idempotency, patient/lab mutations, and audit events.
+- [ ] Add an HL7 import review/admin surface for reviewed jobs, reviewed results, and lab mapping maintenance.
 - [x] Define the first FHIR sync boundary after HL7 import is stable.
 - [ ] Implement SSO group/claim-to-role mappings for verified SSO principals.
 

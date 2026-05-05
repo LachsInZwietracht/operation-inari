@@ -71,11 +71,13 @@ RLS:
 
 ## 2. HL7 v2 Import MVP
 
+Status: implemented as the first inbound API foundation via migration `20260522000040_hl7_import_mvp.sql`, `POST /api/integrations/hl7/import`, and `tests/hl7-import.spec.ts`. The remaining follow-up is an admin/review UI for mappings, jobs, and review results.
+
 ### Goal
 
 Import a minimal, auditable subset of HL7 v2 messages for clinics that cannot offer FHIR first.
 
-The MVP should parse patient identity and lab observations into existing tables:
+The MVP parses patient identity and numeric lab observations into existing tables:
 - `patients`
 - `patient_lab_values`
 - `access_audit_logs`
@@ -128,7 +130,7 @@ Patient matching order:
 | `OBX-11` | Result status | `patient_lab_values.metadata.resultStatus` |
 | `OBX-14` | Observation time | `patient_lab_values.date` |
 
-Recommended mapping table:
+Implemented mapping table:
 
 ```sql
 CREATE TABLE hl7_lab_parameter_mappings (
@@ -137,7 +139,7 @@ CREATE TABLE hl7_lab_parameter_mappings (
   source_system TEXT NOT NULL,
   hl7_identifier TEXT NOT NULL,
   hl7_text TEXT,
-  hl7_coding_system TEXT,
+  hl7_coding_system TEXT NOT NULL DEFAULT '',
   parameter_id TEXT NOT NULL,
   unit TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
@@ -149,7 +151,7 @@ CREATE TABLE hl7_lab_parameter_mappings (
 
 ### Import Job Contract
 
-Recommended tables:
+Implemented tables:
 - `hl7_import_jobs`: one row per uploaded message or batch.
 - `hl7_import_results`: one row per parsed patient/observation outcome.
 
@@ -174,8 +176,8 @@ Minimum result fields:
 
 MVP endpoint:
 - `POST /api/integrations/hl7/import`
-- Requires app-session admin/institution admin or an API key with future scope `integrations:hl7:write`.
-- Accepts `text/plain` HL7 or JSON `{ sourceSystem, message }`.
+- Requires an app-session institution role or an API key with scope `integrations:hl7:write`.
+- Accepts `text/plain` HL7 with `x-hl7-source-system`, or JSON `{ sourceSystem, message, allowCreatePatients }`.
 - Returns a job summary with counts and review items.
 
 Security:
@@ -264,8 +266,7 @@ FHIR job statuses should mirror HL7:
 ## 4. Next Implementation Order
 
 1. Implement `sso_group_role_mappings` and admin UI under SSO configuration.
-2. Add pure HL7 parser utilities with deterministic fixtures.
-3. Add HL7 import job/result tables and dry-run import API.
-4. Add lab parameter mapping admin surface.
-5. Enable HL7 import mode after review UI exists.
-6. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
+2. Add the HL7 import review/admin surface for `hl7_import_jobs`, `hl7_import_results`, and lab parameter mappings.
+3. Add lab parameter mapping maintenance to the integration/admin workflow.
+4. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
+5. Enable broader FHIR sync only after the HL7 review workflow is stable.

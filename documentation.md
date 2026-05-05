@@ -172,9 +172,10 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Failed history loads are shown inline so the export page does not silently degrade when the journal endpoint or schema is unavailable.
   - Export-journal failures include explicit recovery hints for missing `export_jobs` migrations or unavailable `/api/export-jobs` responses.
   - **API keys:** Owner/admin users can issue, list, and revoke live API keys from the REST API tab. Tokens are stored only as SHA-256 hashes in `api_keys`, the full token is shown once, and create/revoke events are written to `access_audit_logs`.
-  - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. The first live API-key surface is intentionally limited to Lebensmittel CSV/JSON exports over non-custom food rows; patient, meal-plan, recipe, and report scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
+  - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. `POST /api/integrations/hl7/import` accepts app sessions or API keys with `integrations:hl7:write` for inbound HL7 v2 ADT/ORU imports. Patient, meal-plan, recipe, and report API scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
+  - **HL7 import:** `/api/integrations/hl7/import` parses `MSH`, `PID`, and numeric `OBX` segments, persists `hl7_import_jobs`/`hl7_import_results`, maps observations through `hl7_lab_parameter_mappings`, writes patient/lab mutations with audit events, returns review items for ambiguous patients, unknown lab identifiers, and non-numeric values, and is idempotent by organization/source/`MSH-10`.
   - **Webhooks:** Owner/admin users can create and disable HTTPS webhook endpoints from the `Integrationen` tab. Secrets are stored only as SHA-256 hashes, the full signing secret is shown once, and matching export/report/protocol events create persisted `webhook_delivery_attempts` rows with `queued` status.
-  - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, and queued delivery attempts are live. FHIR/DEBInet/BI connector activation and outbound retry delivery remain future integration work.
+  - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, queued delivery attempts, and the HL7 import API foundation are live. FHIR/DEBInet/BI connector activation, outbound retry delivery, and the HL7 review UI remain future integration work.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
 ### 4.10 Admin & Sicherheit (`/admin/users`)
@@ -183,7 +184,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
   - **Audit:** SSO create/update/disable flows write `sso_config_created`, `sso_config_updated`, and `sso_config_disabled` rows to `access_audit_logs`.
   - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff.
-  - **Integration contracts:** LDAP/AD group mapping, HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
+  - **Integration contracts:** LDAP/AD group mapping, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
 
 ### 4.11 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`

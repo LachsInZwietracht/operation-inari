@@ -8,7 +8,10 @@ import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { ApiKeyRecord, ApiKeyScope } from "@/lib/types";
 
-export const API_KEY_SCOPES = ["exports:datasets:read"] as const satisfies readonly ApiKeyScope[];
+export const API_KEY_SCOPES = [
+  "exports:datasets:read",
+  "integrations:hl7:write",
+] as const satisfies readonly ApiKeyScope[];
 
 type ApiKeyRow = {
   id: string;

@@ -254,7 +254,7 @@ export interface ApiKey {
   status: "aktiv" | "widerrufen";
 }
 
-export type ApiKeyScope = "exports:datasets:read";
+export type ApiKeyScope = "exports:datasets:read" | "integrations:hl7:write";
 
 export interface ApiKeyRecord {
   id: ID;

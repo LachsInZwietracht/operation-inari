@@ -187,8 +187,8 @@ Product direction:
 ## 8. Technical Requirements
 
 ### 8.1 Integrations
-- **HL7 message import** — MVP boundary defined for ADT/ORU messages using `MSH`, `PID`, `OBR`, and numeric `OBX` segments mapped to `patients` and `patient_lab_values` with import review/audit jobs.
-- **FHIR sync** — first boundary defined for inbound `Patient` and lab `Observation` sync after HL7 import/review is stable; write-back and broader resources are deferred.
+- **HL7 message import** — MVP API implemented for ADT/ORU messages using `MSH`, `PID`, and numeric `OBX` segments mapped to `patients` and `patient_lab_values` with persisted import/review/audit jobs; a review/admin UI remains follow-up work.
+- **FHIR sync** — first boundary defined for inbound `Patient` and lab `Observation` sync after the HL7 review surface is stable; write-back and broader resources are deferred.
 - **Web Serial/WebUSB** — for medical device and eGK card reader communication.
 
 ---
@@ -217,7 +217,7 @@ Roadmap notes:
 4. PROCAM score and medical calculations (Creatinine clearance, MNA, SGA).
 
 ### Phase 4 - Full Clinical Integration
-1. **HL7/FHIR Sync:** HL7 import MVP and first FHIR Patient/Observation boundary defined; bidirectional HIS integration remains later.
+1. **HL7/FHIR Sync:** HL7 import MVP API implemented and first FHIR Patient/Observation boundary defined; HL7 review UI, FHIR sync, and bidirectional HIS integration remain later.
 2. Kitchen production and tray card generation.
 3. Quality report generation (Qualitätsbericht).
 

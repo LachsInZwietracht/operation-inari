@@ -304,9 +304,10 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `api_keys` stores organization-scoped API tokens for external integrations:
   - only the token prefix and SHA-256 hash are persisted
   - owner/admin users can list, create, and revoke keys through `/api/api-keys`
-  - the only current scope is `exports:datasets:read`
+  - current scopes are `exports:datasets:read` and `integrations:hl7:write`
   - API-key dataset exports are limited to non-custom Lebensmittel rows via `/api/exports/datasets`
-  - create, revoke, and dataset-export actions write `access_audit_logs`
+  - `integrations:hl7:write` can call `/api/integrations/hl7/import` for inbound HL7 jobs
+  - create, revoke, dataset-export, and HL7-import actions write `access_audit_logs`
 - `webhook_endpoints` and `webhook_delivery_attempts` store the first durable integration queue:
   - only HTTPS endpoints are accepted
   - endpoint signing secrets are stored as prefixes plus SHA-256 hashes
@@ -339,9 +340,10 @@ The full schema is defined in Supabase migration files under `supabase/migration
 
 - `docs/clinic-it-integration-plan.md` defines the remaining clinic IT integration contracts:
   - LDAP/Active Directory claim/group-to-role mapping on top of `organization_sso_configs`
-  - HL7 v2 MVP for `PID`, `MSH`, `OBR`, and numeric `OBX` imports into `patients` and `patient_lab_values`
-  - first FHIR boundary for inbound `Patient` and lab `Observation` sync after HL7 import/review is stable
-- HL7/FHIR implementation should add import job/result tables before mutating patient or lab data. Raw messages/resources must not be written to logs or API error bodies.
+  - HL7 v2 import review/admin surface for imported jobs, result diagnostics, and lab mapping maintenance
+  - first FHIR boundary for inbound `Patient` and lab `Observation` sync after the HL7 review surface is stable
+- HL7 v2 import persistence is implemented through `hl7_lab_parameter_mappings`, `hl7_import_jobs`, and `hl7_import_results`. Raw messages are not stored; only `raw_message_sha256`, count summaries, and non-PHI review metadata are persisted.
+- HL7/FHIR implementations must not write raw messages/resources to logs or API error bodies.
 
 ### Database Lifecycle Notes
 
