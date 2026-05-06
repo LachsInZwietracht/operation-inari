@@ -3,7 +3,10 @@ import { Activity, AlertTriangle, DatabaseZap, Network, Settings2 } from "lucide
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ADMIN_ROLES } from "@/lib/auth/rbac";
 import { AuthRequiredError, ForbiddenError, requireRole } from "@/lib/auth/access";
@@ -19,6 +22,7 @@ import {
   type Hl7LabMappingStatus,
 } from "@/lib/data/hl7-admin";
 import { createClient } from "@/lib/supabase/server";
+import { disableHl7LabMappingAction, upsertHl7LabMappingAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +95,10 @@ function getReviewDetail(result: Hl7ImportResultAdminRecord) {
   return result.targetId ?? result.id;
 }
 
+function getSearchParamValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function AdminFallback() {
   return (
     <div className="space-y-6">
@@ -108,7 +116,15 @@ function AdminFallback() {
   );
 }
 
-export default async function AdminIntegrationenPage() {
+export default async function AdminIntegrationenPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const successMessage = getSearchParamValue(resolvedSearchParams.success);
+  const errorMessage = getSearchParamValue(resolvedSearchParams.error);
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return <AdminFallback />;
   }
@@ -148,6 +164,18 @@ export default async function AdminIntegrationenPage() {
         description="Schnittstellenbetrieb fuer Klinik-IT"
         helpText="Diese Admin-Ansicht startet mit dem HL7-v2-Importstatus und wird als zentrale Flaeche fuer Mappingpflege, Review-Workflows und spaetere FHIR-Syncs ausgebaut."
       />
+
+      {successMessage ? (
+        <Card className="border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <CardContent className="pt-6 text-sm text-emerald-900 dark:text-emerald-100">{successMessage}</CardContent>
+        </Card>
+      ) : null}
+
+      {errorMessage ? (
+        <Card className="border-destructive/40 bg-destructive/10">
+          <CardContent className="pt-6 text-sm text-destructive">{errorMessage}</CardContent>
+        </Card>
+      ) : null}
 
       {loadError ? (
         <Card className="border-destructive/40 bg-destructive/10">
@@ -286,9 +314,51 @@ export default async function AdminIntegrationenPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">HL7 Labormappings</CardTitle>
-          <CardDescription>Aktuelle Zuordnung von HL7-Observation-IDs zu internen Laborparametern.</CardDescription>
+          <CardDescription>Zuordnung von HL7-Observation-IDs zu internen Laborparametern erstellen, pflegen und deaktivieren.</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="space-y-4 overflow-x-auto">
+          <form action={upsertHl7LabMappingAction} className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_120px_140px_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-source">Quelle</Label>
+              <Input id="hl7-mapping-source" name="sourceSystem" placeholder="LAB" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-identifier">HL7-ID</Label>
+              <Input id="hl7-mapping-identifier" name="hl7Identifier" placeholder="4548-4" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-text">Text</Label>
+              <Input id="hl7-mapping-text" name="hl7Text" placeholder="HbA1c" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-coding">Coding</Label>
+              <Input id="hl7-mapping-coding" name="hl7CodingSystem" placeholder="LN" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-parameter">Parameter</Label>
+              <Input id="hl7-mapping-parameter" name="parameterId" placeholder="lab_hba1c" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-unit">Einheit</Label>
+              <Input id="hl7-mapping-unit" name="unit" placeholder="%" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-mapping-status">Status</Label>
+              <select
+                id="hl7-mapping-status"
+                name="status"
+                defaultValue="active"
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="active">Aktiv</option>
+                <option value="disabled">Deaktiviert</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <Button type="submit">Mapping speichern</Button>
+            </div>
+          </form>
+
           {mappings.length > 0 ? (
             <Table>
               <TableHeader>
@@ -300,6 +370,7 @@ export default async function AdminIntegrationenPage() {
                   <TableHead>Parameter</TableHead>
                   <TableHead>Einheit</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -315,6 +386,68 @@ export default async function AdminIntegrationenPage() {
                       <Badge className={MAPPING_STATUS_BADGES[mapping.status]}>
                         {MAPPING_STATUS_LABELS[mapping.status]}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <form action={upsertHl7LabMappingAction} className="flex flex-wrap justify-end gap-2">
+                          <input type="hidden" name="mappingId" value={mapping.id} />
+                          <Input
+                            name="sourceSystem"
+                            defaultValue={mapping.sourceSystem}
+                            aria-label={`Quelle fuer Mapping ${mapping.hl7Identifier}`}
+                            className="w-28"
+                            required
+                          />
+                          <Input
+                            name="hl7Identifier"
+                            defaultValue={mapping.hl7Identifier}
+                            aria-label={`HL7-ID fuer Mapping ${mapping.hl7Identifier}`}
+                            className="w-28"
+                            required
+                          />
+                          <Input
+                            name="hl7Text"
+                            defaultValue={mapping.hl7Text ?? ""}
+                            aria-label={`Text fuer Mapping ${mapping.hl7Identifier}`}
+                            className="w-28"
+                          />
+                          <Input
+                            name="hl7CodingSystem"
+                            defaultValue={mapping.hl7CodingSystem}
+                            aria-label={`Coding fuer Mapping ${mapping.hl7Identifier}`}
+                            className="w-24"
+                          />
+                          <Input
+                            name="parameterId"
+                            defaultValue={mapping.parameterId}
+                            aria-label={`Parameter fuer Mapping ${mapping.hl7Identifier}`}
+                            className="w-36"
+                            required
+                          />
+                          <Input
+                            name="unit"
+                            defaultValue={mapping.unit ?? ""}
+                            aria-label={`Einheit fuer Mapping ${mapping.hl7Identifier}`}
+                            className="w-20"
+                          />
+                          <select
+                            name="status"
+                            defaultValue={mapping.status}
+                            aria-label={`Status fuer Mapping ${mapping.hl7Identifier}`}
+                            className="border-input bg-background h-9 w-[130px] rounded-md border px-3 text-sm shadow-xs"
+                          >
+                            <option value="active">Aktiv</option>
+                            <option value="disabled">Deaktiviert</option>
+                          </select>
+                          <Button type="submit" size="sm">Speichern</Button>
+                        </form>
+                        {mapping.status !== "disabled" ? (
+                          <form action={disableHl7LabMappingAction}>
+                            <input type="hidden" name="mappingId" value={mapping.id} />
+                            <Button type="submit" size="sm" variant="outline">Deaktivieren</Button>
+                          </form>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -19,7 +19,7 @@ Start here unless product priorities have changed:
 
 1. Add the real OIDC/SAML provider callback handoff and apply SSO claim mappings only after verified provider claims.
 2. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
-3. Add HL7 import review actions and lab mapping maintenance to `/admin/integrationen`.
+3. Add HL7 import review actions, filters, and job detail drill-down to `/admin/integrationen`.
 
 Recently completed sprint work:
 - Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
@@ -35,7 +35,7 @@ Recently completed sprint work:
 - Digital protocol coverage now drives the practitioner Smart-Match review sheet into the protocol form, saves the internal nutrition protocol, verifies converted submission state, and checks the conversion audit row.
 - HL7 v2 import MVP now has persisted job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency by `MSH-10`, API-key scope `integrations:hl7:write`, audit events, and Playwright coverage.
 - SSO claim-to-role mappings now persist in Supabase, are editable from `/admin/users`, write audit events, and resolve verified IdP claims by deterministic priority without auto-changing owners.
-- `/admin/integrationen` now gives owner/admin users a dedicated read-only integration operations surface for HL7 import jobs, review results, and lab mappings.
+- `/admin/integrationen` now gives owner/admin users a dedicated integration operations surface for HL7 import jobs, review results, and lab mapping creation/edit/disable workflows.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -76,7 +76,8 @@ Recently completed sprint work:
 - [x] Define HL7 v2 import MVP for `PID`, `OBX`, and basic patient/lab mapping into existing patient/lab tables.
 - [x] Implement HL7 v2 import MVP with job/result persistence, review states, idempotency, patient/lab mutations, and audit events.
 - [x] Add a read-only HL7 import review/admin surface for reviewed jobs, reviewed results, and lab mapping visibility.
-- [ ] Add HL7 review actions, filters, job detail drill-down, and lab mapping maintenance to `/admin/integrationen`.
+- [x] Add HL7 lab mapping maintenance to `/admin/integrationen`.
+- [ ] Add HL7 review actions, filters, and job detail drill-down to `/admin/integrationen`.
 - [x] Define the first FHIR sync boundary after HL7 import is stable.
 
 ## P1: Patient-To-Kitchen Workflow

@@ -345,7 +345,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
   - HL7 v2 import review/admin surface for imported jobs, result diagnostics, and lab mapping maintenance
   - first FHIR boundary for inbound `Patient` and lab `Observation` sync after the HL7 review surface is stable
 - HL7 v2 import persistence is implemented through `hl7_lab_parameter_mappings`, `hl7_import_jobs`, and `hl7_import_results`. Raw messages are not stored; only `raw_message_sha256`, count summaries, and non-PHI review metadata are persisted.
-- `/admin/integrationen` reads those HL7 tables for the first admin operations surface: recent jobs, review results, and lab mapping visibility. Review actions, filtering, and mapping edits are still follow-up work.
+- `/admin/integrationen` reads those HL7 tables for the first admin operations surface: recent jobs, review results, and lab mapping visibility. Lab mappings can be created, edited, and disabled from the page with `hl7_lab_mapping_*` audit events. Review actions, filtering, and job detail drill-down are still follow-up work.
 - HL7/FHIR implementations must not write raw messages/resources to logs or API error bodies.
 
 ### Database Lifecycle Notes

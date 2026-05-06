@@ -182,7 +182,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/admin/integrationen/page.tsx`
   - Owner/admin users can open a dedicated integration operations surface from the sidebar.
   - The first version loads recent `hl7_import_jobs`, current `needs_review`/`failed` results from `hl7_import_results`, and existing `hl7_lab_parameter_mappings` through `lib/data/hl7-admin.ts`.
-  - The page is read-only for this step: mapping creation/editing, review resolution, source filters, and job detail drawers remain follow-up work.
+  - HL7 lab mappings can be created, edited inline, and disabled from the page. Mapping changes write `hl7_lab_mapping_created`, `hl7_lab_mapping_updated`, and `hl7_lab_mapping_disabled` audit events.
+  - Review resolution, source filters, and job detail drawers remain follow-up work.
   - Migration/schema recovery errors are shown inline so missing HL7 migrations do not fail silently.
 
 ### 4.11 Admin & Sicherheit (`/admin/users`)

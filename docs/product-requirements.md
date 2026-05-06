@@ -187,7 +187,7 @@ Product direction:
 ## 8. Technical Requirements
 
 ### 8.1 Integrations
-- **HL7 message import** — MVP API implemented for ADT/ORU messages using `MSH`, `PID`, and numeric `OBX` segments mapped to `patients` and `patient_lab_values` with persisted import/review/audit jobs; `/admin/integrationen` now exposes read-only job/review/mapping visibility, while review actions and mapping edits remain follow-up work.
+- **HL7 message import** — MVP API implemented for ADT/ORU messages using `MSH`, `PID`, and numeric `OBX` segments mapped to `patients` and `patient_lab_values` with persisted import/review/audit jobs; `/admin/integrationen` now exposes job/review visibility and lab mapping maintenance, while review actions and job drill-down remain follow-up work.
 - **FHIR sync** — first boundary defined for inbound `Patient` and lab `Observation` sync after the HL7 review surface is stable; write-back and broader resources are deferred.
 - **Web Serial/WebUSB** — for medical device and eGK card reader communication.
 
