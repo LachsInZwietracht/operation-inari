@@ -1,8 +1,8 @@
 # Clinic IT Integration Plan
 
-This document defines the remaining P1 clinic IT contracts after the SSO, API key, and webhook foundations.
+This document defines the remaining P1 clinic IT contracts after the SSO, API key, webhook, and HL7 import foundations.
 
-Status: requirements and MVP boundaries are defined. Implementation should start from the schemas and acceptance criteria below, not from ad-hoc connector code.
+Status: SSO claim mapping and the HL7 import API foundation are implemented. Remaining connector work should build on the persisted schemas and acceptance criteria below, not on ad-hoc connector code.
 
 ## 1. LDAP / Active Directory Mapping
 
@@ -11,6 +11,8 @@ Status: requirements and MVP boundaries are defined. Implementation should start
 Allow a clinic IT team to map identity-provider claims and directory groups to Operation Prodi roles without manual per-user role maintenance.
 
 This builds on the persisted SSO foundation in `organization_sso_configs`. It does not replace Supabase Auth or local RBAC; it defines how an authenticated SSO principal should be placed into `organization_memberships`.
+
+Status: implemented via migration `20260523000041_sso_group_role_mappings.sql`, admin forms in `/admin/users`, and `resolveSsoRoleFromClaims()` in `lib/data/sso.ts`. Real OIDC/SAML callback handling remains a follow-up; pre-login domain routing still does not create memberships.
 
 ### Scope
 
@@ -23,12 +25,11 @@ Required mapping inputs:
 - `organization_sso_config_id`
 - `claim_name`, for example `groups`, `roles`, `memberOf`, `department`, `extension_Role`
 - `claim_value`, for example an Entra group object ID or AD distinguished name
-- target app role: `owner`, `admin`, `dietitian`, `assistant`, `institution_admin`
+- target app role: `admin`, `dietitian`, `assistant`, `institution_admin`; `owner` stays a manual break-glass role
 - status: `active` or `disabled`
 - priority for deterministic conflict resolution
-- optional notes for clinic IT review
 
-Recommended table:
+Implemented table:
 
 ```sql
 CREATE TABLE sso_group_role_mappings (
@@ -37,10 +38,10 @@ CREATE TABLE sso_group_role_mappings (
   sso_config_id UUID NOT NULL REFERENCES organization_sso_configs(id) ON DELETE CASCADE,
   claim_name TEXT NOT NULL,
   claim_value TEXT NOT NULL,
-  target_role TEXT NOT NULL CHECK (target_role IN ('owner', 'admin', 'dietitian', 'assistant', 'institution_admin')),
-  priority INTEGER NOT NULL DEFAULT 100,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'dietitian', 'assistant', 'institution_admin')),
+  priority INTEGER NOT NULL DEFAULT 100 CHECK (priority >= 0 AND priority <= 10000),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-  notes TEXT,
+  disabled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (sso_config_id, claim_name, claim_value)
@@ -64,8 +65,8 @@ RLS:
 ### Acceptance Criteria
 
 - Admin UI can create, edit, disable, and list mappings under the SSO configuration.
-- Mapping validation rejects unknown app roles, empty claim names, empty claim values, and duplicate active mappings.
-- Login callback can resolve a role from verified claims without granting a role from the email domain alone.
+- Mapping validation rejects unknown app roles, empty claim names, empty claim values, duplicate mappings, and invalid priorities.
+- The resolver can resolve a role from verified claims without granting a role from the email domain alone.
 - Audit log captures actor, mapping ID, previous role/status, next role/status, claim name/value, and SSO config ID.
 - Tests cover deterministic priority, ambiguity rejection, Owner downgrade protection, and no-match behavior.
 
@@ -265,7 +266,7 @@ FHIR job statuses should mirror HL7:
 
 ## 4. Next Implementation Order
 
-1. Implement `sso_group_role_mappings` and admin UI under SSO configuration.
+1. Add the real OIDC/SAML callback handoff and apply `resolveSsoRoleFromClaims()` only after provider verification.
 2. Add the HL7 import review/admin surface for `hl7_import_jobs`, `hl7_import_results`, and lab parameter mappings.
 3. Add lab parameter mapping maintenance to the integration/admin workflow.
 4. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.

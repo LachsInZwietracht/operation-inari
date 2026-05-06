@@ -7,9 +7,9 @@ import { redirect } from "next/navigation"
 import { ADMIN_ROLES, hasAnyRole } from "@/lib/auth/rbac"
 import { ensureCurrentMembership, requireRole } from "@/lib/auth/access"
 import { upsertReportRetentionPolicy } from "@/lib/data/report-retention"
-import { disableSsoConfig, upsertSsoConfig } from "@/lib/data/sso"
+import { disableSsoConfig, disableSsoRoleMapping, upsertSsoConfig, upsertSsoRoleMapping } from "@/lib/data/sso"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
-import type { AppRole, OrganizationMembership, SsoConfigStatus, SsoProviderType } from "@/lib/types"
+import type { AppRole, OrganizationMembership, SsoConfigStatus, SsoMappableRole, SsoProviderType, SsoRoleMappingStatus } from "@/lib/types"
 
 const MEMBERSHIP_ROLES = ["owner", "admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly AppRole[]
 const MEMBERSHIP_STATUSES = ["active", "invited", "disabled"] as const
@@ -17,6 +17,8 @@ const INVITABLE_ROLES = ["admin", "dietitian", "assistant", "institution_admin"]
 const INVITE_TTL_DAYS = 14
 const SSO_PROVIDER_TYPES = ["oidc", "saml"] as const satisfies readonly SsoProviderType[]
 const SSO_STATUSES = ["draft", "active", "disabled"] as const satisfies readonly SsoConfigStatus[]
+const SSO_MAPPING_ROLES = ["admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly SsoMappableRole[]
+const SSO_MAPPING_STATUSES = ["active", "disabled"] as const satisfies readonly SsoRoleMappingStatus[]
 
 function adminUsersRedirect(status: "success" | "error", message: string): never {
   redirect(`/admin/users?${status}=${encodeURIComponent(message)}`)
@@ -52,6 +54,14 @@ function parseSsoProviderType(value: string): SsoProviderType | null {
 
 function parseSsoStatus(value: string): SsoConfigStatus | null {
   return SSO_STATUSES.includes(value as SsoConfigStatus) ? value as SsoConfigStatus : null
+}
+
+function parseSsoMappingRole(value: string): SsoMappableRole | null {
+  return SSO_MAPPING_ROLES.includes(value as SsoMappableRole) ? value as SsoMappableRole : null
+}
+
+function parseSsoMappingStatus(value: string): SsoRoleMappingStatus | null {
+  return SSO_MAPPING_STATUSES.includes(value as SsoRoleMappingStatus) ? value as SsoRoleMappingStatus : null
 }
 
 function parseDomainList(value: string) {
@@ -202,6 +212,61 @@ export async function disableSsoConfigAction(formData: FormData) {
 
   revalidatePath("/admin/users")
   adminUsersRedirect("success", "SSO-Konfiguration wurde deaktiviert.")
+}
+
+export async function upsertSsoRoleMappingAction(formData: FormData) {
+  const supabase = await createClient()
+  await requireRole(ADMIN_ROLES, supabase)
+
+  const role = parseSsoMappingRole(getString(formData, "role"))
+  const status = parseSsoMappingStatus(getString(formData, "status"))
+  if (!role) adminUsersRedirect("error", "Bitte eine gueltige Zielrolle fuer die SSO-Zuordnung waehlen.")
+  if (!status) adminUsersRedirect("error", "Bitte einen gueltigen Status fuer die SSO-Zuordnung waehlen.")
+
+  const priorityRaw = Number(getString(formData, "priority") || 100)
+  try {
+    await upsertSsoRoleMapping(
+      {
+        id: getString(formData, "mappingId") || undefined,
+        ssoConfigId: getString(formData, "ssoConfigId"),
+        claimName: getString(formData, "claimName"),
+        claimValue: getString(formData, "claimValue"),
+        role,
+        priority: Number.isFinite(priorityRaw) ? priorityRaw : 100,
+        status,
+      },
+      supabase,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const translated = message === "SSO_CONFIG_REQUIRED"
+      ? "Bitte zuerst eine SSO-Konfiguration speichern."
+      : message === "SSO_MAPPING_CLAIM_NAME_REQUIRED"
+        ? "Bitte einen Claim-Namen angeben."
+        : message === "SSO_MAPPING_CLAIM_VALUE_REQUIRED"
+          ? "Bitte einen Claim-Wert angeben."
+          : message === "SSO_MAPPING_PRIORITY_INVALID"
+            ? "Prioritaet muss zwischen 0 und 10000 liegen."
+            : message === "SSO_MAPPING_ROLE_INVALID"
+              ? "Diese Rolle kann nicht automatisch per SSO vergeben werden."
+              : message
+    adminUsersRedirect("error", translated)
+  }
+
+  revalidatePath("/admin/users")
+  adminUsersRedirect("success", "SSO-Rollenzuordnung wurde gespeichert.")
+}
+
+export async function disableSsoRoleMappingAction(formData: FormData) {
+  const supabase = await createClient()
+  await requireRole(ADMIN_ROLES, supabase)
+  const mappingId = getString(formData, "mappingId")
+  if (!mappingId) adminUsersRedirect("error", "SSO-Rollenzuordnung wurde nicht angegeben.")
+
+  await disableSsoRoleMapping(mappingId, supabase)
+
+  revalidatePath("/admin/users")
+  adminUsersRedirect("success", "SSO-Rollenzuordnung wurde deaktiviert.")
 }
 
 export async function inviteTeamMemberAction(formData: FormData) {

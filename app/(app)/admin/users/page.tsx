@@ -19,15 +19,26 @@ import {
   requireRole,
 } from "@/lib/auth/access";
 import { getOrCreateReportRetentionPolicy } from "@/lib/data/report-retention";
-import { listSsoConfigs } from "@/lib/data/sso";
+import { listSsoConfigs, listSsoRoleMappings } from "@/lib/data/sso";
 import { createClient } from "@/lib/supabase/server";
-import type { AppRole, MembershipStatus, OrganizationSsoConfigRecord, SsoConfigStatus, SsoProviderType } from "@/lib/types";
+import type {
+  AppRole,
+  MembershipStatus,
+  OrganizationSsoConfigRecord,
+  SsoConfigStatus,
+  SsoMappableRole,
+  SsoProviderType,
+  SsoRoleMappingRecord,
+  SsoRoleMappingStatus,
+} from "@/lib/types";
 import {
   disableSsoConfigAction,
+  disableSsoRoleMappingAction,
   inviteTeamMemberAction,
   resendTeamInvitationAction,
   revokeTeamInvitationAction,
   upsertSsoConfigAction,
+  upsertSsoRoleMappingAction,
   updateReportRetentionPolicyAction,
   updateTeamMemberAccessAction,
 } from "./actions";
@@ -87,6 +98,23 @@ const SSO_STATUS_BADGES: Record<SsoConfigStatus, string> = {
   disabled: "bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-200",
 };
 
+const SSO_MAPPING_STATUS_LABELS: Record<SsoRoleMappingStatus, string> = {
+  active: "Aktiv",
+  disabled: "Deaktiviert",
+};
+
+const SSO_MAPPING_STATUS_BADGES: Record<SsoRoleMappingStatus, string> = {
+  active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+  disabled: "bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-200",
+};
+
+const SSO_MAPPING_ROLE_OPTIONS: Array<{ value: SsoMappableRole; label: string }> = [
+  { value: "admin", label: ROLE_LABELS.admin },
+  { value: "dietitian", label: ROLE_LABELS.dietitian },
+  { value: "assistant", label: ROLE_LABELS.assistant },
+  { value: "institution_admin", label: ROLE_LABELS.institution_admin },
+];
+
 function getEditableStatusOptions(status: MembershipStatus) {
   return STATUS_OPTIONS.filter((option) => option.value !== "invited" || status === "invited");
 }
@@ -139,7 +167,9 @@ export default async function AdminUsersPage({
   let retentionPolicy = null;
   let retentionPolicyError: string | null = null;
   let ssoConfigs: OrganizationSsoConfigRecord[] = [];
+  let ssoRoleMappings: SsoRoleMappingRecord[] = [];
   let ssoConfigError: string | null = null;
+  let ssoRoleMappingError: string | null = null;
   try {
     retentionPolicy = await getOrCreateReportRetentionPolicy(supabase, currentMembership.organizationId);
   } catch (error) {
@@ -151,6 +181,13 @@ export default async function AdminUsersPage({
     ssoConfigError = (error as Error).message;
   }
   const primarySsoConfig = ssoConfigs[0];
+  if (primarySsoConfig) {
+    try {
+      ssoRoleMappings = await listSsoRoleMappings(primarySsoConfig.id, supabase);
+    } catch (error) {
+      ssoRoleMappingError = (error as Error).message;
+    }
+  }
 
   const activeCount = memberships.filter((membership) => membership.status === "active").length;
   const adminCount = memberships.filter((membership) => hasAnyRole(membership.role, ADMIN_ROLES)).length;
@@ -524,6 +561,152 @@ export default async function AdminUsersPage({
               Noch keine SSO-Konfiguration gespeichert.
             </p>
           )}
+
+          <div className="border-t pt-4">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold">Claim-zu-Rolle Zuordnung</h3>
+              <p className="text-sm text-muted-foreground">
+                Verifizierte IdP-Claims werden erst nach Provider-Handoff ausgewertet. Owner werden nicht automatisch per SSO vergeben oder herabgestuft.
+              </p>
+            </div>
+
+            {ssoRoleMappingError ? (
+              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+                SSO-Rollenzuordnungen konnten nicht geladen werden. Bitte Migration `20260523000041_sso_group_role_mappings.sql` anwenden. Fehler: {ssoRoleMappingError}
+              </div>
+            ) : null}
+
+            {primarySsoConfig ? (
+              <form action={upsertSsoRoleMappingAction} className="grid gap-3 lg:grid-cols-[1fr_1fr_210px_120px_140px_auto]">
+                <input type="hidden" name="ssoConfigId" value={primarySsoConfig.id} />
+                <div className="space-y-2">
+                  <Label htmlFor="sso-mapping-claim-name">Claim</Label>
+                  <Input id="sso-mapping-claim-name" name="claimName" placeholder="groups" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-mapping-claim-value">Wert</Label>
+                  <Input id="sso-mapping-claim-value" name="claimValue" placeholder="nutrition-admins" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-mapping-role">Zielrolle</Label>
+                  <select
+                    id="sso-mapping-role"
+                    name="role"
+                    defaultValue="dietitian"
+                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+                  >
+                    {SSO_MAPPING_ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-mapping-priority">Prioritaet</Label>
+                  <Input id="sso-mapping-priority" name="priority" type="number" min={0} max={10000} defaultValue={100} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-mapping-status">Status</Label>
+                  <select
+                    id="sso-mapping-status"
+                    name="status"
+                    defaultValue="active"
+                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+                  >
+                    <option value="active">Aktiv</option>
+                    <option value="disabled">Deaktiviert</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <Button type="submit">Zuordnung speichern</Button>
+                </div>
+              </form>
+            ) : (
+              <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                Speichern Sie zuerst eine SSO-Konfiguration, bevor Claim-Zuordnungen angelegt werden.
+              </p>
+            )}
+
+            {ssoRoleMappings.length > 0 ? (
+              <div className="mt-4 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Claim</TableHead>
+                      <TableHead>Wert</TableHead>
+                      <TableHead>Rolle</TableHead>
+                      <TableHead>Prioritaet</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Aktionen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ssoRoleMappings.map((mapping) => (
+                      <TableRow key={mapping.id}>
+                        <TableCell className="font-medium">{mapping.claimName}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{mapping.claimValue}</TableCell>
+                        <TableCell>{ROLE_LABELS[mapping.role]}</TableCell>
+                        <TableCell>{mapping.priority}</TableCell>
+                        <TableCell>
+                          <Badge className={SSO_MAPPING_STATUS_BADGES[mapping.status]}>
+                            {SSO_MAPPING_STATUS_LABELS[mapping.status]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <form action={upsertSsoRoleMappingAction} className="flex flex-wrap justify-end gap-2">
+                              <input type="hidden" name="mappingId" value={mapping.id} />
+                              <input type="hidden" name="ssoConfigId" value={mapping.ssoConfigId} />
+                              <input type="hidden" name="claimName" value={mapping.claimName} />
+                              <input type="hidden" name="claimValue" value={mapping.claimValue} />
+                              <select
+                                name="role"
+                                defaultValue={mapping.role}
+                                aria-label={`SSO-Rolle fuer ${mapping.claimName} ${mapping.claimValue}`}
+                                className="border-input bg-background h-9 w-[170px] rounded-md border px-3 text-sm shadow-xs"
+                              >
+                                {SSO_MAPPING_ROLE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                              <Input
+                                name="priority"
+                                type="number"
+                                min={0}
+                                max={10000}
+                                defaultValue={mapping.priority}
+                                aria-label={`SSO-Prioritaet fuer ${mapping.claimName} ${mapping.claimValue}`}
+                                className="w-24"
+                              />
+                              <select
+                                name="status"
+                                defaultValue={mapping.status}
+                                aria-label={`SSO-Status fuer ${mapping.claimName} ${mapping.claimValue}`}
+                                className="border-input bg-background h-9 w-[130px] rounded-md border px-3 text-sm shadow-xs"
+                              >
+                                <option value="active">Aktiv</option>
+                                <option value="disabled">Deaktiviert</option>
+                              </select>
+                              <Button type="submit" size="sm">Speichern</Button>
+                            </form>
+                            {mapping.status !== "disabled" ? (
+                              <form action={disableSsoRoleMappingAction}>
+                                <input type="hidden" name="mappingId" value={mapping.id} />
+                                <Button type="submit" size="sm" variant="outline">Deaktivieren</Button>
+                              </form>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : primarySsoConfig ? (
+              <p className="mt-4 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                Noch keine Claim-Zuordnungen gespeichert.
+              </p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

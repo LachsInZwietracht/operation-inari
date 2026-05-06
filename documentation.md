@@ -182,9 +182,10 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Component:** `app/(app)/admin/users/page.tsx`
   - Team membership, invitations, role/status changes, report retention, and SSO configuration are backed by Supabase.
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
+  - **SSO role mappings:** The same panel now manages `sso_group_role_mappings` for verified IdP claims. Claim mappings support deterministic priority, active/disabled status, audit events, and roles `admin`, `dietitian`, `assistant`, and `institution_admin`; `owner` remains manual.
   - **Audit:** SSO create/update/disable flows write `sso_config_created`, `sso_config_updated`, and `sso_config_disabled` rows to `access_audit_logs`.
-  - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff.
-  - **Integration contracts:** LDAP/AD group mapping, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
+  - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff. `resolveSsoRoleFromClaims()` is ready for the later verified callback path.
+  - **Integration contracts:** real SSO provider callback handoff, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
 
 ### 4.11 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`

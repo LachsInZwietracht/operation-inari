@@ -1,4 +1,5 @@
 import type { ID } from "./common";
+import type { AppRole } from "./auth";
 
 export interface PracticeInfo {
   name: string;
@@ -329,6 +330,8 @@ export interface WebhookDeliveryAttemptRecord {
 
 export type SsoProviderType = "oidc" | "saml";
 export type SsoConfigStatus = "draft" | "active" | "disabled";
+export type SsoRoleMappingStatus = "active" | "disabled";
+export type SsoMappableRole = Exclude<AppRole, "owner">;
 
 export interface OrganizationSsoConfigRecord {
   id: ID;
@@ -359,6 +362,28 @@ export interface SsoDomainResolution {
   displayName?: string;
   status?: SsoConfigStatus;
   loginHintParameter?: string;
+}
+
+export interface SsoRoleMappingRecord {
+  id: ID;
+  organizationId: ID;
+  ssoConfigId: ID;
+  claimName: string;
+  claimValue: string;
+  role: SsoMappableRole;
+  priority: number;
+  status: SsoRoleMappingStatus;
+  disabledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SsoRoleResolution {
+  status: "matched" | "no_match" | "ambiguous" | "owner_preserved";
+  role?: AppRole;
+  mappingId?: ID;
+  matchedMappingIds: ID[];
+  reason?: string;
 }
 
 export interface ExportJob {

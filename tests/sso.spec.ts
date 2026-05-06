@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
+import { resolveSsoRoleFromClaims } from "@/lib/data/sso";
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -8,9 +10,15 @@ const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+function uniqueSuffix() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 test.describe("SSO admin foundation", () => {
   test("persists an organization SSO config and resolves login domains", async ({ page, request }) => {
-    const domain = `sso-${Date.now()}.clinic.test`;
+    const suffix = uniqueSuffix();
+    const domain = `sso-${suffix}.clinic.test`;
+    const claimValue = `nutrition-admins-${suffix}`;
 
     await page.goto("/admin/users");
     await expect(page.getByRole("heading", { name: "Admin & Sicherheit" })).toBeVisible();
@@ -27,6 +35,15 @@ test.describe("SSO admin foundation", () => {
 
     await expect(page.getByText("SSO-Konfiguration wurde gespeichert.")).toBeVisible();
     await expect(page.getByRole("row", { name: new RegExp(domain) }).first()).toBeVisible();
+
+    await page.locator("#sso-mapping-claim-name").fill("groups");
+    await page.locator("#sso-mapping-claim-value").fill(claimValue);
+    await page.locator("#sso-mapping-role").selectOption("institution_admin");
+    await page.locator("#sso-mapping-priority").fill("10");
+    await page.getByRole("button", { name: "Zuordnung speichern" }).click();
+
+    await expect(page.getByText("SSO-Rollenzuordnung wurde gespeichert.")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("row", { name: new RegExp(`groups ${claimValue} Institution Admin 10 Aktiv`) }).first()).toBeVisible({ timeout: 15_000 });
 
     const resolution = await request.get(`/api/sso/resolve?email=arzt@${domain}`);
     expect(resolution.status()).toBe(200);
@@ -48,13 +65,112 @@ test.describe("SSO admin foundation", () => {
     });
   });
 
+  test("resolves SSO claim mappings by priority and rejects ambiguous top matches", async () => {
+    const suffix = uniqueSuffix();
+    const domain = `claims-${suffix}.clinic.test`;
+    const { data: organization, error: organizationError } = await admin
+      .from("organizations")
+      .insert({ name: `Claim Mapping Test ${suffix}` })
+      .select("id")
+      .single();
+    if (organizationError) throw new Error(organizationError.message);
+
+    try {
+      const { data: config, error: configError } = await admin
+        .from("organization_sso_configs")
+        .insert({
+          organization_id: organization.id,
+          provider_type: "oidc",
+          status: "active",
+          display_name: "Claim Mapping SSO",
+          domains: [domain],
+          issuer_url: `https://login.${domain}/issuer`,
+          login_hint_parameter: "login_hint",
+        })
+        .select("id")
+        .single();
+      if (configError) throw new Error(configError.message);
+
+      const { error: mappingError } = await admin.from("sso_group_role_mappings").insert([
+        {
+          organization_id: organization.id,
+          sso_config_id: config.id,
+          claim_name: "groups",
+          claim_value: "nutrition-admins",
+          role: "admin",
+          priority: 10,
+        },
+        {
+          organization_id: organization.id,
+          sso_config_id: config.id,
+          claim_name: "groups",
+          claim_value: "nutrition-team",
+          role: "dietitian",
+          priority: 20,
+        },
+      ]);
+      if (mappingError) throw new Error(mappingError.message);
+
+      const prioritized = await resolveSsoRoleFromClaims(
+        {
+          organizationId: organization.id,
+          ssoConfigId: config.id,
+          claims: { groups: ["nutrition-team", "nutrition-admins"] },
+        },
+        admin,
+      );
+      expect(prioritized).toMatchObject({ status: "matched", role: "admin" });
+
+      const ownerPreserved = await resolveSsoRoleFromClaims(
+        {
+          organizationId: organization.id,
+          ssoConfigId: config.id,
+          existingRole: "owner",
+          claims: { groups: ["nutrition-team"] },
+        },
+        admin,
+      );
+      expect(ownerPreserved).toMatchObject({
+        status: "owner_preserved",
+        role: "owner",
+        reason: "ACTIVE_OWNER_NOT_CHANGED_BY_SSO",
+      });
+
+      const { error: ambiguousMappingError } = await admin.from("sso_group_role_mappings").insert({
+        organization_id: organization.id,
+        sso_config_id: config.id,
+        claim_name: "roles",
+        claim_value: "nutrition-leads",
+        role: "institution_admin",
+        priority: 10,
+      });
+      if (ambiguousMappingError) throw new Error(ambiguousMappingError.message);
+
+      const ambiguous = await resolveSsoRoleFromClaims(
+        {
+          organizationId: organization.id,
+          ssoConfigId: config.id,
+          claims: { groups: ["nutrition-admins"], roles: ["nutrition-leads"] },
+        },
+        admin,
+      );
+      expect(ambiguous).toMatchObject({
+        status: "ambiguous",
+        reason: "MULTIPLE_SSO_MAPPINGS_WITH_SAME_PRIORITY",
+      });
+      expect(ambiguous.matchedMappingIds).toHaveLength(2);
+    } finally {
+      await admin.from("organizations").delete().eq("id", organization.id);
+    }
+  });
+
 });
 
 test.describe("SSO login routing", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("shows prepared SSO login path for configured domains", async ({ page }) => {
-    const domain = `login-${Date.now()}.clinic.test`;
+    const domain = `login-${uniqueSuffix()}.clinic.test`;
     const { data: organization, error: organizationError } = await admin
       .from("organizations")
       .insert({ name: "Login SSO Test Organisation" })

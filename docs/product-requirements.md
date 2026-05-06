@@ -179,8 +179,8 @@ Product direction:
 
 ### 7.1 Authentication & Authorization
 - **Implementation note:** Local development may bypass auth temporarily in `middleware.ts`. Do not treat that as the intended production model.
-- **SSO foundation:** Organization admins can persist OIDC/SAML provider metadata and email domains. The login page resolves active SSO configs by email domain and shows the prepared SSO path; actual provider handoff remains a follow-up integration step.
-- **LDAP/Active Directory mapping:** Requirements are defined for group/claim-to-role mapping on top of verified OIDC/SAML claims. Direct LDAP bind/sync is deferred.
+- **SSO foundation:** Organization admins can persist OIDC/SAML provider metadata, email domains, and verified claim-to-role mappings. The login page resolves active SSO configs by email domain and shows the prepared SSO path; actual provider handoff remains a follow-up integration step.
+- **LDAP/Active Directory mapping:** Group/claim-to-role mapping is implemented for verified OIDC/SAML claims. Direct LDAP bind/sync is deferred.
 
 ---
 

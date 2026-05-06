@@ -5,10 +5,15 @@ import { ADMIN_ROLES } from "@/lib/auth/rbac";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type {
+  AppRole,
   OrganizationSsoConfigRecord,
+  SsoMappableRole,
   SsoConfigStatus,
   SsoDomainResolution,
   SsoProviderType,
+  SsoRoleMappingRecord,
+  SsoRoleMappingStatus,
+  SsoRoleResolution,
 } from "@/lib/types";
 
 type SsoConfigRow = {
@@ -32,6 +37,20 @@ type SsoConfigRow = {
   organizations?: { name: string } | Array<{ name: string }> | null;
 };
 
+type SsoRoleMappingRow = {
+  id: string;
+  organization_id: string;
+  sso_config_id: string;
+  claim_name: string;
+  claim_value: string;
+  role: SsoMappableRole;
+  priority: number;
+  status: SsoRoleMappingStatus;
+  disabled_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export interface UpsertSsoConfigInput {
   id?: string;
   providerType: SsoProviderType;
@@ -47,8 +66,27 @@ export interface UpsertSsoConfigInput {
   loginHintParameter?: string;
 }
 
+export interface UpsertSsoRoleMappingInput {
+  id?: string;
+  ssoConfigId: string;
+  claimName: string;
+  claimValue: string;
+  role: SsoMappableRole;
+  priority: number;
+  status: SsoRoleMappingStatus;
+}
+
+export interface ResolveSsoRoleInput {
+  organizationId: string;
+  ssoConfigId: string;
+  claims: Record<string, unknown>;
+  existingRole?: AppRole | null;
+}
+
 const PROVIDER_TYPES = ["oidc", "saml"] as const satisfies readonly SsoProviderType[];
 const STATUSES = ["draft", "active", "disabled"] as const satisfies readonly SsoConfigStatus[];
+const MAPPABLE_ROLES = ["admin", "dietitian", "assistant", "institution_admin"] as const satisfies readonly SsoMappableRole[];
+const MAPPING_STATUSES = ["active", "disabled"] as const satisfies readonly SsoRoleMappingStatus[];
 
 function mapConfig(row: SsoConfigRow): OrganizationSsoConfigRecord {
   return {
@@ -66,6 +104,22 @@ function mapConfig(row: SsoConfigRow): OrganizationSsoConfigRecord {
     entityId: row.entity_id ?? undefined,
     ssoUrl: row.sso_url ?? undefined,
     loginHintParameter: row.login_hint_parameter,
+    disabledAt: row.disabled_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapRoleMapping(row: SsoRoleMappingRow): SsoRoleMappingRecord {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    ssoConfigId: row.sso_config_id,
+    claimName: row.claim_name,
+    claimValue: row.claim_value,
+    role: row.role,
+    priority: row.priority,
+    status: row.status,
     disabledAt: row.disabled_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -120,6 +174,39 @@ function assertValidInput(input: UpsertSsoConfigInput) {
   };
 }
 
+function normalizeClaimText(value: string) {
+  return value.trim();
+}
+
+function normalizeClaimValue(value: string) {
+  return value.trim();
+}
+
+function assertValidMappingInput(input: UpsertSsoRoleMappingInput) {
+  const claimName = normalizeClaimText(input.claimName);
+  const claimValue = normalizeClaimValue(input.claimValue);
+  if (!input.ssoConfigId) throw new Error("SSO_CONFIG_REQUIRED");
+  if (!claimName) throw new Error("SSO_MAPPING_CLAIM_NAME_REQUIRED");
+  if (!claimValue) throw new Error("SSO_MAPPING_CLAIM_VALUE_REQUIRED");
+  if (!MAPPABLE_ROLES.includes(input.role)) throw new Error("SSO_MAPPING_ROLE_INVALID");
+  if (!MAPPING_STATUSES.includes(input.status)) throw new Error("SSO_MAPPING_STATUS_INVALID");
+  const priority = Math.trunc(Number(input.priority));
+  if (!Number.isFinite(priority) || priority < 0 || priority > 10_000) {
+    throw new Error("SSO_MAPPING_PRIORITY_INVALID");
+  }
+  return { claimName, claimValue, priority };
+}
+
+function claimValueMatches(actual: unknown, expected: string): boolean {
+  if (Array.isArray(actual)) {
+    return actual.some((entry) => claimValueMatches(entry, expected));
+  }
+  if (actual && typeof actual === "object") {
+    return false;
+  }
+  return String(actual ?? "").trim() === expected;
+}
+
 export async function listSsoConfigs(supabase?: SupabaseClient) {
   const client = supabase ?? await createClient();
   await requireRole(ADMIN_ROLES, client);
@@ -133,6 +220,203 @@ export async function listSsoConfigs(supabase?: SupabaseClient) {
 
   if (error) throw new Error(error.message);
   return ((data ?? []) as SsoConfigRow[]).map(mapConfig);
+}
+
+export async function listSsoRoleMappings(ssoConfigId: string, supabase?: SupabaseClient) {
+  const client = supabase ?? await createClient();
+  await requireRole(ADMIN_ROLES, client);
+  const membership = await ensureCurrentMembership(client);
+
+  const { data, error } = await client
+    .from("sso_group_role_mappings")
+    .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+    .eq("organization_id", membership.organizationId)
+    .eq("sso_config_id", ssoConfigId)
+    .order("priority", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as SsoRoleMappingRow[]).map(mapRoleMapping);
+}
+
+export async function upsertSsoRoleMapping(input: UpsertSsoRoleMappingInput, supabase?: SupabaseClient) {
+  const client = supabase ?? await createClient();
+  await requireRole(ADMIN_ROLES, client);
+  const membership = await ensureCurrentMembership(client);
+  const normalized = assertValidMappingInput(input);
+
+  const { data: config, error: configError } = await client
+    .from("organization_sso_configs")
+    .select("id,organization_id")
+    .eq("id", input.ssoConfigId)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+  if (configError) throw new Error(configError.message);
+  if (!config) throw new Error("SSO_CONFIG_NOT_FOUND");
+
+  let previous: SsoRoleMappingRow | null = null;
+  if (input.id) {
+    const { data: previousData, error: previousError } = await client
+      .from("sso_group_role_mappings")
+      .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+      .eq("id", input.id)
+      .eq("organization_id", membership.organizationId)
+      .maybeSingle();
+    if (previousError) throw new Error(previousError.message);
+    if (!previousData) throw new Error("SSO_MAPPING_NOT_FOUND");
+    previous = previousData as SsoRoleMappingRow;
+  }
+
+  const payload = {
+    organization_id: membership.organizationId,
+    sso_config_id: input.ssoConfigId,
+    claim_name: normalized.claimName,
+    claim_value: normalized.claimValue,
+    role: input.role,
+    priority: normalized.priority,
+    status: input.status,
+    disabled_at: input.status === "disabled" ? new Date().toISOString() : null,
+  };
+
+  const mutation = input.id
+    ? client
+        .from("sso_group_role_mappings")
+        .update(payload)
+        .eq("id", input.id)
+        .eq("organization_id", membership.organizationId)
+        .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+        .single()
+    : client
+        .from("sso_group_role_mappings")
+        .insert(payload)
+        .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+        .single();
+
+  const { data, error } = await mutation;
+  if (error) throw new Error(error.message);
+  const row = data as SsoRoleMappingRow;
+
+  await writeAccessAuditLog(client, {
+    action: input.id ? "sso_mapping_updated" : "sso_mapping_created",
+    targetType: "sso_group_role_mapping",
+    targetId: row.id,
+    metadata: {
+      ssoConfigId: row.sso_config_id,
+      claimName: row.claim_name,
+      claimValue: row.claim_value,
+      previousRole: previous?.role,
+      nextRole: row.role,
+      previousStatus: previous?.status,
+      nextStatus: row.status,
+      previousPriority: previous?.priority,
+      nextPriority: row.priority,
+    },
+  });
+
+  return mapRoleMapping(row);
+}
+
+export async function disableSsoRoleMapping(mappingId: string, supabase?: SupabaseClient) {
+  const client = supabase ?? await createClient();
+  await requireRole(ADMIN_ROLES, client);
+  const membership = await ensureCurrentMembership(client);
+  const now = new Date().toISOString();
+
+  const { data: previous, error: previousError } = await client
+    .from("sso_group_role_mappings")
+    .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+    .eq("id", mappingId)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+  if (previousError) throw new Error(previousError.message);
+  if (!previous) throw new Error("SSO_MAPPING_NOT_FOUND");
+
+  const { data, error } = await client
+    .from("sso_group_role_mappings")
+    .update({ status: "disabled", disabled_at: now })
+    .eq("id", mappingId)
+    .eq("organization_id", membership.organizationId)
+    .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+    .single();
+
+  if (error) throw new Error(error.message);
+  const row = data as SsoRoleMappingRow;
+
+  await writeAccessAuditLog(client, {
+    action: "sso_mapping_disabled",
+    targetType: "sso_group_role_mapping",
+    targetId: row.id,
+    metadata: {
+      ssoConfigId: row.sso_config_id,
+      claimName: row.claim_name,
+      claimValue: row.claim_value,
+      previousRole: (previous as SsoRoleMappingRow).role,
+      nextRole: row.role,
+      previousStatus: (previous as SsoRoleMappingRow).status,
+      nextStatus: row.status,
+    },
+  });
+
+  return mapRoleMapping(row);
+}
+
+export async function resolveSsoRoleFromClaims(
+  input: ResolveSsoRoleInput,
+  supabase?: SupabaseClient,
+): Promise<SsoRoleResolution> {
+  if (input.existingRole === "owner") {
+    return {
+      status: "owner_preserved",
+      role: "owner",
+      matchedMappingIds: [],
+      reason: "ACTIVE_OWNER_NOT_CHANGED_BY_SSO",
+    };
+  }
+
+  const client = supabase ?? await createServiceClient();
+  const { data: config, error: configError } = await client
+    .from("organization_sso_configs")
+    .select("id,status,organization_id")
+    .eq("id", input.ssoConfigId)
+    .eq("organization_id", input.organizationId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (configError) throw new Error(configError.message);
+  if (!config) return { status: "no_match", matchedMappingIds: [], reason: "SSO_CONFIG_NOT_ACTIVE" };
+
+  const { data, error } = await client
+    .from("sso_group_role_mappings")
+    .select("id,organization_id,sso_config_id,claim_name,claim_value,role,priority,status,disabled_at,created_at,updated_at")
+    .eq("organization_id", input.organizationId)
+    .eq("sso_config_id", input.ssoConfigId)
+    .eq("status", "active")
+    .order("priority", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const matches = ((data ?? []) as SsoRoleMappingRow[])
+    .filter((mapping) => claimValueMatches(input.claims[mapping.claim_name], mapping.claim_value));
+
+  if (matches.length === 0) {
+    return { status: "no_match", matchedMappingIds: [] };
+  }
+
+  const highestPriority = matches[0].priority;
+  const topMatches = matches.filter((mapping) => mapping.priority === highestPriority);
+  if (topMatches.length > 1) {
+    return {
+      status: "ambiguous",
+      matchedMappingIds: topMatches.map((mapping) => mapping.id),
+      reason: "MULTIPLE_SSO_MAPPINGS_WITH_SAME_PRIORITY",
+    };
+  }
+
+  return {
+    status: "matched",
+    role: topMatches[0].role,
+    mappingId: topMatches[0].id,
+    matchedMappingIds: matches.map((mapping) => mapping.id),
+  };
 }
 
 export async function upsertSsoConfig(input: UpsertSsoConfigInput, supabase?: SupabaseClient) {
