@@ -178,7 +178,14 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, queued delivery attempts, and the HL7 import API foundation are live. FHIR/DEBInet/BI connector activation, outbound retry delivery, and the HL7 review UI remain future integration work.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
-### 4.10 Admin & Sicherheit (`/admin/users`)
+### 4.10 Admin Integrationen (`/admin/integrationen`)
+- **Component:** `app/(app)/admin/integrationen/page.tsx`
+  - Owner/admin users can open a dedicated integration operations surface from the sidebar.
+  - The first version loads recent `hl7_import_jobs`, current `needs_review`/`failed` results from `hl7_import_results`, and existing `hl7_lab_parameter_mappings` through `lib/data/hl7-admin.ts`.
+  - The page is read-only for this step: mapping creation/editing, review resolution, source filters, and job detail drawers remain follow-up work.
+  - Migration/schema recovery errors are shown inline so missing HL7 migrations do not fail silently.
+
+### 4.11 Admin & Sicherheit (`/admin/users`)
 - **Component:** `app/(app)/admin/users/page.tsx`
   - Team membership, invitations, role/status changes, report retention, and SSO configuration are backed by Supabase.
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
@@ -187,7 +194,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff. `resolveSsoRoleFromClaims()` is ready for the later verified callback path.
   - **Integration contracts:** real SSO provider callback handoff, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
 
-### 4.11 Datenbankstatus (`/datenbank`)
+### 4.12 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`
   - The route now reads the live source catalog from `data_sources` through `fetchDataSources()`.
   - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.

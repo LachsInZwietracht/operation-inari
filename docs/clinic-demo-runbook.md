@@ -41,7 +41,7 @@ What to say:
 
 Important boundary:
 - SSO configuration, claim-to-role mappings, API keys, webhooks, audit records, and the HL7 import API foundation are implemented.
-- Real SSO provider handoff, outbound webhook retry workers, the HL7 review/admin UI, and FHIR sync are still follow-up implementation work.
+- Real SSO provider handoff, outbound webhook retry workers, HL7 review actions/mapping edits, and FHIR sync are still follow-up implementation work.
 
 ### 2. Patient Intake
 

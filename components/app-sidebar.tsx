@@ -22,6 +22,7 @@ import {
   LineChart,
   BookOpen,
   Network,
+  PlugZap,
   ShieldCheck,
   Gauge,
   Ruler,
@@ -104,6 +105,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Wissen", icon: BookOpen, route: "/wissen" },
       { label: "API & Export", icon: Network, route: "/api-export" },
+      { label: "Integrationen", icon: PlugZap, route: "/admin/integrationen" },
       { label: "Leistung", icon: Gauge, route: "/leistung" },
       { label: "Tarife", icon: ShieldCheck, route: "/admin/tarife" },
       { label: "Admin & Nutzer", icon: ShieldCheck, route: "/admin/users" },

@@ -11,6 +11,15 @@ test.describe("Ops Surfaces", () => {
     await expect(page.getByText("Berichtsaufbewahrung")).toBeVisible();
   });
 
+  test("shows the admin integration operations surface", async ({ page }) => {
+    await page.goto("/admin/integrationen");
+
+    await expect(page.getByRole("heading", { name: "Integrationen" })).toBeVisible();
+    await expect(page.getByText("HL7 Import-Jobs")).toBeVisible();
+    await expect(page.getByText("Review-Ergebnisse", { exact: true })).toBeVisible();
+    await expect(page.getByText("HL7 Labormappings")).toBeVisible();
+  });
+
   test("loads live data source catalog on datenbank page", async ({ page }) => {
     await page.goto("/datenbank");
 
