@@ -72,7 +72,7 @@ RLS:
 
 ## 2. HL7 v2 Import MVP
 
-Status: implemented as the first inbound API foundation via migration `20260522000040_hl7_import_mvp.sql`, `POST /api/integrations/hl7/import`, and `tests/hl7-import.spec.ts`. The remaining follow-up is an admin/review UI for mappings, jobs, and review results.
+Status: implemented as the first inbound API foundation via migration `20260522000040_hl7_import_mvp.sql`, `POST /api/integrations/hl7/import`, `/admin/integrationen`, `tests/hl7-import.spec.ts`, and `tests/ops-surfaces.spec.ts`. The remaining follow-up is richer review resolution for mapping suggestions and patient-match decisions.
 
 ### Goal
 
@@ -267,7 +267,6 @@ FHIR job statuses should mirror HL7:
 ## 4. Next Implementation Order
 
 1. Add the real OIDC/SAML callback handoff and apply `resolveSsoRoleFromClaims()` only after provider verification.
-2. Add the HL7 import review/admin surface for `hl7_import_jobs`, `hl7_import_results`, and lab parameter mappings.
-3. Add lab parameter mapping maintenance to the integration/admin workflow.
-4. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
-5. Enable broader FHIR sync only after the HL7 review workflow is stable.
+2. Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
+3. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
+4. Enable broader FHIR sync only after the HL7 review workflow is stable.

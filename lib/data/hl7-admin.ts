@@ -33,6 +33,16 @@ export type Hl7ImportResultAdminRecord = {
   createdAt: string;
 };
 
+export type Hl7ImportJobFilters = {
+  status?: Hl7ImportJobStatus | "all";
+  sourceSystem?: string;
+};
+
+export type Hl7ImportResultFilters = {
+  jobId?: string;
+  onlyOpen?: boolean;
+};
+
 export type Hl7LabMappingAdminRecord = {
   id: string;
   organizationId: string;
@@ -97,6 +107,7 @@ type Hl7LabMappingRow = {
 };
 
 const LAB_MAPPING_STATUSES = ["active", "disabled"] as const satisfies readonly Hl7LabMappingStatus[];
+const JOB_STATUSES = ["received", "parsed", "needs_review", "imported", "failed"] as const satisfies readonly Hl7ImportJobStatus[];
 
 function mapJob(row: Hl7ImportJobRow): Hl7ImportJobAdminRecord {
   return {
@@ -166,7 +177,132 @@ function assertValidLabMappingInput(input: UpsertHl7LabMappingInput) {
   };
 }
 
-export async function listHl7ImportJobsForAdmin(supabase?: SupabaseClient, limit = 25) {
+function incrementJobCount(
+  counts: Record<string, number>,
+  status: Hl7ImportResultStatus,
+  targetType: Hl7ImportResultRow["target_type"],
+) {
+  if (targetType === "patient" && status === "created") counts.patientsCreated += 1;
+  else if (targetType === "patient" && status === "updated") counts.patientsUpdated += 1;
+  else if (targetType === "patient_lab_value" && status === "created") counts.labValuesCreated += 1;
+  else if (status === "needs_review") counts.needsReview += 1;
+  else if (status === "skipped") counts.skipped += 1;
+  else if (status === "failed") counts.failed += 1;
+}
+
+function summarizeResults(job: Hl7ImportJobRow, results: Hl7ImportResultRow[]) {
+  const counts = {
+    patientsCreated: 0,
+    patientsUpdated: 0,
+    labValuesCreated: 0,
+    needsReview: 0,
+    skipped: 0,
+    failed: 0,
+  };
+
+  for (const result of results) {
+    incrementJobCount(counts, result.status, result.target_type);
+  }
+
+  const status: Hl7ImportJobStatus = counts.failed > 0
+    ? "failed"
+    : counts.needsReview > 0
+      ? "needs_review"
+      : "imported";
+
+  return {
+    status,
+    summary: {
+      ...(job.summary ?? {}),
+      counts,
+      reviewItems: results
+        .filter((result) => result.status === "needs_review" || result.status === "failed")
+        .map((result) => ({
+          targetType: result.target_type,
+          status: result.status,
+          ...(result.metadata ?? {}),
+        })),
+    },
+  };
+}
+
+export async function listHl7ImportJobsForAdmin(
+  supabase?: SupabaseClient,
+  limit = 25,
+  filters: Hl7ImportJobFilters = {},
+) {
+  const client = supabase ?? await createClient();
+  await requireRole(ADMIN_ROLES, client);
+  const membership = await ensureCurrentMembership(client);
+
+  let query = client
+    .from("hl7_import_jobs")
+    .select("id,organization_id,actor_user_id,source_system,message_control_id,message_type,status,raw_message_sha256,summary,created_at,updated_at")
+    .eq("organization_id", membership.organizationId)
+    .order("created_at", { ascending: false });
+
+  if (filters.status && filters.status !== "all" && JOB_STATUSES.includes(filters.status)) {
+    query = query.eq("status", filters.status);
+  }
+  if (filters.sourceSystem) {
+    query = query.eq("source_system", filters.sourceSystem);
+  }
+
+  const { data, error } = await query.limit(limit);
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Hl7ImportJobRow[]).map(mapJob);
+}
+
+export async function listHl7ReviewResultsForAdmin(
+  supabase?: SupabaseClient,
+  limit = 50,
+  filters: Hl7ImportResultFilters = { onlyOpen: true },
+) {
+  const client = supabase ?? await createClient();
+  await requireRole(ADMIN_ROLES, client);
+  const membership = await ensureCurrentMembership(client);
+
+  let jobIds: string[] = [];
+  if (filters.jobId) {
+    const { data: job, error: jobError } = await client
+      .from("hl7_import_jobs")
+      .select("id")
+      .eq("id", filters.jobId)
+      .eq("organization_id", membership.organizationId)
+      .maybeSingle();
+    if (jobError) throw new Error(jobError.message);
+    jobIds = job?.id ? [job.id as string] : [];
+  } else {
+    const { data: jobs, error: jobsError } = await client
+      .from("hl7_import_jobs")
+      .select("id")
+      .eq("organization_id", membership.organizationId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (jobsError) throw new Error(jobsError.message);
+    jobIds = (jobs ?? []).map((job) => job.id as string);
+  }
+
+  if (jobIds.length === 0) return [];
+
+  let query = client
+    .from("hl7_import_results")
+    .select("id,job_id,target_type,target_id,status,metadata,created_at")
+    .in("job_id", jobIds)
+    .order("created_at", { ascending: false });
+
+  if (filters.onlyOpen ?? true) {
+    query = query.in("status", ["needs_review", "failed"]);
+  }
+
+  const { data, error } = await query.limit(limit);
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Hl7ImportResultRow[]).map(mapResult);
+}
+
+export async function getHl7ImportJobForAdmin(jobId: string, supabase?: SupabaseClient) {
   const client = supabase ?? await createClient();
   await requireRole(ADMIN_ROLES, client);
   const membership = await ensureCurrentMembership(client);
@@ -174,40 +310,12 @@ export async function listHl7ImportJobsForAdmin(supabase?: SupabaseClient, limit
   const { data, error } = await client
     .from("hl7_import_jobs")
     .select("id,organization_id,actor_user_id,source_system,message_control_id,message_type,status,raw_message_sha256,summary,created_at,updated_at")
+    .eq("id", jobId)
     .eq("organization_id", membership.organizationId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Hl7ImportJobRow[]).map(mapJob);
-}
-
-export async function listHl7ReviewResultsForAdmin(supabase?: SupabaseClient, limit = 50) {
-  const client = supabase ?? await createClient();
-  await requireRole(ADMIN_ROLES, client);
-  const membership = await ensureCurrentMembership(client);
-
-  const { data: jobs, error: jobsError } = await client
-    .from("hl7_import_jobs")
-    .select("id")
-    .eq("organization_id", membership.organizationId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (jobsError) throw new Error(jobsError.message);
-
-  const jobIds = (jobs ?? []).map((job) => job.id as string);
-  if (jobIds.length === 0) return [];
-
-  const { data, error } = await client
-    .from("hl7_import_results")
-    .select("id,job_id,target_type,target_id,status,metadata,created_at")
-    .in("job_id", jobIds)
-    .in("status", ["needs_review", "failed"])
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as Hl7ImportResultRow[]).map(mapResult);
+  return data ? mapJob(data as Hl7ImportJobRow) : null;
 }
 
 export async function listHl7LabMappingsForAdmin(supabase?: SupabaseClient) {
@@ -331,4 +439,89 @@ export async function disableHl7LabMappingForAdmin(mappingId: string, supabase?:
   });
 
   return mapMapping(row);
+}
+
+export async function markHl7ReviewResultReviewedForAdmin(
+  resultId: string,
+  note: string | undefined,
+  supabase?: SupabaseClient,
+  actor?: { userId: string; organizationId: string },
+) {
+  const client = supabase ?? await createClient();
+  let membership = actor;
+  if (!membership) {
+    await requireRole(ADMIN_ROLES, client);
+    membership = await ensureCurrentMembership(client);
+  }
+
+  const { data: result, error: resultError } = await client
+    .from("hl7_import_results")
+    .select("id,job_id,target_type,target_id,status,metadata,created_at")
+    .eq("id", resultId)
+    .maybeSingle();
+  if (resultError) throw new Error(resultError.message);
+  if (!result) throw new Error("HL7_REVIEW_RESULT_NOT_FOUND");
+  const resultRow = result as Hl7ImportResultRow;
+
+  const { data: job, error: jobError } = await client
+    .from("hl7_import_jobs")
+    .select("id,organization_id,actor_user_id,source_system,message_control_id,message_type,status,raw_message_sha256,summary,created_at,updated_at")
+    .eq("id", resultRow.job_id)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+  if (jobError) throw new Error(jobError.message);
+  if (!job) throw new Error("HL7_IMPORT_JOB_NOT_FOUND");
+  const jobRow = job as Hl7ImportJobRow;
+
+  if (resultRow.status !== "needs_review" && resultRow.status !== "failed") {
+    throw new Error("HL7_REVIEW_RESULT_ALREADY_CLOSED");
+  }
+
+  const reviewedAt = new Date().toISOString();
+  const metadata = {
+    ...(resultRow.metadata ?? {}),
+    reviewResolution: "manually_reviewed",
+    reviewedAt,
+    reviewedBy: membership.userId,
+    reviewNote: note?.trim() || undefined,
+    previousStatus: resultRow.status,
+  };
+
+  const { data: updatedResult, error: updateError } = await client
+    .from("hl7_import_results")
+    .update({ status: "skipped", metadata })
+    .eq("id", resultRow.id)
+    .select("id,job_id,target_type,target_id,status,metadata,created_at")
+    .single();
+  if (updateError) throw new Error(updateError.message);
+
+  const { data: allResults, error: allResultsError } = await client
+    .from("hl7_import_results")
+    .select("id,job_id,target_type,target_id,status,metadata,created_at")
+    .eq("job_id", jobRow.id);
+  if (allResultsError) throw new Error(allResultsError.message);
+
+  const nextJob = summarizeResults(jobRow, (allResults ?? []) as Hl7ImportResultRow[]);
+  const { error: jobUpdateError } = await client
+    .from("hl7_import_jobs")
+    .update({ status: nextJob.status, summary: nextJob.summary })
+    .eq("id", jobRow.id);
+  if (jobUpdateError) throw new Error(jobUpdateError.message);
+
+  await writeAccessAuditLog(client, {
+    action: "hl7_review_result_reviewed",
+    targetType: "hl7_import_result",
+    targetId: resultRow.id,
+    metadata: {
+      jobId: jobRow.id,
+      sourceSystem: jobRow.source_system,
+      messageControlId: jobRow.message_control_id,
+      targetType: resultRow.target_type,
+      previousStatus: resultRow.status,
+      nextStatus: "skipped",
+      note: note?.trim() || undefined,
+    },
+  }, { actorUserId: membership.userId });
+
+  return mapResult(updatedResult as Hl7ImportResultRow);
 }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Activity, AlertTriangle, DatabaseZap, Network, Settings2 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
+import { Hl7ReviewActionForm } from "@/components/hl7-review-action-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ADMIN_ROLES } from "@/lib/auth/rbac";
 import { AuthRequiredError, ForbiddenError, requireRole } from "@/lib/auth/access";
 import {
+  getHl7ImportJobForAdmin,
   listHl7ImportJobsForAdmin,
   listHl7LabMappingsForAdmin,
   listHl7ReviewResultsForAdmin,
@@ -99,6 +101,19 @@ function getSearchParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function getValidJobStatus(value: string | undefined): Hl7ImportJobStatus | "all" {
+  if (
+    value === "received" ||
+    value === "parsed" ||
+    value === "needs_review" ||
+    value === "imported" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return "all";
+}
+
 function AdminFallback() {
   return (
     <div className="space-y-6">
@@ -124,6 +139,9 @@ export default async function AdminIntegrationenPage({
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const successMessage = getSearchParamValue(resolvedSearchParams.success);
   const errorMessage = getSearchParamValue(resolvedSearchParams.error);
+  const statusFilter = getValidJobStatus(getSearchParamValue(resolvedSearchParams.status));
+  const sourceFilter = getSearchParamValue(resolvedSearchParams.source)?.trim() || "";
+  const selectedJobId = getSearchParamValue(resolvedSearchParams.jobId)?.trim() || "";
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return <AdminFallback />;
@@ -139,16 +157,24 @@ export default async function AdminIntegrationenPage({
   }
 
   let jobs: Hl7ImportJobAdminRecord[] = [];
+  let selectedJob: Hl7ImportJobAdminRecord | null = null;
+  let selectedJobResults: Hl7ImportResultAdminRecord[] = [];
   let reviewResults: Hl7ImportResultAdminRecord[] = [];
   let mappings: Hl7LabMappingAdminRecord[] = [];
   let loadError: string | null = null;
 
   try {
     [jobs, reviewResults, mappings] = await Promise.all([
-      listHl7ImportJobsForAdmin(supabase),
-      listHl7ReviewResultsForAdmin(supabase),
+      listHl7ImportJobsForAdmin(supabase, 25, { status: statusFilter, sourceSystem: sourceFilter || undefined }),
+      listHl7ReviewResultsForAdmin(supabase, 50, { onlyOpen: true }),
       listHl7LabMappingsForAdmin(supabase),
     ]);
+    if (selectedJobId) {
+      [selectedJob, selectedJobResults] = await Promise.all([
+        getHl7ImportJobForAdmin(selectedJobId, supabase),
+        listHl7ReviewResultsForAdmin(supabase, 100, { jobId: selectedJobId, onlyOpen: false }),
+      ]);
+    }
   } catch (error) {
     loadError = error instanceof Error ? error.message : String(error);
   }
@@ -232,7 +258,34 @@ export default async function AdminIntegrationenPage({
           </CardTitle>
           <CardDescription>Letzte eingegangene ADT-/ORU-Nachrichten mit Importstatus und Ergebniszaehlern.</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="space-y-4 overflow-x-auto">
+          <form className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="hl7-job-status-filter">Status</Label>
+              <select
+                id="hl7-job-status-filter"
+                name="status"
+                defaultValue={statusFilter}
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs"
+              >
+                <option value="all">Alle</option>
+                <option value="needs_review">Pruefung</option>
+                <option value="failed">Fehlgeschlagen</option>
+                <option value="imported">Importiert</option>
+                <option value="received">Empfangen</option>
+                <option value="parsed">Geparst</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hl7-job-source-filter">Quelle</Label>
+              <Input id="hl7-job-source-filter" name="source" defaultValue={sourceFilter} placeholder="LAB" />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button type="submit">Filtern</Button>
+              <Button type="submit" variant="outline" name="status" value="all">Zuruecksetzen</Button>
+            </div>
+          </form>
+
           {jobs.length > 0 ? (
             <Table>
               <TableHeader>
@@ -245,6 +298,7 @@ export default async function AdminIntegrationenPage({
                   <TableHead>Patienten</TableHead>
                   <TableHead>Laborwerte</TableHead>
                   <TableHead>Review</TableHead>
+                  <TableHead className="text-right">Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,6 +314,13 @@ export default async function AdminIntegrationenPage({
                     <TableCell>{getCount(job, "patientsCreated") + getCount(job, "patientsUpdated")}</TableCell>
                     <TableCell>{getCount(job, "labValuesCreated")}</TableCell>
                     <TableCell>{getCount(job, "needsReview")}</TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild size="sm" variant={selectedJobId === job.id ? "default" : "outline"}>
+                        <a href={`/admin/integrationen?jobId=${encodeURIComponent(job.id)}&status=${encodeURIComponent(statusFilter)}&source=${encodeURIComponent(sourceFilter)}`}>
+                          Anzeigen
+                        </a>
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -271,6 +332,74 @@ export default async function AdminIntegrationenPage({
           )}
         </CardContent>
       </Card>
+
+      {selectedJob ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Job-Details</CardTitle>
+            <CardDescription>
+              {selectedJob.sourceSystem} · {selectedJob.messageType} · Kontroll-ID {selectedJob.messageControlId}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-x-auto">
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Status</p>
+                <Badge className={JOB_STATUS_BADGES[selectedJob.status]}>{JOB_STATUS_LABELS[selectedJob.status]}</Badge>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Hash</p>
+                <p className="font-mono text-xs">{selectedJob.rawMessageSha256.slice(0, 16)}…</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Erstellt</p>
+                <p className="text-sm">{formatDate(selectedJob.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Aktualisiert</p>
+                <p className="text-sm">{formatDate(selectedJob.updatedAt)}</p>
+              </div>
+            </div>
+
+            {selectedJobResults.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Zeitpunkt</TableHead>
+                    <TableHead>Ziel</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Grund</TableHead>
+                    <TableHead>Referenz</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedJobResults.map((result) => (
+                    <TableRow key={result.id}>
+                      <TableCell className="whitespace-nowrap">{formatDate(result.createdAt)}</TableCell>
+                      <TableCell>{result.targetType === "patient" ? "Patient" : "Laborwert"}</TableCell>
+                      <TableCell>
+                        <Badge className={RESULT_STATUS_BADGES[result.status]}>{RESULT_STATUS_LABELS[result.status]}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{getReviewReason(result)}</TableCell>
+                      <TableCell className="font-mono text-xs">{getReviewDetail(result)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                Dieser Job hat keine Ergebniszeilen.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : selectedJobId ? (
+        <Card className="border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <CardContent className="pt-6 text-sm text-amber-900 dark:text-amber-100">
+            Der ausgewaehlte HL7-Job wurde in dieser Organisation nicht gefunden.
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -287,6 +416,7 @@ export default async function AdminIntegrationenPage({
                   <TableHead>Status</TableHead>
                   <TableHead>Grund</TableHead>
                   <TableHead>Referenz</TableHead>
+                  <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -299,6 +429,9 @@ export default async function AdminIntegrationenPage({
                     </TableCell>
                     <TableCell className="font-mono text-xs">{getReviewReason(result)}</TableCell>
                     <TableCell className="font-mono text-xs">{getReviewDetail(result)}</TableCell>
+                    <TableCell>
+                      <Hl7ReviewActionForm resultId={result.id} reviewDetail={getReviewDetail(result)} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

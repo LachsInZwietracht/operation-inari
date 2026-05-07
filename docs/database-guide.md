@@ -245,6 +245,9 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260519000037_api_keys.sql` | Organization-scoped hashed API keys for the first external dataset export boundary |
 | `20260520000038_webhooks.sql` | Organization-scoped webhook endpoints plus persisted delivery attempts for export/report/protocol events |
 | `20260521000039_sso_configs.sql` | Organization-scoped OIDC/SAML SSO configuration, provider metadata storage, and domain-based login routing foundation |
+| `20260522000040_hl7_import_mvp.sql` | HL7 lab mappings, import jobs/results, RLS, and audit-backed ADT/ORU import persistence |
+| `20260523000041_sso_group_role_mappings.sql` | Organization-scoped SSO claim/group to RBAC role mappings with priority and audit support |
+| `20260524000042_hl7_import_results_update_policy.sql` | Admin-scoped update policy for closing HL7 review results through the integration operations surface |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -342,10 +345,10 @@ The full schema is defined in Supabase migration files under `supabase/migration
 
 - `docs/clinic-it-integration-plan.md` defines the remaining clinic IT integration contracts:
   - real OIDC/SAML callback handoff that applies `sso_group_role_mappings` after provider verification
-  - HL7 v2 import review/admin surface for imported jobs, result diagnostics, and lab mapping maintenance
-  - first FHIR boundary for inbound `Patient` and lab `Observation` sync after the HL7 review surface is stable
+  - richer HL7 review resolution workflows for mapping suggestions and patient-match decisions
+  - first FHIR boundary for inbound `Patient` and lab `Observation` sync after the HL7 admin surface is stable
 - HL7 v2 import persistence is implemented through `hl7_lab_parameter_mappings`, `hl7_import_jobs`, and `hl7_import_results`. Raw messages are not stored; only `raw_message_sha256`, count summaries, and non-PHI review metadata are persisted.
-- `/admin/integrationen` reads those HL7 tables for the first admin operations surface: recent jobs, review results, and lab mapping visibility. Lab mappings can be created, edited, and disabled from the page with `hl7_lab_mapping_*` audit events. Review actions, filtering, and job detail drill-down are still follow-up work.
+- `/admin/integrationen` reads those HL7 tables for the first admin operations surface: filtered jobs, job details, open review results, and lab mapping maintenance. Lab mappings can be created, edited, and disabled from the page with `hl7_lab_mapping_*` audit events. Open review results can be marked checked through `POST /api/admin/integrations/hl7/review-result`, which updates result metadata, recomputes parent job counts/status, and writes `hl7_review_result_reviewed` audit events.
 - HL7/FHIR implementations must not write raw messages/resources to logs or API error bodies.
 
 ### Database Lifecycle Notes

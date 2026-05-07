@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 
 import { ADMIN_ROLES } from "@/lib/auth/rbac";
 import { requireRole } from "@/lib/auth/access";
-import { disableHl7LabMappingForAdmin, upsertHl7LabMappingForAdmin, type Hl7LabMappingStatus } from "@/lib/data/hl7-admin";
+import {
+  disableHl7LabMappingForAdmin,
+  upsertHl7LabMappingForAdmin,
+  type Hl7LabMappingStatus,
+} from "@/lib/data/hl7-admin";
 import { createClient } from "@/lib/supabase/server";
 
 const HL7_MAPPING_STATUSES = ["active", "disabled"] as const satisfies readonly Hl7LabMappingStatus[];

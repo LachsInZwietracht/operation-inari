@@ -175,7 +175,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. `POST /api/integrations/hl7/import` accepts app sessions or API keys with `integrations:hl7:write` for inbound HL7 v2 ADT/ORU imports. Patient, meal-plan, recipe, and report API scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
   - **HL7 import:** `/api/integrations/hl7/import` parses `MSH`, `PID`, and numeric `OBX` segments, persists `hl7_import_jobs`/`hl7_import_results`, maps observations through `hl7_lab_parameter_mappings`, writes patient/lab mutations with audit events, returns review items for ambiguous patients, unknown lab identifiers, and non-numeric values, and is idempotent by organization/source/`MSH-10`.
   - **Webhooks:** Owner/admin users can create and disable HTTPS webhook endpoints from the `Integrationen` tab. Secrets are stored only as SHA-256 hashes, the full signing secret is shown once, and matching export/report/protocol events create persisted `webhook_delivery_attempts` rows with `queued` status.
-  - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, queued delivery attempts, and the HL7 import API foundation are live. FHIR/DEBInet/BI connector activation, outbound retry delivery, and the HL7 review UI remain future integration work.
+  - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, queued delivery attempts, and the HL7 import/admin foundation are live. FHIR/DEBInet/BI connector activation, outbound retry delivery, and richer HL7 resolution workflows remain future integration work.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
 ### 4.10 Admin Integrationen (`/admin/integrationen`)
@@ -183,7 +183,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Owner/admin users can open a dedicated integration operations surface from the sidebar.
   - The first version loads recent `hl7_import_jobs`, current `needs_review`/`failed` results from `hl7_import_results`, and existing `hl7_lab_parameter_mappings` through `lib/data/hl7-admin.ts`.
   - HL7 lab mappings can be created, edited inline, and disabled from the page. Mapping changes write `hl7_lab_mapping_created`, `hl7_lab_mapping_updated`, and `hl7_lab_mapping_disabled` audit events.
-  - Review resolution, source filters, and job detail drawers remain follow-up work.
+  - HL7 jobs can be filtered by status and source system, opened into a persisted job-detail table, and reviewed through the current open result queue.
+  - Open `needs_review`/`failed` review results can be marked checked from the page. The action stores review metadata, recomputes job counts/status, and writes a `hl7_review_result_reviewed` audit event.
   - Migration/schema recovery errors are shown inline so missing HL7 migrations do not fail silently.
 
 ### 4.11 Admin & Sicherheit (`/admin/users`)

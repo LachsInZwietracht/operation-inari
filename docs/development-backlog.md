@@ -1,6 +1,6 @@
 # Development Backlog
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 Purpose:
 - Track currently open development tasks for the next engineer or agent.
@@ -19,7 +19,7 @@ Start here unless product priorities have changed:
 
 1. Add the real OIDC/SAML provider callback handoff and apply SSO claim mappings only after verified provider claims.
 2. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
-3. Add HL7 import review actions, filters, and job detail drill-down to `/admin/integrationen`.
+3. Add richer HL7 resolution workflows for mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
 
 Recently completed sprint work:
 - Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
@@ -36,6 +36,7 @@ Recently completed sprint work:
 - HL7 v2 import MVP now has persisted job/result tables, PID patient matching, numeric OBX lab import, review states, idempotency by `MSH-10`, API-key scope `integrations:hl7:write`, audit events, and Playwright coverage.
 - SSO claim-to-role mappings now persist in Supabase, are editable from `/admin/users`, write audit events, and resolve verified IdP claims by deterministic priority without auto-changing owners.
 - `/admin/integrationen` now gives owner/admin users a dedicated integration operations surface for HL7 import jobs, review results, and lab mapping creation/edit/disable workflows.
+- `/admin/integrationen` now supports HL7 job status/source filtering, job detail drill-down, and checked review-result resolution with audit logging.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -77,7 +78,7 @@ Recently completed sprint work:
 - [x] Implement HL7 v2 import MVP with job/result persistence, review states, idempotency, patient/lab mutations, and audit events.
 - [x] Add a read-only HL7 import review/admin surface for reviewed jobs, reviewed results, and lab mapping visibility.
 - [x] Add HL7 lab mapping maintenance to `/admin/integrationen`.
-- [ ] Add HL7 review actions, filters, and job detail drill-down to `/admin/integrationen`.
+- [x] Add HL7 review actions, filters, and job detail drill-down to `/admin/integrationen`.
 - [x] Define the first FHIR sync boundary after HL7 import is stable.
 
 ## P1: Patient-To-Kitchen Workflow
