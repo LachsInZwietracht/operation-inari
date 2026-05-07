@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
+import type { User } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 
-import { resolveSsoRoleFromClaims } from "@/lib/data/sso";
+import { completeVerifiedSsoLogin, resolveSsoRoleFromClaims } from "@/lib/data/sso";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -161,6 +162,95 @@ test.describe("SSO admin foundation", () => {
       expect(ambiguous.matchedMappingIds).toHaveLength(2);
     } finally {
       await admin.from("organizations").delete().eq("id", organization.id);
+    }
+  });
+
+  test("applies verified SSO callback claims to organization membership", async () => {
+    const suffix = uniqueSuffix();
+    const domain = `callback-${suffix}.clinic.test`;
+    const email = `sso-user-${suffix}@${domain}`;
+    const { data: organization, error: organizationError } = await admin
+      .from("organizations")
+      .insert({ name: `SSO Callback Test ${suffix}` })
+      .select("id")
+      .single();
+    if (organizationError) throw new Error(organizationError.message);
+
+    const { data: authUser, error: authError } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { name: "Ignored Mutable Name" },
+    });
+    if (authError) throw new Error(authError.message);
+    if (!authUser.user) throw new Error("SSO callback test user not created");
+
+    try {
+      const { data: config, error: configError } = await admin
+        .from("organization_sso_configs")
+        .insert({
+          organization_id: organization.id,
+          provider_type: "oidc",
+          status: "active",
+          display_name: "Callback SSO",
+          domains: [domain],
+          issuer_url: `https://login.${domain}/issuer`,
+          login_hint_parameter: "login_hint",
+        })
+        .select("id")
+        .single();
+      if (configError) throw new Error(configError.message);
+
+      const { error: mappingError } = await admin.from("sso_group_role_mappings").insert({
+        organization_id: organization.id,
+        sso_config_id: config.id,
+        claim_name: "groups",
+        claim_value: "nutrition-team",
+        role: "dietitian",
+        priority: 10,
+      });
+      if (mappingError) throw new Error(mappingError.message);
+
+      const verifiedUser = {
+        ...authUser.user,
+        is_sso_user: true,
+        identities: [
+          {
+            id: `identity-${suffix}`,
+            identity_id: `identity-${suffix}`,
+            user_id: authUser.user.id,
+            provider: "sso",
+            identity_data: {
+              groups: ["nutrition-team"],
+              name: "Verified IdP Name",
+            },
+          },
+        ],
+      } as User;
+
+      const result = await completeVerifiedSsoLogin(verifiedUser, admin);
+      expect(result).toMatchObject({
+        status: "applied",
+        organizationId: organization.id,
+        role: "dietitian",
+        resolution: { status: "matched", role: "dietitian" },
+      });
+
+      const { data: membership, error: membershipError } = await admin
+        .from("organization_memberships")
+        .select("email,display_name,role,status")
+        .eq("organization_id", organization.id)
+        .eq("user_id", authUser.user.id)
+        .maybeSingle();
+      if (membershipError) throw new Error(membershipError.message);
+      expect(membership).toMatchObject({
+        email,
+        display_name: "Verified IdP Name",
+        role: "dietitian",
+        status: "active",
+      });
+    } finally {
+      await admin.from("organizations").delete().eq("id", organization.id);
+      await admin.auth.admin.deleteUser(authUser.user.id);
     }
   });
 

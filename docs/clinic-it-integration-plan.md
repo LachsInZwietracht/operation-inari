@@ -2,7 +2,7 @@
 
 This document defines the remaining P1 clinic IT contracts after the SSO, API key, webhook, and HL7 import foundations.
 
-Status: SSO claim mapping and the HL7 import API foundation are implemented. Remaining connector work should build on the persisted schemas and acceptance criteria below, not on ad-hoc connector code.
+Status: SSO claim mapping, SSO callback membership application, and the HL7 import API foundation are implemented. Remaining connector work should build on the persisted schemas and acceptance criteria below, not on ad-hoc connector code.
 
 ## 1. LDAP / Active Directory Mapping
 
@@ -12,7 +12,7 @@ Allow a clinic IT team to map identity-provider claims and directory groups to O
 
 This builds on the persisted SSO foundation in `organization_sso_configs`. It does not replace Supabase Auth or local RBAC; it defines how an authenticated SSO principal should be placed into `organization_memberships`.
 
-Status: implemented via migration `20260523000041_sso_group_role_mappings.sql`, admin forms in `/admin/users`, and `resolveSsoRoleFromClaims()` in `lib/data/sso.ts`. Real OIDC/SAML callback handling remains a follow-up; pre-login domain routing still does not create memberships.
+Status: implemented via migration `20260523000041_sso_group_role_mappings.sql`, admin forms in `/admin/users`, Supabase Auth SSO handoff from the login form, `/auth/sso/callback`, `resolveSsoRoleFromClaims()`, and `completeVerifiedSsoLogin()` in `lib/data/sso.ts`. Pre-login domain routing still does not create memberships.
 
 ### Scope
 
@@ -266,7 +266,7 @@ FHIR job statuses should mirror HL7:
 
 ## 4. Next Implementation Order
 
-1. Add the real OIDC/SAML callback handoff and apply `resolveSsoRoleFromClaims()` only after provider verification.
-2. Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
-3. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
-4. Enable broader FHIR sync only after the HL7 review workflow is stable.
+1. Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
+2. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
+3. Enable broader FHIR sync only after the HL7 review workflow is stable.
+4. Add outbound webhook retry workers and operational retry visibility.

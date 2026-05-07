@@ -40,8 +40,8 @@ What to say:
 - `export_jobs` is an operational journal; patient-bound report binaries and immutable snapshots live in the patient report tables and private Supabase Storage.
 
 Important boundary:
-- SSO configuration, claim-to-role mappings, API keys, webhooks, audit records, and the HL7 import/admin foundation are implemented.
-- Real SSO provider handoff, outbound webhook retry workers, richer HL7 resolution workflows, and FHIR sync are still follow-up implementation work.
+- SSO configuration, claim-to-role mappings, Supabase Auth SSO callback membership application, API keys, webhooks, audit records, and the HL7 import/admin foundation are implemented.
+- Outbound webhook retry workers, richer HL7 resolution workflows, and FHIR sync are still follow-up implementation work.
 
 ### 2. Patient Intake
 
@@ -204,7 +204,7 @@ P0 demo hardening:
 - Keep `tests/fixtures/clinic-demo.ts` aligned with the deployed seed story as report, institution, and digital-protocol coverage expands.
 
 P1 clinic readiness:
-- Add real SSO provider handoff that applies claim-to-role mappings after verified OIDC/SAML callback claims.
+- Add outbound webhook retry workers and operational retry visibility for failed integration deliveries.
 - Extend the HL7 review/admin surface with richer mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
 - Decide whether production batch state should persist as a kitchen execution table before presenting it as production operations history.
 

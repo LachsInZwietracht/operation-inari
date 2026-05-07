@@ -179,7 +179,7 @@ Product direction:
 
 ### 7.1 Authentication & Authorization
 - **Implementation note:** Local development may bypass auth temporarily in `middleware.ts`. Do not treat that as the intended production model.
-- **SSO foundation:** Organization admins can persist OIDC/SAML provider metadata, email domains, and verified claim-to-role mappings. The login page resolves active SSO configs by email domain and shows the prepared SSO path; actual provider handoff remains a follow-up integration step.
+- **SSO foundation:** Organization admins can persist OIDC/SAML provider metadata, email domains, and verified claim-to-role mappings. The login page resolves active SSO configs by email domain, starts Supabase Auth SSO, and `/auth/sso/callback` applies verified IdP claims to organization memberships while preserving owners and rejecting ambiguous/no-match mappings.
 - **LDAP/Active Directory mapping:** Group/claim-to-role mapping is implemented for verified OIDC/SAML claims. Direct LDAP bind/sync is deferred.
 
 ---
@@ -212,7 +212,7 @@ Roadmap notes:
 
 ### Phase 3 - Expert & Institutional Features
 1. Lab values, Diabetes module, and Medication management.
-2. **SSO Integration:** OIDC/SAML configuration and login-domain routing foundation implemented; LDAP/Active Directory group mapping requirements defined.
+2. **SSO Integration:** OIDC/SAML configuration, login-domain routing, verified callback role application, and LDAP/Active Directory group mapping requirements implemented.
 3. **Bedside Optimized UI:** Tablet-first ward assistant with QR scanning.
 4. PROCAM score and medical calculations (Creatinine clearance, MNA, SGA).
 

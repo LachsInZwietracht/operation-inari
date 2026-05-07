@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import { ensureCurrentMembership, requireRole } from "@/lib/auth/access";
 import { ADMIN_ROLES } from "@/lib/auth/rbac";
@@ -81,6 +81,14 @@ export interface ResolveSsoRoleInput {
   ssoConfigId: string;
   claims: Record<string, unknown>;
   existingRole?: AppRole | null;
+}
+
+export interface CompleteVerifiedSsoLoginResult {
+  status: "applied" | "owner_preserved" | "rejected";
+  organizationId?: string;
+  role?: AppRole;
+  reason?: string;
+  resolution?: SsoRoleResolution;
 }
 
 const PROVIDER_TYPES = ["oidc", "saml"] as const satisfies readonly SsoProviderType[];
@@ -205,6 +213,73 @@ function claimValueMatches(actual: unknown, expected: string): boolean {
     return false;
   }
   return String(actual ?? "").trim() === expected;
+}
+
+function getEmailDomain(email: string | undefined) {
+  return email?.trim().toLowerCase().split("@")[1] || "";
+}
+
+function getUserDisplayName(user: User) {
+  const identityData = user.identities?.find((identity) => identity.identity_data)?.identity_data;
+  const fullName = identityData?.full_name ?? identityData?.name ?? user.app_metadata?.full_name ?? user.app_metadata?.name;
+  if (typeof fullName === "string" && fullName.trim()) return fullName.trim();
+
+  const firstName = identityData?.first_name ?? user.app_metadata?.first_name;
+  const lastName = identityData?.last_name ?? user.app_metadata?.last_name;
+  const displayName = [firstName, lastName]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  return displayName || user.email || "SSO Benutzer";
+}
+
+function mergeClaimValue(previous: unknown, next: unknown) {
+  if (previous === undefined) return next;
+  const previousValues = Array.isArray(previous) ? previous : [previous];
+  const nextValues = Array.isArray(next) ? next : [next];
+  return Array.from(new Set([...previousValues, ...nextValues].map((value) => String(value))));
+}
+
+export function extractVerifiedSsoClaims(user: User): Record<string, unknown> {
+  const claims: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(user.app_metadata ?? {})) {
+    if (value !== undefined && value !== null) claims[key] = value;
+  }
+
+  for (const identity of user.identities ?? []) {
+    if (!identity.identity_data) continue;
+    claims.provider = mergeClaimValue(claims.provider, identity.provider);
+    for (const [key, value] of Object.entries(identity.identity_data)) {
+      if (value !== undefined && value !== null) {
+        claims[key] = mergeClaimValue(claims[key], value);
+      }
+    }
+  }
+
+  if (user.email) claims.email = user.email;
+  return claims;
+}
+
+function hasVerifiedSsoIdentity(user: User) {
+  if (user.is_sso_user) return true;
+  return (user.identities ?? []).some((identity) => identity.provider === "sso" || identity.provider === "saml");
+}
+
+async function findActiveSsoConfigForEmail(email: string, supabase: SupabaseClient) {
+  const domain = getEmailDomain(email);
+  if (!domain) return null;
+
+  const { data, error } = await supabase
+    .from("organization_sso_configs")
+    .select("id,organization_id,created_by,provider_type,status,display_name,domains,issuer_url,metadata_url,metadata_xml,client_id,entity_id,sso_url,login_hint_parameter,disabled_at,created_at,updated_at")
+    .eq("status", "active")
+    .contains("domains", [domain])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? data as SsoConfigRow : null;
 }
 
 export async function listSsoConfigs(supabase?: SupabaseClient) {
@@ -416,6 +491,116 @@ export async function resolveSsoRoleFromClaims(
     role: topMatches[0].role,
     mappingId: topMatches[0].id,
     matchedMappingIds: matches.map((mapping) => mapping.id),
+  };
+}
+
+export async function completeVerifiedSsoLogin(
+  user: User,
+  supabase?: SupabaseClient,
+): Promise<CompleteVerifiedSsoLoginResult> {
+  if (!user.email) return { status: "rejected", reason: "SSO_USER_EMAIL_REQUIRED" };
+  if (!hasVerifiedSsoIdentity(user)) return { status: "rejected", reason: "SSO_VERIFIED_IDENTITY_REQUIRED" };
+
+  const client = supabase ?? await createServiceClient();
+  const config = await findActiveSsoConfigForEmail(user.email, client);
+  if (!config) return { status: "rejected", reason: "SSO_CONFIG_NOT_FOUND_FOR_EMAIL" };
+
+  const { data: existingMembership, error: membershipError } = await client
+    .from("organization_memberships")
+    .select("id,organization_id,user_id,email,display_name,role,status,invited_by,invitation_sent_at,invitation_expires_at,revoked_at,joined_at,created_at,updated_at")
+    .eq("organization_id", config.organization_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (membershipError) throw new Error(membershipError.message);
+
+  const existing = existingMembership as { id: string; role: AppRole; status: string; joined_at: string | null } | null;
+  const claims = extractVerifiedSsoClaims(user);
+  const resolution = await resolveSsoRoleFromClaims(
+    {
+      organizationId: config.organization_id,
+      ssoConfigId: config.id,
+      claims,
+      existingRole: existing?.status === "active" ? existing.role : null,
+    },
+    client,
+  );
+
+  if (resolution.status === "owner_preserved") {
+    await writeAccessAuditLog(client, {
+      action: "sso_callback_owner_preserved",
+      targetType: "organization_membership",
+      targetId: existing?.id,
+      metadata: {
+        ssoConfigId: config.id,
+        matchedMappingIds: resolution.matchedMappingIds,
+        reason: resolution.reason,
+      },
+    }, { actorUserId: user.id });
+
+    return {
+      status: "owner_preserved",
+      organizationId: config.organization_id,
+      role: "owner",
+      resolution,
+    };
+  }
+
+  if (resolution.status !== "matched" || !resolution.role) {
+    return {
+      status: "rejected",
+      organizationId: config.organization_id,
+      reason: resolution.reason ?? resolution.status,
+      resolution,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const payload = {
+    organization_id: config.organization_id,
+    user_id: user.id,
+    email: user.email,
+    display_name: getUserDisplayName(user),
+    role: resolution.role,
+    status: "active",
+    joined_at: existing?.joined_at ?? now,
+  };
+
+  const mutation = existing
+    ? client
+        .from("organization_memberships")
+        .update(payload)
+        .eq("id", existing.id)
+        .select("id")
+        .single()
+    : client
+        .from("organization_memberships")
+        .insert(payload)
+        .select("id")
+        .single();
+
+  const { data: membership, error: mutationError } = await mutation;
+  if (mutationError) throw new Error(mutationError.message);
+
+  await writeAccessAuditLog(client, {
+    action: existing ? "sso_callback_membership_updated" : "sso_callback_membership_created",
+    targetType: "organization_membership",
+    targetId: (membership as { id: string }).id,
+    metadata: {
+      ssoConfigId: config.id,
+      mappingId: resolution.mappingId,
+      matchedMappingIds: resolution.matchedMappingIds,
+      previousRole: existing?.role,
+      nextRole: resolution.role,
+      previousStatus: existing?.status,
+      nextStatus: "active",
+    },
+  }, { actorUserId: user.id });
+
+  return {
+    status: "applied",
+    organizationId: config.organization_id,
+    role: resolution.role,
+    resolution,
   };
 }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -55,6 +55,15 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [ssoLoading, setSsoLoading] = useState(false)
   const [ssoResolution, setSsoResolution] = useState<SsoDomainResolution | null>(null)
   const isRegister = mode === "register"
+
+  useEffect(() => {
+    if (isRegister || typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const ssoError = params.get("sso_error")
+    if (ssoError) {
+      toast.error("SSO-Anmeldung konnte nicht abgeschlossen werden. Bitte pruefen Sie die IdP-Zuordnung oder nutzen Sie den Passwortlogin.")
+    }
+  }, [isRegister])
 
   const form = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
@@ -138,9 +147,28 @@ export function AuthForm({ mode }: AuthFormProps) {
     }
   }
 
-  function handleSsoIntent() {
+  async function handleSsoIntent() {
     if (!ssoResolution?.matched) return
-    toast.info("SSO-Konfiguration gefunden. Der Provider-Handoff wird im naechsten Integrationsschritt aktiviert.")
+    setSsoLoading(true)
+    const supabase = createClient()
+    const redirectTo = `${window.location.origin}/auth/sso/callback`
+    const { data, error } = await supabase.auth.signInWithSSO({
+      domain: ssoResolution.domain ?? form.getValues("email").split("@")[1],
+      options: { redirectTo },
+    })
+
+    if (error) {
+      setSsoLoading(false)
+      toast.error(error.message)
+      return
+    }
+    if (data?.url) {
+      window.location.href = data.url
+      return
+    }
+
+    setSsoLoading(false)
+    toast.error("SSO-Provider konnte keine Weiterleitung starten.")
   }
 
   return (
@@ -209,7 +237,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                 <p className="mt-1 text-xs text-muted-foreground">
                   {ssoResolution.organizationName ?? "Organisation"} · {ssoResolution.providerType?.toUpperCase()} · Domain {ssoResolution.domain}
                 </p>
-                <Button type="button" className="mt-3 w-full" variant="secondary" onClick={handleSsoIntent}>
+                <Button type="button" className="mt-3 w-full" variant="secondary" onClick={() => void handleSsoIntent()} disabled={ssoLoading}>
                   Mit SSO anmelden
                 </Button>
               </div>

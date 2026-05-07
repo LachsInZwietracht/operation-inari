@@ -295,8 +295,8 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/admin/users` role/status changes are performed server-side against `organization_memberships`, enforce Owner-only Owner changes plus last-active-Owner and self-lockout guards, and write `team_membership_updated` rows to `access_audit_logs`.
 - `/admin/users` stores organization-level SSO configuration in `organization_sso_configs`: OIDC/SAML provider type, domains, provider metadata URLs/XML, client/entity identifiers, status, and login-hint parameter. Create/update/disable actions write `sso_config_*` audit rows.
 - `/admin/users` also manages `sso_group_role_mappings`: verified IdP claim names/values map to `admin`, `dietitian`, `assistant`, or `institution_admin` with deterministic priority. Owner is intentionally not assignable by SSO mapping. Create/update/disable actions write `sso_mapping_*` audit rows.
-- `/api/sso/resolve` is the public login-routing resolver. It accepts an email address, matches active SSO configs by domain through a service-role lookup, and returns only minimal routing metadata. It does not perform provider handoff yet.
-- `resolveSsoRoleFromClaims()` resolves active mappings only after verified OIDC/SAML claims are available. Same-priority matches return ambiguity, no-match creates no membership, and existing active owners are preserved.
+- `/api/sso/resolve` is the public login-routing resolver. It accepts an email address, matches active SSO configs by domain through a service-role lookup, and returns only minimal routing metadata. `components/auth-form.tsx` uses that domain match to start Supabase Auth SSO.
+- `/auth/sso/callback` exchanges the Supabase Auth code, verifies the user through `getUser()`, extracts server-verified app metadata and identity data, and calls `completeVerifiedSsoLogin()`. Same-priority matches return ambiguity, no-match creates no membership, existing active owners are preserved, and matched roles create/update active `organization_memberships` rows with `sso_callback_*` audit events.
 - Direct LDAP bind/sync is intentionally out of scope for v1; LDAP/AD groups should arrive through verified OIDC/SAML claims.
 - Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, patient report exports/downloads, export history and dataset exports, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
@@ -344,7 +344,6 @@ The full schema is defined in Supabase migration files under `supabase/migration
 ### Clinic Integration Notes
 
 - `docs/clinic-it-integration-plan.md` defines the remaining clinic IT integration contracts:
-  - real OIDC/SAML callback handoff that applies `sso_group_role_mappings` after provider verification
   - richer HL7 review resolution workflows for mapping suggestions and patient-match decisions
   - first FHIR boundary for inbound `Patient` and lab `Observation` sync after the HL7 admin surface is stable
 - HL7 v2 import persistence is implemented through `hl7_lab_parameter_mappings`, `hl7_import_jobs`, and `hl7_import_results`. Raw messages are not stored; only `raw_message_sha256`, count summaries, and non-PHI review metadata are persisted.

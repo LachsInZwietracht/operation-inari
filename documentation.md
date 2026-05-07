@@ -193,8 +193,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
   - **SSO role mappings:** The same panel now manages `sso_group_role_mappings` for verified IdP claims. Claim mappings support deterministic priority, active/disabled status, audit events, and roles `admin`, `dietitian`, `assistant`, and `institution_admin`; `owner` remains manual.
   - **Audit:** SSO create/update/disable flows write `sso_config_created`, `sso_config_updated`, and `sso_config_disabled` rows to `access_audit_logs`.
-  - **Login routing:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI exposes the SSO path when a domain matches but does not fake provider handoff. `resolveSsoRoleFromClaims()` is ready for the later verified callback path.
-  - **Integration contracts:** real SSO provider callback handoff, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
+  - **Login routing and callback:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI now starts Supabase Auth SSO with the matched domain and returns through `/auth/sso/callback`, which exchanges the auth code, verifies the user through `getUser()`, extracts Supabase Auth identity claims, applies `resolveSsoRoleFromClaims()`, and creates/updates `organization_memberships` only after a deterministic mapping match. Existing owners are preserved, ambiguous/no-match callbacks are signed out, and callback membership changes write `sso_callback_*` audit events.
+  - **Integration contracts:** SSO provider callback handoff, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
 
 ### 4.12 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`
