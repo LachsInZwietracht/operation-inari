@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import {
-  ArrowRight,
   Check,
   Copy,
   Globe,
@@ -59,16 +58,9 @@ import type {
 } from "@/lib/types";
 import { NUTRIENT_GROUP_LABELS } from "@/lib/constants";
 
-const FLAG_EMOJI: Record<string, string> = {
-  DE: "🇩🇪",
-  AT: "🇦🇹",
-  CH: "🇨🇭",
-  US: "🇺🇸",
-};
-
 function ComparisonView() {
   const { officialRows } = useReferenceProfiles();
-  const [selectedStandards, setSelectedStandards] = useState<Exclude<ReferenceStandardId, "custom">[]>(["dge", "rda"]);
+  const [selectedStandards, setSelectedStandards] = useState<Exclude<ReferenceStandardId, "custom">[]>(["dge"]);
   const [ageGroupId, setAgeGroupId] = useState("25-51");
   const [gender, setGender] = useState<"m" | "w">("w");
   const [nutrientGroup, setNutrientGroup] = useState<NutrientGroup>("makronaehrstoffe");
@@ -708,83 +700,13 @@ function NutrientOverrideTable({
 }
 
 export default function ReferenzwertePage() {
-  const { standardId, setStandard } = useReferenceProfiles();
-
   return (
     <div className="flex flex-col gap-6 p-6">
       <PageHeader
         title="Referenzwerte"
-        description="Nährstoff-Referenzwerte nach DGE, ÖGE, SGE und RDA — mit Vergleich und eigenen Profilen"
-        helpText="Referenzwerte bilden die Grundlage für die Nährstoffanalyse. Wählen Sie den passenden Standard für Ihre Region und passen Sie Werte bei Bedarf mit eigenen Profilen an."
+        description="Nährstoff-Referenzwerte nach DGE — mit Vergleich und eigenen Profilen"
+        helpText="Referenzwerte bilden die Grundlage für die Nährstoffanalyse. Aktuell sind die DGE-Werte hinterlegt; weitere Standards folgen."
       />
-
-      {/* Active standard quick-switch */}
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">Aktiver Standard:</span>
-        <div className="flex gap-1">
-          {REFERENCE_STANDARDS.map((s) => (
-            <Button
-              key={s.id}
-              variant={standardId === s.id ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStandard(s.id)}
-            >
-              {s.shortName}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Standard overview cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {REFERENCE_STANDARDS.map((s) => (
-          <Card
-            key={s.id}
-            data-testid={`reference-standard-${s.id}`}
-            className={
-              standardId === s.id
-                ? "ring-2 ring-primary"
-                : ""
-            }
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  {FLAG_EMOJI[s.country]} {s.shortName}
-                </CardTitle>
-                {standardId === s.id && (
-                  <Badge variant="default" className="text-xs">
-                    Aktiv
-                  </Badge>
-                )}
-              </div>
-              <CardDescription className="text-xs">{s.name}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">{s.description}</p>
-              <div className="mt-2 flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  Edition {s.edition}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {AGE_GROUPS.filter((group) => group.minAge >= 1).length} Altersgruppen
-                </Badge>
-              </div>
-              {standardId !== s.id && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2 w-full text-xs"
-                  onClick={() => setStandard(s.id)}
-                >
-                  Als Standard setzen
-                  <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
       <Tabs defaultValue="comparison">
         <TabsList>

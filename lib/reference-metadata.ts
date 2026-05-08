@@ -49,9 +49,13 @@ export const REFERENCE_STANDARD_METADATA: Record<
   },
 };
 
-export const REFERENCE_STANDARDS = Object.entries(REFERENCE_STANDARD_METADATA).map(
-  ([id, meta]) => ({
-    id: id as Exclude<ReferenceStandardId, "custom">,
-    ...meta,
-  }),
-);
+const ENABLED_REFERENCE_STANDARDS: Exclude<ReferenceStandardId, "custom">[] = ["dge"];
+
+export const REFERENCE_STANDARDS = (
+  Object.entries(REFERENCE_STANDARD_METADATA) as [
+    Exclude<ReferenceStandardId, "custom">,
+    (typeof REFERENCE_STANDARD_METADATA)[Exclude<ReferenceStandardId, "custom">],
+  ][]
+)
+  .filter(([id]) => ENABLED_REFERENCE_STANDARDS.includes(id))
+  .map(([id, meta]) => ({ id, ...meta }));
