@@ -167,7 +167,7 @@ Product direction:
 ## 6. Institutional / Clinical Features
 
 ### 6.1 Hospital Management Features
-**Status:** Partially implemented with real operational analytics. Inpatient meal workflow, tray cards, and institution dashboards now run on persisted menu plans, stays, meal orders, and allergen constraints; HIS integration remains roadmap.
+**Status:** Partially implemented with real operational analytics. Inpatient meal workflow, tray cards, production batch execution, and institution dashboards now run on persisted menu plans, stays, meal orders, kitchen production batches/events, and allergen constraints; HIS integration remains roadmap.
 - **Patient self-service menu selection** — tablet/bedside terminal selection for patients, filtered by diet form and allergens.
 - **Table cards / tray cards** — auto-generate cards for meal trays showing room/bed, diet form, and selection.
 - **Institution analytics** — compliance and institution statistics should derive from active menu cycles, meal orders, inpatient stays, and restriction snapshots rather than mock KPI datasets.

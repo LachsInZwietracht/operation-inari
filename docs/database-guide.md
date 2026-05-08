@@ -248,6 +248,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260522000040_hl7_import_mvp.sql` | HL7 lab mappings, import jobs/results, RLS, and audit-backed ADT/ORU import persistence |
 | `20260523000041_sso_group_role_mappings.sql` | Organization-scoped SSO claim/group to RBAC role mappings with priority and audit support |
 | `20260524000042_hl7_import_results_update_policy.sql` | Admin-scoped update policy for closing HL7 review results through the integration operations surface |
+| `20260525000043_kitchen_production_batches.sql` | Persisted kitchen production batch current state plus append-only event history for production execution |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -708,6 +709,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
 | Database status/lifecycle | Live `data_sources` catalog, `data_source_events` lifecycle history, and audited food-reference replacement v1 | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/database-lifecycle.ts` |
 | Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, report-retention controls, and organization SSO configuration | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts`, `lib/data/sso.ts` |
+| Kitchen production | Persisted production batch current state and event ledger for menu-derived kitchen execution | `app/(app)/institution/produktion/page.tsx`, `lib/data/production-batches.ts`, `lib/data/production-batches-client.ts` |
 | Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 

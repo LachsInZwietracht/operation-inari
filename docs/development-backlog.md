@@ -17,9 +17,9 @@ Priority guide:
 
 Start here unless product priorities have changed:
 
-1. Decide whether institution production batch states should persist as a kitchen execution ledger before positioning them as production operations history.
-2. Add richer HL7 resolution workflows for mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
-3. Reuse the SSO callback audit pattern for outbound webhook retry workers and operational retry visibility.
+1. Add richer HL7 resolution workflows for mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
+2. Reuse the SSO callback audit pattern for outbound webhook retry workers and operational retry visibility.
+3. Decide whether kitchen production should grow into waste tracking, LMIV labels, or inventory handoff before expanding the hospital kitchen scope.
 
 Recently completed sprint work:
 - Mobile/tablet overflow fixes across `/dashboard`, `/lebensmittel`, `/patienten`, `/berichte`, and `/institution/*`.
@@ -38,6 +38,7 @@ Recently completed sprint work:
 - SSO login now uses Supabase Auth SSO handoff and `/auth/sso/callback` applies verified IdP identity claims to organization memberships, preserving owners and rejecting ambiguous/no-match callbacks.
 - `/admin/integrationen` now gives owner/admin users a dedicated integration operations surface for HL7 import jobs, review results, and lab mapping creation/edit/disable workflows.
 - `/admin/integrationen` now supports HL7 job status/source filtering, job detail drill-down, and checked review-result resolution with audit logging.
+- `/institution/produktion` now persists kitchen production batch states in `kitchen_production_batches`, appends `kitchen_production_events`, and verifies state survives reload.
 
 ## P0: Stabilize Clinic Demo Quality
 
@@ -87,6 +88,7 @@ Recently completed sprint work:
 - [x] Improve institution workflow hierarchy with a compact sticky operations bar for service window, station, and status.
 - [x] Promote unsafe orders, missing diet forms, allergen conflicts, and pending kitchen actions above general institution counts.
 - [x] Add production batch states: planned, in preparation, ready, served, and held.
+- [x] Persist production batch states as a kitchen execution ledger with event history and audit logging.
 - [x] Expand tray-card generation with diet form, allergens, room/bed, notes, and kitchen status.
 - [x] Add diet-order override logging for allergen and diet-form conflicts.
 - [x] Derive institution analytics from persisted menu cycles, meal orders, inpatient stays, and restriction snapshots.

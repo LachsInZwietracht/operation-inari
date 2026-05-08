@@ -49,6 +49,7 @@ test.describe("Institution Features", () => {
   });
 
   test("renders populated menu planning and production views from explicit fixtures", async ({ page }) => {
+    test.setTimeout(90_000);
     const fixture = await createClinicDemoInstitutionFixture({ includeDraftMenu: true });
 
     await visitInstitutionPage(page, "/institution/menueplaene", "Menüplanung");
@@ -71,9 +72,13 @@ test.describe("Institution Features", () => {
     await expect(page.getByRole("button", { name: /CSV exportieren/i })).toBeVisible();
 
     await visitInstitutionPage(page, "/institution/produktion", "Produktionsmanagement");
-    await expect(page.getByText("Chargenstatus")).toBeVisible();
-    await expect(page.getByText("Geplant").first()).toBeVisible();
+    await expect(page.getByText("Chargenstatus").last()).toBeVisible();
+    await expect(page.getByText("Geplant").last()).toBeVisible();
     await page.getByRole("button", { name: /^Start$/ }).first().click();
+    await expect(page.getByText("Chargenstatus wurde gespeichert.")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("In Vorbereitung").first()).toBeVisible();
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 45_000 });
+    await expect(page.getByRole("heading", { name: "Produktionsmanagement" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("In Vorbereitung").first()).toBeVisible();
   });
 

@@ -339,6 +339,8 @@ export async function fetchLatestAccessAuditLog(action: string, targetId?: strin
 }
 
 export async function clearClinicDemoInstitutionData(userId: string) {
+  await admin.from("kitchen_production_events").delete().eq("user_id", userId);
+  await admin.from("kitchen_production_batches").delete().eq("user_id", userId);
   await admin.from("meal_orders").delete().eq("user_id", userId);
   await admin.from("inpatient_stays").delete().eq("user_id", userId);
   await admin.from("institution_menus").delete().eq("user_id", userId);

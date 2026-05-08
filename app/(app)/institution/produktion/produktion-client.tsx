@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/page-header";
 import { formatNumber } from "@/lib/format";
 import { useInstitutionMenu } from "@/hooks/use-institution-menu";
 import type { MealSlotType, ProductionItem, ShoppingItem, Recipe, InstitutionMenu } from "@/lib/types";
+import { persistKitchenProductionBatchStatus } from "@/lib/data/production-batches-client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ProductionBatchStatus } from "@/lib/types";
+import type { KitchenProductionBatch, ProductionBatchStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,6 +115,23 @@ function getBatchKey(item: ProductionItem) {
   return `${item.mealSlot}:${item.recipeId}:${item.dietFormId}`;
 }
 
+function getLedgerKey(input: {
+  menuId: string;
+  weekNumber: number;
+  dayOfWeek: number;
+  mealSlot: MealSlotType;
+  dietFormId: string;
+  recipeId: string;
+}) {
+  return `${input.menuId}:${input.weekNumber}:${input.dayOfWeek}:${input.mealSlot}:${input.dietFormId}:${input.recipeId}`;
+}
+
+function getServiceDate(menu: InstitutionMenu, weekNumber: number, dayOfWeek: number) {
+  const date = new Date(`${menu.startDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + (weekNumber - 1) * 7 + dayOfWeek);
+  return date.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -121,9 +139,10 @@ function getBatchKey(item: ProductionItem) {
 interface ProduktionPageClientProps {
   recipes: Recipe[];
   initialMenus?: InstitutionMenu[];
+  initialBatches?: KitchenProductionBatch[];
 }
 
-export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageClientProps) {
+export function ProduktionPageClient({ recipes, initialMenus, initialBatches = [] }: ProduktionPageClientProps) {
   const { activeMenu, generateProductionList, generateShoppingList } =
     useInstitutionMenu(initialMenus, recipes);
 
@@ -131,7 +150,14 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
   const [selectedDay, setSelectedDay] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [portionScale, setPortionScale] = useState<number>(1);
-  const [batchStatuses, setBatchStatuses] = useState<Record<string, ProductionBatchStatus>>({});
+  const [batchStatuses, setBatchStatuses] = useState<Record<string, ProductionBatchStatus>>(() => {
+    const statuses: Record<string, ProductionBatchStatus> = {};
+    for (const batch of initialBatches) {
+      statuses[getLedgerKey(batch)] = batch.status;
+    }
+    return statuses;
+  });
+  const [pendingBatchKeys, setPendingBatchKeys] = useState<Set<string>>(new Set());
 
   // --- Production data (generated from active menu) -------------------------
   const productionItems: ProductionItem[] = useMemo(() => {
@@ -166,7 +192,16 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
   const batchSummary = useMemo(() => {
     return productionItems.reduce(
       (summary, item) => {
-        const status = batchStatuses[getBatchKey(item)] ?? "planned";
+        const status = activeMenu
+          ? batchStatuses[getLedgerKey({
+              menuId: activeMenu.id,
+              weekNumber: selectedWeek,
+              dayOfWeek: selectedDay,
+              mealSlot: item.mealSlot,
+              dietFormId: item.dietFormId,
+              recipeId: item.recipeId,
+            })] ?? "planned"
+          : "planned";
         summary[status] += 1;
         return summary;
       },
@@ -178,7 +213,7 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
         held: 0,
       } satisfies Record<ProductionBatchStatus, number>,
     );
-  }, [batchStatuses, productionItems]);
+  }, [activeMenu, batchStatuses, productionItems, selectedDay, selectedWeek]);
 
   // --- Shopping data (generated from active menu) ---------------------------
   const shoppingItems: ShoppingItem[] = useMemo(() => {
@@ -216,11 +251,51 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
     });
   }
 
-  function setBatchStatus(item: ProductionItem, status: ProductionBatchStatus) {
+  async function setBatchStatus(item: ProductionItem, status: ProductionBatchStatus) {
+    if (!activeMenu) return;
+    const serviceDate = getServiceDate(activeMenu, selectedWeek, selectedDay);
+    const ledgerKey = getLedgerKey({
+      menuId: activeMenu.id,
+      weekNumber: selectedWeek,
+      dayOfWeek: selectedDay,
+      mealSlot: item.mealSlot,
+      dietFormId: item.dietFormId,
+      recipeId: item.recipeId,
+    });
+    const previousStatus = batchStatuses[ledgerKey] ?? "planned";
     setBatchStatuses((prev) => ({
       ...prev,
-      [getBatchKey(item)]: status,
+      [ledgerKey]: status,
     }));
+    setPendingBatchKeys((prev) => new Set(prev).add(ledgerKey));
+
+    try {
+      await persistKitchenProductionBatchStatus({
+        menuId: activeMenu.id,
+        weekNumber: selectedWeek,
+        dayOfWeek: selectedDay,
+        serviceDate,
+        mealSlot: item.mealSlot,
+        dietFormId: item.dietFormId,
+        recipeId: item.recipeId,
+        recipeName: item.recipeName,
+        portionCount: item.portionCount,
+        status,
+      });
+      toast.success("Chargenstatus wurde gespeichert.");
+    } catch (error) {
+      setBatchStatuses((prev) => ({
+        ...prev,
+        [ledgerKey]: previousStatus,
+      }));
+      toast.error((error as Error).message || "Chargenstatus konnte nicht gespeichert werden.");
+    } finally {
+      setPendingBatchKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(ledgerKey);
+        return next;
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -409,7 +484,18 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                         {group.items.map((item) => {
                           const rowKey = `${item.recipeId}_${item.dietFormId}_${item.mealSlot}`;
                           const isOpen = expandedRows.has(rowKey);
-                          const batchStatus = batchStatuses[getBatchKey(item)] ?? "planned";
+                          const ledgerKey = activeMenu
+                            ? getLedgerKey({
+                                menuId: activeMenu.id,
+                                weekNumber: selectedWeek,
+                                dayOfWeek: selectedDay,
+                                mealSlot: item.mealSlot,
+                                dietFormId: item.dietFormId,
+                                recipeId: item.recipeId,
+                              })
+                            : getBatchKey(item);
+                          const batchStatus = batchStatuses[ledgerKey] ?? "planned";
+                          const isPending = pendingBatchKeys.has(ledgerKey);
 
                           return (
                             <TableRow
@@ -450,9 +536,10 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                                       type="button"
                                       size="sm"
                                       variant="outline"
+                                      disabled={isPending}
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        setBatchStatus(item, "in_preparation");
+                                        void setBatchStatus(item, "in_preparation");
                                       }}
                                     >
                                       <Play className="mr-1 h-3.5 w-3.5" />
@@ -464,9 +551,10 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                                       type="button"
                                       size="sm"
                                       variant="outline"
+                                      disabled={isPending}
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        setBatchStatus(item, "ready");
+                                        void setBatchStatus(item, "ready");
                                       }}
                                     >
                                       <PackageCheck className="mr-1 h-3.5 w-3.5" />
@@ -478,9 +566,10 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                                       type="button"
                                       size="sm"
                                       variant="outline"
+                                      disabled={isPending}
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        setBatchStatus(item, "served");
+                                        void setBatchStatus(item, "served");
                                       }}
                                     >
                                       Ausgeben
@@ -491,9 +580,10 @@ export function ProduktionPageClient({ recipes, initialMenus }: ProduktionPageCl
                                       type="button"
                                       size="sm"
                                       variant="ghost"
+                                      disabled={isPending}
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        setBatchStatus(item, "held");
+                                        void setBatchStatus(item, "held");
                                       }}
                                     >
                                       <PauseCircle className="mr-1 h-3.5 w-3.5" />

@@ -4,6 +4,7 @@ import { ProduktionPageClient } from "./produktion-client";
 import { fetchFoodsForInstitution } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMenuPlans } from "@/lib/data/menu-plans";
+import { fetchKitchenProductionBatches } from "@/lib/data/production-batches";
 import { FoodsProvider } from "@/components/foods-provider";
 import { PageHeader } from "@/components/page-header";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
@@ -24,15 +25,16 @@ async function ProductionContent() {
     targetId: "produktion",
     metadata: { route: "/institution/produktion" },
   });
-  const [foods, recipes, menus] = await Promise.all([
+  const [foods, recipes, menus, productionBatches] = await Promise.all([
     fetchFoodsForInstitution(),
     fetchRecipes(),
     fetchMenuPlans(),
+    fetchKitchenProductionBatches(),
   ]);
   await auditLog;
   return (
     <FoodsProvider foods={foods}>
-      <ProduktionPageClient recipes={recipes} initialMenus={menus} />
+      <ProduktionPageClient recipes={recipes} initialMenus={menus} initialBatches={productionBatches} />
     </FoodsProvider>
   );
 }

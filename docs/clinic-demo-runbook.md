@@ -168,12 +168,14 @@ Demo actions:
 
 Implementation references:
 - `app/(app)/institution/produktion/produktion-client.tsx`
+- `lib/data/production-batches.ts`
+- `lib/data/production-batches-client.ts`
 - `app/(app)/institution/compliance/compliance-client.tsx`
 - `app/(app)/institution/statistiken/statistiken-client.tsx`
 - `lib/institution-analytics.ts`
 
 Important boundary:
-- Current production batch states are operational UI state for the production surface. They demonstrate workflow readiness but are not yet a persisted kitchen execution ledger.
+- Production batch states now persist in `kitchen_production_batches`, with state transitions appended to `kitchen_production_events` and mirrored in `access_audit_logs`.
 
 ## Demo Prerequisites
 
@@ -206,7 +208,7 @@ P0 demo hardening:
 P1 clinic readiness:
 - Add outbound webhook retry workers and operational retry visibility for failed integration deliveries.
 - Extend the HL7 review/admin surface with richer mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
-- Decide whether production batch state should persist as a kitchen execution table before presenting it as production operations history.
+- Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
 
 P2 product depth:
 - Extend patient portal/PWA beyond diary entry to report delivery, reminders, meal-plan feedback, and secure messages.

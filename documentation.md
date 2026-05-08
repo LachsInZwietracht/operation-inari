@@ -329,8 +329,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.18.1 Einrichtung – Produktion (`/institution/produktion`)
 - **Route:** `app/(app)/institution/produktion/page.tsx` (server) → `produktion-client.tsx` (client).
-- **Data:** Uses the active institution menu, recipes, and food context from `useInstitutionMenu(initialMenus, recipes)`.
-- **Workflow UI:** Production items are grouped by meal slot and diet form. Each batch has an operational state: `planned`, `in_preparation`, `ready`, `served`, or `held`. The page summarizes batch counts by state and exposes row actions for start, ready, serve, and hold.
+- **Data:** Uses the active institution menu, recipes, food context from `useInstitutionMenu(initialMenus, recipes)`, and persisted `kitchen_production_batches`.
+- **Workflow UI:** Production items are grouped by meal slot and diet form. Each batch has an operational state: `planned`, `in_preparation`, `ready`, `served`, or `held`. Status actions persist the current batch state, append `kitchen_production_events`, write `kitchen_production_batch_status_changed` audit rows, and survive reloads.
 - **Shopping UI:** The shopping tab remains category-grouped with portion scaling and CSV export.
 
 ### 4.19 Einrichtung – Nährstoff-Compliance (`/institution/compliance`)

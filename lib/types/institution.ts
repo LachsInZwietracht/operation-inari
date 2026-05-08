@@ -90,6 +90,20 @@ export interface ProductionItem {
 
 export type ProductionBatchStatus = "planned" | "in_preparation" | "ready" | "served" | "held";
 
+export interface KitchenProductionBatch extends Timestamped {
+  id: ID;
+  menuId: ID;
+  weekNumber: number;
+  dayOfWeek: number;
+  serviceDate: string;
+  mealSlot: MealSlotType;
+  dietFormId: ID;
+  recipeId: ID;
+  recipeName: string;
+  portionCount: number;
+  status: ProductionBatchStatus;
+}
+
 export interface ProductionList extends Timestamped {
   id: ID;
   menuId: ID;
