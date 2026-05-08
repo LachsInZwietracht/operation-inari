@@ -13,6 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarIcon,
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
   Printer,
   ChefHat,
   Copy,
@@ -127,6 +130,14 @@ const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> =
 }
 
 type DietLineTargetDraft = DietLinePreset["targets"][number]
+type PlanReviewSeverity = "critical" | "warning" | "ok"
+
+interface PlanReviewItem {
+  id: string
+  label: string
+  description: string
+  severity: PlanReviewSeverity
+}
 
 function createTargetDraft(nutrientId = "energie"): DietLineTargetDraft {
   const definition = NUTRIENT_DEFINITIONS.find((item) => item.id === nutrientId)
@@ -184,6 +195,12 @@ function complianceBadge(value: number, min?: number, max?: number): "ok" | "low
   if (typeof min === "number" && value < min) return "low"
   if (typeof max === "number" && value > max) return "high"
   return "ok"
+}
+
+function reviewSeverityBadgeClass(severity: PlanReviewSeverity): string {
+  if (severity === "critical") return "border-red-200 bg-red-50 text-red-700"
+  if (severity === "warning") return "border-amber-200 bg-amber-50 text-amber-700"
+  return "border-emerald-200 bg-emerald-50 text-emerald-700"
 }
 
 interface ErnaehrungsplanPageClientProps {
@@ -593,6 +610,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
   }
 
   const updateCurrentPlanStatus = (status: NonNullable<DailyMealPlan["status"]>) => {
+    if (status === "approved" && clinicalReview.blockingItems.length > 0) {
+      toast.error("Freigabe blockiert: Bitte kritische Prüfpunkte klären.")
+      return
+    }
+
     updatePlanMetadata(currentDate, {
       status,
       approvedAt: status === "approved" ? currentPlan.approvedAt ?? new Date().toISOString() : undefined,
@@ -792,6 +814,100 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     })
   }, [dailyNutrients, dietLine])
 
+  const clinicalReview = useMemo(() => {
+    const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
+    const allergenConflictCount = Array.from(entryAllergenWarnings.values()).reduce(
+      (sum, warnings) => sum + warnings.length,
+      0,
+    )
+    const missingCoreSlots = currentPlan.slots
+      .filter((slot) => ["fruehstueck", "mittagessen", "abendessen"].includes(slot.type))
+      .filter((slot) => slot.entries.length === 0)
+      .map((slot) => MEAL_SLOT_LABELS[slot.type])
+    const offTargetItems = dietLineCompliance.filter((target) => target.status !== "ok")
+    const items: PlanReviewItem[] = []
+
+    items.push({
+      id: "entries",
+      label: "Planinhalt",
+      description:
+        totalEntries > 0
+          ? `${totalEntries} Einträge geplant.`
+          : "Der Tagesplan enthält noch keine Mahlzeiten.",
+      severity: totalEntries > 0 ? "ok" : "critical",
+    })
+
+    items.push({
+      id: "patient",
+      label: "Patientenkontext",
+      description:
+        patientId && currentPlan.patientId !== patientId
+          ? "Der geöffnete Patientenkontext ist noch nicht am Plan gespeichert."
+          : currentPlan.patientId
+            ? "Patientenkontext ist am Plan gespeichert."
+            : "Allgemeiner Plan ohne Patientenzuordnung.",
+      severity: patientId && currentPlan.patientId !== patientId ? "critical" : "ok",
+    })
+
+    items.push({
+      id: "targets",
+      label: "Zielprofil",
+      description: dietLine
+        ? `${dietLine.name}: ${offTargetItems.length === 0 ? "alle Zielwerte im Bereich." : `${offTargetItems.length} Zielwerte außerhalb des Bereichs.`}`
+        : "Es ist kein Kostform-/Zielprofil ausgewählt.",
+      severity: dietLine ? (offTargetItems.length === 0 ? "ok" : "warning") : "critical",
+    })
+
+    items.push({
+      id: "allergens",
+      label: "Allergenprüfung",
+      description:
+        allergenConflictCount > 0
+          ? `${allergenConflictCount} Konflikthinweise im aktuellen Plan.`
+          : patientAllergens.length > 0
+            ? "Keine Konflikte gegen die hinterlegten Allergen-/Intoleranzhinweise."
+            : "Keine patientenspezifischen Allergenhinweise hinterlegt.",
+      severity: allergenConflictCount > 0 ? "critical" : "ok",
+    })
+
+    items.push({
+      id: "meal-structure",
+      label: "Mahlzeitenstruktur",
+      description:
+        missingCoreSlots.length > 0
+          ? `Noch offen: ${missingCoreSlots.join(", ")}.`
+          : "Frühstück, Mittagessen und Abendessen sind belegt.",
+      severity: missingCoreSlots.length > 0 ? "warning" : "ok",
+    })
+
+    items.push({
+      id: "prodiscore",
+      label: "PRODIscore",
+      description: `${formatNumber(planProdScore.score, 0)} Punkte: ${planProdScore.summary}`,
+      severity: planProdScore.score < 60 ? "warning" : "ok",
+    })
+
+    const blockingItems = items.filter((item) => item.severity === "critical")
+    const warningItems = items.filter((item) => item.severity === "warning")
+
+    return {
+      items,
+      blockingItems,
+      warningItems,
+      canApprove: blockingItems.length === 0,
+    }
+  }, [
+    currentPlan.patientId,
+    currentPlan.slots,
+    dietLine,
+    dietLineCompliance,
+    entryAllergenWarnings,
+    patientAllergens.length,
+    patientId,
+    planProdScore.score,
+    planProdScore.summary,
+  ])
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -859,7 +975,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(PLAN_STATUS_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
+                    <SelectItem key={value} value={value} disabled={value === "approved" && !clinicalReview.canApprove}>
                       {label}
                     </SelectItem>
                   ))}
@@ -903,6 +1019,41 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
                 Patient zuordnen
               </Button>
             )}
+          </div>
+          <div className="rounded-md border p-3 lg:col-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <ClipboardCheck className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Klinische Freigabeprüfung</p>
+                  <p className="text-xs text-muted-foreground">
+                    {clinicalReview.canApprove
+                      ? clinicalReview.warningItems.length > 0
+                        ? `${clinicalReview.warningItems.length} Hinweise prüfen; Freigabe ist möglich.`
+                        : "Alle kritischen Prüfpunkte sind erfüllt."
+                      : `${clinicalReview.blockingItems.length} kritische Prüfpunkte blockieren die Freigabe.`}
+                  </p>
+                </div>
+              </div>
+              <Badge className={reviewSeverityBadgeClass(clinicalReview.canApprove ? "ok" : "critical")} variant="outline">
+                {clinicalReview.canApprove ? "freigabereif" : "blockiert"}
+              </Badge>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {clinicalReview.items.map((item) => (
+                <div key={item.id} className="rounded-md border p-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    {item.severity === "ok" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className={item.severity === "critical" ? "h-3.5 w-3.5 text-red-600" : "h-3.5 w-3.5 text-amber-600"} />
+                    )}
+                    <span className="font-medium">{item.label}</span>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">{item.description}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -258,6 +258,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Food add workflow:** The add dialog uses the lightweight global food search index and hydrates the selected food through `fetchFoodById()` before insertion so newly selected foods have nutrients and display names immediately.
 - **Patient context:** When opened with `patientId`, new plans inherit the patient context. DGE/reference bars resolve against the patient’s date of birth, gender, and reference assignment; allergen warnings use the same patient context.
 - **Planakte:** The day view exposes plan title, status (`draft`/`active`/`approved`/`archived`), notes, patient assignment state, and approval timestamp.
+- **Clinical review gate:** Planakte derives a Freigabeprüfung from plan entries, patient assignment, selected target profile, allergen conflicts, core meal coverage, and PRODIscore. Critical findings block `approved`; warnings remain visible but do not prevent approval.
 - **Exchange workflow:** Entry rows expose an exchange action. Selecting a food from the exchange dialog can replace the current entry while preserving the amount; slot-level exchange still inserts a new food.
 - **Week workflow:** Week cards can open a day, copy today to a selected day, copy a selected day to the following day, or clear a day.
 
