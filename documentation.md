@@ -152,6 +152,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.8 Patienten Mail Merge (`/patienten`)
 - **Component:** `app/(app)/patienten/page.tsx`
+  - **Patient creation intake:** `components/patient-form.tsx` now separates identity/status, contact/consent, address/contact person, and clinical intake context. New patient records can store care setting, external patient number, case number, preferred contact/language, communication and digital-protocol consent, referrer/department, intake reason, patient goals, clinical notes, admin notes, and emergency contact metadata.
+  - **Duplicate guard:** The patient form warns before saving when another patient matches insurance number, external patient number, or name plus date of birth.
+  - **Post-create handoff:** New patient creation can continue directly to the patient workspace, first counseling session, or back to the patient list.
   - **Patient cards:** the overview now derives `Letzte Beratung` from real `useCounseling()` session data instead of the legacy `COUNSELING_SESSIONS` mock constant.
   - **Dense worklist:** a compact patient worklist summarizes missing indications, overdue/missing counseling sessions, upcoming birthdays, and open eGK demo events above the patient cards.
   - **Priority order:** patient search/filter and patient cards render before demo and mailing utilities so the primary patient-management task is first.

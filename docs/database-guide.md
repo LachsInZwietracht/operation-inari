@@ -269,6 +269,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `reference_profile_values` | Nutrient overrides per custom profile | `profile_id`, `nutrient_id`, `amount` |
 | `user_reference_preferences` | Default reference selection for generic app views | `user_id`, `standard_id`, `profile_id`, `age_group_id`, `gender`, `life_stage` |
 | `patient_reference_assignments` | Patient-specific reference overrides | `patient_id`, `user_id`, `standard_id`, `profile_id`, `life_stage` |
+| `patients` intake extensions | Patient intake, clinic identifiers, consent, and contact context | `status`, `care_setting`, `external_patient_number`, `case_number`, preferred contact/language, consent flags, referrer/department, intake reason, patient goals, clinical/admin notes, emergency contact fields |
 | `off_staging` | Open Food Facts quarantine | `barcode`, `nutriments` (JSONB), `validated`, `promoted` |
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |

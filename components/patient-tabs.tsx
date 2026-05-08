@@ -70,7 +70,14 @@ import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
 import { useDigitalProtocolSubmissions } from "@/hooks/use-digital-protocol-submissions"
 import { useProtocols } from "@/hooks/use-protocols"
 import { useCounseling } from "@/hooks/use-counseling"
-import type { Patient, AnthropometricEntry, DigitalProtocolLink } from "@/lib/types"
+import type {
+  AnthropometricEntry,
+  DigitalProtocolLink,
+  Patient,
+  PatientCareSetting,
+  PatientStatus,
+  PreferredContactChannel,
+} from "@/lib/types"
 import { toast } from "sonner"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import { usePracticeAppointments } from "@/hooks/use-practice"
@@ -85,6 +92,26 @@ import {
 } from "@/lib/allergen-constants"
 import { AlertTriangle, Trash2 } from "lucide-react"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
+
+const PATIENT_STATUS_LABELS: Record<PatientStatus, string> = {
+  active: "Aktiv",
+  inactive: "Inaktiv",
+  archived: "Archiviert",
+  deceased: "Verstorben",
+}
+
+const CARE_SETTING_LABELS: Record<PatientCareSetting, string> = {
+  ambulatory: "Ambulant",
+  inpatient: "Stationär",
+  discharged: "Entlassen",
+}
+
+const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
+  phone: "Telefon",
+  email: "E-Mail",
+  mail: "Post",
+  none: "Keine Angabe",
+}
 
 const AnthropometricChart = dynamic(
   () => import("@/components/anthropometric-chart").then((mod) => mod.AnthropometricChart),
@@ -924,6 +951,30 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                   {patient.gender === "m" ? "Männlich" : patient.gender === "w" ? "Weiblich" : "Divers"}
                 </dd>
               </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">Status</dt>
+                <dd className="text-sm font-medium">
+                  <Badge variant={patient.status === "active" || !patient.status ? "secondary" : "outline"}>
+                    {PATIENT_STATUS_LABELS[patient.status ?? "active"]}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">Versorgungskontext</dt>
+                <dd className="text-sm font-medium">{CARE_SETTING_LABELS[patient.careSetting ?? "ambulatory"]}</dd>
+              </div>
+              {patient.externalPatientNumber && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Patientennummer</dt>
+                  <dd className="text-sm font-medium">{patient.externalPatientNumber}</dd>
+                </div>
+              )}
+              {patient.caseNumber && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Fallnummer</dt>
+                  <dd className="text-sm font-medium">{patient.caseNumber}</dd>
+                </div>
+              )}
               {patient.email && (
                 <div>
                   <dt className="text-sm text-muted-foreground">E-Mail</dt>
@@ -936,11 +987,41 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                   <dd className="text-sm font-medium">{patient.phone}</dd>
                 </div>
               )}
+              {patient.preferredContactChannel && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Bevorzugter Kontakt</dt>
+                  <dd className="text-sm font-medium">{CONTACT_CHANNEL_LABELS[patient.preferredContactChannel]}</dd>
+                </div>
+              )}
+              {patient.preferredLanguage && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Sprache</dt>
+                  <dd className="text-sm font-medium">{patient.preferredLanguage}</dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-sm text-muted-foreground">Kontaktfreigabe</dt>
+                <dd className="text-sm font-medium">{patient.communicationConsent ? "Ja" : "Nein"}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">Digitale Protokolle</dt>
+                <dd className="text-sm font-medium">{patient.digitalProtocolConsent ? "Freigegeben" : "Nicht freigegeben"}</dd>
+              </div>
               {patient.street && (
                 <div className="sm:col-span-2">
                   <dt className="text-sm text-muted-foreground">Adresse</dt>
                   <dd className="text-sm font-medium">
                     {patient.street}, {patient.zip} {patient.city}
+                  </dd>
+                </div>
+              )}
+              {(patient.emergencyContactName || patient.emergencyContactPhone) && (
+                <div className="sm:col-span-2">
+                  <dt className="text-sm text-muted-foreground">Kontaktperson</dt>
+                  <dd className="text-sm font-medium">
+                    {[patient.emergencyContactName, patient.emergencyContactRelationship, patient.emergencyContactPhone]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </dd>
                 </div>
               )}
@@ -974,6 +1055,18 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                   </dd>
                 </div>
               )}
+              {patient.referrerName && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Zuweiser</dt>
+                  <dd className="text-sm font-medium">{patient.referrerName}</dd>
+                </div>
+              )}
+              {patient.department && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Fachbereich / Station</dt>
+                  <dd className="text-sm font-medium">{patient.department}</dd>
+                </div>
+              )}
               {amputationDescriptions.length > 0 && (
                 <div className="sm:col-span-2">
                   <dt className="text-sm text-muted-foreground">Amputationen</dt>
@@ -990,12 +1083,32 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                 </div>
               )}
             </dl>
-            {patient.notes && (
-              <div className="mt-4">
-                <dt className="text-sm text-muted-foreground">Notizen</dt>
-                <dd className="mt-1 text-sm whitespace-pre-wrap">{patient.notes}</dd>
-              </div>
-            )}
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {patient.intakeReason && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Aufnahmegrund</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.intakeReason}</dd>
+                </div>
+              )}
+              {patient.patientGoals && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Patientenziele</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.patientGoals}</dd>
+                </div>
+              )}
+              {(patient.clinicalNotes || patient.notes) && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Klinische Notizen</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.clinicalNotes ?? patient.notes}</dd>
+                </div>
+              )}
+              {patient.adminNotes && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">Administrative Notizen</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.adminNotes}</dd>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

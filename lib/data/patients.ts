@@ -29,6 +29,23 @@ interface PatientRow {
   indication: string | null;
   notes: string | null;
   amputations: string[] | null;
+  status: Patient["status"] | null;
+  care_setting: Patient["careSetting"] | null;
+  external_patient_number: string | null;
+  case_number: string | null;
+  preferred_contact_channel: Patient["preferredContactChannel"] | null;
+  preferred_language: string | null;
+  communication_consent: boolean | null;
+  digital_protocol_consent: boolean | null;
+  referrer_name: string | null;
+  department: string | null;
+  intake_reason: string | null;
+  patient_goals: string | null;
+  clinical_notes: string | null;
+  admin_notes: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relationship: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +68,23 @@ const PATIENT_COLUMNS = [
   "indication",
   "notes",
   "amputations",
+  "status",
+  "care_setting",
+  "external_patient_number",
+  "case_number",
+  "preferred_contact_channel",
+  "preferred_language",
+  "communication_consent",
+  "digital_protocol_consent",
+  "referrer_name",
+  "department",
+  "intake_reason",
+  "patient_goals",
+  "clinical_notes",
+  "admin_notes",
+  "emergency_contact_name",
+  "emergency_contact_phone",
+  "emergency_contact_relationship",
   "created_at",
   "updated_at",
 ].join(",");
@@ -73,6 +107,23 @@ function mapPatientRow(row: PatientRow): Patient {
     indication: row.indication ?? undefined,
     notes: row.notes ?? undefined,
     amputations: row.amputations ?? undefined,
+    status: row.status ?? undefined,
+    careSetting: row.care_setting ?? undefined,
+    externalPatientNumber: row.external_patient_number ?? undefined,
+    caseNumber: row.case_number ?? undefined,
+    preferredContactChannel: row.preferred_contact_channel ?? undefined,
+    preferredLanguage: row.preferred_language ?? undefined,
+    communicationConsent: row.communication_consent ?? undefined,
+    digitalProtocolConsent: row.digital_protocol_consent ?? undefined,
+    referrerName: row.referrer_name ?? undefined,
+    department: row.department ?? undefined,
+    intakeReason: row.intake_reason ?? undefined,
+    patientGoals: row.patient_goals ?? undefined,
+    clinicalNotes: row.clinical_notes ?? undefined,
+    adminNotes: row.admin_notes ?? undefined,
+    emergencyContactName: row.emergency_contact_name ?? undefined,
+    emergencyContactPhone: row.emergency_contact_phone ?? undefined,
+    emergencyContactRelationship: row.emergency_contact_relationship ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

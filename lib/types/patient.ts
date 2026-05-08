@@ -1,6 +1,9 @@
 import { ID, Timestamped } from "./common";
 
 export type Gender = "m" | "w" | "d";
+export type PatientStatus = "active" | "inactive" | "archived" | "deceased";
+export type PatientCareSetting = "ambulatory" | "inpatient" | "discharged";
+export type PreferredContactChannel = "phone" | "email" | "mail" | "none";
 
 export interface Patient extends Timestamped {
   id: ID;
@@ -19,6 +22,23 @@ export interface Patient extends Timestamped {
   indication?: string;
   notes?: string;
   amputations?: string[];
+  status?: PatientStatus;
+  careSetting?: PatientCareSetting;
+  externalPatientNumber?: string;
+  caseNumber?: string;
+  preferredContactChannel?: PreferredContactChannel;
+  preferredLanguage?: string;
+  communicationConsent?: boolean;
+  digitalProtocolConsent?: boolean;
+  referrerName?: string;
+  department?: string;
+  intakeReason?: string;
+  patientGoals?: string;
+  clinicalNotes?: string;
+  adminNotes?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContactRelationship?: string;
 }
 
 export interface EgkCardData {

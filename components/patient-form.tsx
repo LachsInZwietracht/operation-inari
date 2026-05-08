@@ -1,13 +1,15 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
+import { AlertTriangle, CheckCircle2, CreditCard, FileText, Stethoscope, UserRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -26,12 +28,23 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 
 import { AMPUTATION_AREAS, INDICATION_OPTIONS } from "@/lib/constants"
-import type { Patient, Gender, EgkCardData } from "@/lib/types"
+import type {
+  EgkCardData,
+  Gender,
+  Patient,
+  PatientCareSetting,
+  PatientStatus,
+  PreferredContactChannel,
+} from "@/lib/types"
 import { useEgkScanner } from "@/hooks/use-egk-scanner"
+
+const NO_CONTACT_CHANNEL_VALUE = "__none__"
 
 const patientSchema = z.object({
   firstName: z.string().min(1, "Vorname ist erforderlich"),
@@ -48,6 +61,23 @@ const patientSchema = z.object({
   indication: z.string(),
   notes: z.string(),
   amputations: z.array(z.string()),
+  status: z.enum(["active", "inactive", "archived", "deceased"] as const),
+  careSetting: z.enum(["ambulatory", "inpatient", "discharged"] as const),
+  externalPatientNumber: z.string(),
+  caseNumber: z.string(),
+  preferredContactChannel: z.enum(["phone", "email", "mail", "none"] as const).optional(),
+  preferredLanguage: z.string(),
+  communicationConsent: z.boolean(),
+  digitalProtocolConsent: z.boolean(),
+  referrerName: z.string(),
+  department: z.string(),
+  intakeReason: z.string(),
+  patientGoals: z.string(),
+  clinicalNotes: z.string(),
+  adminNotes: z.string(),
+  emergencyContactName: z.string(),
+  emergencyContactPhone: z.string(),
+  emergencyContactRelationship: z.string(),
 })
 
 type PatientFormValues = z.infer<typeof patientSchema>
@@ -58,14 +88,38 @@ const GENDER_LABELS: Record<Gender, string> = {
   d: "Divers",
 }
 
+const STATUS_LABELS: Record<PatientStatus, string> = {
+  active: "Aktiv",
+  inactive: "Inaktiv",
+  archived: "Archiviert",
+  deceased: "Verstorben",
+}
+
+const CARE_SETTING_LABELS: Record<PatientCareSetting, string> = {
+  ambulatory: "Ambulant",
+  inpatient: "Stationär",
+  discharged: "Entlassen",
+}
+
+const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
+  phone: "Telefon",
+  email: "E-Mail",
+  mail: "Post",
+  none: "Keine Angabe",
+}
+
+type SubmitIntent = "overview" | "detail" | "counseling"
+
 interface PatientFormProps {
   patient?: Patient
   onSubmit: (values: Omit<Patient, "id" | "createdAt" | "updatedAt">) => void | Promise<unknown>
   isEditing?: boolean
+  existingPatients?: Patient[]
 }
 
-export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) {
+export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [] }: PatientFormProps) {
   const router = useRouter()
+  const [submitIntent, setSubmitIntent] = useState<SubmitIntent>("detail")
   const {
     status: egkStatus,
     isSupported: egkSupported,
@@ -95,8 +149,62 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
       indication: patient?.indication ?? "",
       notes: patient?.notes ?? "",
       amputations: patient?.amputations ?? [],
+      status: patient?.status ?? "active",
+      careSetting: patient?.careSetting ?? "ambulatory",
+      externalPatientNumber: patient?.externalPatientNumber ?? "",
+      caseNumber: patient?.caseNumber ?? "",
+      preferredContactChannel: patient?.preferredContactChannel,
+      preferredLanguage: patient?.preferredLanguage ?? "Deutsch",
+      communicationConsent: patient?.communicationConsent ?? false,
+      digitalProtocolConsent: patient?.digitalProtocolConsent ?? false,
+      referrerName: patient?.referrerName ?? "",
+      department: patient?.department ?? "",
+      intakeReason: patient?.intakeReason ?? "",
+      patientGoals: patient?.patientGoals ?? "",
+      clinicalNotes: patient?.clinicalNotes ?? patient?.notes ?? "",
+      adminNotes: patient?.adminNotes ?? "",
+      emergencyContactName: patient?.emergencyContactName ?? "",
+      emergencyContactPhone: patient?.emergencyContactPhone ?? "",
+      emergencyContactRelationship: patient?.emergencyContactRelationship ?? "",
     },
   })
+
+  const watchedIdentity = form.watch(["firstName", "lastName", "dateOfBirth", "insuranceNumber", "externalPatientNumber"])
+
+  const duplicateCandidates = useMemo(() => {
+    const [firstName, lastName, dateOfBirth, insuranceNumber, externalPatientNumber] = watchedIdentity
+    const normalizedFirstName = firstName.trim().toLowerCase()
+    const normalizedLastName = lastName.trim().toLowerCase()
+    const normalizedInsurance = insuranceNumber.trim().toLowerCase()
+    const normalizedExternalId = externalPatientNumber.trim().toLowerCase()
+
+    if (!normalizedLastName && !dateOfBirth && !normalizedInsurance && !normalizedExternalId) return []
+
+    return existingPatients
+      .filter((candidate) => candidate.id !== patient?.id && candidate.legacyId !== patient?.id)
+      .map((candidate) => {
+        const reasons: string[] = []
+        if (normalizedInsurance && candidate.insuranceNumber?.trim().toLowerCase() === normalizedInsurance) {
+          reasons.push("Versichertennummer")
+        }
+        if (normalizedExternalId && candidate.externalPatientNumber?.trim().toLowerCase() === normalizedExternalId) {
+          reasons.push("Patientennummer")
+        }
+        if (
+          normalizedFirstName &&
+          normalizedLastName &&
+          dateOfBirth &&
+          candidate.firstName.trim().toLowerCase() === normalizedFirstName &&
+          candidate.lastName.trim().toLowerCase() === normalizedLastName &&
+          candidate.dateOfBirth === dateOfBirth
+        ) {
+          reasons.push("Name und Geburtsdatum")
+        }
+        return { patient: candidate, reasons }
+      })
+      .filter((entry) => entry.reasons.length > 0)
+      .slice(0, 3)
+  }, [existingPatients, patient?.id, watchedIdentity])
 
   const applyCardData = useCallback(
     (card: EgkCardData) => {
@@ -139,7 +247,7 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
 
   async function handleSubmit(values: PatientFormValues) {
     try {
-      await Promise.resolve(
+      const savedPatient = await Promise.resolve(
         onSubmit({
           firstName: values.firstName,
           lastName: values.lastName,
@@ -153,12 +261,38 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
           insuranceProvider: values.insuranceProvider || undefined,
           insuranceNumber: values.insuranceNumber || undefined,
           indication: values.indication || undefined,
-          notes: values.notes || undefined,
+          notes: values.clinicalNotes || values.notes || undefined,
           amputations: values.amputations && values.amputations.length > 0 ? values.amputations : undefined,
+          status: values.status,
+          careSetting: values.careSetting,
+          externalPatientNumber: values.externalPatientNumber || undefined,
+          caseNumber: values.caseNumber || undefined,
+          preferredContactChannel: values.preferredContactChannel,
+          preferredLanguage: values.preferredLanguage || undefined,
+          communicationConsent: values.communicationConsent,
+          digitalProtocolConsent: values.digitalProtocolConsent,
+          referrerName: values.referrerName || undefined,
+          department: values.department || undefined,
+          intakeReason: values.intakeReason || undefined,
+          patientGoals: values.patientGoals || undefined,
+          clinicalNotes: values.clinicalNotes || undefined,
+          adminNotes: values.adminNotes || undefined,
+          emergencyContactName: values.emergencyContactName || undefined,
+          emergencyContactPhone: values.emergencyContactPhone || undefined,
+          emergencyContactRelationship: values.emergencyContactRelationship || undefined,
         }),
       )
       toast.success(isEditing ? "Patient aktualisiert!" : "Patient erstellt!")
-      router.push("/patienten")
+      const savedId = typeof savedPatient === "object" && savedPatient && "id" in savedPatient
+        ? String((savedPatient as Patient).id)
+        : patient?.id
+      if (isEditing || submitIntent === "overview" || !savedId) {
+        router.push("/patienten")
+      } else if (submitIntent === "counseling") {
+        router.push(`/patienten/${savedId}/beratungen/neu`)
+      } else {
+        router.push(`/patienten/${savedId}`)
+      }
     } catch (error) {
       console.error("Failed to submit patient form:", error)
       toast.error("Patient konnte nicht gespeichert werden")
@@ -171,10 +305,13 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
         <Card className="border-dashed border-primary/40 bg-primary/5">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base">eGK-Demo</CardTitle>
-              <p className="text-sm text-muted-foreground">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CreditCard className="h-4 w-4" />
+                Aufnahme per eGK-Demo
+              </CardTitle>
+              <CardDescription>
                 Simulieren Sie eGK-Stammdaten für Tests und Demos.
-              </p>
+              </CardDescription>
             </div>
             <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
           </CardHeader>
@@ -220,9 +357,52 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
           </CardContent>
         </Card>
 
+        {duplicateCandidates.length > 0 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Mögliche Dublette</AlertTitle>
+            <AlertDescription>
+              <div className="space-y-1">
+                {duplicateCandidates.map((entry) => (
+                  <p key={entry.patient.id}>
+                    {entry.patient.lastName}, {entry.patient.firstName} · {entry.reasons.join(", ")}
+                  </p>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+            <div>
+              <p className="text-sm font-medium">Schnellaufnahme</p>
+              <p className="text-xs text-muted-foreground">Name, Geburtsdatum und Indikation reichen zum Start.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Stethoscope className="mt-0.5 h-4 w-4 text-blue-600" />
+            <div>
+              <p className="text-sm font-medium">Klinischer Kontext</p>
+              <p className="text-xs text-muted-foreground">Grund, Ziele und Zuweiser steuern die weitere Beratung.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <FileText className="mt-0.5 h-4 w-4 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium">Folgeworkflow</p>
+              <p className="text-xs text-muted-foreground">Nach dem Speichern direkt in Akte oder Erstberatung springen.</p>
+            </div>
+          </div>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Persönliche Daten</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserRound className="h-5 w-5" />
+              Identität & Status
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -290,6 +470,87 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                         )}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Status wählen" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(Object.entries(STATUS_LABELS) as [PatientStatus, string][]).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="careSetting"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Versorgungskontext</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Kontext wählen" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(Object.entries(CARE_SETTING_LABELS) as [PatientCareSetting, string][]).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Hilft bei Praxis-, Stations- und Entlass-Workflows.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="externalPatientNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Patientennummer</FormLabel>
+                    <FormControl>
+                      <Input placeholder="KIS-/Praxis-ID" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="caseNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fallnummer</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Optionaler Behandlungsfall" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -364,12 +625,91 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                 )}
               />
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="preferredContactChannel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bevorzugter Kontakt</FormLabel>
+                    <Select
+                      value={field.value ?? NO_CONTACT_CHANNEL_VALUE}
+                      onValueChange={(value) => field.onChange(value === NO_CONTACT_CHANNEL_VALUE ? undefined : value)}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Kontaktweg wählen" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={NO_CONTACT_CHANNEL_VALUE}>Keine Angabe</SelectItem>
+                        {(Object.entries(CONTACT_CHANNEL_LABELS) as [PreferredContactChannel, string][])
+                          .filter(([value]) => value !== "none")
+                          .map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="preferredLanguage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sprache</FormLabel>
+                    <FormControl>
+                      <Input placeholder="z. B. Deutsch" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="communicationConsent"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 rounded-md border p-3">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Kontaktfreigabe liegt vor</FormLabel>
+                      <FormDescription>E-Mail, Telefon oder Post für Praxis-Kommunikation.</FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="digitalProtocolConsent"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 rounded-md border p-3">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Digitale Protokolle freigegeben</FormLabel>
+                      <FormDescription>Patient darf öffentliche Protokoll-Links erhalten.</FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Adresse</CardTitle>
+            <CardTitle>Adresse & Bezugsperson</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <FormField
@@ -407,6 +747,48 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                     <FormLabel>Ort</FormLabel>
                     <FormControl>
                       <Input placeholder="Ort" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <Separator />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="emergencyContactName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Kontaktperson</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="emergencyContactPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telefon Kontaktperson</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="Telefon" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="emergencyContactRelationship"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Beziehung</FormLabel>
+                    <FormControl>
+                      <Input placeholder="z. B. Angehörige" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -473,16 +855,44 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                 </FormItem>
               )}
             />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="referrerName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Zuweiser</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Arzt, Station oder Praxis" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="department"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fachbereich / Station</FormLabel>
+                    <FormControl>
+                      <Input placeholder="z. B. Onkologie, Station 3B" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
-              name="notes"
+              name="intakeReason"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notizen</FormLabel>
+                  <FormLabel>Aufnahmegrund</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Anmerkungen zum Patienten"
-                      rows={4}
+                      placeholder="Warum wird der Patient ernährungstherapeutisch aufgenommen?"
+                      rows={3}
                       {...field}
                     />
                   </FormControl>
@@ -490,19 +900,94 @@ export function PatientForm({ patient, onSubmit, isEditing }: PatientFormProps) 
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="patientGoals"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Patientenziele</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Ziele, Erwartungen oder relevante Angaben aus Patientensicht"
+                      rows={3}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="clinicalNotes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Klinische Notizen</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Interne klinische Hinweise, Risiken oder Kontext"
+                        rows={4}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="adminNotes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Administrative Notizen</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Abrechnung, Terminierung, interne Organisation"
+                        rows={4}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 
-        <div className="flex gap-3">
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting
-              ? isEditing
-                ? "Speichert..."
-                : "Erstellt..."
-              : isEditing
-                ? "Patient aktualisieren"
-                : "Patient erstellen"}
-          </Button>
+        <div className="flex flex-wrap gap-3">
+          {isEditing ? (
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Speichert..." : "Patient aktualisieren"}
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting}
+                onClick={() => setSubmitIntent("detail")}
+              >
+                {form.formState.isSubmitting && submitIntent === "detail" ? "Erstellt..." : "Speichern & Akte öffnen"}
+              </Button>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={form.formState.isSubmitting}
+                onClick={() => setSubmitIntent("counseling")}
+              >
+                {form.formState.isSubmitting && submitIntent === "counseling" ? "Erstellt..." : "Speichern & Erstberatung"}
+              </Button>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={form.formState.isSubmitting}
+                onClick={() => setSubmitIntent("overview")}
+              >
+                {form.formState.isSubmitting && submitIntent === "overview" ? "Erstellt..." : "Speichern & Liste"}
+              </Button>
+            </>
+          )}
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Abbrechen
           </Button>

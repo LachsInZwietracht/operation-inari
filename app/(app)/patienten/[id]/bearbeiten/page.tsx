@@ -11,7 +11,7 @@ export default function PatientBearbeitenPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
-  const { getPatient, updatePatient } = usePatients()
+  const { getPatient, updatePatient, patients } = usePatients()
   const patient = getPatient(id)
 
   if (!patient) {
@@ -34,6 +34,7 @@ export default function PatientBearbeitenPage({
       <PatientForm
         patient={patient}
         isEditing
+        existingPatients={patients}
         onSubmit={(values) => updatePatient(patient.id, values)}
       />
     </div>
