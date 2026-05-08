@@ -259,6 +259,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Patient context:** When opened with `patientId`, new plans inherit the patient context. DGE/reference bars resolve against the patient’s date of birth, gender, and reference assignment; allergen warnings use the same patient context.
 - **Planakte:** The day view exposes plan title, status (`draft`/`active`/`approved`/`archived`), notes, patient assignment state, and approval timestamp.
 - **Clinical review gate:** Planakte derives a Freigabeprüfung from plan entries, patient assignment, selected target profile, allergen conflicts, core meal coverage, and PRODIscore. Critical findings block `approved`; warnings remain visible but do not prevent approval.
+- **Direct exports:** The day toolbar can export the current plan as a clinical PDF, approval-gated patient handout, or 7-day Lehrküchenplan. Exports reuse `/api/exports/report`, persist patient-bound report history when patient context is present, and use `lib/exports/report-builder.ts` variant payloads.
 - **Exchange workflow:** Entry rows expose an exchange action. Selecting a food from the exchange dialog can replace the current entry while preserving the amount; slot-level exchange still inserts a new food.
 - **Week workflow:** Week cards can open a day, copy today to a selected day, copy a selected day to the following day, or clear a day.
 
@@ -393,7 +394,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Exports (`lib/exports/*`):**
   - `constants.ts` defines allowed format/scope combinations.
   - `pdf.tsx` contains branded PDF rendering for reports and patient documents.
-  - `report-builder.ts` creates a default report payload for generic exports.
+  - `report-builder.ts` creates meal-plan report payloads for clinical reports, patient handouts, and Lehrküchen exports.
   - `server.ts` centralizes file responses and export job creation.
 
 ## 6. Scripts & ETL

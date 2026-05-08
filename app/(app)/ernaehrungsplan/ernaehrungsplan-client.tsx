@@ -16,13 +16,17 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
-  Printer,
   ChefHat,
   Copy,
+  Download,
+  FileText,
+  Loader2,
   Plus,
   Save,
   Settings2,
   Trash2,
+  Users,
+  Utensils,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import {
@@ -74,6 +78,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useMealPlan } from "@/hooks/use-meal-plan"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
@@ -108,6 +120,12 @@ import { toast } from "sonner"
 import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
+import {
+  buildDefaultReportExportRequest,
+  buildTeachingKitchenExportRequest,
+  type MealPlanReportVariant,
+} from "@/lib/exports/report-builder"
+import { downloadResponseFile } from "@/lib/utils"
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -268,6 +286,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
   const [dietLineDraftDescription, setDietLineDraftDescription] = useState("")
   const [dietLineDraftTargets, setDietLineDraftTargets] = useState<DietLineTargetDraft[]>([])
   const [isSavingDietLine, setIsSavingDietLine] = useState(false)
+  const [exportingVariant, setExportingVariant] = useState<MealPlanReportVariant | null>(null)
   const {
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
@@ -908,6 +927,86 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     planProdScore.summary,
   ])
 
+  const handleExportPlan = useCallback(
+    async (variant: MealPlanReportVariant) => {
+      if (exportingVariant) return
+
+      const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
+      if (totalEntries === 0) {
+        toast.error("Export nicht möglich: Der aktuelle Plan enthält noch keine Einträge.")
+        return
+      }
+      if (variant === "patient" && !clinicalReview.canApprove) {
+        toast.error("Patientenhandout erst nach geklärter Freigabeprüfung exportieren.")
+        return
+      }
+
+      const patientName = patient ? `${patient.firstName} ${patient.lastName}` : undefined
+      const planContext = {
+        patientId: currentPlan.patientId ?? patientId,
+        patientName,
+        patientIndication: patient?.indication,
+        planId: currentPlan.id,
+        dietLineName: dietLine?.name,
+      }
+      const reviewNote = clinicalReview.canApprove
+        ? clinicalReview.warningItems.length > 0
+          ? `Freigabeprüfung: ${clinicalReview.warningItems.length} Hinweise ohne kritische Blocker.`
+          : "Freigabeprüfung: keine kritischen Blocker oder Hinweise."
+        : `Freigabeprüfung: ${clinicalReview.blockingItems.length} kritische Blocker.`
+      const notes = [currentPlan.notes, reviewNote].filter(Boolean).join("\n\n")
+
+      const reportRequest =
+        variant === "lehrkueche"
+          ? buildTeachingKitchenExportRequest(weekPlans, recipes, foods, refConfig, {
+              ...planContext,
+              rangeLabel: weekRangeLabel,
+            })
+          : buildDefaultReportExportRequest(currentPlan, recipes, foods, refConfig, {
+              ...planContext,
+              variant,
+              notes,
+            })
+
+      setExportingVariant(variant)
+      try {
+        const response = await fetch("/api/exports/report", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(reportRequest),
+        })
+        await downloadResponseFile(response, `${reportRequest.fileBaseName}.pdf`)
+        toast.success(
+          variant === "patient"
+            ? "Patientenhandout exportiert."
+            : variant === "lehrkueche"
+              ? "Lehrküchenplan exportiert."
+              : "Klinischer Bericht exportiert.",
+        )
+      } catch (error) {
+        console.error("Failed to export meal plan:", error)
+        toast.error((error as Error).message || "Export ist fehlgeschlagen.")
+      } finally {
+        setExportingVariant(null)
+      }
+    },
+    [
+      clinicalReview.blockingItems.length,
+      clinicalReview.canApprove,
+      clinicalReview.warningItems.length,
+      currentPlan,
+      dietLine?.name,
+      exportingVariant,
+      foods,
+      patient,
+      patientId,
+      recipes,
+      refConfig,
+      weekPlans,
+      weekRangeLabel,
+    ],
+  )
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1189,6 +1288,50 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
                 <Settings2 className="h-4 w-4" />
                 <span className="sr-only">Zielprofil verwalten</span>
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={exportingVariant !== null}>
+                    {exportingVariant ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Plan exportieren
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>PDF-Export</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => void handleExportPlan("clinical")}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>Klinischer Bericht</span>
+                      <span className="text-muted-foreground text-xs">Soll-/Ist-Abgleich, Vitamine, Mineralstoffe</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!clinicalReview.canApprove}
+                    onSelect={() => void handleExportPlan("patient")}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>Patientenhandout</span>
+                      <span className="text-muted-foreground text-xs">
+                        {clinicalReview.canApprove
+                          ? "Mahlzeiten & Hinweise, ohne klinische Tabellen"
+                          : "erst nach geklärter Freigabeprüfung"}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleExportPlan("lehrkueche")}>
+                    <Utensils className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>Lehrküchenplan (Woche)</span>
+                      <span className="text-muted-foreground text-xs">7-Tage-Aushang für Küche & Station</span>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -1493,14 +1636,15 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      if (typeof window !== "undefined") {
-                        window.print()
-                      }
-                    }}
+                    disabled={exportingVariant !== null}
+                    onClick={() => void handleExportPlan("lehrkueche")}
                   >
-                    <Printer className="mr-2 h-4 w-4" />
-                    Druckvorschau
+                    {exportingVariant === "lehrkueche" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    PDF exportieren
                   </Button>
                 </CardHeader>
                 <CardContent>
