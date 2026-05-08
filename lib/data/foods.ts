@@ -686,14 +686,10 @@ async function fetchFoodsBrowserPageByName(
       );
 
       if (fallback.error) {
-        console.error(`Food browser name search failed: ${fallback.error.message}`);
-        return {
-          foods: [],
-          totalCount: 0,
-          page: query.page,
-          pageSize: query.pageSize,
-          hasMore: false,
-        };
+        console.error(
+          `Food browser name search RPCs failed; falling back to direct query: ${fallback.error.message}`,
+        );
+        return fetchFoodsBrowserPageByQuery(query, client);
       }
 
       rows = ((fallback.data ?? []) as SearchFoodsRpcRow[]).map((row) => ({

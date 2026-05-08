@@ -121,7 +121,7 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 
 **Tier 2a — Search index plus nutrient maps (preferred for exchange/ranking views):**
 - Use `useFoodSearch()` for names/categories and `useNutrientValueMaps()` for only the displayed nutrient columns
-- `/austauschtabellen` follows this pattern, so the route no longer hydrates `Food[]` at page load
+- `/austauschtabellen` follows this pattern for blank/category browsing, so the route no longer hydrates `Food[]` at page load; once the user types at least two characters, it queries `/api/foods/browser` for database-backed name and BLS/source-code search results
 - Prefer this when the UI sorts/ranks foods by nutrient values but does not need allergens, portions, source metadata, or full nutrient arrays
 
 **Tier 2b — List-optimised food catalog (~2-3 MB, preferred when components need `Food[]`):**
@@ -775,6 +775,7 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - ✅ `/lebensmittel` now uses a paginated server-backed browser API at `/api/foods/browser` instead of hydrating the full catalog into the client.
 - ✅ Name-mode foods search prefers the `search_foods_with_total()` RPC so the UI can paginate ranked fuzzy matches and display an accurate total count.
 - ✅ The browser falls back to `search_foods()` if `search_foods_with_total()` is not present yet, which keeps older environments usable during rollout.
+- ✅ If both search RPCs fail because migrations are missing or the deployed function return type is out of sync, the browser falls back to a direct paginated Supabase `ILIKE` name query so typed food search still returns database rows.
 - ✅ Cologne phonetics ported to Postgres via migration `20260516000033`. The `cologne_phonetics()` function generates `phonetic_code` columns on `foods` and `food_synonyms`, and both search RPCs include a phonetic match branch (weighted at 0.6x). The client-side fallback in `lib/search/fuzzy-search.ts` remains available for the Cmd+K palette and for environments where the migration has not been applied.
 
 ### Phase 5: localStorage → Supabase (Remaining User Data) — PARTIALLY COMPLETE
@@ -821,7 +822,7 @@ Rules going forward:
 
 ### Deployed: Postgres Trigram + ILIKE Search
 
-The `search_foods()` Postgres function combines trigram similarity (`%` operator) with ILIKE substring fallback for short queries. See `supabase/migrations/20260412000006_search_function.sql` for the full implementation.
+The `search_foods()` Postgres function combines trigram similarity (`%` operator) with ILIKE substring fallback for short queries. See `supabase/migrations/20260412000006_search_function.sql` for the full implementation. If the RPC layer is unavailable or the deployed function signature is out of sync, `/api/foods/browser` falls back to direct paginated Supabase `name ILIKE` queries.
 
 The paginated foods browser adds `search_foods_with_total()` in `supabase/migrations/20260503000019_search_foods_with_total.sql`. It preserves the same matching behavior but includes `COUNT(*) OVER ()` so `/lebensmittel` can render total counts and page navigation for ranked search results.
 
@@ -840,11 +841,11 @@ The client code in `fetchFoodsBrowserPageByName()` (`lib/data/foods.ts`) uses a 
 
 1. **`search_foods_with_total()`** (migration `20260503000019`) — trigram + ILIKE + Cologne phonetics (migration `20260516000033`), returns `total_count` for pagination.
 2. **`search_foods()`** (migration `20260412000006`) — same matching logic, no `total_count`. Pagination uses an estimated count (current offset + returned rows).
-3. **Empty results** — if both RPCs fail (e.g., table doesn't exist), the UI renders an empty list without crashing.
+3. **Direct Supabase name query** — if both RPCs fail or return a function-signature error, the route uses `foods.name ILIKE` with the same pagination/filter parameters.
 
 What's lost at each tier:
 - Without `search_foods_with_total`: total counts are approximate, page navigation may be inaccurate.
-- Without `search_foods`: name-mode search returns no results; code/group/browse modes still work via direct Supabase queries.
+- Without `search_foods`: name-mode search loses ranked trigram/phonetic/synonym matching but still returns substring matches; code/group/browse modes continue to use direct Supabase queries.
 
 **Cologne phonetics** (migration `20260516000033`) adds a `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, and a phonetic match branch in both RPCs. If only the older search migrations are applied, phonetic matching is unavailable server-side but the client fallback in `lib/search/fuzzy-search.ts` still provides it for the Cmd+K palette.
 
@@ -904,7 +905,7 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 
 **Current architecture (7,140 BLS foods):**
 - Layout provides lazy access to the ~100 KB food search index; consumers load it through `/api/foods/search-index`
-- `/austauschtabellen` uses the search index plus nutrient value maps for selected table columns instead of hydrating `Food[]`
+- `/austauschtabellen` uses the search index plus nutrient value maps for selected table columns instead of hydrating `Food[]`; typed search is delegated to `/api/foods/browser` so RPC/name matching and BLS/source-code matching stay consistent with the main food browser
 - Remaining list pages that need `Food[]` use `fetchAllFoodsForList()` — 13 nutrients only, ~2-3 MB (down from ~46 MB with all 37 nutrients + portions)
 - Comparison uses `fetchFoodsForComparison()` — seven displayed nutrients only, no portions
 - Pages requiring every nutrient and portion use `fetchAllFoods()` — all 37 nutrients + portions (~46 MB, use sparingly)

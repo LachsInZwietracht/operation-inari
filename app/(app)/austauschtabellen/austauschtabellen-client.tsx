@@ -26,16 +26,35 @@ import { Search, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useFoodSearch } from "@/components/foods-provider";
 import { useNutrientValueMaps } from "@/hooks/use-nutrient-values";
+import { searchFoodsInBrowser } from "@/lib/food-browser-search";
+import type { Food, FoodSearchItem } from "@/lib/types";
 
 type SortDir = "asc" | "desc";
 
 const TABLE_NUTRIENT_IDS = ["energie", "eiweiss", "fett", "kohlenhydrate"];
+
+type ExchangeTableFood = FoodSearchItem & Pick<Food, "blsCode" | "source">;
+
+function mapBrowserFood(food: Food): ExchangeTableFood {
+  return {
+    id: food.id,
+    name: food.name,
+    categoryId: food.categoryId,
+    sourceId: food.sourceId,
+    isCustom: food.isCustom,
+    blsCode: food.blsCode,
+    source: food.source,
+  };
+}
 
 export function AustauschtabellenPageClient() {
   const { index: foods, isLoading: isIndexLoading, loadIndex } = useFoodSearch();
   const [selectedNutrient, setSelectedNutrient] = useState("energie");
   const [categoryFilter, setCategoryFilter] = useState<string>("alle");
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<ExchangeTableFood[]>([]);
+  const [isRemoteSearching, setIsRemoteSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const nutrientDef = NUTRIENT_DEFINITIONS.find((d) => d.id === selectedNutrient);
@@ -45,6 +64,7 @@ export function AustauschtabellenPageClient() {
   );
   const { valuesByNutrient, isLoading: nutrientLoading, error: nutrientError } =
     useNutrientValueMaps(nutrientIds);
+  const isTableLoading = isIndexLoading || nutrientLoading || isRemoteSearching;
   const nutrientValues = useMemo(
     () => valuesByNutrient.get(selectedNutrient) ?? new Map<string, number>(),
     [selectedNutrient, valuesByNutrient],
@@ -54,10 +74,54 @@ export function AustauschtabellenPageClient() {
     void loadIndex();
   }, [loadIndex]);
 
+  useEffect(() => {
+    const query = search.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setIsRemoteSearching(false);
+      setSearchError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setIsRemoteSearching(true);
+      setSearchError(null);
+      void (async () => {
+        try {
+          const result = await searchFoodsInBrowser(query, {
+            signal: controller.signal,
+            pageSize: 50,
+            categoryId: categoryFilter === "alle" ? null : categoryFilter,
+          });
+          setSearchResults(result.foods.map(mapBrowserFood));
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            setSearchResults([]);
+            setSearchError(error instanceof Error ? error.message : "Suche fehlgeschlagen");
+          }
+        } finally {
+          if (!controller.signal.aborted) {
+            setIsRemoteSearching(false);
+          }
+        }
+      })();
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [search, categoryFilter]);
+
   const filtered = useMemo(() => {
-    return foods
+    const query = search.trim().toLowerCase();
+    const isSearching = query.length >= 2;
+    const sourceFoods = isSearching ? searchResults : foods;
+
+    return sourceFoods
       .filter((food) => {
-        const matchesSearch = !search || food.name.toLowerCase().includes(search.toLowerCase());
+        const matchesSearch = isSearching || !query || food.name.toLowerCase().includes(query);
         const matchesCategory = categoryFilter === "alle" || food.categoryId === categoryFilter;
         return matchesSearch && matchesCategory;
       })
@@ -66,7 +130,7 @@ export function AustauschtabellenPageClient() {
         const bVal = nutrientValues.get(b.id) ?? 0;
         return sortDir === "desc" ? bVal - aVal : aVal - bVal;
       });
-  }, [foods, search, categoryFilter, sortDir, nutrientValues]);
+  }, [foods, searchResults, search, categoryFilter, sortDir, nutrientValues]);
 
   function getNutrientAmount(foodId: string, nutrientId: string) {
     return valuesByNutrient.get(nutrientId)?.get(foodId) ?? 0;
@@ -117,8 +181,13 @@ export function AustauschtabellenPageClient() {
         </Select>
       </div>
 
-      {(isIndexLoading || nutrientLoading) && (
+      {isTableLoading && (
         <p className="text-muted-foreground text-sm">Nährstoffwerte werden geladen …</p>
+      )}
+      {searchError && (
+        <p className="text-destructive text-sm">
+          Lebensmittel konnten nicht gesucht werden: {searchError}
+        </p>
       )}
       {nutrientError && (
         <p className="text-destructive text-sm">
@@ -156,7 +225,7 @@ export function AustauschtabellenPageClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((food) => {
+              {!isTableLoading && filtered.map((food) => {
                 const category = FOOD_CATEGORIES.find((c) => c.id === food.categoryId);
                 const nutrientVal = nutrientValues.get(food.id) ?? 0;
                 return (
@@ -183,6 +252,13 @@ export function AustauschtabellenPageClient() {
                   </TableRow>
                 );
               })}
+              {!isTableLoading && filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    Keine passenden Lebensmittel gefunden.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

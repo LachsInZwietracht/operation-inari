@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -21,9 +21,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Food, FoodBrowserResult } from "@/lib/types";
+import type { Food } from "@/lib/types";
 import { scaleNutrients, getNutrientValue } from "@/lib/nutrients";
 import { formatNumber } from "@/lib/format";
+import { searchFoodsInBrowser } from "@/lib/food-browser-search";
 
 interface LebensmittelVergleichPageClientProps {
   brandedFoods: Food[];
@@ -57,7 +58,7 @@ function ComparisonFoodPicker({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Food[]>([]);
-  const [isPending, startTransition] = useTransition();
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -73,20 +74,13 @@ function ComparisonFoodPicker({
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      startTransition(async () => {
+      setIsSearching(true);
+      void (async () => {
         try {
-          const params = new URLSearchParams({
-            q: query,
-            mode: "name",
-            page: "1",
-            pageSize: "8",
-          });
-          const response = await fetch(`/api/foods/browser?${params.toString()}`, {
+          const result = await searchFoodsInBrowser(query, {
             signal: controller.signal,
-            headers: { Accept: "application/json" },
+            pageSize: 20,
           });
-          if (!response.ok) throw new Error("Suche fehlgeschlagen");
-          const result = (await response.json()) as FoodBrowserResult;
 
           // Merge server results with local branded matches (deduplicated)
           const merged = new Map<string, Food>();
@@ -98,8 +92,12 @@ function ComparisonFoodPicker({
           if (!controller.signal.aborted) {
             setResults(localMatches);
           }
+        } finally {
+          if (!controller.signal.aborted) {
+            setIsSearching(false);
+          }
         }
-      });
+      })();
     }, 250);
 
     return () => {
@@ -129,7 +127,7 @@ function ComparisonFoodPicker({
 
         {query.trim().length >= 2 ? (
           <div className="max-h-48 overflow-y-auto rounded-md border divide-y">
-            {isPending ? (
+            {isSearching ? (
               <div className="p-3 text-sm text-muted-foreground">Suche laeuft...</div>
             ) : results.length === 0 ? (
               <div className="p-3 text-sm text-muted-foreground">Keine Treffer gefunden.</div>
