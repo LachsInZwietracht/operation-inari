@@ -2,8 +2,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { RECIPES } from "@/lib/mock-data/recipes";
 import { MEAL_PLANS } from "@/lib/mock-data/meal-plans";
+import { MEAL_PLAN_TEMPLATES } from "@/lib/mock-data/meal-plan-templates";
 import { FOODS } from "@/lib/mock-data";
-import type { Recipe, MealEntry, MealSlot, DailyMealPlan } from "@/lib/types";
+import type { Recipe, MealEntry, MealSlot, DailyMealPlan, MealPlanTemplate } from "@/lib/types";
 
 /**
  * Inline legacy mock-ID-to-BLS-code map. Only needed at seed time to resolve
@@ -85,6 +86,11 @@ function collectRequiredFoodCodes(): Set<string> {
   }
   for (const plan of MEAL_PLANS) {
     for (const slot of plan.slots) {
+      addFromSlot(slot);
+    }
+  }
+  for (const template of MEAL_PLAN_TEMPLATES) {
+    for (const slot of template.slots) {
       addFromSlot(slot);
     }
   }
@@ -320,6 +326,59 @@ async function upsertMealPlans(
   }
 }
 
+async function upsertMealPlanTemplates(
+  codeToFoodId: Map<string, string>,
+  recipeIdMap: Map<string, string>,
+) {
+  if (MEAL_PLAN_TEMPLATES.length === 0) {
+    return;
+  }
+
+  const rows = MEAL_PLAN_TEMPLATES.map((template: MealPlanTemplate) => {
+    const slots = template.slots.map((slot) => ({
+      type: slot.type,
+      entries: slot.entries.map((entry, entryIndex) => {
+        const referenceId =
+          entry.type === "food"
+            ? resolveFoodId(entry.referenceId, codeToFoodId)
+            : recipeIdMap.get(entry.referenceId);
+        if (!referenceId) {
+          throw new Error(
+            `Unknown ${entry.type} reference ${entry.referenceId} in meal plan template ${template.id}`,
+          );
+        }
+        return {
+          id: entry.id ?? `tplentry_${template.id}_${slot.type}_${entryIndex}`,
+          type: entry.type,
+          referenceId,
+          amount: entry.amount,
+        };
+      }),
+    }));
+
+    return {
+      legacy_id: template.id,
+      user_id: null,
+      name: template.name,
+      description: template.description,
+      indication: template.indication ?? null,
+      diet_line_id: template.dietLineId ?? null,
+      target_profile_id: template.targetProfileId ?? null,
+      slots,
+      notes: template.notes ?? null,
+      source_type: "system",
+    };
+  });
+
+  console.log(`Upserting ${rows.length} meal plan templates...`);
+  const { error } = await supabase
+    .from("meal_plan_templates")
+    .upsert(rows, { onConflict: "legacy_id" });
+  if (error) {
+    throw new Error(`Failed to upsert meal plan templates: ${error.message}`);
+  }
+}
+
 async function main() {
   const codes = collectRequiredFoodCodes();
   console.log(`Resolving ${codes.size} unique BLS food codes...`);
@@ -335,15 +394,20 @@ async function main() {
 
   const recipeIdMap = await upsertRecipes(codeToFoodId);
   await upsertMealPlans(codeToFoodId, recipeIdMap);
+  await upsertMealPlanTemplates(codeToFoodId, recipeIdMap);
 
   const { writeDataSourceEvent } = await import("./etl-event");
   await writeDataSourceEvent({
     dataSourceId: "bls",
     eventType: "import",
     title: "Rezepte & Tagesplaene Seed",
-    summary: `${RECIPES.length} Rezepte und ${MEAL_PLANS.length} Tagesplaene importiert.`,
-    recordCount: RECIPES.length + MEAL_PLANS.length,
-    metadata: { recipes: RECIPES.length, mealPlans: MEAL_PLANS.length },
+    summary: `${RECIPES.length} Rezepte, ${MEAL_PLANS.length} Tagesplaene und ${MEAL_PLAN_TEMPLATES.length} Vorlagen importiert.`,
+    recordCount: RECIPES.length + MEAL_PLANS.length + MEAL_PLAN_TEMPLATES.length,
+    metadata: {
+      recipes: RECIPES.length,
+      mealPlans: MEAL_PLANS.length,
+      mealPlanTemplates: MEAL_PLAN_TEMPLATES.length,
+    },
   });
 
   console.log("Recipe + meal plan import completed.");

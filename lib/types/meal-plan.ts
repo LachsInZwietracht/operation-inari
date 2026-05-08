@@ -36,6 +36,22 @@ export interface DailyMealPlan {
   slots: MealSlot[];
 }
 
+export interface MealPlanTemplate {
+  id: ID;
+  legacyId?: ID;
+  userId?: ID;
+  name: string;
+  description: string;
+  indication?: string;
+  dietLineId?: string;
+  targetProfileId?: ID;
+  slots: MealSlot[];
+  notes?: string;
+  sourceType: "personal" | "system";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface DietLinePreset {
   id: ID;
   name: string;

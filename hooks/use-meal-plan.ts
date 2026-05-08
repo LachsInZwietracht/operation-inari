@@ -381,6 +381,33 @@ export function useMealPlan(
     [updatePlanForDate],
   )
 
+  const applyTemplateToDate = useCallback(
+    (
+      date: string,
+      slots: MealSlot[],
+      metadata: MealPlanMetadataPatch = {},
+    ) => {
+      updatePlanForDate(date, (plan) => {
+        const cloned: MealSlot[] = ALL_SLOT_TYPES.map((type) => {
+          const incoming = slots.find((slot) => slot.type === type)
+          return {
+            type,
+            entries: (incoming?.entries ?? []).map((entry) => cloneEntry(entry)),
+          }
+        })
+        return {
+          ...plan,
+          ...metadata,
+          status: metadata.status ?? "draft",
+          approvedAt: undefined,
+          approvedBy: undefined,
+          slots: cloned,
+        }
+      })
+    },
+    [updatePlanForDate],
+  )
+
   const setDate = useCallback((date: string) => {
     setCurrentDate(date)
   }, [])
@@ -405,6 +432,7 @@ export function useMealPlan(
     copyPlanToDate,
     clearPlanForDate,
     updatePlanMetadata,
+    applyTemplateToDate,
     setDate,
     goToNextDay,
     goToPreviousDay,

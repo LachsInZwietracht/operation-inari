@@ -2,8 +2,9 @@ import { ErnaehrungsplanPageClient } from "./ernaehrungsplan-client";
 import { fetchFoodsViaRpc } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
+import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
 import { FoodsProvider } from "@/components/foods-provider";
-import type { DailyMealPlan, Recipe } from "@/lib/types";
+import type { DailyMealPlan, MealPlanTemplate, Recipe } from "@/lib/types";
 
 const MEAL_PLAN_NUTRIENT_IDS = [
   "energie", "eiweiss", "fett", "kohlenhydrate", "ballaststoffe",
@@ -12,11 +13,25 @@ const MEAL_PLAN_NUTRIENT_IDS = [
   "vitamin_d", "kalium", "phosphor",
 ];
 
-function extractFoodIds(recipes: Recipe[], mealPlans: DailyMealPlan[]): string[] {
+function extractFoodIds(
+  recipes: Recipe[],
+  mealPlans: DailyMealPlan[],
+  templates: MealPlanTemplate[],
+): string[] {
   const ids = new Set<string>();
 
   for (const plan of mealPlans) {
     for (const slot of plan.slots) {
+      for (const entry of slot.entries) {
+        if (entry.type === "food") {
+          ids.add(entry.referenceId);
+        }
+      }
+    }
+  }
+
+  for (const template of templates) {
+    for (const slot of template.slots) {
       for (const entry of slot.entries) {
         if (entry.type === "food") {
           ids.add(entry.referenceId);
@@ -40,23 +55,27 @@ export default async function ErnaehrungsplanPage({
   searchParams: Promise<{ patientId?: string; date?: string }>;
 }) {
   const { patientId, date } = await searchParams;
-  // Step 1: Fetch recipes + meal plans first (both cached)
-  const [recipes, mealPlans] = await Promise.all([
+  const [recipes, mealPlans, templates] = await Promise.all([
     fetchRecipes(),
     fetchMealPlans(),
+    fetchMealPlanTemplates(),
   ]);
 
-  // Step 2: Extract only the food IDs actually referenced
-  const foodIds = extractFoodIds(recipes, mealPlans);
+  const foodIds = extractFoodIds(recipes, mealPlans, templates);
 
-  // Step 3: Fetch only those foods via single RPC call
   const foods = foodIds.length > 0
     ? await fetchFoodsViaRpc({ foodIds, nutrientIds: MEAL_PLAN_NUTRIENT_IDS })
     : [];
 
   return (
     <FoodsProvider foods={foods}>
-      <ErnaehrungsplanPageClient recipes={recipes} initialPlans={mealPlans} patientId={patientId} initialDate={date} />
+      <ErnaehrungsplanPageClient
+        recipes={recipes}
+        initialPlans={mealPlans}
+        initialTemplates={templates}
+        patientId={patientId}
+        initialDate={date}
+      />
     </FoodsProvider>
   );
 }

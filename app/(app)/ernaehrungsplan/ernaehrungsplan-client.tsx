@@ -14,15 +14,18 @@ import {
   ChevronRight,
   CalendarIcon,
   AlertTriangle,
+  BookmarkPlus,
   CheckCircle2,
   ClipboardCheck,
   ChefHat,
   Copy,
   Download,
   FileText,
+  LayoutTemplate,
   Loader2,
   Plus,
   Save,
+  Search,
   Settings2,
   Trash2,
   Users,
@@ -97,13 +100,14 @@ import {
   calculatePerServing,
 } from "@/lib/nutrients"
 import { formatNumber, formatNutrient } from "@/lib/format"
-import { MEAL_SLOT_LABELS } from "@/lib/constants"
+import { MEAL_SLOT_LABELS, MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
 import type {
   MealSlotType,
   MealEntry,
   NutrientValue,
   DailyMealPlan,
   Food,
+  MealPlanTemplate,
   Recipe,
   DietLinePreset,
 } from "@/lib/types"
@@ -120,6 +124,7 @@ import { toast } from "sonner"
 import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
+import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
 import {
   buildDefaultReportExportRequest,
   buildTeachingKitchenExportRequest,
@@ -224,11 +229,12 @@ function reviewSeverityBadgeClass(severity: PlanReviewSeverity): string {
 interface ErnaehrungsplanPageClientProps {
   recipes: Recipe[]
   initialPlans: DailyMealPlan[]
+  initialTemplates?: MealPlanTemplate[]
   patientId?: string
   initialDate?: string
 }
 
-export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, initialDate }: ErnaehrungsplanPageClientProps) {
+export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTemplates, patientId, initialDate }: ErnaehrungsplanPageClientProps) {
   const serverFoods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
   const { getPatient } = usePatients()
@@ -257,6 +263,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     copyPlanToDate,
     clearPlanForDate,
     updatePlanMetadata,
+    applyTemplateToDate,
     setDate,
     goToNextDay,
     goToPreviousDay,
@@ -267,6 +274,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     savePreset: saveDietLinePreset,
     deletePreset: deleteDietLinePreset,
   } = useDietLinePresets()
+  const {
+    templates: mealPlanTemplates,
+    isLoading: templatesLoading,
+    saveTemplate: saveMealPlanTemplateFromHook,
+  } = useMealPlanTemplates({ initialTemplates })
 
   const [commandOpen, setCommandOpen] = useState(false)
   const [foodCommandQuery, setFoodCommandQuery] = useState("")
@@ -287,6 +299,15 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
   const [dietLineDraftTargets, setDietLineDraftTargets] = useState<DietLineTargetDraft[]>([])
   const [isSavingDietLine, setIsSavingDietLine] = useState(false)
   const [exportingVariant, setExportingVariant] = useState<MealPlanReportVariant | null>(null)
+  const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
+  const [applyTemplateSearch, setApplyTemplateSearch] = useState("")
+  const [applyTemplateScope, setApplyTemplateScope] = useState<"alle" | "indikation" | "kostform">("alle")
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
+  const [templateDraftName, setTemplateDraftName] = useState("")
+  const [templateDraftDescription, setTemplateDraftDescription] = useState("")
+  const [templateDraftIndication, setTemplateDraftIndication] = useState("")
+  const [templateDraftDietLineId, setTemplateDraftDietLineId] = useState<string>("")
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const {
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
@@ -531,18 +552,34 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
   }, [])
 
   const slotCompliance = useMemo(() => {
-    if (!dietLine) return {} as Record<MealSlotType, { label: string; status: "ok" | "low" | "high" }[]>
-    const slotCount = currentPlan.slots.length || 1
     const map = {} as Record<MealSlotType, { label: string; status: "ok" | "low" | "high" }[]>
+    if (!dietLine) return map
+
+    // Per-slot evaluation only fires for macronutrient targets. Vitamin /
+    // mineral targets are daily-aggregate by clinical convention and would
+    // produce noise when scaled to a single meal.
+    const macroTargets = dietLine.targets.filter((target) => {
+      const definition = nutrientDefMap.get(target.nutrientId)
+      return definition?.group === "makronaehrstoffe"
+    })
+
+    if (macroTargets.length === 0) return map
 
     for (const slot of currentPlan.slots) {
+      if (slot.entries.length === 0) {
+        map[slot.type] = []
+        continue
+      }
+
+      const fraction = MEAL_SLOT_TARGET_FRACTIONS[slot.type] ?? 1 / (currentPlan.slots.length || 1)
       const summed = sumNutrients(
         slot.entries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap)),
       )
-      map[slot.type] = dietLine.targets.map((target) => {
+
+      map[slot.type] = macroTargets.map((target) => {
         const value = getNutrientValue(summed, target.nutrientId)
-        const perSlotMin = typeof target.min === "number" ? target.min / slotCount : undefined
-        const perSlotMax = typeof target.max === "number" ? target.max / slotCount : undefined
+        const perSlotMin = typeof target.min === "number" ? target.min * fraction : undefined
+        const perSlotMax = typeof target.max === "number" ? target.max * fraction : undefined
         return {
           label: target.label,
           status: complianceBadge(value, perSlotMin, perSlotMax),
@@ -551,7 +588,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     }
 
     return map
-  }, [currentPlan.slots, dietLine, foodMap, foods, recipeMap])
+  }, [currentPlan.slots, dietLine, foodMap, foods, nutrientDefMap, recipeMap])
 
   const filteredRecipes = useMemo(() => {
     const search = recipeSearch.toLowerCase()
@@ -927,6 +964,110 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     planProdScore.summary,
   ])
 
+  const filteredTemplates = useMemo(() => {
+    const query = applyTemplateSearch.trim().toLowerCase()
+    return mealPlanTemplates.filter((template) => {
+      if (applyTemplateScope === "indikation" && patient?.indication) {
+        if (template.indication?.toLowerCase() !== patient.indication.toLowerCase()) {
+          return false
+        }
+      }
+      if (applyTemplateScope === "kostform" && dietLineId) {
+        if (template.dietLineId !== dietLineId) {
+          return false
+        }
+      }
+      if (!query) return true
+      const haystack = [
+        template.name,
+        template.description ?? "",
+        template.indication ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [applyTemplateScope, applyTemplateSearch, dietLineId, mealPlanTemplates, patient?.indication])
+
+  const openApplyTemplateDialog = useCallback(() => {
+    setApplyTemplateSearch("")
+    setApplyTemplateScope(patient?.indication ? "indikation" : "alle")
+    setApplyTemplateDialogOpen(true)
+  }, [patient?.indication])
+
+  const handleApplyTemplate = useCallback(
+    (template: MealPlanTemplate) => {
+      applyTemplateToDate(currentDate, template.slots, {
+        dietLineId: template.dietLineId ?? currentPlan.dietLineId,
+        targetProfileId: template.targetProfileId ?? currentPlan.targetProfileId,
+        title:
+          currentPlan.title ??
+          (patient
+            ? `${template.name} – ${patient.firstName} ${patient.lastName}`
+            : template.name),
+        notes: currentPlan.notes ?? template.notes ?? undefined,
+      })
+      setApplyTemplateDialogOpen(false)
+      toast.success(`Vorlage "${template.name}" auf den Tagesplan angewendet.`)
+    },
+    [
+      applyTemplateToDate,
+      currentDate,
+      currentPlan.dietLineId,
+      currentPlan.notes,
+      currentPlan.targetProfileId,
+      currentPlan.title,
+      patient,
+    ],
+  )
+
+  const openSaveTemplateDialog = useCallback(() => {
+    const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
+    if (totalEntries === 0) {
+      toast.error("Speichern nicht möglich: Der aktuelle Plan enthält keine Einträge.")
+      return
+    }
+    setTemplateDraftName(currentPlan.title ?? "")
+    setTemplateDraftDescription("")
+    setTemplateDraftIndication(patient?.indication ?? "")
+    setTemplateDraftDietLineId(dietLineId || "")
+    setSaveTemplateDialogOpen(true)
+  }, [currentPlan.slots, currentPlan.title, dietLineId, patient?.indication])
+
+  const handleSaveTemplate = useCallback(async () => {
+    const name = templateDraftName.trim()
+    if (!name) {
+      toast.error("Bitte einen Namen für die Vorlage eingeben.")
+      return
+    }
+    setIsSavingTemplate(true)
+    try {
+      await saveMealPlanTemplateFromHook({
+        name,
+        description: templateDraftDescription.trim() || undefined,
+        indication: templateDraftIndication.trim() || undefined,
+        dietLineId: templateDraftDietLineId || undefined,
+        slots: currentPlan.slots,
+        notes: currentPlan.notes,
+      })
+      setSaveTemplateDialogOpen(false)
+      toast.success("Vorlage gespeichert.")
+    } catch (error) {
+      console.error("Failed to save meal plan template:", error)
+      toast.error("Vorlage konnte nicht gespeichert werden.")
+    } finally {
+      setIsSavingTemplate(false)
+    }
+  }, [
+    currentPlan.notes,
+    currentPlan.slots,
+    saveMealPlanTemplateFromHook,
+    templateDraftDescription,
+    templateDraftDietLineId,
+    templateDraftIndication,
+    templateDraftName,
+  ])
+
   const handleExportPlan = useCallback(
     async (variant: MealPlanReportVariant) => {
       if (exportingVariant) return
@@ -1288,6 +1429,38 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
                 <Settings2 className="h-4 w-4" />
                 <span className="sr-only">Zielprofil verwalten</span>
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <LayoutTemplate className="mr-2 h-4 w-4" />
+                    Vorlagen
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Planvorlagen</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={openApplyTemplateDialog}>
+                    <LayoutTemplate className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>Plan aus Vorlage erzeugen</span>
+                      <span className="text-muted-foreground text-xs">
+                        {patient?.indication
+                          ? `${mealPlanTemplates.length} Vorlagen, gefiltert nach Indikation`
+                          : `${mealPlanTemplates.length} Vorlagen verfügbar`}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={openSaveTemplateDialog}>
+                    <BookmarkPlus className="mr-2 h-4 w-4" />
+                    <div className="flex flex-col">
+                      <span>Aktuellen Plan als Vorlage speichern</span>
+                      <span className="text-muted-foreground text-xs">
+                        Persönliche Vorlage für Wiederverwendung
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" disabled={exportingVariant !== null}>
@@ -2058,6 +2231,192 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
               </Table>
             </ScrollArea>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={applyTemplateDialogOpen} onOpenChange={setApplyTemplateDialogOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Plan aus Vorlage erzeugen</DialogTitle>
+            <DialogDescription>
+              Die ausgewählte Vorlage ersetzt den aktuellen Tagesplan. Status und Freigabe werden zurückgesetzt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="text-muted-foreground absolute left-2.5 top-2.5 h-4 w-4" />
+                <Input
+                  value={applyTemplateSearch}
+                  onChange={(event) => setApplyTemplateSearch(event.target.value)}
+                  placeholder="Vorlagen durchsuchen..."
+                  className="pl-8"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant={applyTemplateScope === "alle" ? "default" : "outline"}
+                  onClick={() => setApplyTemplateScope("alle")}
+                >
+                  Alle
+                </Button>
+                {patient?.indication && (
+                  <Button
+                    size="sm"
+                    variant={applyTemplateScope === "indikation" ? "default" : "outline"}
+                    onClick={() => setApplyTemplateScope("indikation")}
+                  >
+                    {patient.indication}
+                  </Button>
+                )}
+                {dietLine && (
+                  <Button
+                    size="sm"
+                    variant={applyTemplateScope === "kostform" ? "default" : "outline"}
+                    onClick={() => setApplyTemplateScope("kostform")}
+                  >
+                    {dietLine.name}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <ScrollArea className="h-[360px] rounded-md border">
+              {templatesLoading && filteredTemplates.length === 0 ? (
+                <div className="text-muted-foreground p-4 text-sm">Vorlagen werden geladen …</div>
+              ) : filteredTemplates.length === 0 ? (
+                <div className="text-muted-foreground p-4 text-sm">
+                  Keine Vorlagen für die aktuelle Filterauswahl.
+                </div>
+              ) : (
+                <ul className="divide-y">
+                  {filteredTemplates.map((template) => {
+                    const entryCount = template.slots.reduce(
+                      (sum, slot) => sum + slot.entries.length,
+                      0,
+                    )
+                    const dietLineForTemplate = dietLines.find(
+                      (line) => line.id === template.dietLineId,
+                    )
+                    return (
+                      <li key={template.id} className="flex flex-wrap items-start justify-between gap-3 p-3">
+                        <div className="min-w-[220px] flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{template.name}</span>
+                            <Badge variant="outline" className="text-[10px]">
+                              {template.sourceType === "system" ? "System" : "Eigene"}
+                            </Badge>
+                            {template.indication && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {template.indication}
+                              </Badge>
+                            )}
+                            {dietLineForTemplate && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {dietLineForTemplate.name}
+                              </Badge>
+                            )}
+                          </div>
+                          {template.description && (
+                            <p className="text-muted-foreground mt-1 text-xs">{template.description}</p>
+                          )}
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            {entryCount} {entryCount === 1 ? "Eintrag" : "Einträge"} über alle Mahlzeiten
+                          </p>
+                        </div>
+                        <Button size="sm" onClick={() => handleApplyTemplate(template)}>
+                          Übernehmen
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </ScrollArea>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApplyTemplateDialogOpen(false)}>
+              Schließen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={saveTemplateDialogOpen} onOpenChange={setSaveTemplateDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Plan als Vorlage speichern</DialogTitle>
+            <DialogDescription>
+              Die Vorlage wird Ihrem Konto zugeordnet und steht für künftige Pläne zur Verfügung.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="template-name">Name</Label>
+              <Input
+                id="template-name"
+                value={templateDraftName}
+                onChange={(event) => setTemplateDraftName(event.target.value)}
+                placeholder="z. B. Reduktion 1500 kcal Tag 1"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="template-description">Beschreibung</Label>
+              <Textarea
+                id="template-description"
+                value={templateDraftDescription}
+                onChange={(event) => setTemplateDraftDescription(event.target.value)}
+                placeholder="Wofür eignet sich die Vorlage?"
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="template-indication">Indikation</Label>
+                <Input
+                  id="template-indication"
+                  value={templateDraftIndication}
+                  onChange={(event) => setTemplateDraftIndication(event.target.value)}
+                  placeholder="z. B. Diabetes mellitus Typ 2"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Kostform</Label>
+                <Select
+                  value={templateDraftDietLineId || "none"}
+                  onValueChange={(value) =>
+                    setTemplateDraftDietLineId(value === "none" ? "" : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Kostform" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Keine Zuordnung</SelectItem>
+                    {dietLines.map((line) => (
+                      <SelectItem key={line.id} value={line.id}>
+                        {line.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveTemplateDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleSaveTemplate} disabled={isSavingTemplate}>
+              {isSavingTemplate ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Speichern
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

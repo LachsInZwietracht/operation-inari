@@ -13,6 +13,19 @@ export const MEAL_SLOT_LABELS: Record<MealSlotType, string> = {
   abendessen: "Abendessen",
 };
 
+// DGE-typical share of daily intake per meal slot, used to scale daily
+// macronutrient targets down to a realistic per-slot range. Dividing a daily
+// target by slot count would treat snacks and main meals as equally large,
+// making snacks always look "low" — these weights mirror the energy
+// distribution recommended for ambulatory patients (≈25/10/30/10/25).
+export const MEAL_SLOT_TARGET_FRACTIONS: Record<MealSlotType, number> = {
+  fruehstueck: 0.25,
+  snack_vormittag: 0.1,
+  mittagessen: 0.3,
+  snack_nachmittag: 0.1,
+  abendessen: 0.25,
+};
+
 export const NUTRIENT_GROUP_LABELS: Record<NutrientGroup, string> = {
   makronaehrstoffe: "Makronährstoffe",
   vitamine: "Vitamine",
