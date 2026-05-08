@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   format,
   parseISO,
@@ -15,6 +15,8 @@ import {
   CalendarIcon,
   Printer,
   ChefHat,
+  Copy,
+  Trash2,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import {
@@ -45,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -94,6 +97,10 @@ import type { FoodSearchItem } from "@/lib/types"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import { checkAllergenConflicts } from "@/lib/allergen-warnings"
 import { toast } from "sonner"
+import { fetchFoodById } from "@/lib/data/foods-client"
+import { usePatients } from "@/hooks/use-patients"
+
+const DEFAULT_DIET_LINE_ID = DIET_LINES[0]?.id ?? ""
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -107,6 +114,13 @@ const KEY_NUTRIENT_IDS = [
   "eisen",
   "magnesium",
 ]
+
+const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> = {
+  draft: "Entwurf",
+  active: "Aktiv",
+  approved: "Freigegeben",
+  archived: "Archiviert",
+}
 
 function calculateEntryNutrients(
   entry: MealEntry,
@@ -153,11 +167,22 @@ interface ErnaehrungsplanPageClientProps {
   recipes: Recipe[]
   initialPlans: DailyMealPlan[]
   patientId?: string
+  initialDate?: string
 }
 
-export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: ErnaehrungsplanPageClientProps) {
-  const foods = useFoods()
+export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, initialDate }: ErnaehrungsplanPageClientProps) {
+  const serverFoods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
+  const { getPatient } = usePatients()
+  const patient = patientId ? getPatient(patientId) : undefined
+  const defaultPlanMetadata = useMemo(
+    () => ({
+      patientId,
+      title: patient ? `Ernährungsplan ${patient.firstName} ${patient.lastName}` : undefined,
+    }),
+    [patient, patientId],
+  )
+  const [hydratedFoods, setHydratedFoods] = useState<Food[]>(serverFoods)
   const { getForPatient: getAllergensForPatient } = usePatientAllergens()
   const patientAllergens = useMemo(
     () => (patientId ? getAllergensForPatient(patientId) : []),
@@ -170,20 +195,25 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     addEntry,
     removeEntry,
     updateEntryAmount,
+    replaceEntry,
+    copyPlanToDate,
+    clearPlanForDate,
+    updatePlanMetadata,
     setDate,
     goToNextDay,
     goToPreviousDay,
-  } = useMealPlan(initialPlans, foods)
+  } = useMealPlan(initialPlans, serverFoods, defaultPlanMetadata, initialDate)
 
   const [commandOpen, setCommandOpen] = useState(false)
+  const [foodCommandQuery, setFoodCommandQuery] = useState("")
   const [activeSlot, setActiveSlot] = useState<MealSlotType>("fruehstueck")
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [view, setView] = useState("day")
   const [paletteSlot, setPaletteSlot] = useState<MealSlotType>("mittagessen")
   const [recipeSearch, setRecipeSearch] = useState("")
-  const [dietLineId, setDietLineId] = useState(DIET_LINES[0]?.id ?? "")
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
+  const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
   const [exchangeSearch, setExchangeSearch] = useState("")
   const [exchangeCategory, setExchangeCategory] = useState<string>("alle")
   const [exchangeNutrient, setExchangeNutrient] = useState("energie")
@@ -191,10 +221,54 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
     error: exchangeNutrientError,
-  } = useNutrientValues(exchangeNutrient, foods)
+  } = useNutrientValues(exchangeNutrient, hydratedFoods, {
+    forceRemote: foodSearchIndex.length > hydratedFoods.length,
+  })
   const [weekOffset, setWeekOffset] = useState(0)
   const [cycleOffset, setCycleOffset] = useState(0)
 
+  useEffect(() => {
+    setHydratedFoods((prev) => {
+      const next = new Map(prev.map((food) => [food.id, food]))
+      for (const food of serverFoods) {
+        next.set(food.id, food)
+      }
+      return Array.from(next.values())
+    })
+  }, [serverFoods])
+
+  useEffect(() => {
+    if (commandOpen) {
+      void loadFoodSearchIndex()
+    }
+  }, [commandOpen, loadFoodSearchIndex])
+
+  const hydrateFood = useCallback(
+    async (foodId: string): Promise<Food | null> => {
+      const existing = hydratedFoods.find((food) => food.id === foodId || food.legacyId === foodId)
+      if (existing) return existing
+
+      try {
+        const food = await fetchFoodById(foodId)
+        if (!food) {
+          toast.error("Lebensmittel konnte nicht geladen werden.")
+          return null
+        }
+        setHydratedFoods((prev) => {
+          if (prev.some((item) => item.id === food.id)) return prev
+          return [...prev, food]
+        })
+        return food
+      } catch (error) {
+        console.error("Failed to hydrate food for meal plan:", error)
+        toast.error("Lebensmittel konnte nicht geladen werden.")
+        return null
+      }
+    },
+    [hydratedFoods],
+  )
+
+  const foods = hydratedFoods
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
 
@@ -235,12 +309,15 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     setCommandOpen(true)
   }
 
-  const handleSelectFood = (foodId: string) => {
-    addEntry(activeSlot, { type: "food", referenceId: foodId, amount: 100 })
+  const handleSelectFood = async (foodId: string) => {
+    const food = await hydrateFood(foodId)
+    if (!food) return
+
+    addEntry(activeSlot, { type: "food", referenceId: food.id, amount: 100 })
     setCommandOpen(false)
+    setFoodCommandQuery("")
 
     if (patientAllergens.length > 0) {
-      const food = foodMap.get(foodId)
       if (food?.allergens?.length) {
         const warnings = checkAllergenConflicts(food.allergens, patientAllergens)
         for (const w of warnings) {
@@ -253,6 +330,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
   const handleSelectRecipe = (recipeId: string) => {
     addEntry(activeSlot, { type: "recipe", referenceId: recipeId, amount: 1 })
     setCommandOpen(false)
+    setFoodCommandQuery("")
 
     if (patientAllergens.length > 0) {
       const recipe = recipeMap.get(recipeId)
@@ -272,11 +350,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     }
   }
 
-  const handleDropPayload = (slotType: MealSlotType, payload: { type: MealEntry["type"]; referenceId: string }) => {
+  const handleDropPayload = async (slotType: MealSlotType, payload: { type: MealEntry["type"]; referenceId: string }) => {
     if (payload.type === "recipe") {
       addEntry(slotType, { type: "recipe", referenceId: payload.referenceId, amount: 1 })
     } else {
-      addEntry(slotType, { type: "food", referenceId: payload.referenceId, amount: 120 })
+      const food = await hydrateFood(payload.referenceId)
+      if (food) addEntry(slotType, { type: "food", referenceId: food.id, amount: 120 })
     }
   }
 
@@ -284,17 +363,38 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     addEntry(paletteSlot, { type: "recipe", referenceId: recipeId, amount: 1 })
   }
 
-  const handleOpenExchange = (slotType: MealSlotType) => {
+  const handleOpenExchange = (slotType: MealSlotType, entryId?: string) => {
     setExchangeSlot(slotType)
+    setExchangeEntryId(entryId ?? null)
     setExchangeDialogOpen(true)
     loadFoodSearchIndex()
   }
 
-  const handleSelectExchangeFood = (foodId: string) => {
+  const handleSelectExchangeFood = async (foodId: string) => {
     if (!exchangeSlot) return
-    addEntry(exchangeSlot, { type: "food", referenceId: foodId, amount: 100 })
+    const food = await hydrateFood(foodId)
+    if (!food) return
+    if (exchangeEntryId) {
+      const slot = currentPlan.slots.find((item) => item.type === exchangeSlot)
+      const existing = slot?.entries.find((entry) => entry.id === exchangeEntryId)
+      replaceEntry(exchangeSlot, exchangeEntryId, {
+        type: "food",
+        referenceId: food.id,
+        amount: existing?.amount ?? 100,
+      })
+    } else {
+      addEntry(exchangeSlot, { type: "food", referenceId: food.id, amount: 100 })
+    }
     setExchangeDialogOpen(false)
     setExchangeSlot(null)
+    setExchangeEntryId(null)
+  }
+
+  const dietLineId = currentPlan.dietLineId ?? DEFAULT_DIET_LINE_ID
+
+  const handleDietLineChange = (nextId: string) => {
+    if (nextId === dietLineId) return
+    updatePlanMetadata(currentDate, { dietLineId: nextId })
   }
 
   const dietLine = useMemo(() => {
@@ -340,10 +440,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
   const { getResolvedConfig } = useReferenceProfiles()
   const refConfig = useMemo(() => {
     return getResolvedConfig({
-      dateOfBirth: "1990-01-01",
-      gender: "w",
+      patientId,
+      dateOfBirth: patient?.dateOfBirth ?? "1990-01-01",
+      gender: patient?.gender ?? "w",
     })
-  }, [getResolvedConfig])
+  }, [getResolvedConfig, patient?.dateOfBirth, patient?.gender, patientId])
 
   const referenceMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -387,6 +488,21 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     )
   }, [recipeSearch, recipes])
 
+  const foodCommandSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
+  const filteredCommandFoods = useMemo(() => {
+    const query = foodCommandQuery.trim().toLowerCase()
+    return foodCommandSource
+      .filter((food) => !query || food.name.toLowerCase().includes(query))
+      .slice(0, 80)
+  }, [foodCommandQuery, foodCommandSource])
+
+  const filteredCommandRecipes = useMemo(() => {
+    const query = foodCommandQuery.trim().toLowerCase()
+    return recipes
+      .filter((recipe) => !query || recipe.name.toLowerCase().includes(query))
+      .slice(0, 40)
+  }, [foodCommandQuery, recipes])
+
   // Use the lightweight search index for the exchange dialog (instead of all 7,140 full Food objects)
   const exchangeSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
   const filteredExchangeFoods = useMemo(() => {
@@ -411,6 +527,52 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
     "d. MMM yyyy",
     { locale: de },
   )}`
+
+  const copyCurrentPlanToDate = (targetDate: string) => {
+    copyPlanToDate(currentDate, targetDate)
+    toast.success("Tagesplan wurde kopiert.")
+  }
+
+  const copyPlanToNextDay = (sourceDate: string) => {
+    const targetDate = format(addDays(parseISO(sourceDate), 1), "yyyy-MM-dd")
+    copyPlanToDate(sourceDate, targetDate)
+    toast.success("Tagesplan wurde auf den Folgetag kopiert.")
+  }
+
+  const clearPlan = (date: string) => {
+    clearPlanForDate(date)
+    toast.success("Tagesplan wurde geleert.")
+  }
+
+  const saveCurrentPlanTitle = (title: string) => {
+    const trimmed = title.trim()
+    updatePlanMetadata(currentDate, { title: trimmed || undefined })
+    toast.success("Plantitel gespeichert.")
+  }
+
+  const saveCurrentPlanNotes = (notes: string) => {
+    const trimmed = notes.trim()
+    updatePlanMetadata(currentDate, { notes: trimmed || undefined })
+    toast.success("Planhinweise gespeichert.")
+  }
+
+  const updateCurrentPlanStatus = (status: NonNullable<DailyMealPlan["status"]>) => {
+    updatePlanMetadata(currentDate, {
+      status,
+      approvedAt: status === "approved" ? currentPlan.approvedAt ?? new Date().toISOString() : undefined,
+      approvedBy: status === "approved" ? currentPlan.approvedBy : undefined,
+    })
+    toast.success(`Planstatus: ${PLAN_STATUS_LABELS[status]}`)
+  }
+
+  const attachCurrentPatient = () => {
+    if (!patientId) return
+    updatePlanMetadata(currentDate, {
+      patientId,
+      title: currentPlan.title ?? (patient ? `Ernährungsplan ${patient.firstName} ${patient.lastName}` : undefined),
+    })
+    toast.success("Patientenkontext am Plan gespeichert.")
+  }
 
   const cycleStart = addWeeks(baseWeekStart, cycleOffset * 4)
   const cycleStartIso = format(cycleStart, "yyyy-MM-dd")
@@ -507,6 +669,113 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
         description={`Steuerung für Tag, Woche oder Zyklus – aktuell ${formattedDate}`}
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der PRODIscore zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
       />
+
+      {patientId && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+            <div>
+              <p className="font-medium">
+                Patientenkontext: {patient ? `${patient.firstName} ${patient.lastName}` : "Patient wird geladen"}
+              </p>
+              <p className="text-muted-foreground">
+                DGE-Referenzen und Allergenwarnungen werden für diesen Kontext ausgewertet.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">{refConfig.standardId.toUpperCase()}</Badge>
+              {patient?.indication && <Badge variant="outline">{patient.indication}</Badge>}
+              {patientAllergens.length > 0 && (
+                <Badge variant="outline">{patientAllergens.length} Allergen-/Intoleranzhinweise</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Planakte</CardTitle>
+              <CardDescription>
+                Titel, Status und klinische Hinweise für den aktuellen Tagesplan.
+              </CardDescription>
+            </div>
+            <Badge variant={currentPlan.status === "approved" ? "secondary" : "outline"}>
+              {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Titel</p>
+              <Input
+                key={`title-${currentPlan.id}-${currentPlan.date}`}
+                defaultValue={currentPlan.title ?? ""}
+                placeholder="z. B. Reduktionskost Woche 1"
+                onBlur={(event) => {
+                  if (event.currentTarget.value.trim() !== (currentPlan.title ?? "")) {
+                    saveCurrentPlanTitle(event.currentTarget.value)
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Status</p>
+              <Select value={currentPlan.status ?? "draft"} onValueChange={(value) => updateCurrentPlanStatus(value as NonNullable<DailyMealPlan["status"]>)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Status wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PLAN_STATUS_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Hinweise</p>
+              <Textarea
+                key={`notes-${currentPlan.id}-${currentPlan.date}`}
+                defaultValue={currentPlan.notes ?? ""}
+                placeholder="Indikation, Beratungshinweise, Patientenvorlieben oder interne Prüfnotizen"
+                rows={2}
+                onBlur={(event) => {
+                  if (event.currentTarget.value.trim() !== (currentPlan.notes ?? "")) {
+                    saveCurrentPlanNotes(event.currentTarget.value)
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <div className="space-y-2 rounded-md border p-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Patient</span>
+              <span className="text-right font-medium">
+                {currentPlan.patientId
+                  ? patient && currentPlan.patientId === patient.id
+                    ? `${patient.firstName} ${patient.lastName}`
+                    : "zugeordnet"
+                  : "nicht zugeordnet"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Freigabe</span>
+              <span className="text-right font-medium">
+                {currentPlan.approvedAt ? format(parseISO(currentPlan.approvedAt), "dd.MM.yyyy HH:mm") : "offen"}
+              </span>
+            </div>
+            {patientId && currentPlan.patientId !== patientId && (
+              <Button size="sm" variant="outline" className="mt-2 w-full" onClick={attachCurrentPatient}>
+                Patient zuordnen
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -623,7 +892,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
               </PopoverContent>
             </Popover>
             <div className="ml-auto flex items-center gap-2">
-              <Select value={dietLineId} onValueChange={setDietLineId}>
+              <Select value={dietLineId} onValueChange={handleDietLineChange}>
                 <SelectTrigger className="w-[220px]">
                   <SelectValue placeholder="Diet-Line" />
                 </SelectTrigger>
@@ -824,14 +1093,57 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {weekSummaries.map(({ plan, totals }) => (
                   <Card key={plan.date}>
-                    <CardHeader className="space-y-1">
-                      <CardTitle className="text-base">
-                        {format(parseISO(plan.date), "EEE, dd.MM.", { locale: de })}
-                      </CardTitle>
-                      <CardDescription>
-                        {formatNumber(Math.round(getNutrientValue(totals, "energie")))} kcal ·{' '}
-                        {formatNumber(getNutrientValue(totals, "eiweiss"), 0)} g Eiweiß
-                      </CardDescription>
+                    <CardHeader className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-base">
+                            {format(parseISO(plan.date), "EEE, dd.MM.", { locale: de })}
+                          </CardTitle>
+                          <CardDescription>
+                            {formatNumber(Math.round(getNutrientValue(totals, "energie")))} kcal ·{' '}
+                            {formatNumber(getNutrientValue(totals, "eiweiss"), 0)} g Eiweiß
+                          </CardDescription>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setDate(plan.date)
+                            setView("day")
+                          }}
+                        >
+                          Öffnen
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => copyCurrentPlanToDate(plan.date)}
+                        >
+                          <Copy className="mr-1 h-3.5 w-3.5" />
+                          Heute hierher
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => copyPlanToNextDay(plan.date)}
+                        >
+                          <Copy className="mr-1 h-3.5 w-3.5" />
+                          Auf Folgetag
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                          onClick={() => clearPlan(plan.date)}
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" />
+                          Leeren
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-1.5 text-sm">
                       {plan.slots.map((slot) => (
@@ -1032,33 +1344,45 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
 
       <CommandDialog
         open={commandOpen}
-        onOpenChange={setCommandOpen}
+        onOpenChange={(open) => {
+          setCommandOpen(open)
+          if (!open) setFoodCommandQuery("")
+        }}
         title="Lebensmittel oder Rezept hinzufügen"
         description="Suche nach einem Lebensmittel oder Rezept."
       >
-        <CommandInput placeholder="Suchen..." />
+        <CommandInput
+          placeholder="Lebensmittel oder Rezept suchen..."
+          value={foodCommandQuery}
+          onValueChange={setFoodCommandQuery}
+        />
         <CommandList>
           <CommandEmpty>Keine Ergebnisse gefunden.</CommandEmpty>
           <CommandGroup heading="Lebensmittel">
-            {foods.map((food) => (
+            {filteredCommandFoods.map((food) => {
+              const hydratedFood = foodMap.get(food.id)
+              return (
               <CommandItem
                 key={food.id}
-                value={food.name}
-                onSelect={() => handleSelectFood(food.id)}
+                value={`${food.name} ${food.id}`}
+                onSelect={() => void handleSelectFood(food.id)}
               >
                 <span>{food.name}</span>
                 <span className="text-muted-foreground ml-auto text-xs">
-                  {formatNumber(Math.round(getNutrientValue(food.nutrients, "energie")))} kcal / 100g
+                  {hydratedFood
+                    ? `${formatNumber(Math.round(getNutrientValue(hydratedFood.nutrients, "energie")))} kcal / 100g`
+                    : "wird beim Einfügen geladen"}
                 </span>
               </CommandItem>
-            ))}
+              )
+            })}
           </CommandGroup>
           <Separator />
           <CommandGroup heading="Rezepte">
-            {recipes.map((recipe) => (
+            {filteredCommandRecipes.map((recipe) => (
               <CommandItem
                 key={recipe.id}
-                value={recipe.name}
+                value={`${recipe.name} ${recipe.id}`}
                 onSelect={() => handleSelectRecipe(recipe.id)}
               >
                 <span>{recipe.name}</span>
@@ -1075,14 +1399,20 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
         open={exchangeDialogOpen}
         onOpenChange={(open) => {
           setExchangeDialogOpen(open)
-          if (!open) setExchangeSlot(null)
+          if (!open) {
+            setExchangeSlot(null)
+            setExchangeEntryId(null)
+          }
         }}
       >
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Austauschliste für {exchangeSlot ? MEAL_SLOT_LABELS[exchangeSlot] : "Slot"}</DialogTitle>
+            <DialogTitle>
+              {exchangeEntryId ? "Eintrag austauschen" : "Austauschliste"} für{" "}
+              {exchangeSlot ? MEAL_SLOT_LABELS[exchangeSlot] : "Slot"}
+            </DialogTitle>
             <DialogDescription>
-              Filtere nach Quelle, Kategorie oder Nährstoff und übertrage Alternativen per Klick.
+              Filtere nach Kategorie oder Nährstoff. Beim Austauschen bleibt die bisherige Menge erhalten.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-3">
@@ -1154,7 +1484,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId }: 
                         </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" onClick={() => handleSelectExchangeFood(food.id)}>
-                            Übernehmen
+                            {exchangeEntryId ? "Ersetzen" : "Übernehmen"}
                           </Button>
                         </TableCell>
                       </TableRow>

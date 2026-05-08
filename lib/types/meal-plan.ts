@@ -19,10 +19,20 @@ export interface MealSlot {
   entries: MealEntry[];
 }
 
+export type MealPlanStatus = "draft" | "active" | "approved" | "archived";
+
 export interface DailyMealPlan {
   id: ID;
   legacyId?: ID;
   date: string; // ISO date string YYYY-MM-DD
+  patientId?: ID;
+  title?: string;
+  status?: MealPlanStatus;
+  notes?: string;
+  targetProfileId?: ID;
+  dietLineId?: string;
+  approvedAt?: string;
+  approvedBy?: ID;
   slots: MealSlot[];
 }
 
@@ -30,6 +40,8 @@ export interface DietLinePreset {
   id: ID;
   name: string;
   description: string;
+  userId?: ID;
+  isSystem?: boolean;
   targets: Array<{
     nutrientId: string;
     label: string;

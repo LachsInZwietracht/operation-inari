@@ -17,16 +17,54 @@ const ALL_SLOT_TYPES: MealSlotType[] = [
   "abendessen",
 ]
 
-function createEmptyPlan(date: string): DailyMealPlan {
+type MealPlanMetadataPatch = Partial<
+  Pick<
+    DailyMealPlan,
+    | "patientId"
+    | "title"
+    | "status"
+    | "notes"
+    | "targetProfileId"
+    | "dietLineId"
+    | "approvedAt"
+    | "approvedBy"
+  >
+>
+
+function createEmptyPlan(date: string, defaults: MealPlanMetadataPatch = {}): DailyMealPlan {
   return {
     id: `plan_${date}`,
     date,
+    status: "draft",
+    ...defaults,
     slots: ALL_SLOT_TYPES.map((type) => ({ type, entries: [] })),
   }
 }
 
 function generateId(): string {
   return `entry_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+}
+
+function cloneEntry(entry: MealEntry): MealEntry {
+  return {
+    ...entry,
+    id: generateId(),
+  }
+}
+
+function clonePlanForDate(plan: DailyMealPlan, date: string): DailyMealPlan {
+  return {
+    ...plan,
+    id: `plan_${date}`,
+    date,
+    status: plan.status === "approved" ? "draft" : plan.status,
+    approvedAt: undefined,
+    approvedBy: undefined,
+    slots: ensureAllSlots(plan).slots.map((slot) => ({
+      ...slot,
+      entries: slot.entries.map(cloneEntry),
+    })),
+  }
 }
 
 function ensureAllSlots(plan: DailyMealPlan): DailyMealPlan {
@@ -62,10 +100,15 @@ function buildInitialPlans(initialPlans: DailyMealPlan[], foods: Food[]): Record
   return merged
 }
 
-export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = []) {
+export function useMealPlan(
+  initialPlans: DailyMealPlan[] = [],
+  foods: Food[] = [],
+  defaultMetadata: MealPlanMetadataPatch = {},
+  initialDate?: string,
+) {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [currentDate, setCurrentDate] = useState(() =>
-    format(new Date(), "yyyy-MM-dd")
+    initialDate ?? format(new Date(), "yyyy-MM-dd")
   )
   const [plans, setPlans] = useState<Record<string, DailyMealPlan>>(() =>
     buildInitialPlans(initialPlans, foods)
@@ -149,9 +192,9 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     (date: string): DailyMealPlan => {
       const existing = plans[date]
       if (existing) return ensureAllSlots(existing)
-      return createEmptyPlan(date)
+      return createEmptyPlan(date, defaultMetadata)
     },
-    [plans],
+    [defaultMetadata, plans],
   )
 
   const getCurrentPlan = useCallback((): DailyMealPlan => {
@@ -192,7 +235,7 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
       setPlans((prev) => {
         const currentPlan = prev[currentDate]
           ? ensureAllSlots(prev[currentDate])
-          : createEmptyPlan(currentDate)
+          : createEmptyPlan(currentDate, defaultMetadata)
         updatedPlan = updater(currentPlan)
 
         return {
@@ -205,7 +248,30 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
         void syncPlanToSupabase(updatedPlan)
       }
     },
-    [currentDate, syncPlanToSupabase]
+    [currentDate, defaultMetadata, syncPlanToSupabase]
+  )
+
+  const updatePlanForDate = useCallback(
+    (date: string, updater: (plan: DailyMealPlan) => DailyMealPlan) => {
+      let updatedPlan: DailyMealPlan | null = null
+
+      setPlans((prev) => {
+        const basePlan = prev[date]
+          ? ensureAllSlots(prev[date])
+          : createEmptyPlan(date, defaultMetadata)
+        updatedPlan = updater(basePlan)
+
+        return {
+          ...prev,
+          [date]: updatedPlan,
+        }
+      })
+
+      if (updatedPlan) {
+        void syncPlanToSupabase(updatedPlan)
+      }
+    },
+    [defaultMetadata, syncPlanToSupabase],
   )
 
   const addEntry = useCallback(
@@ -261,6 +327,60 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     [updateCurrentPlan]
   )
 
+  const replaceEntry = useCallback(
+    (slotType: MealSlotType, entryId: string, entry: Omit<MealEntry, "id">) => {
+      updateCurrentPlan((plan) => {
+        const newSlots = plan.slots.map((slot) => {
+          if (slot.type !== slotType) return slot
+          return {
+            ...slot,
+            entries: slot.entries.map((existing) =>
+              existing.id === entryId ? { ...entry, id: generateId() } : existing
+            ),
+          }
+        })
+
+        return { ...plan, slots: newSlots }
+      })
+    },
+    [updateCurrentPlan],
+  )
+
+  const copyPlanToDate = useCallback(
+    (sourceDate: string, targetDate: string) => {
+      const sourcePlan = getPlanForDate(sourceDate)
+      const copiedPlan = clonePlanForDate(sourcePlan, targetDate)
+
+      setPlans((prev) => ({
+        ...prev,
+        [targetDate]: copiedPlan,
+      }))
+
+      void syncPlanToSupabase(copiedPlan)
+    },
+    [getPlanForDate, syncPlanToSupabase],
+  )
+
+  const clearPlanForDate = useCallback(
+    (date: string) => {
+      updatePlanForDate(date, (plan) => ({
+        ...plan,
+        slots: ensureAllSlots(plan).slots.map((slot) => ({ ...slot, entries: [] })),
+      }))
+    },
+    [updatePlanForDate],
+  )
+
+  const updatePlanMetadata = useCallback(
+    (date: string, metadata: MealPlanMetadataPatch) => {
+      updatePlanForDate(date, (plan) => ({
+        ...plan,
+        ...metadata,
+      }))
+    },
+    [updatePlanForDate],
+  )
+
   const setDate = useCallback((date: string) => {
     setCurrentDate(date)
   }, [])
@@ -281,6 +401,10 @@ export function useMealPlan(initialPlans: DailyMealPlan[] = [], foods: Food[] = 
     addEntry,
     removeEntry,
     updateEntryAmount,
+    replaceEntry,
+    copyPlanToDate,
+    clearPlanForDate,
+    updatePlanMetadata,
     setDate,
     goToNextDay,
     goToPreviousDay,

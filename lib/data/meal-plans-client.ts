@@ -18,6 +18,14 @@ interface MealPlanRow {
   date: string;
   user_id: string | null;
   legacy_id?: string | null;
+  patient_id?: string | null;
+  title?: string | null;
+  status?: DailyMealPlan["status"] | null;
+  notes?: string | null;
+  target_profile_id?: string | null;
+  diet_line_id?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
   meal_entries: MealEntryRow[] | null;
 }
 
@@ -89,6 +97,14 @@ function mapMealPlanRow(row: MealPlanRow): DailyMealPlan {
     id: row.id,
     legacyId: row.legacy_id ?? undefined,
     date: row.date,
+    patientId: row.patient_id ?? undefined,
+    title: row.title ?? undefined,
+    status: row.status ?? undefined,
+    notes: row.notes ?? undefined,
+    targetProfileId: row.target_profile_id ?? undefined,
+    dietLineId: row.diet_line_id ?? undefined,
+    approvedAt: row.approved_at ?? undefined,
+    approvedBy: row.approved_by ?? undefined,
     slots,
   };
 }
@@ -106,7 +122,7 @@ function baseMealPlanQuery(client: SupabaseClient) {
   return client
     .from("daily_meal_plans")
     .select(
-      "id,date,user_id,legacy_id,meal_entries(id,meal_plan_id,slot_type,entry_type,reference_id,amount,sort_order)",
+      "id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by,meal_entries(id,meal_plan_id,slot_type,entry_type,reference_id,amount,sort_order)",
     )
     .order("date", { ascending: false });
 }
@@ -152,12 +168,20 @@ export async function persistMealPlan(
     legacy_id: legacyId,
     date: plan.date,
     user_id: userId,
+    patient_id: plan.patientId ?? null,
+    title: plan.title ?? null,
+    status: plan.status ?? "draft",
+    notes: plan.notes ?? null,
+    target_profile_id: plan.targetProfileId ?? null,
+    diet_line_id: plan.dietLineId ?? null,
+    approved_at: plan.approvedAt ?? null,
+    approved_by: plan.approvedBy ?? null,
   };
 
   const { data: persistedPlan, error: planError } = await client
     .from("daily_meal_plans")
     .upsert(planPayload, { onConflict: canonicalId ? "id" : "user_id,date" })
-    .select("id,date,user_id,legacy_id")
+    .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by")
     .single();
 
   if (planError) {
