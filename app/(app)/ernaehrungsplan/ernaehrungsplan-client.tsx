@@ -16,6 +16,9 @@ import {
   Printer,
   ChefHat,
   Copy,
+  Plus,
+  Save,
+  Settings2,
   Trash2,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
@@ -47,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -54,6 +58,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -69,7 +74,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useMealPlan } from "@/hooks/use-meal-plan"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
-import { DIET_LINES } from "@/lib/reference-data/diet-lines"
 import {
   scaleNutrients,
   sumNutrients,
@@ -86,6 +90,7 @@ import type {
   DailyMealPlan,
   Food,
   Recipe,
+  DietLinePreset,
 } from "@/lib/types"
 import { calculateProdScore } from "@/lib/prodi-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
@@ -99,8 +104,7 @@ import { checkAllergenConflicts } from "@/lib/allergen-warnings"
 import { toast } from "sonner"
 import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
-
-const DEFAULT_DIET_LINE_ID = DIET_LINES[0]?.id ?? ""
+import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -120,6 +124,25 @@ const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> =
   active: "Aktiv",
   approved: "Freigegeben",
   archived: "Archiviert",
+}
+
+type DietLineTargetDraft = DietLinePreset["targets"][number]
+
+function createTargetDraft(nutrientId = "energie"): DietLineTargetDraft {
+  const definition = NUTRIENT_DEFINITIONS.find((item) => item.id === nutrientId)
+  return {
+    nutrientId,
+    label: definition?.shortName ?? definition?.name ?? nutrientId,
+    unit: definition?.unit ?? "",
+    min: undefined,
+    max: undefined,
+  }
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function calculateEntryNutrients(
@@ -203,6 +226,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     goToNextDay,
     goToPreviousDay,
   } = useMealPlan(initialPlans, serverFoods, defaultPlanMetadata, initialDate)
+  const {
+    presets: dietLines,
+    isLoading: dietLinesLoading,
+    savePreset: saveDietLinePreset,
+    deletePreset: deleteDietLinePreset,
+  } = useDietLinePresets()
 
   const [commandOpen, setCommandOpen] = useState(false)
   const [foodCommandQuery, setFoodCommandQuery] = useState("")
@@ -217,6 +246,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
   const [exchangeSearch, setExchangeSearch] = useState("")
   const [exchangeCategory, setExchangeCategory] = useState<string>("alle")
   const [exchangeNutrient, setExchangeNutrient] = useState("energie")
+  const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
+  const [dietLineDraftName, setDietLineDraftName] = useState("")
+  const [dietLineDraftDescription, setDietLineDraftDescription] = useState("")
+  const [dietLineDraftTargets, setDietLineDraftTargets] = useState<DietLineTargetDraft[]>([])
+  const [isSavingDietLine, setIsSavingDietLine] = useState(false)
   const {
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
@@ -390,7 +424,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
     setExchangeEntryId(null)
   }
 
-  const dietLineId = currentPlan.dietLineId ?? DEFAULT_DIET_LINE_ID
+  const dietLineId = currentPlan.dietLineId ?? dietLines[0]?.id ?? ""
 
   const handleDietLineChange = (nextId: string) => {
     if (nextId === dietLineId) return
@@ -398,8 +432,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
   }
 
   const dietLine = useMemo(() => {
-    return DIET_LINES.find((line) => line.id === dietLineId) ?? DIET_LINES[0]
-  }, [dietLineId])
+    return dietLines.find((line) => line.id === dietLineId) ?? dietLines[0]
+  }, [dietLineId, dietLines])
+
+  const isCurrentDietLineEditable = Boolean(dietLine?.userId)
 
   const dailyNutrients = useMemo(() => {
     const allEntryNutrients: NutrientValue[][] = []
@@ -572,6 +608,100 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
       title: currentPlan.title ?? (patient ? `Ernährungsplan ${patient.firstName} ${patient.lastName}` : undefined),
     })
     toast.success("Patientenkontext am Plan gespeichert.")
+  }
+
+  const openDietLineEditor = () => {
+    const baseTargets = dietLine?.targets.length
+      ? dietLine.targets.map((target) => ({ ...target }))
+      : [createTargetDraft("energie"), createTargetDraft("eiweiss"), createTargetDraft("kohlenhydrate")]
+
+    setDietLineDraftName(
+      dietLine ? (isCurrentDietLineEditable ? dietLine.name : `${dietLine.name} Kopie`) : "",
+    )
+    setDietLineDraftDescription(dietLine?.description ?? "")
+    setDietLineDraftTargets(baseTargets)
+    setDietLineDialogOpen(true)
+  }
+
+  const updateDietLineDraftTarget = (index: number, patch: Partial<DietLineTargetDraft>) => {
+    setDietLineDraftTargets((prev) =>
+      prev.map((target, targetIndex) => {
+        if (targetIndex !== index) return target
+        const next = { ...target, ...patch }
+        if (patch.nutrientId) {
+          const definition = NUTRIENT_DEFINITIONS.find((item) => item.id === patch.nutrientId)
+          next.label = definition?.shortName ?? definition?.name ?? patch.nutrientId
+          next.unit = definition?.unit ?? ""
+        }
+        return next
+      }),
+    )
+  }
+
+  const addDietLineDraftTarget = () => {
+    const firstUnused = NUTRIENT_DEFINITIONS.find(
+      (definition) => !dietLineDraftTargets.some((target) => target.nutrientId === definition.id),
+    )
+    setDietLineDraftTargets((prev) => [...prev, createTargetDraft(firstUnused?.id ?? "energie")])
+  }
+
+  const removeDietLineDraftTarget = (index: number) => {
+    setDietLineDraftTargets((prev) => prev.filter((_, targetIndex) => targetIndex !== index))
+  }
+
+  const saveDietLineDraft = async () => {
+    const name = dietLineDraftName.trim()
+    const description = dietLineDraftDescription.trim()
+    const targets = dietLineDraftTargets
+      .map((target) => ({
+        ...target,
+        label:
+          target.label.trim() ||
+          (NUTRIENT_DEFINITIONS.find((item) => item.id === target.nutrientId)?.shortName ?? target.nutrientId),
+      }))
+      .filter((target) => target.nutrientId && (target.min != null || target.max != null))
+
+    if (!name) {
+      toast.error("Bitte einen Namen für das Zielprofil eingeben.")
+      return
+    }
+    if (targets.length === 0) {
+      toast.error("Bitte mindestens einen Zielwert mit Unter- oder Obergrenze pflegen.")
+      return
+    }
+
+    setIsSavingDietLine(true)
+    try {
+      const savedPreset = await saveDietLinePreset({
+        id: isCurrentDietLineEditable ? dietLine?.id : undefined,
+        name,
+        description,
+        targets,
+      })
+      updatePlanMetadata(currentDate, { dietLineId: savedPreset.id })
+      setDietLineDialogOpen(false)
+      toast.success("Zielprofil gespeichert.")
+    } catch (error) {
+      console.error("Failed to save diet line preset:", error)
+      toast.error("Zielprofil konnte nicht gespeichert werden.")
+    } finally {
+      setIsSavingDietLine(false)
+    }
+  }
+
+  const deleteCurrentDietLine = async () => {
+    if (!dietLine?.id || !isCurrentDietLineEditable) return
+
+    try {
+      await deleteDietLinePreset(dietLine.id)
+      const fallbackPreset = dietLines.find((line) => line.id !== dietLine.id)
+      updatePlanMetadata(currentDate, { dietLineId: fallbackPreset?.id })
+      setDietLineDialogOpen(false)
+      toast.success("Zielprofil gelöscht.")
+    } catch (error) {
+      console.error("Failed to delete diet line preset:", error)
+      toast.error("Zielprofil konnte nicht gelöscht werden.")
+    }
   }
 
   const cycleStart = addWeeks(baseWeekStart, cycleOffset * 4)
@@ -894,17 +1024,20 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
             <div className="ml-auto flex items-center gap-2">
               <Select value={dietLineId} onValueChange={handleDietLineChange}>
                 <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Diet-Line" />
+                  <SelectValue placeholder="Kostform/Zielprofil" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DIET_LINES.length === 0 && <SelectItem value="">Keine Vorgabe</SelectItem>}
-                  {DIET_LINES.map((line) => (
+                  {dietLines.map((line) => (
                     <SelectItem key={line.id} value={line.id}>
-                      {line.name}
+                      {line.name}{line.userId ? " (eigene)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="icon" onClick={openDietLineEditor}>
+                <Settings2 className="h-4 w-4" />
+                <span className="sr-only">Zielprofil verwalten</span>
+              </Button>
             </div>
           </div>
 
@@ -930,10 +1063,15 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Diet-Line Vorgaben</CardTitle>
-                  <CardDescription>{dietLine?.description ?? "Ziele setzen"}</CardDescription>
+                  <CardTitle className="text-base">Kostform- und Zielvorgaben</CardTitle>
+                  <CardDescription>
+                    {dietLine?.description ?? (dietLinesLoading ? "Zielprofile werden geladen" : "Ziele setzen")}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {dietLineCompliance.length === 0 && (
+                    <p className="text-muted-foreground text-sm">Noch keine Zielwerte gepflegt.</p>
+                  )}
                   {dietLineCompliance.map((target) => (
                     <div key={target.label} className="flex items-center justify-between text-sm">
                       <div>
@@ -1084,7 +1222,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
               <span className="sr-only">Nächste Woche</span>
             </Button>
             <div className="ml-auto text-xs text-muted-foreground">
-              Bezug: {dietLine?.name ?? "Diet-Line auswählen"}
+              Bezug: {dietLine?.name ?? "Zielprofil auswählen"}
             </div>
           </div>
 
@@ -1173,7 +1311,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Wöchentliche Kennzahlen</CardTitle>
-                  <CardDescription>Vergleich mit {dietLine?.name ?? "Diet-Line"}</CardDescription>
+                  <CardDescription>Vergleich mit {dietLine?.name ?? "Zielprofil"}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   {dietLineCompliance.map((target) => {
@@ -1264,7 +1402,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
               <span className="sr-only">Nächster Zyklus</span>
             </Button>
             <Badge variant="secondary" className="ml-auto">
-              {dietLine?.name ?? "Diet-Line"}
+              {dietLine?.name ?? "Zielprofil"}
             </Badge>
           </div>
 
@@ -1341,6 +1479,137 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, patientId, in
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={dietLineDialogOpen} onOpenChange={setDietLineDialogOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Kostform/Zielprofil verwalten</DialogTitle>
+            <DialogDescription>
+              Eigene Vorgaben werden gespeichert und können direkt mit dem aktuellen Tagesplan verknüpft werden.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+              <div className="space-y-2">
+                <Label htmlFor="diet-line-name">Name</Label>
+                <Input
+                  id="diet-line-name"
+                  value={dietLineDraftName}
+                  onChange={(event) => setDietLineDraftName(event.target.value)}
+                  placeholder="z. B. Dialyse 1800 kcal"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="diet-line-description">Beschreibung</Label>
+                <Input
+                  id="diet-line-description"
+                  value={dietLineDraftDescription}
+                  onChange={(event) => setDietLineDraftDescription(event.target.value)}
+                  placeholder="Kurzbeschreibung für Planung und Prüfung"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nährstoff</TableHead>
+                    <TableHead>Label</TableHead>
+                    <TableHead className="w-28">Min.</TableHead>
+                    <TableHead className="w-28">Max.</TableHead>
+                    <TableHead className="w-20">Einheit</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">Entfernen</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dietLineDraftTargets.map((target, index) => (
+                    <TableRow key={`${target.nutrientId}-${index}`}>
+                      <TableCell>
+                        <Select
+                          value={target.nutrientId}
+                          onValueChange={(value) => updateDietLineDraftTarget(index, { nutrientId: value })}
+                        >
+                          <SelectTrigger className="w-[190px]">
+                            <SelectValue placeholder="Nährstoff" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {NUTRIENT_DEFINITIONS.map((definition) => (
+                              <SelectItem key={definition.id} value={definition.id}>
+                                {definition.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={target.label}
+                          onChange={(event) => updateDietLineDraftTarget(index, { label: event.target.value })}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          value={target.min ?? ""}
+                          onChange={(event) => updateDietLineDraftTarget(index, { min: parseOptionalNumber(event.target.value) })}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          value={target.max ?? ""}
+                          onChange={(event) => updateDietLineDraftTarget(index, { max: parseOptionalNumber(event.target.value) })}
+                        />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{target.unit}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeDietLineDraftTarget(index)}
+                          disabled={dietLineDraftTargets.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Zielwert entfernen</span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <Button variant="outline" className="w-fit" onClick={addDietLineDraftTarget}>
+              <Plus className="mr-2 h-4 w-4" />
+              Zielwert hinzufügen
+            </Button>
+          </div>
+          <DialogFooter className="items-center justify-between sm:justify-between">
+            <div>
+              {isCurrentDietLineEditable && (
+                <Button variant="ghost" className="text-destructive" onClick={deleteCurrentDietLine}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Löschen
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setDietLineDialogOpen(false)}>
+                Abbrechen
+              </Button>
+              <Button onClick={saveDietLineDraft} disabled={isSavingDietLine}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSavingDietLine ? "Speichert..." : "Speichern"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CommandDialog
         open={commandOpen}

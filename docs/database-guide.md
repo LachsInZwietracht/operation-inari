@@ -240,6 +240,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260512000029_database_lifecycle.sql` | Database lifecycle events, audited food-reference replacement logs, and the `replace_food_references()` RPC for user-workspace recipes, meal plans, and protocols |
 | `20260513000030_sfk_nutrient_definitions.sql` | 46 SFK-specific nutrient definitions (amino acids, detailed fatty acids, extended vitamins/minerals) and `sfk_column_name` mapping column on `nutrient_definitions` |
 | `20260516000033_cologne_phonetics.sql` | `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, GIN trigram indexes, and phonetic match branch in both `search_foods` and `search_foods_with_total` RPCs |
+| `20260527000045_meal_plan_metadata.sql` | Adds clinical metadata to `daily_meal_plans`: patient assignment, title, lifecycle status, notes, target profile, approval timestamp/user, and supporting indexes |
 | `20260516000034_food_replacement_org_scope.sql` | Extends `food_reference_replacements` to allow `organization` scope, updates `replace_food_references()` with `p_scope` parameter and `is_organization_admin()` check for org-wide replacements |
 | `20260518000036_team_invitations.sql` | Adds invitation timestamps/expiry/revoke metadata to `organization_memberships` and permits admin-created invited memberships |
 | `20260519000037_api_keys.sql` | Organization-scoped hashed API keys for the first external dataset export boundary |
@@ -249,6 +250,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260523000041_sso_group_role_mappings.sql` | Organization-scoped SSO claim/group to RBAC role mappings with priority and audit support |
 | `20260524000042_hl7_import_results_update_policy.sql` | Admin-scoped update policy for closing HL7 review results through the integration operations surface |
 | `20260525000043_kitchen_production_batches.sql` | Persisted kitchen production batch current state plus append-only event history for production execution |
+| `20260528000046_meal_plan_diet_line.sql` | Persists selected diet-line/target-preset identifiers on `daily_meal_plans` |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -273,7 +275,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `off_staging` | Open Food Facts quarantine | `barcode`, `nutriments` (JSONB), `validated`, `promoted` |
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |
-| `daily_meal_plans` | One plan per user per day | `user_id`, `date` (unique together) |
+| `daily_meal_plans` | One plan per user per day, with optional patient/lifecycle metadata and selected target preset | `user_id`, `date` (unique together), `patient_id`, `title`, `status`, `notes`, `target_profile_id`, `diet_line_id`, `approved_at` |
 | `meal_entries` | Items in a meal slot | `meal_plan_id`, `slot_type`, `entry_type` (food/recipe), `reference_id` (polymorphic) |
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
@@ -726,7 +728,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [x] Keep eGK mock cards/events as explicit demo mode with user-facing demo labeling.
 - [x] Move report-template seeds to non-mock bundled product defaults.
 - [x] Replace mock food-synonym seeds with seeded database rows or a curated bundled reference source.
-- [x] Keep `DIET_LINES` as bundled static product defaults in `lib/reference-data/diet-lines.ts`.
+- [x] Keep `DIET_LINES` as bundled product defaults in `lib/reference-data/diet-lines.ts`, with user-defined diet-line presets persisted through `diet_line_presets`/`diet_line_targets`.
 - [x] Move institution `DIET_FORMS` and weekday labels into `lib/reference-data/institution.ts`.
 - [x] Move pediatric percentiles and lab parameter definitions into explicit `lib/reference-data` modules so they are no longer treated as “mock”.
 - [x] Reclassify `/wissen` knowledge cards as bundled product content and keep analytics live/runtime-backed.

@@ -73,6 +73,7 @@ import { useCounseling } from "@/hooks/use-counseling"
 import type {
   AnthropometricEntry,
   DigitalProtocolLink,
+  Food,
   Patient,
   PatientCareSetting,
   PatientStatus,
@@ -112,6 +113,8 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
   mail: "Post",
   none: "Keine Angabe",
 }
+
+const EMPTY_PROTOCOL_FOODS: Food[] = []
 
 const AnthropometricChart = dynamic(
   () => import("@/components/anthropometric-chart").then((mod) => mod.AnthropometricChart),
@@ -322,7 +325,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
     updateStatus: updateDigitalLinkStatus,
     isLoadingRemote: isLoadingDigitalProtocols,
   } = useDigitalProtocols({ initialLinks: initialData?.digitalLinks })
-  const { getForPatient: getProtocolsForPatient } = useProtocols([], {
+  const { getForPatient: getProtocolsForPatient } = useProtocols(EMPTY_PROTOCOL_FOODS, {
     initialProtocols: initialData?.protocols,
   })
   const {
@@ -918,6 +921,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
           screenings={screenings}
           appointments={patientAppointments}
           patientReports={patientReports}
+          mealPlans={initialData?.mealPlans ?? []}
           setQrDialogLink={setQrDialogLink}
           onGenerateLink={() =>
             void generateLink({

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState, type DragEvent } from "react"
-import { X, Plus, AlertTriangle } from "lucide-react"
+import { X, Plus, AlertTriangle, Replace } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,7 +31,7 @@ interface MealSlotProps {
   onUpdateAmount: (slotType: MealSlotType, entryId: string, amount: number) => void
   onDropPayload?: (slotType: MealSlotType, payload: DragPayload) => void
   complianceIndicators?: ComplianceIndicator[]
-  onOpenExchange?: (slotType: MealSlotType) => void
+  onOpenExchange?: (slotType: MealSlotType, entryId?: string) => void
   foods: Food[]
   recipes: Recipe[]
   allergenWarnings?: Map<string, string[]>
@@ -219,6 +219,16 @@ export function MealSlotCard({
                 <span className="text-muted-foreground w-16 text-right text-xs">
                   {formatNumber(Math.round(kcal))} kcal
                 </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => onOpenExchange?.(slot.type, entry.id)}
+                  disabled={!onOpenExchange}
+                >
+                  <Replace className="h-3.5 w-3.5" />
+                  <span className="sr-only">Austauschen</span>
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"

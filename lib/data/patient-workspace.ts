@@ -17,8 +17,9 @@ import type {
   ScreeningResult,
   TherapyDeviceIntegration,
   TherapySetting,
+  DailyMealPlan,
 } from "@/lib/types"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { fetchActivitiesClient } from "@/lib/data/patient-activities-client"
 import { fetchAnthropometricEntriesClient } from "@/lib/data/patient-anthropometrics-client"
 import { fetchCounselingSessionsClient } from "@/lib/data/counseling-client"
@@ -29,7 +30,8 @@ import { fetchLabValuesClient } from "@/lib/data/patient-lab-values-client"
 import { fetchMedicationsClient } from "@/lib/data/patient-medications-client"
 import { fetchPatientAllergensClient } from "@/lib/data/patient-allergens-client"
 import { fetchPatientReportsClient } from "@/lib/data/patient-reports-client"
-import { fetchPatientByRef } from "@/lib/data/patients"
+import { fetchPatientByRef, fetchPatientByRefForUser } from "@/lib/data/patients"
+import { fetchMealPlans } from "@/lib/data/meal-plans"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchProcamResultsClient } from "@/lib/data/patient-procam-client"
 import { fetchProtocolsClient } from "@/lib/data/protocols-client"
@@ -54,6 +56,7 @@ export interface PatientWorkspaceData {
   medications: MedicationEntry[]
   patientAllergens: PatientAllergenEntry[]
   patientReports: PatientReportRecord[]
+  mealPlans: DailyMealPlan[]
   procamResults: ProcamResult[]
   protocols: NutritionProtocol[]
   screenings: ScreeningResult[]
@@ -109,7 +112,15 @@ export async function fetchPatientWorkspaceData(
     return null
   }
 
-  const patient = await fetchPatientByRef(patientRef, supabase)
+  let patient = await fetchPatientByRef(patientRef, supabase)
+  if (!patient) {
+    try {
+      const serviceClient = await createServiceClient()
+      patient = await fetchPatientByRefForUser(patientRef, user.id, serviceClient)
+    } catch (fallbackError) {
+      console.warn("Failed to resolve patient workspace through service fallback:", fallbackError)
+    }
+  }
 
   if (!patient) {
     return {
@@ -127,6 +138,7 @@ export async function fetchPatientWorkspaceData(
       medications: [],
       patientAllergens: [],
       patientReports: [],
+      mealPlans: [],
       procamResults: [],
       protocols: [],
       screenings: [],
@@ -171,6 +183,7 @@ export async function fetchPatientWorkspaceData(
     medications,
     patientAllergens,
     patientReports,
+    mealPlans,
     procamResults,
     protocols,
     screenings,
@@ -189,6 +202,7 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchMedicationsClient(supabase), "medications"),
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
     orEmpty(fetchPatientReportsClient(patient.id, supabase), "patient reports"),
+    orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
     orEmpty(fetchProcamResultsClient(supabase), "PROCAM results"),
     orEmpty(fetchProtocolsClient(supabase, { patientRefs }), "protocols"),
     orEmpty(fetchScreeningsClient(supabase), "screenings"),
@@ -211,6 +225,7 @@ export async function fetchPatientWorkspaceData(
     medications: filterForPatient(medications, patient),
     patientAllergens: filterForPatient(patientAllergens, patient),
     patientReports,
+    mealPlans: filterForPatient(mealPlans, patient),
     procamResults: filterForPatient(procamResults, patient),
     protocols: filterForPatient(protocols, patient),
     screenings: filterForPatient(screenings, patient),

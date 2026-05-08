@@ -18,7 +18,11 @@ function normalizeAmount(row: FoodNutrientRow): number {
   return row.amount * (100 / row.per_amount);
 }
 
-export function useNutrientValues(nutrientId: string, foods: Food[]) {
+export function useNutrientValues(
+  nutrientId: string,
+  foods: Food[],
+  options: { forceRemote?: boolean } = {},
+) {
   const baseValues = useMemo(() => {
     const map = new Map<string, number>();
     let missing = 0;
@@ -40,7 +44,7 @@ export function useNutrientValues(nutrientId: string, foods: Food[]) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (baseValues.missing === 0) {
+    if (baseValues.missing === 0 && !options.forceRemote) {
       setRemoteValues(null);
       setLoading(false);
       setError(null);
@@ -89,7 +93,7 @@ export function useNutrientValues(nutrientId: string, foods: Food[]) {
     return () => {
       active = false;
     };
-  }, [nutrientId, baseValues.missing]);
+  }, [nutrientId, baseValues.missing, options.forceRemote]);
 
   const combinedValues = useMemo(() => {
     const merged = new Map(baseValues.values);

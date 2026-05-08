@@ -4,8 +4,10 @@ import Link from "next/link"
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react"
 import {
   Activity,
+  Archive,
   ArrowRight,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
@@ -39,7 +41,9 @@ import type {
   PatientReportRecord,
   PracticeAppointment,
   ScreeningResult,
+  DailyMealPlan,
 } from "@/lib/types"
+import { usePatientMealPlans } from "@/hooks/use-patient-meal-plans"
 
 type PatientWorkflowStatus = "not_started" | "in_progress" | "done" | "attention"
 type PatientWorkflowStageKey = "intake" | "assessment" | "plan" | "report" | "follow_up"
@@ -83,6 +87,7 @@ interface PatientWorkflowTabProps {
   screenings: ScreeningResult[]
   appointments: PracticeAppointment[]
   patientReports: PatientReportRecord[]
+  mealPlans?: DailyMealPlan[]
   setQrDialogLink: Dispatch<SetStateAction<DigitalProtocolLink | null>>
   onGenerateLink: () => void
   onMarkSubmissionReviewed: (submissionId: string) => void
@@ -110,6 +115,35 @@ const STATUS_META: Record<PatientWorkflowStatus, { label: string; className: str
   },
 }
 
+const MEAL_PLAN_STATUS_META: Record<NonNullable<DailyMealPlan["status"]>, { label: string; className: string }> = {
+  draft: {
+    label: "Entwurf",
+    className: "border-slate-200 text-slate-700",
+  },
+  active: {
+    label: "Aktiv",
+    className: "border-blue-200 text-blue-700",
+  },
+  approved: {
+    label: "Freigegeben",
+    className: "border-emerald-200 text-emerald-700",
+  },
+  archived: {
+    label: "Archiviert",
+    className: "border-slate-200 text-slate-500",
+  },
+}
+
+function mealPlanHref(patientId: string, plan?: DailyMealPlan | null) {
+  const params = new URLSearchParams({ patientId })
+  if (plan?.date) params.set("date", plan.date)
+  return `/ernaehrungsplan?${params.toString()}`
+}
+
+function countPlanEntries(plan: DailyMealPlan) {
+  return plan.slots.reduce((count, slot) => count + slot.entries.length, 0)
+}
+
 function getLatestByDate<T>(items: T[], getDate: (item: T) => string | undefined): T | null {
   const sorted = [...items].sort((a, b) => {
     const aDate = getDate(a) ?? ""
@@ -129,7 +163,7 @@ function WorkflowActionButton({ action }: { action: StageAction }) {
   if (action.href) {
     return (
       <Button asChild variant={action.variant ?? "default"} size="sm">
-        <Link href={action.href}>
+        <Link href={action.href} prefetch={false}>
           {action.label}
           <Icon className="ml-2 h-4 w-4" />
         </Link>
@@ -155,6 +189,7 @@ export function PatientWorkflowTab({
   screenings,
   appointments,
   patientReports,
+  mealPlans: initialMealPlans,
   setQrDialogLink,
   onGenerateLink,
   onMarkSubmissionReviewed,
@@ -162,6 +197,13 @@ export function PatientWorkflowTab({
   digitalLinksPending,
   counselingPending,
 }: PatientWorkflowTabProps) {
+  const {
+    plans: patientMealPlans,
+    latestPlan,
+    isLoadingRemote: mealPlansPending,
+    archivePlan,
+    duplicatePlan,
+  } = usePatientMealPlans(patient, initialMealPlans)
   const latestProtocol = useMemo(
     () => getLatestByDate(protocols, (protocol) => protocol.updatedAt ?? protocol.startDate),
     [protocols],
@@ -216,7 +258,7 @@ export function PatientWorkflowTab({
       ),
     [appointments],
   )
-  const reportHref = `/berichte?patientId=${patient.id}${latestProtocol ? `&protocolId=${latestProtocol.id}` : ""}`
+  const reportHref = `/berichte?patientId=${patient.id}${latestPlan ? `&planId=${latestPlan.id}` : ""}${latestProtocol ? `&protocolId=${latestProtocol.id}` : ""}`
 
   const hasClinicalInputs = anthroEntries.length > 0 || screenings.length > 0
 
@@ -350,15 +392,33 @@ export function PatientWorkflowTab({
   }, [hasClinicalInputs, latestLink, latestProtocol, latestSubmission, patient.id])
 
   const planStage: PatientWorkflowStage = useMemo(() => {
+    if (latestPlan) {
+      const status = latestPlan.status ?? "draft"
+      return {
+        key: "plan",
+        label: "Plan",
+        status: status === "approved" || status === "active" ? "done" : "in_progress",
+        summary:
+          status === "approved"
+            ? "Ein freigegebener patientengebundener Ernährungsplan liegt vor."
+            : status === "active"
+              ? "Ein aktiver patientengebundener Ernährungsplan liegt vor."
+              : "Ein patientengebundener Ernährungsplan ist als Entwurf vorhanden.",
+        dateLabel: formatDate(latestPlan.date),
+        primaryAction: buildAction("Ernährungsplan öffnen", mealPlanHref(patient.id, latestPlan)),
+        secondaryAction: buildAction("Neue Beratung", `/patienten/${patient.id}/beratungen/neu`, undefined, "outline"),
+      }
+    }
+
     if (latestSession) {
       return {
         key: "plan",
         label: "Plan",
-        status: "done",
-        summary: "Eine Beratungssitzung mit Maßnahmen und Empfehlungen wurde dokumentiert.",
+        status: "attention",
+        summary: "Eine Beratungssitzung liegt vor. Der patientengebundene Ernährungsplan sollte als nächster Schritt angelegt werden.",
         dateLabel: formatDate(latestSession.date),
-        primaryAction: buildAction("Beratung öffnen", `/patienten/${patient.id}/beratungen/${latestSession.id}`),
-        secondaryAction: buildAction("Neue Beratung", `/patienten/${patient.id}/beratungen/neu`, undefined, "outline"),
+        primaryAction: buildAction("Ernährungsplan anlegen", mealPlanHref(patient.id)),
+        secondaryAction: buildAction("Beratung öffnen", `/patienten/${patient.id}/beratungen/${latestSession.id}`, undefined, "outline"),
       }
     }
 
@@ -367,9 +427,10 @@ export function PatientWorkflowTab({
         key: "plan",
         label: "Plan",
         status: "attention",
-        summary: "Assessment liegt vor. Als nächster Schritt sollte die Beratung mit Maßnahmen dokumentiert werden.",
+        summary: "Assessment liegt vor. Als nächster Schritt sollte ein patientengebundener Ernährungsplan erstellt werden.",
         dateLabel: formatDate(latestProtocol.startDate),
-        primaryAction: buildAction("Beratung anlegen", `/patienten/${patient.id}/beratungen/neu`),
+        primaryAction: buildAction("Ernährungsplan anlegen", mealPlanHref(patient.id)),
+        secondaryAction: buildAction("Beratung anlegen", `/patienten/${patient.id}/beratungen/neu`, undefined, "outline"),
       }
     }
 
@@ -377,10 +438,10 @@ export function PatientWorkflowTab({
       key: "plan",
       label: "Plan",
       status: "not_started",
-      summary: "Noch keine Beratungs- oder Maßnahmenplanung vorhanden.",
-      primaryAction: buildAction("Beratung anlegen", `/patienten/${patient.id}/beratungen/neu`),
+      summary: "Noch kein patientengebundener Ernährungsplan vorhanden.",
+      primaryAction: buildAction("Ernährungsplan anlegen", mealPlanHref(patient.id)),
     }
-  }, [latestProtocol, latestSession, patient.id])
+  }, [latestPlan, latestProtocol, latestSession, patient.id])
 
   const reportStage: PatientWorkflowStage = useMemo(() => {
     if (latestPatientReportVersion) {
@@ -539,6 +600,18 @@ export function PatientWorkflowTab({
       })
     })
 
+    patientMealPlans.forEach((plan) => {
+      const status = plan.status ?? "draft"
+      events.push({
+        id: `meal_plan_${plan.id}`,
+        date: plan.date,
+        title: plan.title ?? "Ernährungsplan",
+        description: `${MEAL_PLAN_STATUS_META[status].label} · ${countPlanEntries(plan)} Einträge`,
+        href: mealPlanHref(patient.id, plan),
+        tone: status === "approved" || status === "active" ? "success" : "default",
+      })
+    })
+
     appointments
       .filter((appointment) => appointment.patientId === patient.id)
       .forEach((appointment) => {
@@ -566,7 +639,7 @@ export function PatientWorkflowTab({
     return events
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 6)
-  }, [appointments, digitalSubmissions, patient.id, patientReportVersions, protocols, sessions])
+  }, [appointments, digitalSubmissions, patient.id, patientMealPlans, patientReportVersions, protocols, sessions])
 
   const latestActivity = timelineEvents[0] ?? null
   const completedCount = stages.filter((stage) => stage.status === "done").length
@@ -612,7 +685,7 @@ export function PatientWorkflowTab({
             <p>
               {intakeStage.status === "done" ? "Intake übernommen" : "Intake offen"},{" "}
               {assessmentStage.status === "done" ? "Assessment dokumentiert" : "Assessment offen"},{" "}
-              {planStage.status === "done" ? "Beratung dokumentiert" : "Beratung offen"}.
+              {planStage.status === "done" ? "Plan vorhanden" : "Plan offen"}.
             </p>
             <p className="flex items-center gap-2">
               <UserRound className="h-4 w-4" />
@@ -673,7 +746,7 @@ export function PatientWorkflowTab({
                       <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                         <span>{formatDate(event.date)}</span>
                         {event.href ? (
-                          <Link href={event.href} className="font-medium text-foreground hover:underline">
+                        <Link href={event.href} prefetch={false} className="font-medium text-foreground hover:underline">
                             Öffnen
                           </Link>
                         ) : null}
@@ -697,7 +770,7 @@ export function PatientWorkflowTab({
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={`/patienten/${patient.id}/protokolle/neu`}>
+              <Link href={`/patienten/${patient.id}/protokolle/neu`} prefetch={false}>
                 <span className="flex items-center gap-2">
                   <Stethoscope className="h-4 w-4" />
                   Neues Protokoll
@@ -706,7 +779,7 @@ export function PatientWorkflowTab({
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={`/patienten/${patient.id}/beratungen/neu`}>
+              <Link href={`/patienten/${patient.id}/beratungen/neu`} prefetch={false}>
                 <span className="flex items-center gap-2">
                   <ClipboardCheck className="h-4 w-4" />
                   Neue Beratung
@@ -715,7 +788,16 @@ export function PatientWorkflowTab({
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={reportHref}>
+              <Link href={mealPlanHref(patient.id, latestPlan)} prefetch={false}>
+                <span className="flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4" />
+                  {latestPlan ? "Ernährungsplan öffnen" : "Ernährungsplan anlegen"}
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link href={reportHref} prefetch={false}>
                 <span className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   Berichte öffnen
@@ -724,7 +806,7 @@ export function PatientWorkflowTab({
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={`/termine?patientId=${patient.id}`}>
+              <Link href={`/termine?patientId=${patient.id}`} prefetch={false}>
                 <span className="flex items-center gap-2">
                   <CalendarClock className="h-4 w-4" />
                   Kontrolltermin planen
@@ -735,6 +817,86 @@ export function PatientWorkflowTab({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>Ernährungspläne</CardTitle>
+            <CardDescription>
+              Patientengebundene Tagespläne mit Status, Datum und direktem Einstieg in den Planner.
+            </CardDescription>
+          </div>
+          <Button asChild size="sm">
+            <Link href={mealPlanHref(patient.id)} prefetch={false}>
+              <CalendarDays className="mr-2 h-4 w-4" />
+              Plan anlegen
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {patientMealPlans.length > 0 ? (
+            <div className="space-y-3">
+              {patientMealPlans.slice(0, 8).map((plan) => {
+                const status = plan.status ?? "draft"
+                return (
+                  <div
+                    key={plan.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">{plan.title ?? "Ernährungsplan"}</p>
+                        <Badge variant="outline" className={MEAL_PLAN_STATUS_META[status].className}>
+                          {MEAL_PLAN_STATUS_META[status].label}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {formatDate(plan.date)} · {countPlanEntries(plan)} Einträge
+                        {plan.notes ? ` · ${plan.notes}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={mealPlanHref(patient.id, plan)} prefetch={false}>Öffnen</Link>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void duplicatePlan(plan)}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Duplizieren
+                      </Button>
+                      {status !== "archived" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void archivePlan(plan)}
+                        >
+                          <Archive className="mr-2 h-4 w-4" />
+                          Archivieren
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {patientMealPlans.length > 8 && (
+                <p className="text-sm text-muted-foreground">
+                  {patientMealPlans.length - 8} weitere Pläne sind über die Datumsauswahl im Planner erreichbar.
+                </p>
+              )}
+            </div>
+          ) : mealPlansPending ? (
+            <p className="text-sm text-muted-foreground">Ernährungspläne werden synchronisiert.</p>
+          ) : (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              Noch kein patientengebundener Ernährungsplan vorhanden. Lege einen Plan an, damit er hier,
+              in der Timeline und in der Berichtsauswahl auftaucht.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -783,10 +945,10 @@ export function PatientWorkflowTab({
                       <div className="flex gap-2">
                         <Badge variant="outline">{version.snapshot.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
                         <Button asChild size="sm">
-                          <Link href={`/berichte?reportVersionId=${version.id}`}>Historie öffnen</Link>
+                          <Link href={`/berichte?reportVersionId=${version.id}`} prefetch={false}>Historie öffnen</Link>
                         </Button>
                         <Button asChild size="sm" variant="outline">
-                          <Link href={`/api/patient-report-versions/${version.id}/download`}>
+                          <Link href={`/api/patient-report-versions/${version.id}/download`} prefetch={false}>
                             {version.format} herunterladen
                           </Link>
                         </Button>
@@ -812,7 +974,7 @@ export function PatientWorkflowTab({
                   <div className="flex gap-2">
                     <Badge variant="outline">{report.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
                     <Button asChild size="sm">
-                      <Link href={`/berichte?reportId=${report.id}`}>Bericht öffnen</Link>
+                      <Link href={`/berichte?reportId=${report.id}`} prefetch={false}>Bericht öffnen</Link>
                     </Button>
                   </div>
                 </div>

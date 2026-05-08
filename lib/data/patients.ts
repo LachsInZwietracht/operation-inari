@@ -181,3 +181,27 @@ export async function fetchPatientByRef(
     return null;
   }
 }
+
+export async function fetchPatientByRefForUser(
+  patientRef: string,
+  userId: string,
+  supabase: SupabaseClient,
+): Promise<Patient | null> {
+  const column = isUuid(patientRef) ? "id" : "legacy_id";
+  const { data, error } = await withTimeout(
+    supabase
+      .from("patients")
+      .select(PATIENT_COLUMNS)
+      .eq(column, patientRef)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    5000,
+    "Supabase patient detail service lookup timed out",
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? mapPatientRow(data as unknown as PatientRow) : null;
+}

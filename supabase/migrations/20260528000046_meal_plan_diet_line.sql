@@ -5,3 +5,6 @@
 
 ALTER TABLE daily_meal_plans
   ADD COLUMN IF NOT EXISTS diet_line_id TEXT;
+
+CREATE INDEX IF NOT EXISTS daily_meal_plans_user_diet_line_date_idx
+  ON daily_meal_plans(user_id, diet_line_id, date DESC);

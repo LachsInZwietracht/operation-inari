@@ -30,10 +30,11 @@ export function PatientDetailClient({
   initialData?: PatientWorkspaceData | null
 }) {
   const { getPatient, isLoadingRemote } = usePatients({
-    initialPatients: initialData?.patients,
+    initialPatients: initialData?.patient ? initialData.patients : undefined,
   })
   const { loading: authLoading, isAuthenticated } = useAuth()
   const patient = initialData?.patient ?? getPatient(patientId)
+  const resolvedInitialData = initialData?.patient ? initialData : undefined
 
   if (!patient && (authLoading || (isAuthenticated && isLoadingRemote))) {
     return (
@@ -70,7 +71,7 @@ export function PatientDetailClient({
           </Link>
         </Button>
       </PageHeader>
-      <PatientTabs patient={patient} initialData={initialData} />
+      <PatientTabs patient={patient} initialData={resolvedInitialData} />
     </div>
   )
 }
