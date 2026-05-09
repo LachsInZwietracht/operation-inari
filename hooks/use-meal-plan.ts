@@ -119,6 +119,7 @@ export function useMealPlan(
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
   const migrationDone = useRef(false)
   const plansRef = useRef(plans)
+  const dirtyDatesRef = useRef(new Set<string>())
 
   useEffect(() => {
     plansRef.current = plans
@@ -147,7 +148,12 @@ export function useMealPlan(
           nextPlans[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
         }
         for (const plan of persistedPlans) {
-          nextPlans[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+          const dirtyPlan = dirtyDatesRef.current.has(plan.date)
+            ? plansRef.current[plan.date]
+            : undefined
+          nextPlans[plan.date] = ensureAllSlots(
+            normalizeMealPlanFoodReferences(dirtyPlan ?? plan, foods),
+          )
         }
 
         const localCandidates = Object.values(plansRef.current).filter(isLocalMigrationCandidate)
@@ -248,6 +254,7 @@ export function useMealPlan(
       let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
+        dirtyDatesRef.current.add(currentDate)
         const currentPlan = prev[currentDate]
           ? ensureAllSlots(prev[currentDate])
           : createEmptyPlan(currentDate, defaultMetadata)
@@ -276,6 +283,7 @@ export function useMealPlan(
       let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
+        dirtyDatesRef.current.add(date)
         const basePlan = prev[date]
           ? ensureAllSlots(prev[date])
           : createEmptyPlan(date, defaultMetadata)
@@ -388,6 +396,7 @@ export function useMealPlan(
       if (isPlanLocked(targetDate)) return
       const sourcePlan = getPlanForDate(sourceDate)
       const copiedPlan = clonePlanForDate(sourcePlan, targetDate)
+      dirtyDatesRef.current.add(targetDate)
 
       setPlans((prev) => ({
         ...prev,
@@ -468,6 +477,46 @@ export function useMealPlan(
       }
     },
     [getPlanForDate, syncPlanToSupabase],
+  )
+
+  const approvePlan = useCallback(
+    async (
+      date: string,
+      metadata: Pick<DailyMealPlan, "approvedAt" | "approvedBy"> = {},
+    ) => {
+      let approvedPlan: DailyMealPlan | null = null
+
+      setPlans((prev) => {
+        dirtyDatesRef.current.add(date)
+        const basePlan = prev[date]
+          ? ensureAllSlots(prev[date])
+          : createEmptyPlan(date, defaultMetadata)
+        approvedPlan = {
+          ...basePlan,
+          status: "approved",
+          approvedAt: metadata.approvedAt ?? basePlan.approvedAt ?? new Date().toISOString(),
+          approvedBy: metadata.approvedBy ?? basePlan.approvedBy,
+        }
+
+        return {
+          ...prev,
+          [date]: approvedPlan,
+        }
+      })
+
+      if (!approvedPlan) return false
+
+      const persistedPlan = await syncPlanToSupabase(approvedPlan)
+      if (!persistedPlan || !isUuid(persistedPlan.id)) return false
+
+      try {
+        return await snapshotMealPlanVersion(persistedPlan, { reason: "approved" })
+      } catch (error) {
+        console.error(`Failed to approve snapshot meal plan ${persistedPlan.id}:`, error)
+        return false
+      }
+    },
+    [defaultMetadata, syncPlanToSupabase],
   )
 
   const reopenPlan = useCallback(
@@ -554,6 +603,7 @@ export function useMealPlan(
     updatePlanMetadata,
     applyTemplateToDate,
     createPlanCheckpoint,
+    approvePlan,
     reopenPlan,
     restorePlanVersion,
     isPlanLocked,

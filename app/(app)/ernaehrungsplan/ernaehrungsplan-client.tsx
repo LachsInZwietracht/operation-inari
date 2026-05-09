@@ -32,6 +32,7 @@ import {
   Settings2,
   Sparkles,
   Trash2,
+  User,
   Users,
   Utensils,
 } from "lucide-react"
@@ -326,6 +327,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     updatePlanMetadata,
     applyTemplateToDate,
     createPlanCheckpoint,
+    approvePlan,
     reopenPlan,
     restorePlanVersion,
     setDate,
@@ -913,28 +915,30 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     toast.success("Planhinweise gespeichert.")
   }
 
-  const updateCurrentPlanStatus = (status: NonNullable<DailyMealPlan["status"]>) => {
+  const updateCurrentPlanStatus = async (status: NonNullable<DailyMealPlan["status"]>) => {
     if (status === "approved" && clinicalReview.blockingItems.length > 0) {
       toast.error("Freigabe blockiert: Bitte kritische Prüfpunkte klären.")
       return
     }
 
-    const wasApproved = currentPlan.status === "approved"
+    if (status === "approved") {
+      const version = await approvePlan(currentDate, {
+        approvedAt: currentPlan.approvedAt ?? new Date().toISOString(),
+        approvedBy: currentPlan.approvedBy,
+      })
+      if (version) {
+        recordMealPlanVersion(version)
+      }
+      toast.success(`Planstatus: ${PLAN_STATUS_LABELS[status]}`)
+      return
+    }
+
     updatePlanMetadata(currentDate, {
       status,
-      approvedAt: status === "approved" ? currentPlan.approvedAt ?? new Date().toISOString() : undefined,
-      approvedBy: status === "approved" ? currentPlan.approvedBy : undefined,
+      approvedAt: undefined,
+      approvedBy: undefined,
     })
     toast.success(`Planstatus: ${PLAN_STATUS_LABELS[status]}`)
-
-    // Snapshots are written by the hook after persistence completes; give that
-    // round-trip a moment to land before refetching the version list so the
-    // newly-approved revision shows up in the history immediately.
-    if (status === "approved" && !wasApproved) {
-      window.setTimeout(() => {
-        void refreshMealPlanVersions()
-      }, 800)
-    }
   }
 
   const attachCurrentPatient = () => {
@@ -1573,40 +1577,42 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der PRODIscore zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
       />
 
-      {patientId && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
-            <div>
-              <p className="font-medium">
-                Patientenkontext: {patient ? `${patient.firstName} ${patient.lastName}` : "Patient wird geladen"}
-              </p>
-              <p className="text-muted-foreground">
-                DGE-Referenzen und Allergenwarnungen werden für diesen Kontext ausgewertet.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">{refConfig.standardId.toUpperCase()}</Badge>
-              {patient?.indication && <Badge variant="outline">{patient.indication}</Badge>}
-              {patientAllergens.length > 0 && (
-                <Badge variant="outline">{patientAllergens.length} Allergen-/Intoleranzhinweise</Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Planakte</CardTitle>
+            <div className="space-y-1">
+              <CardTitle className="text-base">
+                Planakte
+                {patientId && (
+                  <span className="text-muted-foreground ml-2 text-sm font-normal">
+                    · {patient ? `${patient.firstName} ${patient.lastName}` : "Patient wird geladen"}
+                  </span>
+                )}
+              </CardTitle>
               <CardDescription>
-                Titel, Status und klinische Hinweise für den aktuellen Tagesplan.
+                {patientId
+                  ? "Patientenkontext, klinische Hinweise und Versionshistorie für den aktuellen Tagesplan."
+                  : "Titel, Status und klinische Hinweise für den aktuellen Tagesplan."}
               </CardDescription>
             </div>
-            <Badge variant={currentPlan.status === "approved" ? "secondary" : "outline"}>
-              {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {patientId && (
+                <>
+                  <Badge variant="secondary">{refConfig.standardId.toUpperCase()}</Badge>
+                  {patient?.indication && (
+                    <Badge variant="outline">{patient.indication}</Badge>
+                  )}
+                  {patientAllergens.length > 0 && (
+                    <Badge variant="outline">
+                      {patientAllergens.length} Allergen-/Intoleranzhinweise
+                    </Badge>
+                  )}
+                </>
+              )}
+              <Badge variant={currentPlan.status === "approved" ? "secondary" : "outline"}>
+                {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
@@ -1627,7 +1633,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             </div>
             <div className="space-y-1.5">
               <p className="text-xs font-medium uppercase text-muted-foreground">Status</p>
-              <Select value={currentPlan.status ?? "draft"} onValueChange={(value) => updateCurrentPlanStatus(value as NonNullable<DailyMealPlan["status"]>)}>
+              <Select value={currentPlan.status ?? "draft"} onValueChange={(value) => void updateCurrentPlanStatus(value as NonNullable<DailyMealPlan["status"]>)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Status wählen" />
                 </SelectTrigger>
@@ -1955,12 +1961,57 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </TabsList>
 
         <TabsContent value="day" className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur">
+            {patientId && (
+              <Badge
+                variant="outline"
+                className="bg-background hidden gap-1 px-2 py-1 text-xs sm:inline-flex"
+                title={
+                  patient
+                    ? `${patient.firstName} ${patient.lastName}${patient.indication ? ` · ${patient.indication}` : ""}`
+                    : undefined
+                }
+              >
+                <User className="h-3 w-3" />
+                <span className="max-w-[140px] truncate">
+                  {patient ? `${patient.firstName} ${patient.lastName}` : "Patient"}
+                </span>
+              </Badge>
+            )}
+            <Badge
+              variant={currentPlan.status === "approved" ? "secondary" : "outline"}
+              className={cn(
+                "gap-1 px-2 py-1 text-xs",
+                currentPlan.status === "approved" && "bg-emerald-50 text-emerald-700",
+              )}
+            >
+              {currentPlan.status === "approved" && <Lock className="h-3 w-3" />}
+              {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
+            </Badge>
+            {planAllergenSummary.totalConflicts > 0 && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "gap-1 px-2 py-1 text-xs",
+                  planAllergenSummary.highestSeverity === "severe"
+                    ? "border-red-300 bg-red-50 text-red-800"
+                    : planAllergenSummary.highestSeverity === "moderate"
+                      ? "border-amber-300 bg-amber-50 text-amber-800"
+                      : "border-yellow-300 bg-yellow-50 text-yellow-800",
+                )}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {planAllergenSummary.affectedEntryIds.size} Allergenkonflikte
+              </Badge>
+            )}
+            <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
             <Button variant="outline" size="icon" onClick={goToPreviousDay}>
               <ChevronLeft className="h-4 w-4" />
               <span className="sr-only">Vorheriger Tag</span>
             </Button>
-            <div className="text-sm font-medium capitalize">{formattedDate}</div>
+            <div className="hidden text-sm font-medium capitalize sm:block">
+              {formattedDate}
+            </div>
             <Button variant="outline" size="icon" onClick={goToNextDay}>
               <ChevronRight className="h-4 w-4" />
               <span className="sr-only">Nächster Tag</span>
@@ -1976,13 +2027,13 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <Calendar mode="single" selected={parsedDate} onSelect={handleDateSelect} locale={de} />
               </PopoverContent>
             </Popover>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               <Select
                 value={dietLineId}
                 onValueChange={handleDietLineChange}
                 disabled={currentPlan.status === "approved"}
               >
-                <SelectTrigger className="w-[220px]">
+                <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Kostform/Zielprofil" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2077,6 +2128,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+          </div>
+          <div className="text-muted-foreground -mt-2 text-xs capitalize sm:hidden">
+            {formattedDate}
           </div>
 
           {planAllergenSummary.totalConflicts > 0 && (
