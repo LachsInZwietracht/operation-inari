@@ -36,6 +36,25 @@ export interface DailyMealPlan {
   slots: MealSlot[];
 }
 
+export interface MealPlanVersion {
+  id: ID;
+  mealPlanId: ID;
+  versionNumber: number;
+  reason: "approved" | "manual" | "reopened";
+  createdBy?: ID;
+  createdAt: string;
+  snapshot: {
+    title?: string;
+    notes?: string;
+    status?: MealPlanStatus;
+    targetProfileId?: ID;
+    dietLineId?: string;
+    approvedAt?: string;
+    approvedBy?: ID;
+    slots: MealSlot[];
+  };
+}
+
 export interface MealPlanTemplate {
   id: ID;
   legacyId?: ID;

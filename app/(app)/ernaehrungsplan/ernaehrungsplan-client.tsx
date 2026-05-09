@@ -21,9 +21,12 @@ import {
   Copy,
   Download,
   FileText,
+  History,
   LayoutTemplate,
   Loader2,
+  Lock,
   Plus,
+  RotateCcw,
   Save,
   Search,
   Settings2,
@@ -108,6 +111,7 @@ import type {
   DailyMealPlan,
   Food,
   MealPlanTemplate,
+  MealPlanVersion,
   Recipe,
   DietLinePreset,
 } from "@/lib/types"
@@ -125,6 +129,7 @@ import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
+import { useMealPlanVersions } from "@/hooks/use-meal-plan-versions"
 import {
   buildDefaultReportExportRequest,
   buildTeachingKitchenExportRequest,
@@ -264,10 +269,17 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    reopenPlan,
+    restorePlanVersion,
     setDate,
     goToNextDay,
     goToPreviousDay,
   } = useMealPlan(initialPlans, serverFoods, defaultPlanMetadata, initialDate)
+  const {
+    versions: mealPlanVersions,
+    isLoading: mealPlanVersionsLoading,
+    refresh: refreshMealPlanVersions,
+  } = useMealPlanVersions(currentPlan.id)
   const {
     presets: dietLines,
     isLoading: dietLinesLoading,
@@ -333,6 +345,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       void loadFoodSearchIndex()
     }
   }, [commandOpen, loadFoodSearchIndex])
+
+  useEffect(() => {
+    if (currentPlan.status !== "approved") return
+    const timer = window.setTimeout(() => {
+      void refreshMealPlanVersions()
+    }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [currentPlan.approvedAt, currentPlan.status, refreshMealPlanVersions])
 
   const hydrateFood = useCallback(
     async (foodId: string): Promise<Food | null> => {
@@ -671,12 +691,22 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       return
     }
 
+    const wasApproved = currentPlan.status === "approved"
     updatePlanMetadata(currentDate, {
       status,
       approvedAt: status === "approved" ? currentPlan.approvedAt ?? new Date().toISOString() : undefined,
       approvedBy: status === "approved" ? currentPlan.approvedBy : undefined,
     })
     toast.success(`Planstatus: ${PLAN_STATUS_LABELS[status]}`)
+
+    // Snapshots are written by the hook after persistence completes; give that
+    // round-trip a moment to land before refetching the version list so the
+    // newly-approved revision shows up in the history immediately.
+    if (status === "approved" && !wasApproved) {
+      window.setTimeout(() => {
+        void refreshMealPlanVersions()
+      }, 800)
+    }
   }
 
   const attachCurrentPatient = () => {
@@ -686,6 +716,21 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       title: currentPlan.title ?? (patient ? `Ernährungsplan ${patient.firstName} ${patient.lastName}` : undefined),
     })
     toast.success("Patientenkontext am Plan gespeichert.")
+  }
+
+  const reopenCurrentPlan = () => {
+    reopenPlan(currentDate)
+    toast.success("Plan wurde als Entwurf wieder geöffnet.")
+  }
+
+  const restoreVersion = (version: MealPlanVersion) => {
+    if (currentPlan.status === "approved") {
+      toast.error("Freigegebene Pläne vor dem Wiederherstellen als Entwurf öffnen.")
+      return
+    }
+
+    restorePlanVersion(currentDate, version.snapshot)
+    toast.success(`Version ${version.versionNumber} wurde als Entwurf übernommen.`)
   }
 
   const openDietLineEditor = () => {
@@ -1200,6 +1245,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 key={`title-${currentPlan.id}-${currentPlan.date}`}
                 defaultValue={currentPlan.title ?? ""}
                 placeholder="z. B. Reduktionskost Woche 1"
+                readOnly={currentPlan.status === "approved"}
                 onBlur={(event) => {
                   if (event.currentTarget.value.trim() !== (currentPlan.title ?? "")) {
                     saveCurrentPlanTitle(event.currentTarget.value)
@@ -1229,6 +1275,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 defaultValue={currentPlan.notes ?? ""}
                 placeholder="Indikation, Beratungshinweise, Patientenvorlieben oder interne Prüfnotizen"
                 rows={2}
+                readOnly={currentPlan.status === "approved"}
                 onBlur={(event) => {
                   if (event.currentTarget.value.trim() !== (currentPlan.notes ?? "")) {
                     saveCurrentPlanNotes(event.currentTarget.value)
@@ -1254,9 +1301,24 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 {currentPlan.approvedAt ? format(parseISO(currentPlan.approvedAt), "dd.MM.yyyy HH:mm") : "offen"}
               </span>
             </div>
+            {currentPlan.status === "approved" && (
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>Bearbeitung</span>
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="h-3.5 w-3.5" />
+                  gesperrt
+                </span>
+              </div>
+            )}
             {patientId && currentPlan.patientId !== patientId && (
               <Button size="sm" variant="outline" className="mt-2 w-full" onClick={attachCurrentPatient}>
                 Patient zuordnen
+              </Button>
+            )}
+            {currentPlan.status === "approved" && (
+              <Button size="sm" variant="outline" className="mt-2 w-full" onClick={reopenCurrentPlan}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Als Entwurf öffnen
               </Button>
             )}
           </div>
@@ -1293,6 +1355,63 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   <p className="mt-1 text-muted-foreground">{item.description}</p>
                 </div>
               ))}
+            </div>
+          </div>
+          <div className="rounded-md border p-3 lg:col-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <History className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Versionshistorie</p>
+                  <p className="text-xs text-muted-foreground">
+                    Freigaben werden als unveränderliche Snapshots gespeichert.
+                  </p>
+                </div>
+              </div>
+              <Badge variant="outline">
+                {mealPlanVersionsLoading ? "lädt" : `${mealPlanVersions.length} Versionen`}
+              </Badge>
+            </div>
+            <div className="mt-3 space-y-2">
+              {mealPlanVersions.length === 0 && (
+                <p className="text-muted-foreground text-sm">
+                  Noch keine freigegebene Version für diesen Tagesplan.
+                </p>
+              )}
+              {mealPlanVersions.slice(0, 3).map((version) => {
+                const entryCount = version.snapshot.slots.reduce(
+                  (sum, slot) => sum + slot.entries.length,
+                  0,
+                )
+                return (
+                  <div
+                    key={version.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-2 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        Version {version.versionNumber} · {format(parseISO(version.createdAt), "dd.MM.yyyy HH:mm")}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {entryCount} Einträge · {version.reason === "approved" ? "Freigabe" : version.reason}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={currentPlan.status === "approved"}
+                      onClick={() => restoreVersion(version)}
+                    >
+                      Wiederherstellen
+                    </Button>
+                  </div>
+                )
+              })}
+              {currentPlan.status === "approved" && mealPlanVersions.length > 0 && (
+                <p className="text-muted-foreground text-xs">
+                  Zum Wiederherstellen zuerst den Plan als Entwurf öffnen.
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -1413,7 +1532,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               </PopoverContent>
             </Popover>
             <div className="ml-auto flex items-center gap-2">
-              <Select value={dietLineId} onValueChange={handleDietLineChange}>
+              <Select
+                value={dietLineId}
+                onValueChange={handleDietLineChange}
+                disabled={currentPlan.status === "approved"}
+              >
                 <SelectTrigger className="w-[220px]">
                   <SelectValue placeholder="Kostform/Zielprofil" />
                 </SelectTrigger>
@@ -1439,7 +1562,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel>Planvorlagen</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={openApplyTemplateDialog}>
+                  <DropdownMenuItem
+                    disabled={currentPlan.status === "approved"}
+                    onSelect={openApplyTemplateDialog}
+                  >
                     <LayoutTemplate className="mr-2 h-4 w-4" />
                     <div className="flex flex-col">
                       <span>Plan aus Vorlage erzeugen</span>
@@ -1523,6 +1649,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   foods={foods}
                   recipes={recipes}
                   allergenWarnings={entryAllergenWarnings}
+                  isLocked={currentPlan.status === "approved"}
                 />
               ))}
             </div>

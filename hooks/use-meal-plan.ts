@@ -5,8 +5,9 @@ import { addDays, subDays, format, parseISO } from "date-fns"
 import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot } from "@/lib/types"
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization"
 import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
+import { snapshotMealPlanVersion } from "@/lib/data/meal-plan-versions-client"
 import { getLocalMealPlansRecord, saveLocalMealPlansRecord } from "@/lib/data/local-meal-plans"
-import { isLocalMigrationCandidate } from "@/lib/data/local-records"
+import { isLocalMigrationCandidate, isUuid } from "@/lib/data/local-records"
 import { useAuth } from "@/hooks/use-auth"
 
 const ALL_SLOT_TYPES: MealSlotType[] = [
@@ -212,8 +213,8 @@ export function useMealPlan(
   )
 
   const syncPlanToSupabase = useCallback(
-    async (plan: DailyMealPlan) => {
-      if (!isAuthenticated) return
+    async (plan: DailyMealPlan, options: { snapshot?: boolean } = {}) => {
+      if (!isAuthenticated) return null
 
       try {
         const persistedPlan = await persistMealPlan(plan)
@@ -221,8 +222,19 @@ export function useMealPlan(
           ...prev,
           [persistedPlan.date]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
         }))
+
+        if (options.snapshot && isUuid(persistedPlan.id)) {
+          try {
+            await snapshotMealPlanVersion(persistedPlan, { reason: "approved" })
+          } catch (snapErr) {
+            console.error(`Failed to snapshot meal plan ${persistedPlan.id}:`, snapErr)
+          }
+        }
+
+        return persistedPlan
       } catch (err) {
         console.error(`Failed to sync meal plan for ${plan.date}:`, err)
+        return null
       }
     },
     [foods, isAuthenticated]
@@ -231,12 +243,15 @@ export function useMealPlan(
   const updateCurrentPlan = useCallback(
     (updater: (plan: DailyMealPlan) => DailyMealPlan) => {
       let updatedPlan: DailyMealPlan | null = null
+      let shouldSnapshot = false
 
       setPlans((prev) => {
         const currentPlan = prev[currentDate]
           ? ensureAllSlots(prev[currentDate])
           : createEmptyPlan(currentDate, defaultMetadata)
         updatedPlan = updater(currentPlan)
+        shouldSnapshot =
+          currentPlan.status !== "approved" && updatedPlan.status === "approved"
 
         return {
           ...prev,
@@ -245,7 +260,7 @@ export function useMealPlan(
       })
 
       if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan)
+        void syncPlanToSupabase(updatedPlan, { snapshot: shouldSnapshot })
       }
     },
     [currentDate, defaultMetadata, syncPlanToSupabase]
@@ -254,12 +269,15 @@ export function useMealPlan(
   const updatePlanForDate = useCallback(
     (date: string, updater: (plan: DailyMealPlan) => DailyMealPlan) => {
       let updatedPlan: DailyMealPlan | null = null
+      let shouldSnapshot = false
 
       setPlans((prev) => {
         const basePlan = prev[date]
           ? ensureAllSlots(prev[date])
           : createEmptyPlan(date, defaultMetadata)
         updatedPlan = updater(basePlan)
+        shouldSnapshot =
+          basePlan.status !== "approved" && updatedPlan.status === "approved"
 
         return {
           ...prev,
@@ -268,15 +286,22 @@ export function useMealPlan(
       })
 
       if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan)
+        void syncPlanToSupabase(updatedPlan, { snapshot: shouldSnapshot })
       }
     },
     [defaultMetadata, syncPlanToSupabase],
   )
 
+  const isPlanLocked = useCallback(
+    (date: string) => plans[date]?.status === "approved",
+    [plans],
+  )
+
   const addEntry = useCallback(
     (slotType: MealSlotType, entry: Omit<MealEntry, "id">) => {
+      if (isPlanLocked(currentDate)) return
       updateCurrentPlan((plan) => {
+        if (plan.status === "approved") return plan
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -288,12 +313,14 @@ export function useMealPlan(
         return { ...plan, slots: newSlots }
       })
     },
-    [updateCurrentPlan]
+    [currentDate, isPlanLocked, updateCurrentPlan]
   )
 
   const removeEntry = useCallback(
     (slotType: MealSlotType, entryId: string) => {
+      if (isPlanLocked(currentDate)) return
       updateCurrentPlan((plan) => {
+        if (plan.status === "approved") return plan
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -305,12 +332,14 @@ export function useMealPlan(
         return { ...plan, slots: newSlots }
       })
     },
-    [updateCurrentPlan]
+    [currentDate, isPlanLocked, updateCurrentPlan]
   )
 
   const updateEntryAmount = useCallback(
     (slotType: MealSlotType, entryId: string, amount: number) => {
+      if (isPlanLocked(currentDate)) return
       updateCurrentPlan((plan) => {
+        if (plan.status === "approved") return plan
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -324,12 +353,14 @@ export function useMealPlan(
         return { ...plan, slots: newSlots }
       })
     },
-    [updateCurrentPlan]
+    [currentDate, isPlanLocked, updateCurrentPlan]
   )
 
   const replaceEntry = useCallback(
     (slotType: MealSlotType, entryId: string, entry: Omit<MealEntry, "id">) => {
+      if (isPlanLocked(currentDate)) return
       updateCurrentPlan((plan) => {
+        if (plan.status === "approved") return plan
         const newSlots = plan.slots.map((slot) => {
           if (slot.type !== slotType) return slot
           return {
@@ -343,11 +374,12 @@ export function useMealPlan(
         return { ...plan, slots: newSlots }
       })
     },
-    [updateCurrentPlan],
+    [currentDate, isPlanLocked, updateCurrentPlan],
   )
 
   const copyPlanToDate = useCallback(
     (sourceDate: string, targetDate: string) => {
+      if (isPlanLocked(targetDate)) return
       const sourcePlan = getPlanForDate(sourceDate)
       const copiedPlan = clonePlanForDate(sourcePlan, targetDate)
 
@@ -358,17 +390,21 @@ export function useMealPlan(
 
       void syncPlanToSupabase(copiedPlan)
     },
-    [getPlanForDate, syncPlanToSupabase],
+    [getPlanForDate, isPlanLocked, syncPlanToSupabase],
   )
 
   const clearPlanForDate = useCallback(
     (date: string) => {
-      updatePlanForDate(date, (plan) => ({
-        ...plan,
-        slots: ensureAllSlots(plan).slots.map((slot) => ({ ...slot, entries: [] })),
-      }))
+      if (isPlanLocked(date)) return
+      updatePlanForDate(date, (plan) => {
+        if (plan.status === "approved") return plan
+        return {
+          ...plan,
+          slots: ensureAllSlots(plan).slots.map((slot) => ({ ...slot, entries: [] })),
+        }
+      })
     },
-    [updatePlanForDate],
+    [isPlanLocked, updatePlanForDate],
   )
 
   const updatePlanMetadata = useCallback(
@@ -387,7 +423,9 @@ export function useMealPlan(
       slots: MealSlot[],
       metadata: MealPlanMetadataPatch = {},
     ) => {
+      if (isPlanLocked(date)) return
       updatePlanForDate(date, (plan) => {
+        if (plan.status === "approved") return plan
         const cloned: MealSlot[] = ALL_SLOT_TYPES.map((type) => {
           const incoming = slots.find((slot) => slot.type === type)
           return {
@@ -405,7 +443,47 @@ export function useMealPlan(
         }
       })
     },
+    [isPlanLocked, updatePlanForDate],
+  )
+
+  const reopenPlan = useCallback(
+    (date: string) => {
+      updatePlanForDate(date, (plan) => ({
+        ...plan,
+        status: "draft",
+        approvedAt: undefined,
+        approvedBy: undefined,
+      }))
+    },
     [updatePlanForDate],
+  )
+
+  const restorePlanVersion = useCallback(
+    (date: string, snapshot: { slots: MealSlot[]; title?: string; notes?: string; targetProfileId?: string; dietLineId?: string }) => {
+      if (isPlanLocked(date)) return
+      updatePlanForDate(date, (plan) => {
+        if (plan.status === "approved") return plan
+        const cloned: MealSlot[] = ALL_SLOT_TYPES.map((type) => {
+          const incoming = snapshot.slots.find((slot) => slot.type === type)
+          return {
+            type,
+            entries: (incoming?.entries ?? []).map((entry) => cloneEntry(entry)),
+          }
+        })
+        return {
+          ...plan,
+          title: snapshot.title ?? plan.title,
+          notes: snapshot.notes ?? plan.notes,
+          targetProfileId: snapshot.targetProfileId ?? plan.targetProfileId,
+          dietLineId: snapshot.dietLineId ?? plan.dietLineId,
+          status: "draft",
+          approvedAt: undefined,
+          approvedBy: undefined,
+          slots: cloned,
+        }
+      })
+    },
+    [isPlanLocked, updatePlanForDate],
   )
 
   const setDate = useCallback((date: string) => {
@@ -433,6 +511,9 @@ export function useMealPlan(
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    reopenPlan,
+    restorePlanVersion,
+    isPlanLocked,
     setDate,
     goToNextDay,
     goToPreviousDay,

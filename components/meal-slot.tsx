@@ -35,6 +35,7 @@ interface MealSlotProps {
   foods: Food[]
   recipes: Recipe[]
   allergenWarnings?: Map<string, string[]>
+  isLocked?: boolean
 }
 
 function getEntryName(
@@ -86,6 +87,7 @@ export function MealSlotCard({
   foods,
   recipes,
   allergenWarnings,
+  isLocked = false,
 }: MealSlotProps) {
   const foodMap = useMemo(() => new Map(foods.map((f) => [f.id, f])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
@@ -105,7 +107,7 @@ export function MealSlotCard({
     [onUpdateAmount, slot.type]
   )
 
-  const dropEnabled = Boolean(onDropPayload)
+  const dropEnabled = Boolean(onDropPayload) && !isLocked
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
@@ -162,6 +164,7 @@ export function MealSlotCard({
               size="sm"
               className="h-7 px-2 text-xs"
               onClick={() => onOpenExchange(slot.type)}
+              disabled={isLocked}
             >
               Austauschliste
             </Button>
@@ -170,7 +173,7 @@ export function MealSlotCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        {slot.entries.length === 0 && (
+        {slot.entries.length === 0 && !isLocked && (
           <p className="text-muted-foreground text-sm">
             Noch keine Einträge. {dropEnabled ? "Ziehe Rezepte aus der Bibliothek hierher oder" : ""}
             <Button
@@ -183,6 +186,9 @@ export function MealSlotCard({
             </Button>
             .
           </p>
+        )}
+        {slot.entries.length === 0 && isLocked && (
+          <p className="text-muted-foreground text-sm">Keine Einträge.</p>
         )}
         {slot.entries.map((entry) => {
           const kcal = getEntryKcal(entry, foodMap, recipeMap, foods)
@@ -213,6 +219,8 @@ export function MealSlotCard({
                         e.currentTarget.blur()
                       }
                     }}
+                    readOnly={isLocked}
+                    aria-readonly={isLocked}
                   />
                   <span className="text-muted-foreground w-16 text-xs">{unitLabel}</span>
                 </div>
@@ -224,7 +232,7 @@ export function MealSlotCard({
                   size="icon"
                   className="h-6 w-6"
                   onClick={() => onOpenExchange?.(slot.type, entry.id)}
-                  disabled={!onOpenExchange}
+                  disabled={!onOpenExchange || isLocked}
                 >
                   <Replace className="h-3.5 w-3.5" />
                   <span className="sr-only">Austauschen</span>
@@ -234,6 +242,7 @@ export function MealSlotCard({
                   size="icon"
                   className="h-6 w-6"
                   onClick={() => onRemoveEntry(slot.type, entry.id)}
+                  disabled={isLocked}
                 >
                   <X className="h-3.5 w-3.5" />
                   <span className="sr-only">Entfernen</span>
@@ -243,15 +252,17 @@ export function MealSlotCard({
             </div>
           )
         })}
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2 w-full"
-          onClick={() => onAddEntry(slot.type)}
-        >
-          <Plus className="mr-1 h-4 w-4" />
-          Hinzufügen
-        </Button>
+        {!isLocked && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() => onAddEntry(slot.type)}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Hinzufügen
+          </Button>
+        )}
         {dropEnabled && (
           <p className="text-muted-foreground text-xs">
             Tipp: Rezepte aus der Liste rechts können direkt hierher gezogen werden.

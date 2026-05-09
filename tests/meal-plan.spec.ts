@@ -65,4 +65,26 @@ test.describe("Ernährungsplan", () => {
 
     expect(await pdf.suggestedFilename()).toMatch(/ernaehrungsplan-klinik-.*\.pdf/);
   });
+
+  test("creates an immutable version when a plan is approved", async ({ page }) => {
+    const day = String(Math.floor(Math.random() * 20) + 1).padStart(2, "0");
+    await page.goto(`/ernaehrungsplan?date=2031-02-${day}`);
+    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
+    await page.reload();
+
+    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
+    const searchInput = page.locator("[cmdk-input]");
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill("Hafer");
+    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
+    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+
+    const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
+    await planRecord.getByRole("combobox").click();
+    await page.getByRole("option", { name: "Freigegeben" }).click();
+
+    await expect(planRecord.getByText("Bearbeitung")).toBeVisible();
+    await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
+    await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeDisabled();
+  });
 });

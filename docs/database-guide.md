@@ -251,6 +251,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260524000042_hl7_import_results_update_policy.sql` | Admin-scoped update policy for closing HL7 review results through the integration operations surface |
 | `20260525000043_kitchen_production_batches.sql` | Persisted kitchen production batch current state plus append-only event history for production execution |
 | `20260528000046_meal_plan_diet_line.sql` | Persists selected diet-line/target-preset identifiers on `daily_meal_plans` |
+| `20260530000048_meal_plan_versions.sql` | Append-only immutable meal-plan version snapshots for approved/reopened/manual plan revisions |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -276,6 +277,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |
 | `daily_meal_plans` | One plan per user per day, with optional patient/lifecycle metadata and selected target preset | `user_id`, `date` (unique together), `patient_id`, `title`, `status`, `notes`, `target_profile_id`, `diet_line_id`, `approved_at` |
+| `meal_plan_versions` | Immutable JSONB snapshots of approved/reopened meal-plan revisions | `meal_plan_id`, `version_number`, `snapshot`, `reason`, `created_by`, `created_at` |
 | `meal_entries` | Items in a meal slot | `meal_plan_id`, `slot_type`, `entry_type` (food/recipe), `reference_id` (polymorphic) |
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
