@@ -30,6 +30,7 @@ import {
   Save,
   Search,
   Settings2,
+  Sparkles,
   Trash2,
   Users,
   Utensils,
@@ -120,7 +121,7 @@ import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useFoods, useFoodSearch } from "@/components/foods-provider"
 import { createRecipeLookup } from "@/lib/recipes"
-import { useNutrientValues } from "@/hooks/use-nutrient-values"
+import { useNutrientValues, useNutrientValueMaps } from "@/hooks/use-nutrient-values"
 import type { FoodSearchItem } from "@/lib/types"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import {
@@ -144,7 +145,7 @@ import {
   buildTeachingKitchenExportRequest,
   type MealPlanReportVariant,
 } from "@/lib/exports/report-builder"
-import { downloadResponseFile } from "@/lib/utils"
+import { cn, downloadResponseFile } from "@/lib/utils"
 
 const KEY_NUTRIENT_IDS = [
   "energie",
@@ -158,6 +159,14 @@ const KEY_NUTRIENT_IDS = [
   "eisen",
   "magnesium",
 ]
+
+const EXCHANGE_DELTA_NUTRIENT_IDS = [
+  "energie",
+  "eiweiss",
+  "fett",
+  "kohlenhydrate",
+  "ballaststoffe",
+] as const
 
 const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> = {
   draft: "Entwurf",
@@ -184,6 +193,21 @@ interface PendingAllergenIntent {
   warnings: AllergenWarning[]
   replaceEntryId?: string
   followUp?: () => void
+}
+
+interface OptimizationSuggestion {
+  id: string
+  type: "food" | "recipe"
+  referenceId: string
+  name: string
+  slotType: MealSlotType
+  amount: number
+  nutrientId: string
+  targetLabel: string
+  unit: string
+  deficit: number
+  contribution: number
+  allergens?: string[]
 }
 
 function createTargetDraft(nutrientId = "energie"): DietLineTargetDraft {
@@ -248,6 +272,19 @@ function reviewSeverityBadgeClass(severity: PlanReviewSeverity): string {
   if (severity === "critical") return "border-red-200 bg-red-50 text-red-700"
   if (severity === "warning") return "border-amber-200 bg-amber-50 text-amber-700"
   return "border-emerald-200 bg-emerald-50 text-emerald-700"
+}
+
+function chooseOptimizationSlot(nutrientId: string, plan: DailyMealPlan): MealSlotType {
+  const openCoreSlot = plan.slots.find(
+    (slot) =>
+      ["mittagessen", "abendessen", "fruehstueck"].includes(slot.type) &&
+      slot.entries.length === 0,
+  )?.type
+
+  if (openCoreSlot) return openCoreSlot
+  if (["energie", "eiweiss", "fett", "kohlenhydrate"].includes(nutrientId)) return "mittagessen"
+  if (["ballaststoffe", "vitamin_c", "calcium", "magnesium"].includes(nutrientId)) return "snack_nachmittag"
+  return "abendessen"
 }
 
 interface ErnaehrungsplanPageClientProps {
@@ -350,6 +387,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   } = useNutrientValues(exchangeNutrient, hydratedFoods, {
     forceRemote: foodSearchIndex.length > hydratedFoods.length,
   })
+  const exchangeDeltaNutrientIds = useMemo(() => {
+    const ids = new Set<string>(EXCHANGE_DELTA_NUTRIENT_IDS)
+    if (exchangeNutrient) ids.add(exchangeNutrient)
+    return Array.from(ids)
+  }, [exchangeNutrient])
+  const { valuesByNutrient: exchangeDeltaValues } = useNutrientValueMaps(exchangeDeltaNutrientIds)
   const [weekOffset, setWeekOffset] = useState(0)
   const [cycleOffset, setCycleOffset] = useState(0)
 
@@ -777,6 +820,61 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       )
   }, [exchangeCategory, exchangeNutrientValues, exchangeSearch, exchangeSource])
 
+  const exchangeOriginal = useMemo(() => {
+    if (!exchangeEntryId || !exchangeSlot) return null
+    const slot = currentPlan.slots.find((item) => item.type === exchangeSlot)
+    const entry = slot?.entries.find((item) => item.id === exchangeEntryId)
+    if (!entry) return null
+
+    if (entry.type === "food") {
+      const food = foodMap.get(entry.referenceId)
+      if (!food) return null
+      const scaled = scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
+      const nutrients = new Map<string, number>()
+      for (const id of exchangeDeltaNutrientIds) {
+        nutrients.set(id, getNutrientValue(scaled, id))
+      }
+      return {
+        kind: "food" as const,
+        entry,
+        name: food.name,
+        amount: entry.amount,
+        unitLabel: "g",
+        nutrients,
+      }
+    }
+
+    const recipe = recipeMap.get(entry.referenceId)
+    if (!recipe) return null
+    const totalNutrients = calculateRecipeNutrients(recipe, foods)
+    const perServing = calculatePerServing(totalNutrients, recipe.servings)
+    const scaled = scaleNutrients(perServing, 1, entry.amount)
+    const nutrients = new Map<string, number>()
+    for (const id of exchangeDeltaNutrientIds) {
+      nutrients.set(id, getNutrientValue(scaled, id))
+    }
+    return {
+      kind: "recipe" as const,
+      entry,
+      name: recipe.name,
+      amount: entry.amount,
+      unitLabel: entry.amount === 1 ? "Portion" : "Portionen",
+      nutrients,
+    }
+  }, [
+    currentPlan,
+    exchangeEntryId,
+    exchangeSlot,
+    foodMap,
+    recipeMap,
+    foods,
+    exchangeDeltaNutrientIds,
+  ])
+
+  const exchangeCompareAmount =
+    exchangeOriginal?.kind === "food" ? exchangeOriginal.amount : 100
+  const exchangeShowDelta = exchangeOriginal?.kind === "food"
+
   const baseWeekStart = startOfWeek(parsedDate, { weekStartsOn: 1 })
   const computedWeekStart = addWeeks(baseWeekStart, weekOffset)
   const computedWeekStartIso = format(computedWeekStart, "yyyy-MM-dd")
@@ -891,6 +989,28 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
     restorePlanVersion(currentDate, version.snapshot)
     toast.success(`Version ${version.versionNumber} wurde als Entwurf übernommen.`)
+  }
+
+  const applyOptimizationSuggestion = (suggestion: OptimizationSuggestion) => {
+    if (currentPlan.status === "approved") {
+      toast.error("Freigegebene Pläne vor der Optimierung als Entwurf öffnen.")
+      return
+    }
+
+    guardedAddEntry(
+      suggestion.slotType,
+      {
+        type: suggestion.type,
+        referenceId: suggestion.referenceId,
+        amount: suggestion.amount,
+      },
+      {
+        itemKind: suggestion.type,
+        itemName: suggestion.name,
+        allergens: suggestion.allergens,
+      },
+    )
+    toast.success(`${suggestion.name} für ${MEAL_SLOT_LABELS[suggestion.slotType]} vorgemerkt.`)
   }
 
   const openDietLineEditor = () => {
@@ -1074,6 +1194,98 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       }
     })
   }, [dailyNutrients, dietLine])
+
+  const optimizationSuggestions = useMemo(() => {
+    if (!dietLine) return [] as OptimizationSuggestion[]
+
+    const existingKeys = new Set(
+      currentPlan.slots.flatMap((slot) =>
+        slot.entries.map((entry) => `${entry.type}:${entry.referenceId}`),
+      ),
+    )
+
+    const rankedSuggestions = dietLineCompliance
+      .filter((target) => target.status === "low" && typeof target.min === "number")
+      .flatMap((target) => {
+        const deficit = Math.max(0, (target.min ?? 0) - target.value)
+        if (deficit <= 0) return [] as OptimizationSuggestion[]
+
+        const slotType = chooseOptimizationSlot(target.nutrientId, currentPlan)
+        const foodSuggestions = foods
+          .filter((food) => !existingKeys.has(`food:${food.id}`) && food.nutrients.length > 0)
+          .map((food) => {
+            const contribution = getNutrientValue(
+              scaleNutrients(food.nutrients, food.baseAmount, 100),
+              target.nutrientId,
+            )
+            const severeConflict =
+              patientAllergens.length > 0 && food.allergens?.length
+                ? checkAllergenConflicts(food.allergens, patientAllergens).some((warning) => warning.severity === "severe")
+                : false
+            return {
+              id: `food-${target.nutrientId}-${food.id}`,
+              type: "food" as const,
+              referenceId: food.id,
+              name: food.name,
+              slotType,
+              amount: 100,
+              nutrientId: target.nutrientId,
+              targetLabel: target.label,
+              unit: target.unit,
+              deficit,
+              contribution,
+              allergens: food.allergens,
+              severeConflict,
+            }
+          })
+
+        const recipeSuggestions = recipes
+          .filter((recipe) => !existingKeys.has(`recipe:${recipe.id}`))
+          .map((recipe) => {
+            const perServing = calculatePerServing(calculateRecipeNutrients(recipe, foods), recipe.servings)
+            const contribution = getNutrientValue(perServing, target.nutrientId)
+            const severeConflict =
+              patientAllergens.length > 0 && recipe.allergens?.length
+                ? checkAllergenConflicts(recipe.allergens, patientAllergens).some((warning) => warning.severity === "severe")
+                : false
+            return {
+              id: `recipe-${target.nutrientId}-${recipe.id}`,
+              type: "recipe" as const,
+              referenceId: recipe.id,
+              name: recipe.name,
+              slotType,
+              amount: 1,
+              nutrientId: target.nutrientId,
+              targetLabel: target.label,
+              unit: target.unit,
+              deficit,
+              contribution,
+              allergens: recipe.allergens,
+              severeConflict,
+            }
+          })
+
+        return [...foodSuggestions, ...recipeSuggestions]
+          .filter((suggestion) => suggestion.contribution > 0 && !suggestion.severeConflict)
+          .sort((a, b) => {
+            const aCoverage = Math.min(a.contribution, a.deficit) / a.deficit
+            const bCoverage = Math.min(b.contribution, b.deficit) / b.deficit
+            return bCoverage - aCoverage
+          })
+          .slice(0, 2)
+      })
+      .sort((a, b) => b.deficit - a.deficit)
+
+    const seenSuggestions = new Set<string>()
+    return rankedSuggestions
+      .filter((suggestion) => {
+        const key = `${suggestion.type}:${suggestion.referenceId}`
+        if (seenSuggestions.has(key)) return false
+        seenSuggestions.add(key)
+        return true
+      })
+      .slice(0, 4)
+  }, [currentPlan, dietLine, dietLineCompliance, foods, patientAllergens, recipes])
 
   const clinicalReview = useMemo(() => {
     const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
@@ -1602,7 +1814,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">PRODIscore Tagesplan</CardTitle>
@@ -1683,6 +1895,54 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Optimierungsassistent
+            </CardTitle>
+            <CardDescription>Konkrete Ergänzungen für Zielwerte unterhalb des Profils.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {optimizationSuggestions.length > 0 ? (
+              optimizationSuggestions.map((suggestion) => (
+                <div key={suggestion.id} className="rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{suggestion.name}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {MEAL_SLOT_LABELS[suggestion.slotType]} · {suggestion.targetLabel} +{" "}
+                        {formatNutrient(suggestion.contribution, suggestion.unit)}
+                      </p>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Lücke: {formatNutrient(suggestion.deficit, suggestion.unit)}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={currentPlan.status === "approved"}
+                      onClick={() => applyOptimizationSuggestion(suggestion)}
+                    >
+                      Einfügen
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                {dietLineCompliance.some((target) => target.status === "low")
+                  ? "Keine geeigneten Vorschläge aus den aktuell geladenen Lebensmitteln und Rezepten."
+                  : "Keine niedrigen Zielwerte im aktuellen Profil."}
+              </div>
+            )}
+            {currentPlan.status === "approved" && optimizationSuggestions.length > 0 && (
+              <p className="text-muted-foreground text-xs">
+                Zum Einfügen zuerst den Plan als Entwurf öffnen.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -2458,16 +2718,53 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           }
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {exchangeEntryId ? "Eintrag austauschen" : "Austauschliste"} für{" "}
               {exchangeSlot ? MEAL_SLOT_LABELS[exchangeSlot] : "Slot"}
             </DialogTitle>
             <DialogDescription>
-              Filtere nach Kategorie oder Nährstoff. Beim Austauschen bleibt die bisherige Menge erhalten.
+              {exchangeShowDelta
+                ? "Werte und Δ beziehen sich auf die ursprüngliche Menge. Beim Austauschen bleibt die bisherige Menge erhalten."
+                : "Werte je 100 g. Beim Austauschen bleibt die bisherige Menge erhalten."}
             </DialogDescription>
           </DialogHeader>
+          {exchangeOriginal && (
+            <div className="bg-muted/40 rounded-md border border-dashed p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <div>
+                  <div className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                    Original
+                  </div>
+                  <div className="text-sm font-medium">
+                    {exchangeOriginal.name}{" "}
+                    <span className="text-muted-foreground font-normal">
+                      ({formatNumber(exchangeOriginal.amount, 0)} {exchangeOriginal.unitLabel})
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  {EXCHANGE_DELTA_NUTRIENT_IDS.map((nutrientId) => {
+                    const def = nutrientDefMap.get(nutrientId)
+                    const value = exchangeOriginal.nutrients.get(nutrientId) ?? 0
+                    return (
+                      <Badge key={nutrientId} variant="outline" className="bg-background">
+                        {def?.shortName ?? nutrientId}:{" "}
+                        {formatNumber(value, nutrientId === "energie" ? 0 : 1)} {def?.unit ?? ""}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              </div>
+              {exchangeOriginal.kind === "recipe" && (
+                <p className="text-muted-foreground mt-2 text-[11px]">
+                  Hinweis: Beim Tausch eines Rezepts gegen ein Lebensmittel ist kein Δ-Vergleich
+                  möglich. Die Liste zeigt Werte je 100 g.
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
             <Input
               placeholder="Lebensmittel suchen..."
@@ -2511,8 +2808,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               Nährstoffe konnten nicht geladen werden: {exchangeNutrientError}
             </p>
           )}
-          <div className="mt-4 max-h-[360px] overflow-hidden rounded-md border">
-            <ScrollArea className="h-[360px]">
+          <div className="mt-2 max-h-[420px] overflow-hidden rounded-md border">
+            <ScrollArea className="h-[420px]">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2520,20 +2817,97 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                     <TableHead>Kategorie</TableHead>
                     <TableHead className="text-right">
                       {nutrientDefMap.get(exchangeNutrient)?.shortName ?? exchangeNutrient}
+                      {exchangeShowDelta && (
+                        <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                          ({formatNumber(exchangeCompareAmount, 0)} g)
+                        </span>
+                      )}
                     </TableHead>
+                    <TableHead className="text-right">Makros</TableHead>
                     <TableHead className="text-right">Aktion</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredExchangeFoods.slice(0, 20).map((food) => {
-                    const nutrientVal = exchangeNutrientValues.get(food.id) ?? 0
+                    const pivotPer100 = exchangeNutrientValues.get(food.id) ?? 0
+                    const pivotAbs = (pivotPer100 * exchangeCompareAmount) / 100
+                    const pivotOriginalAbs = exchangeOriginal?.nutrients.get(exchangeNutrient) ?? 0
+                    const pivotDelta = exchangeShowDelta ? pivotAbs - pivotOriginalAbs : null
+                    const pivotDef = nutrientDefMap.get(exchangeNutrient)
                     const category = FOOD_CATEGORIES.find((cat) => cat.id === food.categoryId)
+                    const pivotDecimals = exchangeNutrient === "energie" ? 0 : 1
                     return (
                       <TableRow key={food.id}>
                         <TableCell className="font-medium">{food.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{category?.name ?? "–"}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {category?.name ?? "–"}
+                        </TableCell>
                         <TableCell className="text-right">
-                          {formatNumber(nutrientVal, 1)} {nutrientDefMap.get(exchangeNutrient)?.unit}
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span>
+                              {formatNumber(pivotAbs, pivotDecimals)} {pivotDef?.unit ?? ""}
+                            </span>
+                            {pivotDelta !== null && (
+                              <span
+                                className={cn(
+                                  "text-[11px] font-medium",
+                                  Math.abs(pivotDelta) < 0.05
+                                    ? "text-muted-foreground"
+                                    : pivotDelta > 0
+                                      ? "text-blue-600 dark:text-blue-400"
+                                      : "text-orange-600 dark:text-orange-400",
+                                )}
+                              >
+                                {pivotDelta > 0 ? "+" : ""}
+                                {formatNumber(pivotDelta, pivotDecimals)} {pivotDef?.unit ?? ""}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            {EXCHANGE_DELTA_NUTRIENT_IDS.filter(
+                              (id) => id !== exchangeNutrient,
+                            ).map((nutrientId) => {
+                              const def = nutrientDefMap.get(nutrientId)
+                              const per100 =
+                                exchangeDeltaValues.get(nutrientId)?.get(food.id) ?? 0
+                              const abs = (per100 * exchangeCompareAmount) / 100
+                              const originalAbs =
+                                exchangeOriginal?.nutrients.get(nutrientId) ?? 0
+                              const delta = exchangeShowDelta ? abs - originalAbs : null
+                              const decimals = nutrientId === "energie" ? 0 : 1
+                              if (delta === null) {
+                                return (
+                                  <Badge
+                                    key={nutrientId}
+                                    variant="outline"
+                                    className="text-[10px] font-normal"
+                                  >
+                                    {def?.shortName ?? nutrientId} {formatNumber(abs, decimals)}
+                                  </Badge>
+                                )
+                              }
+                              const isNeutral = Math.abs(delta) < 0.05
+                              return (
+                                <Badge
+                                  key={nutrientId}
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-medium",
+                                    isNeutral
+                                      ? "text-muted-foreground"
+                                      : delta > 0
+                                        ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200"
+                                        : "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200",
+                                  )}
+                                >
+                                  {def?.shortName ?? nutrientId} {delta > 0 ? "+" : ""}
+                                  {formatNumber(delta, decimals)}
+                                </Badge>
+                              )
+                            })}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" onClick={() => handleSelectExchangeFood(food.id)}>

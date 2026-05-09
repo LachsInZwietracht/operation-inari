@@ -97,6 +97,27 @@ test.describe("Ernährungsplan", () => {
     await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeEnabled();
   });
 
+  test("applies a nutrient optimization suggestion", async ({ page }) => {
+    const planDate = uniquePlannerDate(3500);
+    await page.goto(`/ernaehrungsplan?date=${planDate}`);
+    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
+    await page.reload();
+
+    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
+    const searchInput = page.locator("[cmdk-input]");
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill("Hafer");
+    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
+    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+
+    const assistant = page.locator("[data-slot='card']").filter({ hasText: "Optimierungsassistent" }).first();
+    await expect(assistant).toBeVisible();
+    await expect(assistant.getByRole("button", { name: "Einfügen" }).first()).toBeVisible({ timeout: 30_000 });
+    await assistant.getByRole("button", { name: "Einfügen" }).first().click();
+
+    await expect(page.getByText(/vorgemerkt/)).toBeVisible();
+  });
+
   test("creates an immutable version when a plan is approved", async ({ page }) => {
     const planDate = uniquePlannerDate(4000);
     await page.goto(`/ernaehrungsplan?date=${planDate}`);
