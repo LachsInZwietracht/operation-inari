@@ -37,11 +37,7 @@ import {
   Utensils,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import {
-  MealSlotCard,
-  MEAL_PLAN_DRAG_ID,
-  MEAL_PLAN_DRAG_TYPE,
-} from "@/components/meal-slot"
+import { MealSlotCard } from "@/components/meal-slot"
 import { NutrientBar } from "@/components/nutrient-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
@@ -86,6 +82,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Toggle } from "@/components/ui/toggle"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -359,6 +363,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [view, setView] = useState("day")
   const [paletteSlot, setPaletteSlot] = useState<MealSlotType>("mittagessen")
   const [recipeSearch, setRecipeSearch] = useState("")
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteCategory, setPaletteCategory] = useState<string>("alle")
+  const [paletteSort, setPaletteSort] = useState<"name" | "kcalAsc" | "kcalDesc" | "prep">("name")
+  const [paletteIndicationOnly, setPaletteIndicationOnly] = useState(false)
+  const [paletteAllergenSafeOnly, setPaletteAllergenSafeOnly] = useState(false)
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
@@ -785,12 +794,90 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     return map
   }, [currentPlan.slots, dietLine, foodMap, foods, nutrientDefMap, recipeMap])
 
-  const filteredRecipes = useMemo(() => {
-    const search = recipeSearch.toLowerCase()
-    return recipes.filter((recipe) =>
-      recipe.name.toLowerCase().includes(search) || recipe.tags?.some((tag) => tag.toLowerCase().includes(search)),
-    )
-  }, [recipeSearch, recipes])
+  const recipeCategories = useMemo(() => {
+    const set = new Set<string>()
+    for (const recipe of recipes) {
+      if (recipe.category) set.add(recipe.category)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "de"))
+  }, [recipes])
+
+  const paletteRecipes = useMemo(() => {
+    const search = recipeSearch.trim().toLowerCase()
+    const indicationToken = patient?.indication?.trim().toLowerCase() ?? ""
+
+    type EnrichedRecipe = {
+      recipe: Recipe
+      kcal: number
+      totalTime: number
+      conflictCount: number
+    }
+
+    const enriched: EnrichedRecipe[] = recipes
+      .map((recipe) => {
+        const kcal =
+          recipe.cachedKcalPerPortion ??
+          (() => {
+            const total = calculateRecipeNutrients(recipe, foods)
+            const perServing = calculatePerServing(total, recipe.servings)
+            return getNutrientValue(perServing, "energie")
+          })()
+        const conflictCount =
+          patientAllergens.length > 0 && recipe.allergens?.length
+            ? checkAllergenConflicts(recipe.allergens, patientAllergens).length
+            : 0
+        return {
+          recipe,
+          kcal,
+          totalTime: (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0),
+          conflictCount,
+        }
+      })
+      .filter(({ recipe, conflictCount }) => {
+        if (search) {
+          const matchesSearch =
+            recipe.name.toLowerCase().includes(search) ||
+            recipe.tags?.some((tag) => tag.toLowerCase().includes(search))
+          if (!matchesSearch) return false
+        }
+        if (paletteCategory !== "alle" && recipe.category !== paletteCategory) return false
+        if (paletteIndicationOnly && indicationToken) {
+          const matches =
+            recipe.tags?.some((tag) => tag.toLowerCase().includes(indicationToken)) ||
+            recipe.description?.toLowerCase().includes(indicationToken)
+          if (!matches) return false
+        }
+        if (paletteAllergenSafeOnly && conflictCount > 0) return false
+        return true
+      })
+
+    enriched.sort((a, b) => {
+      switch (paletteSort) {
+        case "kcalAsc":
+          return a.kcal - b.kcal
+        case "kcalDesc":
+          return b.kcal - a.kcal
+        case "prep":
+          return a.totalTime - b.totalTime
+        case "name":
+        default:
+          return a.recipe.name.localeCompare(b.recipe.name, "de")
+      }
+    })
+
+    return enriched
+  }, [
+    recipes,
+    foods,
+    recipeSearch,
+    paletteCategory,
+    paletteSort,
+    paletteIndicationOnly,
+    paletteAllergenSafeOnly,
+    patient?.indication,
+    patientAllergens,
+  ])
+
 
   const foodCommandSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
   const filteredCommandFoods = useMemo(() => {
@@ -2048,6 +2135,18 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <Settings2 className="h-4 w-4" />
                 <span className="sr-only">Zielprofil verwalten</span>
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPaletteOpen(true)}
+                disabled={currentPlan.status === "approved"}
+              >
+                <ChefHat className="mr-2 h-4 w-4" />
+                Rezepte
+                <span className="text-muted-foreground ml-1.5 text-xs">
+                  ({recipes.length})
+                </span>
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -2245,64 +2344,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="space-y-1">
-                  <CardTitle className="text-base">Rezeptbibliothek (Drag & Drop)</CardTitle>
-                  <CardDescription>
-                    Ziehe Rezepte direkt in einen Slot oder füge sie per Klick hinzu.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Input
-                    placeholder="Rezepte durchsuchen..."
-                    value={recipeSearch}
-                    onChange={(e) => setRecipeSearch(e.target.value)}
-                  />
-                  <Select value={paletteSlot} onValueChange={(value) => setPaletteSlot(value as MealSlotType)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Slot wählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(MEAL_SLOT_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <ScrollArea className="h-[360px] pr-2">
-                    <div className="space-y-2">
-                      {filteredRecipes.map((recipe) => (
-                        <div
-                          key={recipe.id}
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData(MEAL_PLAN_DRAG_TYPE, "recipe")
-                            event.dataTransfer.setData(MEAL_PLAN_DRAG_ID, recipe.id)
-                            event.dataTransfer.effectAllowed = "copy"
-                          }}
-                          className="cursor-grab rounded-lg border p-3 transition hover:bg-muted active:cursor-grabbing"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-medium leading-tight">{recipe.name}</p>
-                              <p className="text-muted-foreground text-xs">
-                                {(recipe.tags ?? []).slice(0, 2).join(", ") || recipe.category}
-                              </p>
-                            </div>
-                            <Button size="sm" variant="outline" onClick={() => handleQuickAddRecipe(recipe.id)}>
-                              In {MEAL_SLOT_LABELS[paletteSlot]}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      {filteredRecipes.length === 0 && (
-                        <p className="text-muted-foreground text-sm">Keine passenden Rezepte gefunden.</p>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
             </div>
           </div>
         </TabsContent>
@@ -3228,6 +3269,165 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+        >
+          <SheetHeader className="border-b">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <ChefHat className="text-primary h-4 w-4" />
+              Rezeptbibliothek
+            </SheetTitle>
+            <SheetDescription>
+              {paletteRecipes.length} von {recipes.length} Rezepten ·{" "}
+              Treffer landen in {MEAL_SLOT_LABELS[paletteSlot]}.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="border-b p-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <div className="relative min-w-[180px] flex-1">
+                <Search className="text-muted-foreground absolute left-2.5 top-2.5 h-4 w-4" />
+                <Input
+                  value={recipeSearch}
+                  onChange={(event) => setRecipeSearch(event.target.value)}
+                  placeholder="Name oder Tag..."
+                  className="pl-8"
+                />
+              </div>
+              <Select
+                value={paletteSlot}
+                onValueChange={(value) => setPaletteSlot(value as MealSlotType)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Slot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(MEAL_SLOT_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Select value={paletteCategory} onValueChange={setPaletteCategory}>
+                <SelectTrigger className="h-8 w-[170px] text-xs">
+                  <SelectValue placeholder="Kategorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="alle">Alle Kategorien</SelectItem>
+                  {recipeCategories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={paletteSort}
+                onValueChange={(value) =>
+                  setPaletteSort(value as "name" | "kcalAsc" | "kcalDesc" | "prep")
+                }
+              >
+                <SelectTrigger className="h-8 w-[170px] text-xs">
+                  <SelectValue placeholder="Sortierung" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name (A→Z)</SelectItem>
+                  <SelectItem value="kcalAsc">kcal aufsteigend</SelectItem>
+                  <SelectItem value="kcalDesc">kcal absteigend</SelectItem>
+                  <SelectItem value="prep">Zubereitungszeit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {(patient?.indication || patientAllergens.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {patient?.indication && (
+                  <Toggle
+                    size="sm"
+                    pressed={paletteIndicationOnly}
+                    onPressedChange={setPaletteIndicationOnly}
+                    className="h-7 text-xs"
+                  >
+                    Indikation passt
+                  </Toggle>
+                )}
+                {patientAllergens.length > 0 && (
+                  <Toggle
+                    size="sm"
+                    pressed={paletteAllergenSafeOnly}
+                    onPressedChange={setPaletteAllergenSafeOnly}
+                    className="h-7 text-xs"
+                  >
+                    Allergen-sicher
+                  </Toggle>
+                )}
+              </div>
+            )}
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="space-y-2 p-4">
+              {paletteRecipes.length === 0 && (
+                <p className="text-muted-foreground text-sm">
+                  Keine Rezepte entsprechen den aktuellen Filtern.
+                </p>
+              )}
+              {paletteRecipes.map(({ recipe, kcal, totalTime, conflictCount }) => {
+                const tags = (recipe.tags ?? []).slice(0, 3)
+                return (
+                  <div
+                    key={recipe.id}
+                    className="hover:border-primary/40 hover:bg-muted/50 rounded-lg border p-3 transition"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium leading-tight">
+                          {recipe.name}
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          {recipe.category}
+                          {tags.length > 0 ? ` · ${tags.join(", ")}` : ""}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={currentPlan.status === "approved"}
+                        onClick={() => {
+                          handleQuickAddRecipe(recipe.id)
+                        }}
+                      >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Hinzufügen
+                      </Button>
+                    </div>
+                    <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                      <span>{formatNumber(kcal, 0)} kcal/Portion</span>
+                      {totalTime > 0 && <span>· {totalTime} min</span>}
+                      {typeof recipe.prodScore === "number" && (
+                        <span>· PRODIscore {Math.round(recipe.prodScore)}</span>
+                      )}
+                      {conflictCount > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="border-orange-200 bg-orange-50 text-[10px] text-orange-700"
+                        >
+                          <AlertTriangle className="mr-1 h-3 w-3" />
+                          {conflictCount} Allergen-Konflikt
+                          {conflictCount === 1 ? "" : "e"}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
