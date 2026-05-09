@@ -45,4 +45,24 @@ test.describe("Ernährungsplan", () => {
 
     await expect(page.getByText(/Hafer/i).first()).toBeVisible({ timeout: 30_000 });
   });
+
+  test("exports the current plan as a clinical PDF", async ({ page }) => {
+    await page.goto("/ernaehrungsplan");
+    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
+    await page.reload();
+
+    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
+    const searchInput = page.locator("[cmdk-input]");
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill("Hafer");
+    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
+    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Plan exportieren" }).click();
+    const pdfDownload = page.waitForEvent("download");
+    await page.getByRole("menuitem", { name: /Klinischer Bericht/ }).click();
+    const pdf = await pdfDownload;
+
+    expect(await pdf.suggestedFilename()).toMatch(/ernaehrungsplan-klinik-.*\.pdf/);
+  });
 });
