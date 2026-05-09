@@ -39,9 +39,19 @@ export function useMealPlanVersions(mealPlanId?: string) {
     void refresh();
   }, [canLoad, refresh]);
 
+  const recordVersion = useCallback((version: MealPlanVersion) => {
+    setVersions((prev) => {
+      const withoutDuplicate = prev.filter((item) => item.id !== version.id);
+      return [version, ...withoutDuplicate]
+        .sort((a, b) => b.versionNumber - a.versionNumber)
+        .slice(0, 10);
+    });
+  }, []);
+
   return {
     versions,
     isLoading,
     refresh,
+    recordVersion,
   };
 }

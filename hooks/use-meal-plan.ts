@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { addDays, subDays, format, parseISO } from "date-fns"
-import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot } from "@/lib/types"
+import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot, MealPlanVersion } from "@/lib/types"
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization"
 import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
 import { snapshotMealPlanVersion } from "@/lib/data/meal-plan-versions-client"
@@ -31,6 +31,8 @@ type MealPlanMetadataPatch = Partial<
     | "approvedBy"
   >
 >
+
+type MealPlanSnapshotReason = MealPlanVersion["reason"]
 
 function createEmptyPlan(date: string, defaults: MealPlanMetadataPatch = {}): DailyMealPlan {
   return {
@@ -213,7 +215,7 @@ export function useMealPlan(
   )
 
   const syncPlanToSupabase = useCallback(
-    async (plan: DailyMealPlan, options: { snapshot?: boolean } = {}) => {
+    async (plan: DailyMealPlan, options: { snapshotReason?: MealPlanSnapshotReason } = {}) => {
       if (!isAuthenticated) return null
 
       try {
@@ -223,9 +225,9 @@ export function useMealPlan(
           [persistedPlan.date]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
         }))
 
-        if (options.snapshot && isUuid(persistedPlan.id)) {
+        if (options.snapshotReason && isUuid(persistedPlan.id)) {
           try {
-            await snapshotMealPlanVersion(persistedPlan, { reason: "approved" })
+            await snapshotMealPlanVersion(persistedPlan, { reason: options.snapshotReason })
           } catch (snapErr) {
             console.error(`Failed to snapshot meal plan ${persistedPlan.id}:`, snapErr)
           }
@@ -243,15 +245,17 @@ export function useMealPlan(
   const updateCurrentPlan = useCallback(
     (updater: (plan: DailyMealPlan) => DailyMealPlan) => {
       let updatedPlan: DailyMealPlan | null = null
-      let shouldSnapshot = false
+      let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
         const currentPlan = prev[currentDate]
           ? ensureAllSlots(prev[currentDate])
           : createEmptyPlan(currentDate, defaultMetadata)
         updatedPlan = updater(currentPlan)
-        shouldSnapshot =
+        snapshotReason =
           currentPlan.status !== "approved" && updatedPlan.status === "approved"
+            ? "approved"
+            : undefined
 
         return {
           ...prev,
@@ -260,7 +264,7 @@ export function useMealPlan(
       })
 
       if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan, { snapshot: shouldSnapshot })
+        void syncPlanToSupabase(updatedPlan, { snapshotReason })
       }
     },
     [currentDate, defaultMetadata, syncPlanToSupabase]
@@ -269,15 +273,17 @@ export function useMealPlan(
   const updatePlanForDate = useCallback(
     (date: string, updater: (plan: DailyMealPlan) => DailyMealPlan) => {
       let updatedPlan: DailyMealPlan | null = null
-      let shouldSnapshot = false
+      let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
         const basePlan = prev[date]
           ? ensureAllSlots(prev[date])
           : createEmptyPlan(date, defaultMetadata)
         updatedPlan = updater(basePlan)
-        shouldSnapshot =
+        snapshotReason =
           basePlan.status !== "approved" && updatedPlan.status === "approved"
+            ? "approved"
+            : undefined
 
         return {
           ...prev,
@@ -286,7 +292,7 @@ export function useMealPlan(
       })
 
       if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan, { snapshot: shouldSnapshot })
+        void syncPlanToSupabase(updatedPlan, { snapshotReason })
       }
     },
     [defaultMetadata, syncPlanToSupabase],
@@ -446,16 +452,52 @@ export function useMealPlan(
     [isPlanLocked, updatePlanForDate],
   )
 
+  const createPlanCheckpoint = useCallback(
+    async (date: string, reason: MealPlanSnapshotReason = "manual") => {
+      const plan = getPlanForDate(date)
+      if (!plan.slots.some((slot) => slot.entries.length > 0)) return false
+
+      const persistedPlan = await syncPlanToSupabase(plan)
+      if (!persistedPlan || !isUuid(persistedPlan.id)) return false
+
+      try {
+        return await snapshotMealPlanVersion(persistedPlan, { reason })
+      } catch (error) {
+        console.error(`Failed to create ${reason} checkpoint for meal plan ${persistedPlan.id}:`, error)
+        return false
+      }
+    },
+    [getPlanForDate, syncPlanToSupabase],
+  )
+
   const reopenPlan = useCallback(
     (date: string) => {
-      updatePlanForDate(date, (plan) => ({
-        ...plan,
-        status: "draft",
-        approvedAt: undefined,
-        approvedBy: undefined,
-      }))
+      let updatedPlan: DailyMealPlan | null = null
+      let snapshotReason: MealPlanSnapshotReason | undefined
+
+      setPlans((prev) => {
+        const basePlan = prev[date]
+          ? ensureAllSlots(prev[date])
+          : createEmptyPlan(date, defaultMetadata)
+        snapshotReason = basePlan.status === "approved" ? "reopened" : undefined
+        updatedPlan = {
+          ...basePlan,
+          status: "draft",
+          approvedAt: undefined,
+          approvedBy: undefined,
+        }
+
+        return {
+          ...prev,
+          [date]: updatedPlan,
+        }
+      })
+
+      if (updatedPlan) {
+        void syncPlanToSupabase(updatedPlan, { snapshotReason })
+      }
     },
-    [updatePlanForDate],
+    [defaultMetadata, syncPlanToSupabase],
   )
 
   const restorePlanVersion = useCallback(
@@ -511,6 +553,7 @@ export function useMealPlan(
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    createPlanCheckpoint,
     reopenPlan,
     restorePlanVersion,
     isPlanLocked,

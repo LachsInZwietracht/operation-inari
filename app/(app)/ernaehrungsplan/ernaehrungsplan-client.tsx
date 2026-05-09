@@ -123,7 +123,16 @@ import { createRecipeLookup } from "@/lib/recipes"
 import { useNutrientValues } from "@/hooks/use-nutrient-values"
 import type { FoodSearchItem } from "@/lib/types"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
-import { checkAllergenConflicts } from "@/lib/allergen-warnings"
+import {
+  checkAllergenConflicts,
+  summarizePlanAllergenConflicts,
+  type AllergenWarning,
+} from "@/lib/allergen-warnings"
+import {
+  ALLERGEN_SEVERITY_LABELS,
+  ALLERGEN_TYPE_LABELS,
+} from "@/lib/allergen-constants"
+import { PlanAllergenBanner } from "@/components/plan-allergen-banner"
 import { toast } from "sonner"
 import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
@@ -165,6 +174,16 @@ interface PlanReviewItem {
   label: string
   description: string
   severity: PlanReviewSeverity
+}
+
+interface PendingAllergenIntent {
+  itemKind: "food" | "recipe"
+  itemName: string
+  slotType: MealSlotType
+  payload: { type: MealEntry["type"]; referenceId: string; amount: number }
+  warnings: AllergenWarning[]
+  replaceEntryId?: string
+  followUp?: () => void
 }
 
 function createTargetDraft(nutrientId = "energie"): DietLineTargetDraft {
@@ -269,6 +288,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    createPlanCheckpoint,
     reopenPlan,
     restorePlanVersion,
     setDate,
@@ -279,6 +299,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     versions: mealPlanVersions,
     isLoading: mealPlanVersionsLoading,
     refresh: refreshMealPlanVersions,
+    recordVersion: recordMealPlanVersion,
   } = useMealPlanVersions(currentPlan.id)
   const {
     presets: dietLines,
@@ -319,7 +340,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [templateDraftDescription, setTemplateDraftDescription] = useState("")
   const [templateDraftIndication, setTemplateDraftIndication] = useState("")
   const [templateDraftDietLineId, setTemplateDraftDietLineId] = useState<string>("")
+  const [isCheckpointing, setIsCheckpointing] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+  const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
   const {
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
@@ -383,24 +406,18 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
 
+  const planAllergenSummary = useMemo(
+    () => summarizePlanAllergenConflicts(currentPlan, patientAllergens, foodMap, recipeMap),
+    [currentPlan, foodMap, recipeMap, patientAllergens],
+  )
+
   const entryAllergenWarnings = useMemo(() => {
-    if (patientAllergens.length === 0) return new Map<string, string[]>()
     const map = new Map<string, string[]>()
-    for (const slot of currentPlan.slots) {
-      for (const entry of slot.entries) {
-        const allergens = entry.type === "food"
-          ? foodMap.get(entry.referenceId)?.allergens
-          : recipeMap.get(entry.referenceId)?.allergens
-        if (allergens?.length) {
-          const warnings = checkAllergenConflicts(allergens, patientAllergens)
-          if (warnings.length > 0) {
-            map.set(entry.id, warnings.map((w) => w.allergenLabel))
-          }
-        }
-      }
+    for (const [entryId, warnings] of planAllergenSummary.byEntry) {
+      map.set(entryId, warnings.map((warning) => warning.allergenLabel))
     }
     return map
-  }, [currentPlan, foodMap, recipeMap, patientAllergens])
+  }, [planAllergenSummary])
 
   const aggregatePlanNutrients = useCallback(
     (plan: DailyMealPlan): NutrientValue[] =>
@@ -411,6 +428,95 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       ),
     [foodMap, foods, recipeMap],
   )
+
+  const notifyAllergenWarnings = useCallback(
+    (itemName: string, warnings: AllergenWarning[]) => {
+      for (const warning of warnings) {
+        const headline =
+          warning.severity === "moderate"
+            ? `Mittlerer Allergenkonflikt: ${itemName}`
+            : `Allergenhinweis: ${itemName}`
+        toast.warning(headline, {
+          description: `${warning.allergenLabel} · ${ALLERGEN_TYPE_LABELS[warning.type]} · ${ALLERGEN_SEVERITY_LABELS[warning.severity]}`,
+        })
+      }
+    },
+    [],
+  )
+
+  const commitAllergenIntent = useCallback(
+    (intent: PendingAllergenIntent) => {
+      if (intent.replaceEntryId) {
+        replaceEntry(intent.slotType, intent.replaceEntryId, intent.payload)
+      } else {
+        addEntry(intent.slotType, intent.payload)
+      }
+      intent.followUp?.()
+    },
+    [addEntry, replaceEntry],
+  )
+
+  const guardedAddEntry = useCallback(
+    (
+      slotType: MealSlotType,
+      payload: { type: MealEntry["type"]; referenceId: string; amount: number },
+      context: {
+        itemKind: "food" | "recipe"
+        itemName: string
+        allergens: string[] | undefined
+        replaceEntryId?: string
+        followUp?: () => void
+      },
+    ) => {
+      const warnings =
+        patientAllergens.length > 0 && context.allergens?.length
+          ? checkAllergenConflicts(context.allergens, patientAllergens)
+          : []
+      const hasSevere = warnings.some((warning) => warning.severity === "severe")
+
+      if (hasSevere) {
+        setPendingAllergenIntent({
+          itemKind: context.itemKind,
+          itemName: context.itemName,
+          slotType,
+          payload,
+          warnings,
+          replaceEntryId: context.replaceEntryId,
+          followUp: context.followUp,
+        })
+        return
+      }
+
+      commitAllergenIntent({
+        itemKind: context.itemKind,
+        itemName: context.itemName,
+        slotType,
+        payload,
+        warnings,
+        replaceEntryId: context.replaceEntryId,
+        followUp: context.followUp,
+      })
+
+      if (warnings.length > 0) {
+        notifyAllergenWarnings(context.itemName, warnings)
+      }
+    },
+    [commitAllergenIntent, notifyAllergenWarnings, patientAllergens],
+  )
+
+  const confirmPendingAllergenIntent = useCallback(() => {
+    if (!pendingAllergenIntent) return
+    commitAllergenIntent(pendingAllergenIntent)
+    notifyAllergenWarnings(pendingAllergenIntent.itemName, pendingAllergenIntent.warnings)
+    toast.warning(
+      `${pendingAllergenIntent.itemName} wurde trotz schwerer Allergenwarnung übernommen.`,
+    )
+    setPendingAllergenIntent(null)
+  }, [commitAllergenIntent, notifyAllergenWarnings, pendingAllergenIntent])
+
+  const dismissPendingAllergenIntent = useCallback(() => {
+    setPendingAllergenIntent(null)
+  }, [])
 
   const parsedDate = parseISO(currentDate)
   const formattedDate = format(parsedDate, "EEEE, d. MMMM yyyy", { locale: de })
@@ -424,34 +530,28 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     const food = await hydrateFood(foodId)
     if (!food) return
 
-    addEntry(activeSlot, { type: "food", referenceId: food.id, amount: 100 })
     setCommandOpen(false)
     setFoodCommandQuery("")
-
-    if (patientAllergens.length > 0) {
-      if (food?.allergens?.length) {
-        const warnings = checkAllergenConflicts(food.allergens, patientAllergens)
-        for (const w of warnings) {
-          toast.warning(`Allergenwarnung: ${food.name} enthält ${w.allergenLabel}`)
-        }
-      }
-    }
+    guardedAddEntry(
+      activeSlot,
+      { type: "food", referenceId: food.id, amount: 100 },
+      { itemKind: "food", itemName: food.name, allergens: food.allergens },
+    )
   }
 
   const handleSelectRecipe = (recipeId: string) => {
-    addEntry(activeSlot, { type: "recipe", referenceId: recipeId, amount: 1 })
+    const recipe = recipeMap.get(recipeId)
     setCommandOpen(false)
     setFoodCommandQuery("")
-
-    if (patientAllergens.length > 0) {
-      const recipe = recipeMap.get(recipeId)
-      if (recipe?.allergens?.length) {
-        const warnings = checkAllergenConflicts(recipe.allergens, patientAllergens)
-        for (const w of warnings) {
-          toast.warning(`Allergenwarnung: ${recipe.name} enthält ${w.allergenLabel}`)
-        }
-      }
-    }
+    guardedAddEntry(
+      activeSlot,
+      { type: "recipe", referenceId: recipeId, amount: 1 },
+      {
+        itemKind: "recipe",
+        itemName: recipe?.name ?? "Rezept",
+        allergens: recipe?.allergens,
+      },
+    )
   }
 
   const handleDateSelect = (date: Date | undefined) => {
@@ -463,15 +563,38 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const handleDropPayload = async (slotType: MealSlotType, payload: { type: MealEntry["type"]; referenceId: string }) => {
     if (payload.type === "recipe") {
-      addEntry(slotType, { type: "recipe", referenceId: payload.referenceId, amount: 1 })
+      const recipe = recipeMap.get(payload.referenceId)
+      guardedAddEntry(
+        slotType,
+        { type: "recipe", referenceId: payload.referenceId, amount: 1 },
+        {
+          itemKind: "recipe",
+          itemName: recipe?.name ?? "Rezept",
+          allergens: recipe?.allergens,
+        },
+      )
     } else {
       const food = await hydrateFood(payload.referenceId)
-      if (food) addEntry(slotType, { type: "food", referenceId: food.id, amount: 120 })
+      if (!food) return
+      guardedAddEntry(
+        slotType,
+        { type: "food", referenceId: food.id, amount: 120 },
+        { itemKind: "food", itemName: food.name, allergens: food.allergens },
+      )
     }
   }
 
   const handleQuickAddRecipe = (recipeId: string) => {
-    addEntry(paletteSlot, { type: "recipe", referenceId: recipeId, amount: 1 })
+    const recipe = recipeMap.get(recipeId)
+    guardedAddEntry(
+      paletteSlot,
+      { type: "recipe", referenceId: recipeId, amount: 1 },
+      {
+        itemKind: "recipe",
+        itemName: recipe?.name ?? "Rezept",
+        allergens: recipe?.allergens,
+      },
+    )
   }
 
   const handleOpenExchange = (slotType: MealSlotType, entryId?: string) => {
@@ -485,20 +608,27 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     if (!exchangeSlot) return
     const food = await hydrateFood(foodId)
     if (!food) return
-    if (exchangeEntryId) {
-      const slot = currentPlan.slots.find((item) => item.type === exchangeSlot)
-      const existing = slot?.entries.find((entry) => entry.id === exchangeEntryId)
-      replaceEntry(exchangeSlot, exchangeEntryId, {
-        type: "food",
-        referenceId: food.id,
-        amount: existing?.amount ?? 100,
-      })
-    } else {
-      addEntry(exchangeSlot, { type: "food", referenceId: food.id, amount: 100 })
-    }
+    const slot = currentPlan.slots.find((item) => item.type === exchangeSlot)
+    const existing = exchangeEntryId
+      ? slot?.entries.find((entry) => entry.id === exchangeEntryId)
+      : undefined
+    const amount = existing?.amount ?? 100
+    const targetSlot = exchangeSlot
+    const replaceEntryId = exchangeEntryId ?? undefined
     setExchangeDialogOpen(false)
     setExchangeSlot(null)
     setExchangeEntryId(null)
+
+    guardedAddEntry(
+      targetSlot,
+      { type: "food", referenceId: food.id, amount },
+      {
+        itemKind: "food",
+        itemName: food.name,
+        allergens: food.allergens,
+        replaceEntryId,
+      },
+    )
   }
 
   const dietLineId = currentPlan.dietLineId ?? dietLines[0]?.id ?? ""
@@ -721,6 +851,36 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const reopenCurrentPlan = () => {
     reopenPlan(currentDate)
     toast.success("Plan wurde als Entwurf wieder geöffnet.")
+    window.setTimeout(() => {
+      void refreshMealPlanVersions()
+    }, 800)
+  }
+
+  const saveManualCheckpoint = async () => {
+    if (currentPlan.status === "approved") {
+      toast.error("Freigegebene Pläne sind bereits versioniert.")
+      return
+    }
+
+    const hasEntries = currentPlan.slots.some((slot) => slot.entries.length > 0)
+    if (!hasEntries) {
+      toast.error("Leere Pläne können nicht als Version gespeichert werden.")
+      return
+    }
+
+    setIsCheckpointing(true)
+    try {
+      const version = await createPlanCheckpoint(currentDate, "manual")
+      if (!version) {
+        toast.error("Checkpoint konnte nicht gespeichert werden.")
+        return
+      }
+
+      recordMealPlanVersion(version)
+      toast.success("Checkpoint wurde in der Versionshistorie gespeichert.")
+    } finally {
+      setIsCheckpointing(false)
+    }
   }
 
   const restoreVersion = (version: MealPlanVersion) => {
@@ -1364,13 +1524,32 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <div>
                   <p className="text-sm font-medium">Versionshistorie</p>
                   <p className="text-xs text-muted-foreground">
-                    Freigaben werden als unveränderliche Snapshots gespeichert.
+                    Freigaben, Wiederöffnungen und manuelle Checkpoints bleiben nachvollziehbar.
                   </p>
                 </div>
               </div>
-              <Badge variant="outline">
-                {mealPlanVersionsLoading ? "lädt" : `${mealPlanVersions.length} Versionen`}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={saveManualCheckpoint}
+                  disabled={
+                    isCheckpointing ||
+                    currentPlan.status === "approved" ||
+                    !currentPlan.slots.some((slot) => slot.entries.length > 0)
+                  }
+                >
+                  {isCheckpointing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Checkpoint speichern
+                </Button>
+                <Badge variant="outline">
+                  {mealPlanVersionsLoading ? "lädt" : `${mealPlanVersions.length} Versionen`}
+                </Badge>
+              </div>
             </div>
             <div className="mt-3 space-y-2">
               {mealPlanVersions.length === 0 && (
@@ -1393,7 +1572,13 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                         Version {version.versionNumber} · {format(parseISO(version.createdAt), "dd.MM.yyyy HH:mm")}
                       </p>
                       <p className="text-muted-foreground text-xs">
-                        {entryCount} Einträge · {version.reason === "approved" ? "Freigabe" : version.reason}
+                        {entryCount} Einträge · {
+                          version.reason === "approved"
+                            ? "Freigabe"
+                            : version.reason === "manual"
+                              ? "Checkpoint"
+                              : "Wiederöffnung"
+                        }
                       </p>
                     </div>
                     <Button
@@ -1633,6 +1818,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               </DropdownMenu>
             </div>
           </div>
+
+          {planAllergenSummary.totalConflicts > 0 && (
+            <PlanAllergenBanner summary={planAllergenSummary} />
+          )}
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="space-y-4">
@@ -2542,6 +2731,71 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <Save className="mr-2 h-4 w-4" />
               )}
               Speichern
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingAllergenIntent !== null}
+        onOpenChange={(open) => {
+          if (!open) dismissPendingAllergenIntent()
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-red-700">
+              Schwere Allergenwarnung – Eintrag blockiert
+            </DialogTitle>
+            <DialogDescription>
+              {pendingAllergenIntent
+                ? `${pendingAllergenIntent.itemName} kollidiert mit einem als „schwer“ eingestuften Allergen-/Intoleranzhinweis dieses Patienten.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          {pendingAllergenIntent && (
+            <div className="space-y-3 text-sm">
+              <ul className="space-y-1">
+                {pendingAllergenIntent.warnings.map((warning) => (
+                  <li
+                    key={warning.allergenId}
+                    className="flex flex-wrap items-center gap-2"
+                  >
+                    <Badge
+                      variant="outline"
+                      className={
+                        warning.severity === "severe"
+                          ? "border-red-300 bg-red-100 text-red-800"
+                          : warning.severity === "moderate"
+                            ? "border-amber-300 bg-amber-100 text-amber-800"
+                            : "border-yellow-300 bg-yellow-100 text-yellow-800"
+                      }
+                    >
+                      {ALLERGEN_SEVERITY_LABELS[warning.severity]}
+                    </Badge>
+                    <span className="font-medium">{warning.allergenLabel}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {ALLERGEN_TYPE_LABELS[warning.type]} · Treffer: {warning.matchedToken}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-muted-foreground text-xs">
+                Bitte vor der Übernahme die klinische Indikation und alternative Lebensmittel
+                prüfen. Eine Übernahme wird im Plan und in der nächsten Versionsspeicherung
+                dokumentiert.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={dismissPendingAllergenIntent}>
+              Abbrechen
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmPendingAllergenIntent}
+            >
+              Trotzdem übernehmen
             </Button>
           </DialogFooter>
         </DialogContent>

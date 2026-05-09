@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+function uniquePlannerDate(offset = 0) {
+  const seed = Date.now() + offset;
+  const year = 2040 + (seed % 40);
+  const month = String((Math.floor(seed / 40) % 12) + 1).padStart(2, "0");
+  const day = String((Math.floor(seed / 480) % 27) + 1).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 test.describe("Ernährungsplan", () => {
   test.setTimeout(60_000);
 
@@ -18,8 +26,9 @@ test.describe("Ernährungsplan", () => {
   });
 
   test("adds food entry to a meal slot", async ({ page }) => {
+    const planDate = uniquePlannerDate(1000);
     // Clear localStorage to start fresh
-    await page.goto("/ernaehrungsplan");
+    await page.goto(`/ernaehrungsplan?date=${planDate}`);
     await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
     await page.reload();
 
@@ -47,7 +56,8 @@ test.describe("Ernährungsplan", () => {
   });
 
   test("exports the current plan as a clinical PDF", async ({ page }) => {
-    await page.goto("/ernaehrungsplan");
+    const planDate = uniquePlannerDate(2000);
+    await page.goto(`/ernaehrungsplan?date=${planDate}`);
     await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
     await page.reload();
 
@@ -66,9 +76,30 @@ test.describe("Ernährungsplan", () => {
     expect(await pdf.suggestedFilename()).toMatch(/ernaehrungsplan-klinik-.*\.pdf/);
   });
 
+  test("stores a manual checkpoint in the version history", async ({ page }) => {
+    const planDate = uniquePlannerDate(3000);
+    await page.goto(`/ernaehrungsplan?date=${planDate}`);
+    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
+    await page.reload();
+
+    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
+    const searchInput = page.locator("[cmdk-input]");
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill("Hafer");
+    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
+    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+
+    const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
+    await planRecord.getByRole("button", { name: "Checkpoint speichern" }).click();
+
+    await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
+    await expect(planRecord.getByText(/Einträge · Checkpoint/)).toBeVisible();
+    await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeEnabled();
+  });
+
   test("creates an immutable version when a plan is approved", async ({ page }) => {
-    const day = String(Math.floor(Math.random() * 20) + 1).padStart(2, "0");
-    await page.goto(`/ernaehrungsplan?date=2031-02-${day}`);
+    const planDate = uniquePlannerDate(4000);
+    await page.goto(`/ernaehrungsplan?date=${planDate}`);
     await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
     await page.reload();
 

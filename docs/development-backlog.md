@@ -39,6 +39,7 @@ Recently completed sprint work:
 - `/admin/integrationen` now gives owner/admin users a dedicated integration operations surface for HL7 import jobs, review results, and lab mapping creation/edit/disable workflows.
 - `/admin/integrationen` now supports HL7 job status/source filtering, job detail drill-down, and checked review-result resolution with audit logging.
 - `/institution/produktion` now persists kitchen production batch states in `kitchen_production_batches`, appends `kitchen_production_events`, and verifies state survives reload.
+- `/ernaehrungsplan` now supports immutable approval snapshots, manual checkpoints, and reopen snapshots in the Planakte version history.
 
 ## P0: Stabilize Clinic Demo Quality
 
