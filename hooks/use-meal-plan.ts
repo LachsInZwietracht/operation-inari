@@ -391,6 +391,65 @@ export function useMealPlan(
     [currentDate, isPlanLocked, updateCurrentPlan],
   )
 
+  const moveEntry = useCallback(
+    (
+      sourceSlot: MealSlotType,
+      sourceEntryId: string,
+      targetSlot: MealSlotType,
+      targetIndex?: number,
+    ) => {
+      if (isPlanLocked(currentDate)) return
+      updateCurrentPlan((plan) => {
+        if (plan.status === "approved") return plan
+
+        const source = plan.slots.find((slot) => slot.type === sourceSlot)
+        const movedEntry = source?.entries.find((entry) => entry.id === sourceEntryId)
+        if (!source || !movedEntry) return plan
+
+        if (sourceSlot === targetSlot) {
+          const sourceIndex = source.entries.findIndex((entry) => entry.id === sourceEntryId)
+          if (sourceIndex < 0) return plan
+
+          const insertRequest = targetIndex ?? source.entries.length
+          let insertAt = insertRequest
+          if (insertAt > sourceIndex) insertAt -= 1
+          if (insertAt === sourceIndex) return plan
+
+          const nextEntries = [...source.entries]
+          nextEntries.splice(sourceIndex, 1)
+          nextEntries.splice(insertAt, 0, movedEntry)
+
+          return {
+            ...plan,
+            slots: plan.slots.map((slot) =>
+              slot.type === sourceSlot ? { ...slot, entries: nextEntries } : slot,
+            ),
+          }
+        }
+
+        return {
+          ...plan,
+          slots: plan.slots.map((slot) => {
+            if (slot.type === sourceSlot) {
+              return {
+                ...slot,
+                entries: slot.entries.filter((entry) => entry.id !== sourceEntryId),
+              }
+            }
+            if (slot.type === targetSlot) {
+              const insertAt = Math.min(targetIndex ?? slot.entries.length, slot.entries.length)
+              const nextEntries = [...slot.entries]
+              nextEntries.splice(insertAt, 0, movedEntry)
+              return { ...slot, entries: nextEntries }
+            }
+            return slot
+          }),
+        }
+      })
+    },
+    [currentDate, isPlanLocked, updateCurrentPlan],
+  )
+
   const copyPlanToDate = useCallback(
     (sourceDate: string, targetDate: string) => {
       if (isPlanLocked(targetDate)) return
@@ -598,6 +657,7 @@ export function useMealPlan(
     removeEntry,
     updateEntryAmount,
     replaceEntry,
+    moveEntry,
     copyPlanToDate,
     clearPlanForDate,
     updatePlanMetadata,

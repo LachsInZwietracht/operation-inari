@@ -326,6 +326,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     removeEntry,
     updateEntryAmount,
     replaceEntry,
+    moveEntry,
     copyPlanToDate,
     clearPlanForDate,
     updatePlanMetadata,
@@ -2246,6 +2247,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   onRemoveEntry={removeEntry}
                   onUpdateAmount={updateEntryAmount}
                   onDropPayload={handleDropPayload}
+                  onMoveEntry={moveEntry}
                   complianceIndicators={slotCompliance[slot.type]}
                   onOpenExchange={handleOpenExchange}
                   foods={foods}
