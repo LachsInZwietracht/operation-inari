@@ -10,6 +10,7 @@ import {
 } from "date-fns"
 import { de } from "date-fns/locale"
 import {
+  Activity,
   ChevronLeft,
   ChevronRight,
   CalendarIcon,
@@ -21,8 +22,10 @@ import {
   Copy,
   Download,
   FileText,
+  FolderOpen,
   History,
   LayoutTemplate,
+  Leaf,
   Loader2,
   Lock,
   Plus,
@@ -31,8 +34,8 @@ import {
   Search,
   Settings2,
   Sparkles,
+  Target,
   Trash2,
-  User,
   Users,
   Utensils,
 } from "lucide-react"
@@ -86,6 +89,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
@@ -273,12 +277,6 @@ function complianceBadge(value: number, min?: number, max?: number): "ok" | "low
   return "ok"
 }
 
-function reviewSeverityBadgeClass(severity: PlanReviewSeverity): string {
-  if (severity === "critical") return "border-red-200 bg-red-50 text-red-700"
-  if (severity === "warning") return "border-amber-200 bg-amber-50 text-amber-700"
-  return "border-emerald-200 bg-emerald-50 text-emerald-700"
-}
-
 function chooseOptimizationSlot(nutrientId: string, plan: DailyMealPlan): MealSlotType {
   const openCoreSlot = plan.slots.find(
     (slot) =>
@@ -392,6 +390,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [isCheckpointing, setIsCheckpointing] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
+  const [planAkteOpen, setPlanAkteOpen] = useState(false)
   const {
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
@@ -1661,53 +1660,118 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     <div className="space-y-6">
       <PageHeader
         title="Ernährungsplan"
-        description={`Steuerung für Tag, Woche oder Zyklus – aktuell ${formattedDate}`}
+        description={formattedDate}
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der PRODIscore zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
       />
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="space-y-3 pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle className="text-base">
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                <ClipboardCheck className="text-muted-foreground h-4 w-4 shrink-0" />
                 Planakte
-                {patientId && (
-                  <span className="text-muted-foreground ml-2 text-sm font-normal">
-                    · {patient ? `${patient.firstName} ${patient.lastName}` : "Patient wird geladen"}
+                {patient && (
+                  <span className="text-muted-foreground text-sm font-normal">
+                    · {patient.firstName} {patient.lastName}
                   </span>
                 )}
               </CardTitle>
-              <CardDescription>
-                {patientId
-                  ? "Patientenkontext, klinische Hinweise und Versionshistorie für den aktuellen Tagesplan."
-                  : "Titel, Status und klinische Hinweise für den aktuellen Tagesplan."}
+              <CardDescription className="line-clamp-1">
+                {currentPlan.title || "Ohne Titel"}
+                {patient?.indication && ` · ${patient.indication}`}
+                {currentPlan.approvedAt &&
+                  ` · Freigabe ${format(parseISO(currentPlan.approvedAt), "dd.MM.yyyy HH:mm")}`}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               {patientId && (
-                <>
-                  <Badge variant="secondary">{refConfig.standardId.toUpperCase()}</Badge>
-                  {patient?.indication && (
-                    <Badge variant="outline">{patient.indication}</Badge>
-                  )}
-                  {patientAllergens.length > 0 && (
-                    <Badge variant="outline">
-                      {patientAllergens.length} Allergen-/Intoleranzhinweise
-                    </Badge>
-                  )}
-                </>
+                <Badge variant="secondary" className="font-normal">
+                  {refConfig.standardId.toUpperCase()}
+                </Badge>
               )}
-              <Badge variant={currentPlan.status === "approved" ? "secondary" : "outline"}>
+              {patientAllergens.length > 0 && (
+                <Badge variant="outline" className="gap-1 font-normal">
+                  <AlertTriangle className="h-3 w-3" />
+                  {patientAllergens.length} Allergene
+                </Badge>
+              )}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "h-7 gap-1.5 px-2 text-xs",
+                      clinicalReview.canApprove
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+                    )}
+                  >
+                    {clinicalReview.canApprove ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    )}
+                    {clinicalReview.canApprove
+                      ? clinicalReview.warningItems.length > 0
+                        ? `${clinicalReview.warningItems.length} Hinweise`
+                        : "freigabereif"
+                      : `${clinicalReview.blockingItems.length} Blocker`}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[28rem] p-3">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Klinische Freigabeprüfung</p>
+                    <div className="grid gap-2">
+                      {clinicalReview.items.map((item) => (
+                        <div key={item.id} className="rounded-md border p-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            {item.severity === "ok" ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : (
+                              <AlertTriangle
+                                className={
+                                  item.severity === "critical"
+                                    ? "h-3.5 w-3.5 text-red-600"
+                                    : "h-3.5 w-3.5 text-amber-600"
+                                }
+                              />
+                            )}
+                            <span className="font-medium">{item.label}</span>
+                          </div>
+                          <p className="text-muted-foreground mt-1">{item.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Badge
+                variant={currentPlan.status === "approved" ? "secondary" : "outline"}
+                className={cn(
+                  "gap-1 font-normal",
+                  currentPlan.status === "approved" &&
+                    "border-emerald-200 bg-emerald-50 text-emerald-800",
+                )}
+              >
+                {currentPlan.status === "approved" && <Lock className="h-3 w-3" />}
                 {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
               </Badge>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <div className="grid gap-3 md:grid-cols-2">
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(160px,200px)_auto]">
             <div className="space-y-1.5">
-              <p className="text-xs font-medium uppercase text-muted-foreground">Titel</p>
+              <Label
+                htmlFor="planakte-title"
+                className="text-muted-foreground text-xs uppercase tracking-wide"
+              >
+                Titel
+              </Label>
               <Input
+                id="planakte-title"
                 key={`title-${currentPlan.id}-${currentPlan.date}`}
                 defaultValue={currentPlan.title ?? ""}
                 placeholder="z. B. Reduktionskost Woche 1"
@@ -1720,323 +1784,205 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               />
             </div>
             <div className="space-y-1.5">
-              <p className="text-xs font-medium uppercase text-muted-foreground">Status</p>
-              <Select value={currentPlan.status ?? "draft"} onValueChange={(value) => void updateCurrentPlanStatus(value as NonNullable<DailyMealPlan["status"]>)}>
+              <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                Status
+              </Label>
+              <Select
+                value={currentPlan.status ?? "draft"}
+                onValueChange={(value) =>
+                  void updateCurrentPlanStatus(value as NonNullable<DailyMealPlan["status"]>)
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Status wählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(PLAN_STATUS_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value} disabled={value === "approved" && !clinicalReview.canApprove}>
+                    <SelectItem
+                      key={value}
+                      value={value}
+                      disabled={value === "approved" && !clinicalReview.canApprove}
+                    >
                       {label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 md:col-span-2">
-              <p className="text-xs font-medium uppercase text-muted-foreground">Hinweise</p>
-              <Textarea
-                key={`notes-${currentPlan.id}-${currentPlan.date}`}
-                defaultValue={currentPlan.notes ?? ""}
-                placeholder="Indikation, Beratungshinweise, Patientenvorlieben oder interne Prüfnotizen"
-                rows={2}
-                readOnly={currentPlan.status === "approved"}
-                onBlur={(event) => {
-                  if (event.currentTarget.value.trim() !== (currentPlan.notes ?? "")) {
-                    saveCurrentPlanNotes(event.currentTarget.value)
-                  }
-                }}
-              />
+            <div className="flex flex-wrap items-end gap-1.5">
+              {patientId && currentPlan.patientId !== patientId && (
+                <Button size="sm" variant="outline" onClick={attachCurrentPatient}>
+                  Patient zuordnen
+                </Button>
+              )}
+              {currentPlan.status === "approved" && (
+                <Button size="sm" variant="outline" onClick={reopenCurrentPlan}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  Entwurf öffnen
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setPlanAkteOpen(true)}>
+                <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                Akte öffnen
+              </Button>
             </div>
           </div>
-          <div className="space-y-2 rounded-md border p-3 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Patient</span>
-              <span className="text-right font-medium">
-                {currentPlan.patientId
-                  ? patient && currentPlan.patientId === patient.id
-                    ? `${patient.firstName} ${patient.lastName}`
-                    : "zugeordnet"
-                  : "nicht zugeordnet"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Freigabe</span>
-              <span className="text-right font-medium">
-                {currentPlan.approvedAt ? format(parseISO(currentPlan.approvedAt), "dd.MM.yyyy HH:mm") : "offen"}
-              </span>
-            </div>
-            {currentPlan.status === "approved" && (
-              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>Bearbeitung</span>
-                <span className="inline-flex items-center gap-1">
-                  <Lock className="h-3.5 w-3.5" />
-                  gesperrt
+          <div className="bg-muted/30 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <History className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+              {mealPlanVersionsLoading ? (
+                <span className="text-muted-foreground">Versionen werden geladen …</span>
+              ) : mealPlanVersions.length === 0 ? (
+                <span className="text-muted-foreground">Noch keine Versionen.</span>
+              ) : (
+                <span className="truncate font-medium">
+                  Version {mealPlanVersions[0].versionNumber} ·{" "}
+                  {format(parseISO(mealPlanVersions[0].createdAt), "dd.MM.yyyy HH:mm")} ·{" "}
+                  {mealPlanVersions[0].snapshot.slots.reduce(
+                    (sum, slot) => sum + slot.entries.length,
+                    0,
+                  )}{" "}
+                  Einträge ·{" "}
+                  {mealPlanVersions[0].reason === "approved"
+                    ? "Freigabe"
+                    : mealPlanVersions[0].reason === "manual"
+                      ? "Checkpoint"
+                      : "Wiederöffnung"}
                 </span>
-              </div>
-            )}
-            {patientId && currentPlan.patientId !== patientId && (
-              <Button size="sm" variant="outline" className="mt-2 w-full" onClick={attachCurrentPatient}>
-                Patient zuordnen
-              </Button>
-            )}
-            {currentPlan.status === "approved" && (
-              <Button size="sm" variant="outline" className="mt-2 w-full" onClick={reopenCurrentPlan}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Als Entwurf öffnen
-              </Button>
-            )}
-          </div>
-          <div className="rounded-md border p-3 lg:col-span-2">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-2">
-                <ClipboardCheck className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Klinische Freigabeprüfung</p>
-                  <p className="text-xs text-muted-foreground">
-                    {clinicalReview.canApprove
-                      ? clinicalReview.warningItems.length > 0
-                        ? `${clinicalReview.warningItems.length} Hinweise prüfen; Freigabe ist möglich.`
-                        : "Alle kritischen Prüfpunkte sind erfüllt."
-                      : `${clinicalReview.blockingItems.length} kritische Prüfpunkte blockieren die Freigabe.`}
-                  </p>
-                </div>
-              </div>
-              <Badge className={reviewSeverityBadgeClass(clinicalReview.canApprove ? "ok" : "critical")} variant="outline">
-                {clinicalReview.canApprove ? "freigabereif" : "blockiert"}
-              </Badge>
+              )}
+              {mealPlanVersions.length > 1 && (
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  +{mealPlanVersions.length - 1} weitere
+                </Badge>
+              )}
+              {currentPlan.status === "approved" && (
+                <span className="text-muted-foreground inline-flex items-center gap-1">
+                  <Lock className="h-3 w-3" />
+                  Bearbeitung gesperrt
+                </span>
+              )}
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {clinicalReview.items.map((item) => (
-                <div key={item.id} className="rounded-md border p-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    {item.severity === "ok" ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                    ) : (
-                      <AlertTriangle className={item.severity === "critical" ? "h-3.5 w-3.5 text-red-600" : "h-3.5 w-3.5 text-amber-600"} />
-                    )}
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                  <p className="mt-1 text-muted-foreground">{item.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-md border p-3 lg:col-span-2">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-2">
-                <History className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Versionshistorie</p>
-                  <p className="text-xs text-muted-foreground">
-                    Freigaben, Wiederöffnungen und manuelle Checkpoints bleiben nachvollziehbar.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {mealPlanVersions[0] && (
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={saveManualCheckpoint}
-                  disabled={
-                    isCheckpointing ||
-                    currentPlan.status === "approved" ||
-                    !currentPlan.slots.some((slot) => slot.entries.length > 0)
-                  }
+                  className="h-7"
+                  disabled={currentPlan.status === "approved"}
+                  onClick={() => restoreVersion(mealPlanVersions[0])}
                 >
-                  {isCheckpointing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Checkpoint speichern
+                  Wiederherstellen
                 </Button>
-                <Badge variant="outline">
-                  {mealPlanVersionsLoading ? "lädt" : `${mealPlanVersions.length} Versionen`}
-                </Badge>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2">
-              {mealPlanVersions.length === 0 && (
-                <p className="text-muted-foreground text-sm">
-                  Noch keine freigegebene Version für diesen Tagesplan.
-                </p>
               )}
-              {mealPlanVersions.slice(0, 3).map((version) => {
-                const entryCount = version.snapshot.slots.reduce(
-                  (sum, slot) => sum + slot.entries.length,
-                  0,
-                )
-                return (
-                  <div
-                    key={version.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-2 text-sm"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        Version {version.versionNumber} · {format(parseISO(version.createdAt), "dd.MM.yyyy HH:mm")}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {entryCount} Einträge · {
-                          version.reason === "approved"
-                            ? "Freigabe"
-                            : version.reason === "manual"
-                              ? "Checkpoint"
-                              : "Wiederöffnung"
-                        }
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={currentPlan.status === "approved"}
-                      onClick={() => restoreVersion(version)}
-                    >
-                      Wiederherstellen
-                    </Button>
-                  </div>
-                )
-              })}
-              {currentPlan.status === "approved" && mealPlanVersions.length > 0 && (
-                <p className="text-muted-foreground text-xs">
-                  Zum Wiederherstellen zuerst den Plan als Entwurf öffnen.
-                </p>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                onClick={saveManualCheckpoint}
+                disabled={
+                  isCheckpointing ||
+                  currentPlan.status === "approved" ||
+                  !currentPlan.slots.some((slot) => slot.entries.length > 0)
+                }
+              >
+                {isCheckpointing ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <Save className="mr-1.5 h-3 w-3" />
+                )}
+                Checkpoint speichern
+              </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">PRODIscore Tagesplan</CardTitle>
-            <CardDescription>Qualität der heutigen Planung auf einen Blick.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">Ø Score</p>
-                <p className="text-3xl font-semibold">{formatNumber(planProdScore.score, 0)}</p>
-                <p className="text-muted-foreground text-xs">{planProdScore.summary}</p>
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-muted-foreground text-xs uppercase tracking-wide">PRODIscore</p>
+                <p className="mt-1 text-3xl font-semibold leading-none">
+                  {formatNumber(planProdScore.score, 0)}
+                </p>
+                <p className="text-muted-foreground mt-1.5 line-clamp-1 text-xs">
+                  {planProdScore.summary}
+                </p>
               </div>
-              <Badge className={`${planProdScore.badge.color} border-none px-3 py-1 text-xs font-bold`}>
-                PRODIscore {planProdScore.badge.label}
+              <Badge
+                className={cn(
+                  planProdScore.badge.color,
+                  "border-none px-2 py-0.5 text-[11px] font-semibold",
+                )}
+              >
+                {planProdScore.badge.label}
               </Badge>
             </div>
-            <Progress value={planProdScore.score} />
-            <div className="grid gap-2 text-xs sm:grid-cols-2">
-              {positivePlanDrivers.map((driver) => (
-                <div key={driver.id} className="rounded-md bg-emerald-50/70 p-2">
-                  <p className="font-medium">{driver.label}</p>
-                  <p className="text-muted-foreground">{driver.description}</p>
-                </div>
-              ))}
-              {negativePlanDrivers.map((driver) => (
-                <div key={driver.id} className="rounded-md bg-red-50/70 p-2">
-                  <p className="font-medium">{driver.label}</p>
-                  <p className="text-muted-foreground">{driver.description}</p>
-                </div>
-              ))}
+            <Progress value={planProdScore.score} className="mt-3 h-1.5" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-muted-foreground text-xs uppercase tracking-wide">CO₂-Bilanz</p>
+                <p className="mt-1 text-3xl font-semibold leading-none">
+                  {formatNumber(planSustainability.totalCo2, 2)}
+                  <span className="text-muted-foreground ml-1 text-sm font-normal">kg</span>
+                </p>
+                <p className="text-muted-foreground mt-1.5 text-xs">
+                  <span className="font-medium text-emerald-700">
+                    {formatNumber(planSustainability.plantShare * 100, 0)}%
+                  </span>{" "}
+                  pflanzlich · {formatNumber(planSustainability.animalShare * 100, 0)}% tierisch
+                </p>
+              </div>
+              <Leaf className="h-5 w-5 shrink-0 text-emerald-500" />
+            </div>
+            <div className="bg-muted mt-3 flex h-1.5 overflow-hidden rounded-full">
+              <div
+                className="bg-emerald-500"
+                style={{ width: `${planSustainability.plantShare * 100}%` }}
+              />
+              <div
+                className="bg-orange-300"
+                style={{ width: `${planSustainability.animalShare * 100}%` }}
+              />
             </div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Nachhaltigkeit</CardTitle>
-            <CardDescription>CO₂-Fußabdruck & Top-Verursacher des Plans.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-muted-foreground text-xs uppercase tracking-wide">Tagessumme</p>
+                <p className="mt-1 text-3xl font-semibold leading-none">
+                  {formatNumber(Math.round(totalKcal))}
+                  <span className="text-muted-foreground ml-1 text-sm font-normal">kcal</span>
+                </p>
+                <p className="text-muted-foreground mt-1.5 line-clamp-1 text-xs">
+                  Energie · Eiweiß · Fett · Kohlenhydrate
+                </p>
+              </div>
+              <Activity className="text-muted-foreground h-5 w-5 shrink-0" />
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
               <div>
-                <p className="text-xs uppercase text-muted-foreground">Gesamt</p>
-                <p className="text-2xl font-semibold">
-                  {formatNumber(planSustainability.totalCo2, 2)} kg CO₂e
-                </p>
+                <p className="font-semibold">{formatNumber(totalProtein, 0)} g</p>
+                <p className="text-muted-foreground text-[11px]">Eiweiß</p>
               </div>
-              <div className="text-right">
-                <p className="text-xs uppercase text-muted-foreground">Pflanzlich</p>
-                <p className="font-semibold">
-                  {formatNumber(planSustainability.plantShare * 100, 0)}%
-                </p>
+              <div>
+                <p className="font-semibold">{formatNumber(totalFat, 0)} g</p>
+                <p className="text-muted-foreground text-[11px]">Fett</p>
+              </div>
+              <div>
+                <p className="font-semibold">{formatNumber(totalCarbs, 0)} g</p>
+                <p className="text-muted-foreground text-[11px]">KH</p>
               </div>
             </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Pflanzlich</span>
-                <span>{formatNumber(planSustainability.plantShare * 100, 0)}%</span>
-              </div>
-              <Progress value={planSustainability.plantShare * 100} />
-              <div className="mt-2 mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Tierisch</span>
-                <span>{formatNumber(planSustainability.animalShare * 100, 0)}%</span>
-              </div>
-              <Progress value={planSustainability.animalShare * 100} className="bg-orange-100" />
-            </div>
-            <div className="space-y-1 text-xs">
-              {planSustainability.topEmitters.slice(0, 3).map((emitter) => (
-                <div key={emitter.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px]">
-                      {MEAL_SLOT_LABELS[emitter.slot] ?? emitter.slot}
-                    </Badge>
-                    <span>{emitter.label}</span>
-                  </div>
-                  <span className="font-medium">
-                    {formatNumber(emitter.co2, 2)} kg
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Optimierungsassistent
-            </CardTitle>
-            <CardDescription>Konkrete Ergänzungen für Zielwerte unterhalb des Profils.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {optimizationSuggestions.length > 0 ? (
-              optimizationSuggestions.map((suggestion) => (
-                <div key={suggestion.id} className="rounded-md border p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{suggestion.name}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {MEAL_SLOT_LABELS[suggestion.slotType]} · {suggestion.targetLabel} +{" "}
-                        {formatNutrient(suggestion.contribution, suggestion.unit)}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        Lücke: {formatNutrient(suggestion.deficit, suggestion.unit)}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={currentPlan.status === "approved"}
-                      onClick={() => applyOptimizationSuggestion(suggestion)}
-                    >
-                      Einfügen
-                    </Button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                {dietLineCompliance.some((target) => target.status === "low")
-                  ? "Keine geeigneten Vorschläge aus den aktuell geladenen Lebensmitteln und Rezepten."
-                  : "Keine niedrigen Zielwerte im aktuellen Profil."}
-              </div>
-            )}
-            {currentPlan.status === "approved" && optimizationSuggestions.length > 0 && (
-              <p className="text-muted-foreground text-xs">
-                Zum Einfügen zuerst den Plan als Entwurf öffnen.
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -2050,32 +1996,53 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
         <TabsContent value="day" className="space-y-4">
           <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur">
-            {patientId && (
-              <Badge
-                variant="outline"
-                className="bg-background hidden gap-1 px-2 py-1 text-xs sm:inline-flex"
-                title={
-                  patient
-                    ? `${patient.firstName} ${patient.lastName}${patient.indication ? ` · ${patient.indication}` : ""}`
-                    : undefined
-                }
-              >
-                <User className="h-3 w-3" />
-                <span className="max-w-[140px] truncate">
-                  {patient ? `${patient.firstName} ${patient.lastName}` : "Patient"}
-                </span>
-              </Badge>
-            )}
-            <Badge
-              variant={currentPlan.status === "approved" ? "secondary" : "outline"}
-              className={cn(
-                "gap-1 px-2 py-1 text-xs",
-                currentPlan.status === "approved" && "bg-emerald-50 text-emerald-700",
-              )}
-            >
-              {currentPlan.status === "approved" && <Lock className="h-3 w-3" />}
-              {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
-            </Badge>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" onClick={goToPreviousDay}>
+                <ChevronLeft className="h-4 w-4" />
+                <span className="sr-only">Vorheriger Tag</span>
+              </Button>
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden min-w-[180px] justify-start gap-2 capitalize sm:inline-flex"
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    {formattedDate}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={parsedDate}
+                    onSelect={handleDateSelect}
+                    locale={de}
+                  />
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon" className="sm:hidden">
+                    <CalendarIcon className="h-4 w-4" />
+                    <span className="sr-only">Datum wählen</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={parsedDate}
+                    onSelect={handleDateSelect}
+                    locale={de}
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button variant="outline" size="icon" onClick={goToNextDay}>
+                <ChevronRight className="h-4 w-4" />
+                <span className="sr-only">Nächster Tag</span>
+              </Button>
+            </div>
+
             {planAllergenSummary.totalConflicts > 0 && (
               <Badge
                 variant="outline"
@@ -2092,66 +2059,54 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 {planAllergenSummary.affectedEntryIds.size} Allergenkonflikte
               </Badge>
             )}
-            <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
-            <Button variant="outline" size="icon" onClick={goToPreviousDay}>
-              <ChevronLeft className="h-4 w-4" />
-              <span className="sr-only">Vorheriger Tag</span>
-            </Button>
-            <div className="hidden text-sm font-medium capitalize sm:block">
-              {formattedDate}
-            </div>
-            <Button variant="outline" size="icon" onClick={goToNextDay}>
-              <ChevronRight className="h-4 w-4" />
-              <span className="sr-only">Nächster Tag</span>
-            </Button>
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <CalendarIcon className="h-4 w-4" />
-                  <span className="sr-only">Datum wählen</span>
+
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <div className="bg-muted/40 hidden items-center rounded-md border p-0.5 md:flex">
+                <Select
+                  value={dietLineId}
+                  onValueChange={handleDietLineChange}
+                  disabled={currentPlan.status === "approved"}
+                >
+                  <SelectTrigger className="h-8 w-[180px] border-0 bg-transparent shadow-none focus:ring-0">
+                    <SelectValue placeholder="Kostform/Zielprofil" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dietLines.map((line) => (
+                      <SelectItem key={line.id} value={line.id}>
+                        {line.name}
+                        {line.userId ? " (eigene)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={openDietLineEditor}
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  <span className="sr-only">Zielprofil verwalten</span>
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={parsedDate} onSelect={handleDateSelect} locale={de} />
-              </PopoverContent>
-            </Popover>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Select
-                value={dietLineId}
-                onValueChange={handleDietLineChange}
-                disabled={currentPlan.status === "approved"}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Kostform/Zielprofil" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dietLines.map((line) => (
-                    <SelectItem key={line.id} value={line.id}>
-                      {line.name}{line.userId ? " (eigene)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="icon" onClick={openDietLineEditor}>
-                <Settings2 className="h-4 w-4" />
-                <span className="sr-only">Zielprofil verwalten</span>
-              </Button>
+              </div>
+
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setPaletteOpen(true)}
                 disabled={currentPlan.status === "approved"}
               >
-                <ChefHat className="mr-2 h-4 w-4" />
+                <ChefHat className="mr-1.5 h-4 w-4" />
                 Rezepte
-                <span className="text-muted-foreground ml-1.5 text-xs">
+                <span className="text-muted-foreground ml-1 text-xs">
                   ({recipes.length})
                 </span>
               </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
-                    <LayoutTemplate className="mr-2 h-4 w-4" />
+                    <LayoutTemplate className="mr-1.5 h-4 w-4" />
                     Vorlagen
                   </Button>
                 </DropdownMenuTrigger>
@@ -2183,15 +2138,16 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" disabled={exportingVariant !== null}>
                     {exportingVariant ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                     ) : (
-                      <Download className="mr-2 h-4 w-4" />
+                      <Download className="mr-1.5 h-4 w-4" />
                     )}
-                    Plan exportieren
+                    Export
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64">
@@ -2201,7 +2157,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                     <FileText className="mr-2 h-4 w-4" />
                     <div className="flex flex-col">
                       <span>Klinischer Bericht</span>
-                      <span className="text-muted-foreground text-xs">Soll-/Ist-Abgleich, Vitamine, Mineralstoffe</span>
+                      <span className="text-muted-foreground text-xs">
+                        Soll-/Ist-Abgleich, Vitamine, Mineralstoffe
+                      </span>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -2222,7 +2180,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                     <Utensils className="mr-2 h-4 w-4" />
                     <div className="flex flex-col">
                       <span>Lehrküchenplan (Woche)</span>
-                      <span className="text-muted-foreground text-xs">7-Tage-Aushang für Küche & Station</span>
+                      <span className="text-muted-foreground text-xs">
+                        7-Tage-Aushang für Küche & Station
+                      </span>
                     </div>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -2260,92 +2220,147 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
             <div className="space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Kostform- und Zielvorgaben</CardTitle>
-                  <CardDescription>
-                    {dietLine?.description ?? (dietLinesLoading ? "Zielprofile werden geladen" : "Ziele setzen")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {dietLineCompliance.length === 0 && (
-                    <p className="text-muted-foreground text-sm">Noch keine Zielwerte gepflegt.</p>
-                  )}
-                  {dietLineCompliance.map((target) => (
-                    <div key={target.label} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-medium">{target.label}</p>
-                        <p className="text-muted-foreground text-xs">
-                          Ziel {target.min != null ? formatNumber(target.min, 0) : "–"}–
-                          {target.max != null ? formatNumber(target.max, 0) : "–"} {target.unit}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={target.status === "ok" ? "secondary" : "outline"}
-                        className={
-                          target.status === "ok"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : target.status === "low"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-rose-50 text-rose-700"
-                        }
-                      >
-                        {formatNumber(target.value, 0)} {target.unit}
+                <Tabs defaultValue="ziele">
+                  <CardHeader className="space-y-2 pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base">Nährstoffanalyse</CardTitle>
+                      <Badge variant="outline" className="font-normal">
+                        {dietLine?.name ?? "Kein Profil"}
                       </Badge>
                     </div>
-                  ))}
-                </CardContent>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="ziele" className="gap-1.5 text-xs">
+                        <Target className="h-3.5 w-3.5" />
+                        Zielprofil
+                      </TabsTrigger>
+                      <TabsTrigger value="dge" className="gap-1.5 text-xs">
+                        <Activity className="h-3.5 w-3.5" />
+                        DGE-Referenz
+                      </TabsTrigger>
+                    </TabsList>
+                  </CardHeader>
+                  <CardContent>
+                    <TabsContent value="ziele" className="mt-0 space-y-2.5">
+                      {dietLineCompliance.length === 0 && (
+                        <p className="text-muted-foreground text-sm">
+                          {dietLinesLoading
+                            ? "Zielprofile werden geladen …"
+                            : "Noch keine Zielwerte gepflegt."}
+                        </p>
+                      )}
+                      {dietLineCompliance.map((target) => {
+                        const ratio =
+                          typeof target.max === "number" && target.max > 0
+                            ? Math.min((target.value / target.max) * 100, 120)
+                            : typeof target.min === "number" && target.min > 0
+                              ? Math.min((target.value / target.min) * 100, 120)
+                              : 0
+                        return (
+                          <div key={target.label} className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">{target.label}</span>
+                              <span
+                                className={cn(
+                                  "text-xs font-semibold",
+                                  target.status === "ok"
+                                    ? "text-emerald-700"
+                                    : target.status === "low"
+                                      ? "text-amber-700"
+                                      : "text-rose-700",
+                                )}
+                              >
+                                {formatNumber(target.value, 0)} {target.unit}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Progress
+                                value={Math.min(ratio, 100)}
+                                className={cn(
+                                  "h-1.5 flex-1",
+                                  target.status === "ok"
+                                    ? "[&>div]:bg-emerald-500"
+                                    : target.status === "low"
+                                      ? "[&>div]:bg-amber-500"
+                                      : "[&>div]:bg-rose-500",
+                                )}
+                              />
+                              <span className="text-muted-foreground w-20 text-right text-[11px]">
+                                {target.min != null ? formatNumber(target.min, 0) : "–"}–
+                                {target.max != null ? formatNumber(target.max, 0) : "–"}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </TabsContent>
+                    <TabsContent value="dge" className="mt-0 space-y-3">
+                      {KEY_NUTRIENT_IDS.map((nutrientId) => {
+                        const def = nutrientDefMap.get(nutrientId)
+                        if (!def) return null
+                        const value = getNutrientValue(dailyNutrients, nutrientId)
+                        const refValue = referenceMap.get(nutrientId) ?? 0
+
+                        return (
+                          <NutrientBar
+                            key={nutrientId}
+                            label={def.shortName}
+                            value={value}
+                            unit={def.unit}
+                            referenceValue={refValue}
+                          />
+                        )
+                      })}
+                    </TabsContent>
+                  </CardContent>
+                </Tabs>
               </Card>
 
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Tagesübersicht</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="text-primary h-4 w-4" />
+                    Optimierungsassistent
+                  </CardTitle>
+                  <CardDescription>
+                    {optimizationSuggestions.length > 0
+                      ? "Vorschläge für unterversorgte Zielwerte"
+                      : "Profil-Konformität wird laufend geprüft"}
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-orange-50 p-3 dark:bg-orange-950/30">
-                      <p className="text-muted-foreground text-xs">Energie</p>
-                      <p className="text-lg font-bold">{formatNumber(Math.round(totalKcal))} kcal</p>
-                    </div>
-                    <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
-                      <p className="text-muted-foreground text-xs">Eiweiß</p>
-                      <p className="text-lg font-bold">{formatNutrient(totalProtein, "g")}</p>
-                    </div>
-                    <div className="rounded-lg bg-yellow-50 p-3 dark:bg-yellow-950/30">
-                      <p className="text-muted-foreground text-xs">Fett</p>
-                      <p className="text-lg font-bold">{formatNutrient(totalFat, "g")}</p>
-                    </div>
-                    <div className="rounded-lg bg-green-50 p-3 dark:bg-green-950/30">
-                      <p className="text-muted-foreground text-xs">Kohlenhydrate</p>
-                      <p className="text-lg font-bold">{formatNutrient(totalCarbs, "g")}</p>
-                    </div>
-                  </div>
+                <CardContent className="space-y-2 text-sm">
+                  {optimizationSuggestions.length > 0 ? (
+                    optimizationSuggestions.slice(0, 3).map((suggestion) => (
+                      <div
+                        key={suggestion.id}
+                        className="hover:bg-muted/40 flex items-start justify-between gap-3 rounded-md border p-2.5 transition"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{suggestion.name}</p>
+                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                            {MEAL_SLOT_LABELS[suggestion.slotType]} · {suggestion.targetLabel} +
+                            {formatNutrient(suggestion.contribution, suggestion.unit)}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0"
+                          disabled={currentPlan.status === "approved"}
+                          onClick={() => applyOptimizationSuggestion(suggestion)}
+                        >
+                          Einfügen
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
+                      {dietLineCompliance.some((target) => target.status === "low")
+                        ? "Keine geeigneten Vorschläge aus den geladenen Daten."
+                        : "Alle Zielwerte sind im Bereich – keine Vorschläge nötig."}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Nährstoffe vs. DGE-Referenz</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {KEY_NUTRIENT_IDS.map((nutrientId) => {
-                    const def = nutrientDefMap.get(nutrientId)
-                    if (!def) return null
-                    const value = getNutrientValue(dailyNutrients, nutrientId)
-                    const refValue = referenceMap.get(nutrientId) ?? 0
-
-                    return (
-                      <NutrientBar
-                        key={nutrientId}
-                        label={def.shortName}
-                        value={value}
-                        unit={def.unit}
-                        referenceValue={refValue}
-                      />
-                    )
-                  })}
-                </CardContent>
-              </Card>
-
             </div>
           </div>
         </TabsContent>
@@ -3271,6 +3286,178 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={planAkteOpen} onOpenChange={setPlanAkteOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        >
+          <SheetHeader className="border-b">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <FolderOpen className="text-primary h-4 w-4" />
+              Planakte – Detailansicht
+            </SheetTitle>
+            <SheetDescription>
+              Hinweise, Score-Treiber, Nachhaltigkeit und vollständige Versionshistorie.
+            </SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="flex-1">
+            <div className="space-y-5 p-4">
+              <section className="space-y-2">
+                <Label
+                  htmlFor="planakte-notes"
+                  className="text-muted-foreground text-xs uppercase tracking-wide"
+                >
+                  Hinweise
+                </Label>
+                <Textarea
+                  id="planakte-notes"
+                  key={`notes-${currentPlan.id}-${currentPlan.date}`}
+                  defaultValue={currentPlan.notes ?? ""}
+                  placeholder="Indikation, Beratungshinweise, Patientenvorlieben oder interne Prüfnotizen"
+                  rows={4}
+                  readOnly={currentPlan.status === "approved"}
+                  onBlur={(event) => {
+                    if (event.currentTarget.value.trim() !== (currentPlan.notes ?? "")) {
+                      saveCurrentPlanNotes(event.currentTarget.value)
+                    }
+                  }}
+                />
+              </section>
+
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">PRODIscore-Treiber</p>
+                  <Badge variant="outline" className="font-normal">
+                    {formatNumber(planProdScore.score, 0)} Punkte
+                  </Badge>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {positivePlanDrivers.map((driver) => (
+                    <div
+                      key={driver.id}
+                      className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 text-xs"
+                    >
+                      <p className="font-medium text-emerald-900">{driver.label}</p>
+                      <p className="text-muted-foreground mt-0.5">{driver.description}</p>
+                    </div>
+                  ))}
+                  {negativePlanDrivers.map((driver) => (
+                    <div
+                      key={driver.id}
+                      className="rounded-md border border-red-100 bg-red-50/70 p-2 text-xs"
+                    >
+                      <p className="font-medium text-red-900">{driver.label}</p>
+                      <p className="text-muted-foreground mt-0.5">{driver.description}</p>
+                    </div>
+                  ))}
+                  {positivePlanDrivers.length === 0 && negativePlanDrivers.length === 0 && (
+                    <p className="text-muted-foreground text-xs">
+                      Noch keine Treiber – Plan enthält wenig Inhalt.
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Nachhaltigkeit – Top-Verursacher</p>
+                  <Badge variant="outline" className="font-normal">
+                    {formatNumber(planSustainability.totalCo2, 2)} kg CO₂e
+                  </Badge>
+                </div>
+                {planSustainability.topEmitters.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {planSustainability.topEmitters.slice(0, 5).map((emitter) => (
+                      <div
+                        key={emitter.id}
+                        className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] font-normal">
+                            {MEAL_SLOT_LABELS[emitter.slot] ?? emitter.slot}
+                          </Badge>
+                          <span className="truncate">{emitter.label}</span>
+                        </div>
+                        <span className="font-semibold">
+                          {formatNumber(emitter.co2, 2)} kg
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Noch keine Daten zu Emittenten.
+                  </p>
+                )}
+              </section>
+
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Versionshistorie</p>
+                  <Badge variant="outline" className="font-normal">
+                    {mealPlanVersionsLoading ? "lädt" : `${mealPlanVersions.length} Versionen`}
+                  </Badge>
+                </div>
+                {mealPlanVersions.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    Noch keine freigegebene oder gespeicherte Version.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {mealPlanVersions.map((version) => {
+                      const entryCount = version.snapshot.slots.reduce(
+                        (sum, slot) => sum + slot.entries.length,
+                        0,
+                      )
+                      return (
+                        <div
+                          key={version.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium">
+                              Version {version.versionNumber} ·{" "}
+                              {format(parseISO(version.createdAt), "dd.MM.yyyy HH:mm")}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {entryCount} Einträge ·{" "}
+                              {version.reason === "approved"
+                                ? "Freigabe"
+                                : version.reason === "manual"
+                                  ? "Checkpoint"
+                                  : "Wiederöffnung"}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7"
+                            disabled={currentPlan.status === "approved"}
+                            onClick={() => restoreVersion(version)}
+                          >
+                            Wiederherstellen
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {currentPlan.status === "approved" && mealPlanVersions.length > 0 && (
+                  <p className="text-muted-foreground text-[11px]">
+                    Zum Wiederherstellen zuerst den Plan als Entwurf öffnen.
+                  </p>
+                )}
+              </section>
+            </div>
+          </ScrollArea>
+          <SheetFooter className="border-t">
+            <Button variant="outline" onClick={() => setPlanAkteOpen(false)}>
+              Schließen
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>
         <SheetContent
