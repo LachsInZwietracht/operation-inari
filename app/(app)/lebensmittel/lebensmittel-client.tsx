@@ -58,7 +58,7 @@ import {
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
 import { formatNumber } from "@/lib/format";
 import { getClinicalStatusClass, getFoodSourceTrustTone } from "@/lib/clinical-status";
-import { calculateProdScore, getProdScoreBadge } from "@/lib/prodi-score";
+import { calculateInariScore, getInariScoreBadge } from "@/lib/inari-score";
 import { fuzzySearchFoods, normalizeText } from "@/lib/search";
 import { getNutrientValue } from "@/lib/nutrients";
 import type { Food, FoodBrowserResult, FoodSourceId, FoodGroupNode } from "@/lib/types";
@@ -402,7 +402,7 @@ export function LebensmittelPageClient({
   const foodScores = useMemo(() => {
     const map = new Map<string, number>();
     for (const food of visibleFoods) {
-      const score = food.prodScore ?? calculateProdScore(food.nutrients).score;
+      const score = food.prodScore ?? calculateInariScore(food.nutrients).score;
       map.set(food.id, score);
     }
     return map;
@@ -600,7 +600,7 @@ export function LebensmittelPageClient({
                       synonyms.find((synonym) => synonym.isPrimary)?.id ??
                       null;
                     const score = foodScores.get(food.id);
-                    const badge = getProdScoreBadge(score);
+                    const badge = getInariScoreBadge(score);
 
                     return (
                       <div key={food.id} className="rounded-md border bg-card p-3 text-card-foreground shadow-xs">
@@ -691,7 +691,7 @@ export function LebensmittelPageClient({
                       {searchMode === "code" && <TableHead>BLS-Code</TableHead>}
                       {searchMode === "group" && <TableHead>Gruppe</TableHead>}
                       <TableHead>Kategorie</TableHead>
-                      <TableHead className="text-right">PRODIscore</TableHead>
+                      <TableHead className="text-right">Inari Score</TableHead>
                       <TableHead className="text-right">Quelle</TableHead>
                       <TableHead className="text-right">Energie (kcal)</TableHead>
                       <TableHead className="text-right">Eiweiß (g)</TableHead>
@@ -729,7 +729,7 @@ export function LebensmittelPageClient({
                           synonyms.find((synonym) => synonym.isPrimary)?.id ??
                           null;
                         const score = foodScores.get(food.id);
-                        const badge = getProdScoreBadge(score);
+                        const badge = getInariScoreBadge(score);
 
                         return (
                           <TableRow
@@ -925,8 +925,8 @@ export function LebensmittelPageClient({
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {brandsResult.foods.map((food) => {
-                const score = food.prodScore ?? calculateProdScore(food.nutrients).score;
-                const badge = getProdScoreBadge(score);
+                const score = food.prodScore ?? calculateInariScore(food.nutrients).score;
+                const badge = getInariScoreBadge(score);
                 return (
                   <Card
                     key={food.id}
@@ -941,7 +941,7 @@ export function LebensmittelPageClient({
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs uppercase text-muted-foreground">PRODIscore</p>
+                        <p className="text-xs uppercase text-muted-foreground">Inari Score</p>
                         <Badge className={`${badge.color} border-none px-2 py-0.5 text-xs font-semibold`}>
                           {badge.label} · {formatNumber(score, 0)}
                         </Badge>

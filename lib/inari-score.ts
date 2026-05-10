@@ -1,9 +1,9 @@
 import { getNutrientValue } from "@/lib/nutrients"
 import type { NutrientValue } from "@/lib/types"
 
-export type ProdScoreRating = "A" | "B" | "C" | "D" | "E"
+export type InariScoreRating = "A" | "B" | "C" | "D" | "E"
 
-export interface ProdScoreDriver {
+export interface InariScoreDriver {
   id: string
   label: string
   value: number
@@ -13,21 +13,21 @@ export interface ProdScoreDriver {
   description: string
 }
 
-export interface ProdScoreResult {
+export interface InariScoreResult {
   score: number
-  rating: ProdScoreRating
-  badge: ProdScoreBadge
+  rating: InariScoreRating
+  badge: InariScoreBadge
   summary: string
-  drivers: ProdScoreDriver[]
+  drivers: InariScoreDriver[]
 }
 
-export interface ProdScoreBadge {
-  label: ProdScoreRating | "–"
+export interface InariScoreBadge {
+  label: InariScoreRating | "–"
   color: string
   description: string
 }
 
-const BADGES: Record<ProdScoreRating, Omit<ProdScoreBadge, "label">> = {
+const BADGES: Record<InariScoreRating, Omit<InariScoreBadge, "label">> = {
   A: { color: "bg-emerald-100 text-emerald-900", description: "Optimal ausgewogen" },
   B: { color: "bg-lime-100 text-lime-900", description: "Sehr gute Qualität" },
   C: { color: "bg-amber-100 text-amber-900", description: "Ausgewogen" },
@@ -44,7 +44,7 @@ function normalize(value: number, target: number): number {
   return clamp(value / target, 0, 1)
 }
 
-const SUMMARY_BY_RATING: Record<ProdScoreRating, string> = {
+const SUMMARY_BY_RATING: Record<InariScoreRating, string> = {
   A: "Sehr hohe Nährstoffdichte bei geringer Belastung",
   B: "Hohe Qualität mit wenigen Risiken",
   C: "Solide Basisversorgung – Details prüfen",
@@ -52,7 +52,7 @@ const SUMMARY_BY_RATING: Record<ProdScoreRating, string> = {
   E: "Therapiekritisch – Rezeptur prüfen",
 }
 
-export function calculateProdScore(nutrients: NutrientValue[]): ProdScoreResult {
+export function calculateInariScore(nutrients: NutrientValue[]): InariScoreResult {
   const energy = getNutrientValue(nutrients, "energie")
   const protein = getNutrientValue(nutrients, "eiweiss")
   const fiber = getNutrientValue(nutrients, "ballaststoffe")
@@ -83,7 +83,7 @@ export function calculateProdScore(nutrients: NutrientValue[]): ProdScoreResult 
   let positiveImpact = 0
   let negativeImpact = 0
 
-  const drivers: ProdScoreDriver[] = driverConfigs.map((config) => {
+  const drivers: InariScoreDriver[] = driverConfigs.map((config) => {
     const rawImpact = config.score * config.weight
     if (config.trend === "positive") {
       positiveImpact += rawImpact
@@ -104,22 +104,22 @@ export function calculateProdScore(nutrients: NutrientValue[]): ProdScoreResult 
   const base = 55
   const score = clamp(base + positiveImpact - negativeImpact, 5, 100)
 
-  const rating: ProdScoreRating = score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "E"
+  const rating: InariScoreRating = score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "E"
 
   return {
     score,
     rating,
-    badge: getProdScoreBadge(score),
+    badge: getInariScoreBadge(score),
     summary: SUMMARY_BY_RATING[rating],
     drivers,
   }
 }
 
-export function getProdScoreBadge(score?: number): ProdScoreBadge {
+export function getInariScoreBadge(score?: number): InariScoreBadge {
   if (score === undefined) {
     return { label: "–", color: "bg-slate-200 text-slate-900", description: "Keine Daten" }
   }
-  const rating: ProdScoreRating = score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "E"
+  const rating: InariScoreRating = score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "E"
   const badge = BADGES[rating]
   return { label: rating, color: badge.color, description: badge.description }
 }

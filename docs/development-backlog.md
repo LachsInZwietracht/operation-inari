@@ -108,7 +108,7 @@ Recently completed sprint work:
 
 ## P2: UX Rework For Core Workflows
 
-- [x] Redesign `/lebensmittel` mobile results as cards with source, category, kcal, protein/fat/KH, and PRODIscore.
+- [x] Redesign `/lebensmittel` mobile results as cards with source, category, kcal, protein/fat/KH, and Inari Score.
 - [x] Move secondary food-list actions, such as alias management, into row menus or detail drawers on mobile.
 - [x] Reorder `/patienten` so patient search/list and intake actions come before demo and mail-merge tooling.
 - [x] Move the eGK demo into a dedicated intake panel, drawer, or route.

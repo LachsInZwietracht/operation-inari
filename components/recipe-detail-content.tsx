@@ -32,7 +32,7 @@ import {
   getNutrientValue,
   scaleNutrients,
 } from "@/lib/nutrients";
-import { calculateProdScore } from "@/lib/prodi-score";
+import { calculateInariScore } from "@/lib/inari-score";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import type { Recipe, Food, PatientAllergenEntry } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
@@ -94,9 +94,9 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
 
   const foodMap = new Map(availableFoods.map((f) => [f.id, f]));
 
-  // ── Dynamic PRODIscore ──
+  // ── Dynamic Inari Score ──
   const prodScore = useMemo(() => {
-    if (perServing.length > 0) return calculateProdScore(perServing);
+    if (perServing.length > 0) return calculateInariScore(perServing);
     return null;
   }, [perServing]);
 
@@ -184,7 +184,7 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
       >
         <div className="absolute right-4 top-4">
           <Badge className={`${badge.color} border-none px-3 py-1 text-sm font-bold`}>
-            PRODIscore {badge.label}
+            Inari Score {badge.label}
           </Badge>
         </div>
       </div>
@@ -381,10 +381,10 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
             </CardContent>
           </Card>
 
-          {/* ── PRODIscore Card ── */}
+          {/* ── Inari Score Card ── */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">PRODIscore</CardTitle>
+              <CardTitle className="text-base">Inari Score</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">

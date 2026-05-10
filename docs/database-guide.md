@@ -125,7 +125,7 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 - Prefer this when the UI sorts/ranks foods by nutrient values but does not need allergens, portions, source metadata, or full nutrient arrays
 
 **Tier 2b — List-optimised food catalog (~2-3 MB, preferred when components need `Food[]`):**
-- `fetchAllFoodsForList()` in `lib/data/foods.ts` fetches all food columns + only 13 selected nutrients (4 table display + 9 PRODIscore), no portions
+- `fetchAllFoodsForList()` in `lib/data/foods.ts` fetches all food columns + only 13 selected nutrients (4 table display + 9 Inari Score), no portions
 - Uses the `nutrientIds` filter on `fetchFoods()` which leverages PostgREST embedded resource filtering (`food_nutrients.nutrient_id=in.(...)`)
 - ~97% smaller than the full payload (~2-3 MB vs ~46 MB)
 - Used by list-style routes such as `/wissen` and protocol creation where full nutrient/portion data is not required but existing components still need `Food[]`
@@ -154,7 +154,7 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 **Pattern for new pages:**
 - If you only need food names/categories: use `useFoodSearch()` — no page-level fetch needed
 - If you need names/categories plus a few nutrient columns for ranking: use `useFoodSearch()` + `useNutrientValueMaps()`
-- If existing components need `Food[]` with table display nutrients + PRODIscore: use `fetchAllFoodsForList()` + `FoodsProvider`
+- If existing components need `Food[]` with table display nutrients + Inari Score: use `fetchAllFoodsForList()` + `FoodsProvider`
 - If you need a small fixed nutrient set, add or reuse a named subset wrapper such as `fetchFoodsForComparison()`
 - If you need all nutrients and portions: use `fetchAllFoods()` + `FoodsProvider`
 - If you need protocol analysis/day views: use `fetchFoodsForProtocols()` instead of `fetchAllFoods()`
@@ -802,7 +802,7 @@ Rules going forward:
 
 **Done:**
 - Added `nutrientIds` filter to `fetchFoods()` — uses PostgREST embedded resource filtering to fetch only selected nutrients
-- Created `fetchAllFoodsForList()` — fetches 13 nutrients (4 table display: energie/eiweiss/fett/kohlenhydrate + 9 PRODIscore), no portions (~2-3 MB)
+- Created `fetchAllFoodsForList()` — fetches 13 nutrients (4 table display: energie/eiweiss/fett/kohlenhydrate + 9 Inari Score), no portions (~2-3 MB)
 - Added route-specific subset wrappers, including `fetchFoodsForComparison()` for `/lebensmittel/vergleichen`
 - Switched known full-catalog page loads away from `fetchAllFoods()` where full nutrient/portion data is not required
 - `/lebensmittel/neu` no longer fetches any catalog data before rendering the create form

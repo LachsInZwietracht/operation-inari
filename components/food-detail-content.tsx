@@ -28,7 +28,7 @@ import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import { NUTRIENT_GROUP_LABELS } from "@/lib/constants";
 import type { Food, NutrientGroup, PatientAllergenEntry, ResolvedReferenceConfig } from "@/lib/types";
-import { calculateProdScore } from "@/lib/prodi-score";
+import { calculateInariScore } from "@/lib/inari-score";
 import { Progress } from "@/components/ui/progress";
 import { estimateFoodCo2 } from "@/lib/sustainability";
 import { checkAllergenConflicts } from "@/lib/allergen-warnings";
@@ -153,7 +153,7 @@ export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentP
 
   const categoryName = categoryMap.get(food.categoryId) ?? food.categoryId;
   const sourceMeta = food.sourceId ? FOOD_SOURCES.find((s) => s.id === food.sourceId) : null;
-  const prodScore = useMemo(() => calculateProdScore(food.nutrients), [food]);
+  const prodScore = useMemo(() => calculateInariScore(food.nutrients), [food]);
   const badge = prodScore.badge;
   const referencePortion = food.portionSizes?.[0];
   const co2PerBase = useMemo(() => {
@@ -293,7 +293,7 @@ export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentP
           <CardContent className="space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase text-muted-foreground">PRODIscore</p>
+                <p className="text-xs uppercase text-muted-foreground">Inari Score</p>
                 <p className="text-3xl font-semibold">{formatNumber(prodScore.score, 0)}</p>
                 <p className="text-muted-foreground text-xs">{prodScore.summary}</p>
               </div>

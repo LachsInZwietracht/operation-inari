@@ -68,9 +68,9 @@ Product direction:
 - **Recipe-level shopping list output** — generate list with configurable portion count and synonym resolution.
 
 ### 2.2 Recipe Analysis
-**Status:** Implemented (dynamic PRODIscore, LMIV allergen declaration, CO₂ footprint with per-ingredient breakdown).
+**Status:** Implemented (dynamic Inari Score, LMIV allergen declaration, CO₂ footprint with per-ingredient breakdown).
 - Full nutrient breakdown and comparison against intake recommendations.
-- **PRODIscore-style food quality rating** (5-level scale) — dynamically computed from per-serving nutrients on recipe detail; score, letter grade, progress bar, summary, and top positive/negative drivers displayed. Computed value persisted on recipe save.
+- **Inari Score food quality rating** (5-level scale) — dynamically computed from per-serving nutrients on recipe detail; score, letter grade, progress bar, summary, and top positive/negative drivers displayed. Computed value persisted on recipe save.
 - **Allergen declaration (LMIV-compliant)** — auto-derived from ingredient foods via three strategies: explicit `food.allergens`, BLS food-group-to-allergen inference, and name-token matching. Merged with manual allergens; auto-detected entries visually distinguished. Core logic in `lib/allergen-derivation.ts`.
 - **CO₂ footprint calculation** — per-ingredient CO₂ computed from category emission factors, displayed in the ingredients table and sustainability card with plant/animal share visualization and top emitters. Remaining deferred: formal LMIV print output for PDF exports, "may contain traces" distinction.
 

@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { KNOWLEDGE_LIBRARY_DEFAULTS } from "@/lib/content/knowledge-library"
 import { calculateRecipeNutrients, calculatePerServing, scaleNutrients, sumNutrients } from "@/lib/nutrients"
-import { calculateProdScore } from "@/lib/prodi-score"
+import { calculateInariScore } from "@/lib/inari-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { formatNumber } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
@@ -74,14 +74,14 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
       calculateRecipeNutrients(referenceRecipe, foods),
       referenceRecipe.servings,
     )
-    return calculateProdScore(nutrients)
+    return calculateInariScore(nutrients)
   }, [foods, referenceRecipe])
 
   const samplePlan = mealPlans[0]
   const planScore = useMemo(() => {
     if (!samplePlan) return null
     const nutrients = aggregatePlanNutrients(samplePlan)
-    return calculateProdScore(nutrients)
+    return calculateInariScore(nutrients)
   }, [aggregatePlanNutrients, samplePlan])
 
   const sustainability = useMemo(() => {
@@ -94,7 +94,7 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
       id: food.id,
       name: food.name,
       categoryId: food.categoryId,
-      score: calculateProdScore(food.nutrients).score,
+      score: calculateInariScore(food.nutrients).score,
     }))
   }, [foods])
 
@@ -103,7 +103,7 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
       <PageHeader
         title="Wissensbibliothek"
         description="Bundled Fachkarten plus live berechnete Kennzahlen aus Ihren Daten"
-        helpText="Die Fachkarten in dieser Ansicht sind aktuell gebuendelte Produktinhalte. PRODIscore- und Nachhaltigkeitskarten werden dagegen live aus Lebensmitteln, Rezepten und gespeicherten Plaenen berechnet."
+        helpText="Die Fachkarten in dieser Ansicht sind aktuell gebuendelte Produktinhalte. Inari Score- und Nachhaltigkeitskarten werden dagegen live aus Lebensmitteln, Rezepten und gespeicherten Plaenen berechnet."
       />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -188,7 +188,7 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
           <CardHeader>
             <div className="flex items-center gap-2">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Award className="text-primary h-5 w-5" /> PRODIscore Monitor
+                <Award className="text-primary h-5 w-5" /> Inari Score Monitor
               </CardTitle>
               <Badge>Live-Analyse</Badge>
             </div>
@@ -242,7 +242,7 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Treiber des PRODIscore</CardTitle>
+            <CardTitle>Treiber des Inari Score</CardTitle>
             <CardDescription>Positive und kritische Faktoren fuer das aktuelle Referenzrezept.</CardDescription>
           </CardHeader>
           <CardContent>

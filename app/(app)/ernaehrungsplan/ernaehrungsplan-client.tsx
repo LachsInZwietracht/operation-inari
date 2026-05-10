@@ -125,7 +125,7 @@ import type {
   Recipe,
   DietLinePreset,
 } from "@/lib/types"
-import { calculateProdScore } from "@/lib/prodi-score"
+import { calculateInariScore } from "@/lib/inari-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useFoods, useFoodSearch } from "@/components/foods-provider"
@@ -712,22 +712,22 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const totalProtein = getNutrientValue(dailyNutrients, "eiweiss")
   const totalFat = getNutrientValue(dailyNutrients, "fett")
   const totalCarbs = getNutrientValue(dailyNutrients, "kohlenhydrate")
-  const planProdScore = useMemo(() => calculateProdScore(dailyNutrients), [dailyNutrients])
+  const planInariScore = useMemo(() => calculateInariScore(dailyNutrients), [dailyNutrients])
   const positivePlanDrivers = useMemo(
     () =>
-      planProdScore.drivers
+      planInariScore.drivers
         .filter((driver) => driver.impact > 0)
         .sort((a, b) => b.impact - a.impact)
         .slice(0, 2),
-    [planProdScore],
+    [planInariScore],
   )
   const negativePlanDrivers = useMemo(
     () =>
-      planProdScore.drivers
+      planInariScore.drivers
         .filter((driver) => driver.impact < 0)
         .sort((a, b) => a.impact - b.impact)
         .slice(0, 2),
-    [planProdScore],
+    [planInariScore],
   )
   const planSustainability = useMemo(
     () => evaluatePlanSustainability(currentPlan, foods, recipes),
@@ -1445,10 +1445,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     })
 
     items.push({
-      id: "prodiscore",
-      label: "PRODIscore",
-      description: `${formatNumber(planProdScore.score, 0)} Punkte: ${planProdScore.summary}`,
-      severity: planProdScore.score < 60 ? "warning" : "ok",
+      id: "inari-score",
+      label: "Inari Score",
+      description: `${formatNumber(planInariScore.score, 0)} Punkte: ${planInariScore.summary}`,
+      severity: planInariScore.score < 60 ? "warning" : "ok",
     })
 
     const blockingItems = items.filter((item) => item.severity === "critical")
@@ -1468,8 +1468,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     entryAllergenWarnings,
     patientAllergens.length,
     patientId,
-    planProdScore.score,
-    planProdScore.summary,
+    planInariScore.score,
+    planInariScore.summary,
   ])
 
   const filteredTemplates = useMemo(() => {
@@ -1661,7 +1661,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       <PageHeader
         title="Ernährungsplan"
         description={formattedDate}
-        helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der PRODIscore zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
+        helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der Inari Score zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
       />
 
       <Card>
@@ -1902,24 +1902,24 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-muted-foreground text-xs uppercase tracking-wide">PRODIscore</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-wide">Inari Score</p>
                 <p className="mt-1 text-3xl font-semibold leading-none">
-                  {formatNumber(planProdScore.score, 0)}
+                  {formatNumber(planInariScore.score, 0)}
                 </p>
                 <p className="text-muted-foreground mt-1.5 line-clamp-1 text-xs">
-                  {planProdScore.summary}
+                  {planInariScore.summary}
                 </p>
               </div>
               <Badge
                 className={cn(
-                  planProdScore.badge.color,
+                  planInariScore.badge.color,
                   "border-none px-2 py-0.5 text-[11px] font-semibold",
                 )}
               >
-                {planProdScore.badge.label}
+                {planInariScore.badge.label}
               </Badge>
             </div>
-            <Progress value={planProdScore.score} className="mt-3 h-1.5" />
+            <Progress value={planInariScore.score} className="mt-3 h-1.5" />
           </CardContent>
         </Card>
 
@@ -3327,9 +3327,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">PRODIscore-Treiber</p>
+                  <p className="text-sm font-medium">Inari Score-Treiber</p>
                   <Badge variant="outline" className="font-normal">
-                    {formatNumber(planProdScore.score, 0)} Punkte
+                    {formatNumber(planInariScore.score, 0)} Punkte
                   </Badge>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -3597,7 +3597,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                       <span>{formatNumber(kcal, 0)} kcal/Portion</span>
                       {totalTime > 0 && <span>· {totalTime} min</span>}
                       {typeof recipe.prodScore === "number" && (
-                        <span>· PRODIscore {Math.round(recipe.prodScore)}</span>
+                        <span>· Inari Score {Math.round(recipe.prodScore)}</span>
                       )}
                       {conflictCount > 0 && (
                         <Badge

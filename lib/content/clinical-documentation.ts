@@ -58,7 +58,7 @@ export const CLINIC_DOCUMENT_PACKS: ClinicDocumentPack[] = [
     name: "Qualitätsbericht",
     audience: "Leitung, QM und Einkauf",
     purpose: "Aggregierbare Kennzahlen für Therapiequalität, Nachhaltigkeit und Exportfähigkeit erfassen.",
-    sections: ["Abdeckung", "PRODIscore", "Health Claims", "CO2", "Offene Risiken"],
+    sections: ["Abdeckung", "Inari Score", "Health Claims", "CO2", "Offene Risiken"],
     template:
       "Qualitätsbericht\nPlan: {{planDate}}\nEnergieabdeckung: {{energyCoverage}}\nHealth-Claim-Ziele: {{claimTarget}}\nNächste operative Aufgabe: {{nextStep2}}.",
   },

@@ -121,7 +121,7 @@ const REPORT_SECTIONS = [
   {
     id: "summary",
     label: "Kurzfazit & Indikatoren",
-    description: "PRODIscore, Energie- und Makroabdeckung in Stichpunkten",
+    description: "Inari Score, Energie- und Makroabdeckung in Stichpunkten",
   },
   {
     id: "table",
@@ -1178,7 +1178,7 @@ ${microSentence}`
       ],
       specialNotes: [
         `CO₂ gesamt: ${formatNumber(totalCo2, 1)} kg`,
-        `PRODIscore: ${prodiScoreValue} (${prodiLabel})`,
+        `Inari Score: ${prodiScoreValue} (${prodiLabel})`,
         `Health Claims: ${healthClaimResults.filter((claim) => claim.met).length}/${healthClaimResults.length}`,
         `LMIV-Deklaration: ${aggregatedAllergens.length} Allergene, ${aggregatedAdditives.length} Zusatzstoffe`,
       ],
@@ -2298,7 +2298,7 @@ ${microSentence}`
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Award className="h-4 w-4" /> Health Claims & PRODIscore
+                  <Award className="h-4 w-4" /> Health Claims & Inari Score
                 </CardTitle>
                 <CardDescription>Prüft, welche Claims erlaubt sind.</CardDescription>
               </CardHeader>
@@ -2314,7 +2314,7 @@ ${microSentence}`
                           : "bg-rose-100 text-rose-800"
                     }`}
                   >
-                    PRODIscore {prodiScoreValue} · {prodiLabel}
+                    Inari Score {prodiScoreValue} · {prodiLabel}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
                     {healthClaimResults.filter((claim) => claim.met).length} / {healthClaimResults.length} Claims

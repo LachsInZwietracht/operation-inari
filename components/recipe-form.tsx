@@ -35,7 +35,7 @@ import {
 
 import { useNutrientCalculation } from "@/hooks/use-nutrient-calculation";
 import { getNutrientValue } from "@/lib/nutrients";
-import { calculateProdScore } from "@/lib/prodi-score";
+import { calculateInariScore } from "@/lib/inari-score";
 import { formatNumber } from "@/lib/format";
 import type { Recipe, Ingredient, Food } from "@/lib/types";
 import { useFoodSearch } from "@/components/foods-provider";
@@ -216,9 +216,9 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
     try {
       const ingredients = values.ingredients.map(i => ({ foodId: i.foodId, amount: i.amount }));
 
-      // Compute PRODIscore from live nutrients
-      const computedProdScore = perServingNutrients.length > 0
-        ? Math.round(calculateProdScore(perServingNutrients).score)
+      // Compute Inari Score from live nutrients
+      const computedInariScore = perServingNutrients.length > 0
+        ? Math.round(calculateInariScore(perServingNutrients).score)
         : values.prodScore;
 
       // Compute CO₂ per portion from ingredient breakdown
@@ -242,7 +242,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         prepTime: values.prepTime,
         cookTime: values.cookTime,
         imageUrl: values.imageUrl || undefined,
-        prodScore: computedProdScore,
+        prodScore: computedInariScore,
         co2PerPortion: computedCo2,
         allergens: mergedAllergens,
         additives: values.additives ? values.additives.split(",").map(s => s.trim()) : undefined,

@@ -49,7 +49,7 @@ Impact:
 - Nutrient values are useful, but the current mobile presentation hides task hierarchy: identify food, inspect source/category, compare nutrients, then act.
 
 Recommended fix:
-- Keep the desktop table, but add a mobile result card with primary fields: name, aliases, source, category, kcal, protein/fat/KH, PRODIscore.
+- Keep the desktop table, but add a mobile result card with primary fields: name, aliases, source, category, kcal, protein/fat/KH, Inari Score.
 - Move secondary actions such as alias management into a row menu or detail drawer on mobile.
 - Make search mode controls a compact segmented control with horizontal scrolling inside its own container.
 

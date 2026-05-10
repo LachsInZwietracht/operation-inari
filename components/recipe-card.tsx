@@ -22,7 +22,7 @@ interface RecipeCardProps {
   onImport?: () => void;
 }
 
-function getProdScoreBadge(score: number | undefined) {
+function getInariScoreBadge(score: number | undefined) {
   if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
   if (score >= 85) return { label: "A", color: "bg-emerald-100 text-emerald-900" };
   if (score >= 70) return { label: "B", color: "bg-lime-100 text-lime-900" };
@@ -38,7 +38,7 @@ export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
   })();
   
   const totalTime = recipe.prepTime + recipe.cookTime;
-  const scoreBadge = getProdScoreBadge(recipe.prodScore);
+  const scoreBadge = getInariScoreBadge(recipe.prodScore);
 
   return (
     <Link href={`/rezepte/${recipe.id}`} className="group block">
@@ -57,7 +57,7 @@ export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
         >
           <div className="absolute right-3 top-3">
             <Badge className={`${scoreBadge.color} border-none px-2 py-1 text-xs font-bold`}>
-              PRODIscore {scoreBadge.label}
+              Inari Score {scoreBadge.label}
             </Badge>
           </div>
         </div>
