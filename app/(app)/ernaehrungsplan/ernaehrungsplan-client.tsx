@@ -123,6 +123,7 @@ import type {
   Food,
   MealPlanTemplate,
   MealPlanVersion,
+  Patient,
   Recipe,
   DietLinePreset,
 } from "@/lib/types"
@@ -222,6 +223,18 @@ interface OptimizationSuggestion {
   allergens?: string[]
 }
 
+type PatientWithLegacyIndication = Patient & {
+  indication?: string
+  indications?: string[]
+}
+
+function getPatientIndications(patient?: Patient): string[] {
+  if (!patient) return []
+  const record = patient as PatientWithLegacyIndication
+  if (record.indications?.length) return record.indications
+  return record.indication ? [record.indication] : []
+}
+
 function createTargetDraft(nutrientId = "energie"): DietLineTargetDraft {
   const definition = NUTRIENT_DEFINITIONS.find((item) => item.id === nutrientId)
   return {
@@ -307,6 +320,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
   const { patients, getPatient } = usePatients()
   const patient = patientId ? getPatient(patientId) : undefined
+  const patientIndications = useMemo(() => getPatientIndications(patient), [patient])
   const defaultPlanMetadata = useMemo(
     () => ({
       patientId,
@@ -809,7 +823,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const paletteRecipes = useMemo(() => {
     const search = recipeSearch.trim().toLowerCase()
-    const indicationTokens = (patient?.indications ?? [])
+    const indicationTokens = patientIndications
       .map((indication) => indication.trim().toLowerCase())
       .filter(Boolean)
 
@@ -883,7 +897,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     paletteSort,
     paletteIndicationOnly,
     paletteAllergenSafeOnly,
-    patient?.indications,
+    patientIndications,
     patientAllergens,
   ])
 
@@ -987,6 +1001,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const pendingAssignmentPatient = pendingPatientAssignmentId
     ? getPatient(pendingPatientAssignmentId)
     : undefined
+  const visiblePatientIndications = useMemo(() => getPatientIndications(visiblePatient), [visiblePatient])
+  const pendingAssignmentPatientIndications = useMemo(
+    () => getPatientIndications(pendingAssignmentPatient),
+    [pendingAssignmentPatient],
+  )
   const hasCurrentPlanEntries = currentPlan.slots.some((slot) => slot.entries.length > 0)
 
   const openPatientContext = useCallback(
@@ -1530,7 +1549,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const filteredTemplates = useMemo(() => {
     const query = applyTemplateSearch.trim().toLowerCase()
-    const patientIndicationsLower = (patient?.indications ?? []).map((indication) => indication.toLowerCase())
+    const patientIndicationsLower = patientIndications.map((indication) => indication.toLowerCase())
     return mealPlanTemplates.filter((template) => {
       if (applyTemplateScope === "indikation" && patientIndicationsLower.length > 0) {
         const templateIndication = template.indication?.toLowerCase()
@@ -1553,13 +1572,13 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         .toLowerCase()
       return haystack.includes(query)
     })
-  }, [applyTemplateScope, applyTemplateSearch, dietLineId, mealPlanTemplates, patient?.indications])
+  }, [applyTemplateScope, applyTemplateSearch, dietLineId, mealPlanTemplates, patientIndications])
 
   const openApplyTemplateDialog = useCallback(() => {
     setApplyTemplateSearch("")
-    setApplyTemplateScope(patient?.indications?.length ? "indikation" : "alle")
+    setApplyTemplateScope(patientIndications.length ? "indikation" : "alle")
     setApplyTemplateDialogOpen(true)
-  }, [patient?.indications])
+  }, [patientIndications])
 
   const handleApplyTemplate = useCallback(
     (template: MealPlanTemplate) => {
@@ -1595,10 +1614,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
     setTemplateDraftName(currentPlan.title ?? "")
     setTemplateDraftDescription("")
-    setTemplateDraftIndication(patient?.indications?.[0] ?? "")
+    setTemplateDraftIndication(patientIndications[0] ?? "")
     setTemplateDraftDietLineId(dietLineId || "")
     setSaveTemplateDialogOpen(true)
-  }, [currentPlan.slots, currentPlan.title, dietLineId, patient?.indications])
+  }, [currentPlan.slots, currentPlan.title, dietLineId, patientIndications])
 
   const handleSaveTemplate = useCallback(async () => {
     const name = templateDraftName.trim()
@@ -1652,7 +1671,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       const planContext = {
         patientId: currentPlan.patientId ?? patientId,
         patientName,
-        patientIndication: patient?.indications?.length ? patient.indications.join(", ") : undefined,
+        patientIndication: patientIndications.length ? patientIndications.join(", ") : undefined,
         planId: currentPlan.id,
         dietLineName: dietLine?.name,
       }
@@ -1706,6 +1725,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       exportingVariant,
       foods,
       patient,
+      patientIndications,
       patientId,
       recipes,
       refConfig,
@@ -1737,8 +1757,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               </CardTitle>
               <CardDescription className="line-clamp-1">
                 {currentPlan.title || "Ohne Titel"}
-                {visiblePatient?.indications?.length
-                  ? ` · ${visiblePatient.indications.join(" · ")}`
+                {visiblePatientIndications.length
+                  ? ` · ${visiblePatientIndications.join(" · ")}`
                   : ""}
                 {currentPlan.approvedAt &&
                   ` · Freigabe ${format(parseISO(currentPlan.approvedAt), "dd.MM.yyyy HH:mm")}`}
@@ -1861,7 +1881,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   {patients.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
                       {item.lastName}, {item.firstName}
-                      {item.indications?.length ? ` · ${item.indications.join(" · ")}` : ""}
+                      {getPatientIndications(item).length ? ` · ${getPatientIndications(item).join(" · ")}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2205,7 +2225,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                     <div className="flex flex-col">
                       <span>Plan aus Vorlage erzeugen</span>
                       <span className="text-muted-foreground text-xs">
-                        {patient?.indications?.length
+                        {patientIndications.length
                           ? `${mealPlanTemplates.length} Vorlagen, gefiltert nach Indikation`
                           : `${mealPlanTemplates.length} Vorlagen verfügbar`}
                       </span>
@@ -3147,15 +3167,15 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 >
                   Alle
                 </Button>
-                {patient?.indications?.length ? (
+                {patientIndications.length ? (
                   <Button
                     size="sm"
                     variant={applyTemplateScope === "indikation" ? "default" : "outline"}
                     onClick={() => setApplyTemplateScope("indikation")}
                   >
-                    {patient.indications.length === 1
-                      ? patient.indications[0]
-                      : `Indikationen (${patient.indications.length})`}
+                    {patientIndications.length === 1
+                      ? patientIndications[0]
+                      : `Indikationen (${patientIndications.length})`}
                   </Button>
                 ) : null}
                 {dietLine && (
@@ -3328,8 +3348,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 ? `${pendingAssignmentPatient.firstName} ${pendingAssignmentPatient.lastName}`
                 : "Ausgewählter Patient"}
             </p>
-            {pendingAssignmentPatient?.indications?.length ? (
-              <p className="text-muted-foreground">{pendingAssignmentPatient.indications.join(" · ")}</p>
+            {pendingAssignmentPatientIndications.length ? (
+              <p className="text-muted-foreground">{pendingAssignmentPatientIndications.join(" · ")}</p>
             ) : null}
             <p className="text-muted-foreground mt-2">
               {currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)} Einträge ·{" "}
@@ -3676,9 +3696,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </SelectContent>
               </Select>
             </div>
-            {(patient?.indications?.length || patientAllergens.length > 0) ? (
+            {(patientIndications.length || patientAllergens.length > 0) ? (
               <div className="flex flex-wrap gap-2">
-                {patient?.indications?.length ? (
+                {patientIndications.length ? (
                   <Toggle
                     size="sm"
                     pressed={paletteIndicationOnly}
