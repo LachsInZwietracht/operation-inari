@@ -340,7 +340,7 @@ export const API_ENDPOINTS: ApiEndpointDescription[] = [
     method: "GET",
     description: "Listet alle Patienten (authentifizierter Zugriff).",
     sampleResponse: {
-      data: [{ id: "patient_1", firstName: "Maria", lastName: "Schneider", indication: "Adipositas" }],
+      data: [{ id: "patient_1", firstName: "Maria", lastName: "Schneider", indications: ["Adipositas"] }],
       total: 87,
     },
   },

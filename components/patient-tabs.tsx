@@ -1051,11 +1051,17 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                   <dd className="text-sm font-medium">{patient.insuranceNumber}</dd>
                 </div>
               )}
-              {patient.indication && (
+              {patient.indications && patient.indications.length > 0 && (
                 <div>
-                  <dt className="text-sm text-muted-foreground">Indikation</dt>
-                  <dd className="text-sm font-medium">
-                    <Badge variant="secondary">{patient.indication}</Badge>
+                  <dt className="text-sm text-muted-foreground">
+                    {patient.indications.length === 1 ? "Indikation" : "Indikationen"}
+                  </dt>
+                  <dd className="mt-1 flex flex-wrap gap-1.5 text-sm font-medium">
+                    {patient.indications.map((indication) => (
+                      <Badge key={indication} variant="secondary">
+                        {indication}
+                      </Badge>
+                    ))}
                   </dd>
                 </div>
               )}

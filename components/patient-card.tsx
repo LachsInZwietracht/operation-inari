@@ -15,14 +15,18 @@ export function PatientCard({ patient, lastSessionDate }: PatientCardProps) {
     <Link href={`/patienten/${patient.id}`} data-patient-id={patient.id}>
       <Card className="transition-colors hover:bg-muted/50">
         <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-base">
               {patient.lastName}, {patient.firstName}
             </CardTitle>
-            {patient.indication && (
-              <Badge variant="secondary" className="text-xs">
-                {patient.indication}
-              </Badge>
+            {patient.indications && patient.indications.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-1">
+                {patient.indications.map((indication) => (
+                  <Badge key={indication} variant="secondary" className="text-xs">
+                    {indication}
+                  </Badge>
+                ))}
+              </div>
             )}
           </div>
         </CardHeader>

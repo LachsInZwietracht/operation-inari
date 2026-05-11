@@ -66,7 +66,7 @@ export async function createClinicDemoPatient(
   input: {
     firstName?: string;
     lastName?: string;
-    indication?: string;
+    indications?: string[];
   } = {},
 ): Promise<ClinicDemoPatient> {
   const userId = await getTestUserId();
@@ -82,7 +82,7 @@ export async function createClinicDemoPatient(
       last_name: lastName,
       date_of_birth: "1988-01-01",
       gender: "w",
-      indication: input.indication ?? "Adipositas",
+      indications: input.indications ?? ["Adipositas"],
       insurance_provider: "AOK Demo",
       insurance_number: `CLINIC-DEMO-${suffix}`,
     })
@@ -397,7 +397,7 @@ async function createInstitutionPatient(
   input: {
     firstName: string;
     lastName: string;
-    indication: string;
+    indications: string[];
     insuranceNumber: string;
   },
 ) {
@@ -409,7 +409,7 @@ async function createInstitutionPatient(
       last_name: input.lastName,
       date_of_birth: "1988-01-01",
       gender: "w",
-      indication: input.indication,
+      indications: input.indications,
       insurance_provider: "AOK Test",
       insurance_number: input.insuranceNumber,
     })
@@ -437,13 +437,13 @@ export async function createClinicDemoInstitutionFixture(
   const maria = await createInstitutionPatient(userId, {
     firstName: "Maria",
     lastName: `Schneider ${suffix}`,
-    indication: "Adipositas",
+    indications: ["Adipositas"],
     insuranceNumber: `${prefix}-MARIA`,
   });
   const anna = await createInstitutionPatient(userId, {
     firstName: "Anna",
     lastName: `Müller ${suffix}`,
-    indication: "Nahrungsmittelallergie",
+    indications: ["Nahrungsmittelallergie"],
     insuranceNumber: `${prefix}-ANNA`,
   });
 

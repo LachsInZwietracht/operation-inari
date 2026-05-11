@@ -114,7 +114,7 @@ export default function PatientenPage() {
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
         `${p.lastName} ${p.firstName}`.toLowerCase().includes(search.toLowerCase())
       const matchesIndication =
-        indicationFilter === "alle" || p.indication === indicationFilter
+        indicationFilter === "alle" || (p.indications?.includes(indicationFilter) ?? false)
       return matchesSearch && matchesIndication
     })
   }, [patients, search, indicationFilter])
@@ -151,9 +151,9 @@ export default function PatientenPage() {
       "patient.dateOfBirth": format(parseISO(patient.dateOfBirth), "dd.MM.yyyy"),
       "appointment.date": format(new Date(), "dd.MM.yyyy"),
       "appointment.time": "10:00",
-      "protocol.energy": patient.indication?.includes("Diabetes") ? "1850" : "2000",
+      "protocol.energy": patient.indications?.some((ind) => ind.includes("Diabetes")) ? "1850" : "2000",
       "protocol.protein": "85",
-      "protocol.priority": patient.indication ?? "Ernährungscoaching",
+      "protocol.priority": patient.indications?.join(", ") || "Ernährungscoaching",
       "practice.name": "Inari Ernährungszentrum",
     }
 
@@ -337,7 +337,7 @@ export default function PatientenPage() {
 
   const patientWorklist = useMemo(() => {
     const today = new Date()
-    const withoutIndication = patients.filter((patient) => !patient.indication).length
+    const withoutIndication = patients.filter((patient) => !patient.indications?.length).length
     const staleOrMissingSessions = patients.filter((patient) => {
       const lastSession = lastSessionMap.get(patient.id)
       if (!lastSession) return true
@@ -665,7 +665,7 @@ export default function PatientenPage() {
                               {patient.lastName}, {patient.firstName}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {patient.indication ?? "Ohne Indikation"}
+                              {patient.indications?.length ? patient.indications.join(" · ") : "Ohne Indikation"}
                             </span>
                           </div>
                         </label>

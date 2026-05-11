@@ -26,7 +26,7 @@ interface PatientRow {
   city: string | null;
   insurance_provider: string | null;
   insurance_number: string | null;
-  indication: string | null;
+  indications: string[] | null;
   notes: string | null;
   amputations: string[] | null;
   status: Patient["status"] | null;
@@ -65,7 +65,7 @@ const PATIENT_COLUMNS = [
   "city",
   "insurance_provider",
   "insurance_number",
-  "indication",
+  "indications",
   "notes",
   "amputations",
   "status",
@@ -118,7 +118,7 @@ function mapPatientRow(row: PatientRow): Patient {
     city: row.city ?? undefined,
     insuranceProvider: row.insurance_provider ?? undefined,
     insuranceNumber: row.insurance_number ?? undefined,
-    indication: row.indication ?? undefined,
+    indications: row.indications ?? undefined,
     notes: row.notes ?? undefined,
     amputations: row.amputations ?? undefined,
     status: row.status ?? undefined,
@@ -192,7 +192,7 @@ export async function persistPatient(
         city: patient.city ?? null,
         insurance_provider: patient.insuranceProvider ?? null,
         insurance_number: patient.insuranceNumber ?? null,
-        indication: patient.indication ?? null,
+        indications: patient.indications ?? [],
         notes: patient.notes ?? null,
         amputations: patient.amputations ?? null,
         status: patient.status ?? "active",

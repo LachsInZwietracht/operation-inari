@@ -105,7 +105,7 @@ test.describe("Digital Protocol Public Entry", () => {
     const patient = await createClinicDemoPatient({
       firstName: "Digital",
       lastName: "Recall",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
     const link = await createClinicDemoDigitalProtocolLink(patient);
 
@@ -225,7 +225,7 @@ test.describe("Digital Protocol Public Entry", () => {
     const patient = await createClinicDemoPatient({
       firstName: "Smart",
       lastName: "Match",
-      indication: "Diabetes mellitus Typ 2",
+      indications: ["Diabetes mellitus Typ 2"],
     });
     const link = await createClinicDemoDigitalProtocolLink(patient);
 

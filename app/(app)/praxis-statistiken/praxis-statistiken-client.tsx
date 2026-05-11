@@ -457,9 +457,9 @@ export default function PraxisStatistikenClient({
 
     const counts: Record<string, number> = {}
     patients.forEach((p) => {
-      if (p.indication) {
-        counts[p.indication] = (counts[p.indication] || 0) + 1
-      }
+      p.indications?.forEach((indication) => {
+        counts[indication] = (counts[indication] || 0) + 1
+      })
     })
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])

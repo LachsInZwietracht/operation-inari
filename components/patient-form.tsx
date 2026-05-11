@@ -58,7 +58,7 @@ const patientSchema = z.object({
   city: z.string(),
   insuranceProvider: z.string(),
   insuranceNumber: z.string(),
-  indication: z.string(),
+  indications: z.array(z.string()),
   notes: z.string(),
   amputations: z.array(z.string()),
   status: z.enum(["active", "inactive", "archived", "deceased"] as const),
@@ -120,6 +120,7 @@ interface PatientFormProps {
 export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [] }: PatientFormProps) {
   const router = useRouter()
   const [submitIntent, setSubmitIntent] = useState<SubmitIntent>("detail")
+  const [showAmputations, setShowAmputations] = useState(() => (patient?.amputations?.length ?? 0) > 0)
   const {
     status: egkStatus,
     isSupported: egkSupported,
@@ -146,7 +147,7 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
       city: patient?.city ?? "",
       insuranceProvider: patient?.insuranceProvider ?? "",
       insuranceNumber: patient?.insuranceNumber ?? "",
-      indication: patient?.indication ?? "",
+      indications: patient?.indications ?? [],
       notes: patient?.notes ?? "",
       amputations: patient?.amputations ?? [],
       status: patient?.status ?? "active",
@@ -260,7 +261,7 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
           city: values.city || undefined,
           insuranceProvider: values.insuranceProvider || undefined,
           insuranceNumber: values.insuranceNumber || undefined,
-          indication: values.indication || undefined,
+          indications: values.indications.length > 0 ? values.indications : undefined,
           notes: values.clinicalNotes || values.notes || undefined,
           amputations: values.amputations && values.amputations.length > 0 ? values.amputations : undefined,
           status: values.status,
@@ -557,46 +558,6 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="amputations"
-              render={() => {
-                const selected = form.watch("amputations") ?? []
-                return (
-                  <FormItem>
-                    <FormLabel>Amputationen</FormLabel>
-                    <FormDescription>
-                      Optional: korrigiert BMI-Berechnungen bei fehlenden Extremitäten.
-                    </FormDescription>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {AMPUTATION_AREAS.map((area) => {
-                        const isActive = selected.includes(area.id)
-                        return (
-                          <Button
-                            key={area.id}
-                            type="button"
-                            size="sm"
-                            variant={isActive ? "secondary" : "outline"}
-                            onClick={() => {
-                              const current = new Set(form.getValues("amputations"))
-                              if (current.has(area.id)) {
-                                current.delete(area.id)
-                              } else {
-                                current.add(area.id)
-                              }
-                              form.setValue("amputations", Array.from(current), { shouldDirty: true })
-                            }}
-                          >
-                            {area.label}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </FormItem>
-                )
-              }}
-            />
-
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -833,28 +794,103 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
             </div>
             <FormField
               control={form.control}
-              name="indication"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Indikation</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Indikation wählen" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {INDICATION_OPTIONS.map((indication) => (
-                        <SelectItem key={indication} value={indication}>
-                          {indication}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+              name="indications"
+              render={() => {
+                const selected = form.watch("indications") ?? []
+                return (
+                  <FormItem>
+                    <FormLabel>Indikationen</FormLabel>
+                    <FormDescription>
+                      Mehrfachauswahl möglich, z. B. Diabetes mellitus Typ 2 und Adipositas.
+                    </FormDescription>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {INDICATION_OPTIONS.map((indication) => {
+                        const isActive = selected.includes(indication)
+                        return (
+                          <Button
+                            key={indication}
+                            type="button"
+                            size="sm"
+                            variant={isActive ? "secondary" : "outline"}
+                            onClick={() => {
+                              const current = new Set(form.getValues("indications"))
+                              if (current.has(indication)) {
+                                current.delete(indication)
+                              } else {
+                                current.add(indication)
+                              }
+                              form.setValue("indications", Array.from(current), { shouldDirty: true })
+                            }}
+                          >
+                            {indication}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )
+              }}
             />
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <Checkbox
+                  id="patient-has-amputations"
+                  checked={showAmputations}
+                  onCheckedChange={(checked) => {
+                    const isChecked = checked === true
+                    setShowAmputations(isChecked)
+                    if (!isChecked) {
+                      form.setValue("amputations", [], { shouldDirty: true })
+                    }
+                  }}
+                />
+                <div className="space-y-1 leading-none">
+                  <FormLabel htmlFor="patient-has-amputations">Patient hat Amputationen</FormLabel>
+                  <FormDescription>
+                    Optional: korrigiert BMI-Berechnungen bei fehlenden Extremitäten.
+                  </FormDescription>
+                </div>
+              </div>
+              {showAmputations && (
+                <FormField
+                  control={form.control}
+                  name="amputations"
+                  render={() => {
+                    const selected = form.watch("amputations") ?? []
+                    return (
+                      <FormItem>
+                        <FormLabel>Betroffene Bereiche</FormLabel>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {AMPUTATION_AREAS.map((area) => {
+                            const isActive = selected.includes(area.id)
+                            return (
+                              <Button
+                                key={area.id}
+                                type="button"
+                                size="sm"
+                                variant={isActive ? "secondary" : "outline"}
+                                onClick={() => {
+                                  const current = new Set(form.getValues("amputations"))
+                                  if (current.has(area.id)) {
+                                    current.delete(area.id)
+                                  } else {
+                                    current.add(area.id)
+                                  }
+                                  form.setValue("amputations", Array.from(current), { shouldDirty: true })
+                                }}
+                              >
+                                {area.label}
+                              </Button>
+                            )
+                          })}
+                        </div>
+                      </FormItem>
+                    )
+                  }}
+                />
+              )}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}

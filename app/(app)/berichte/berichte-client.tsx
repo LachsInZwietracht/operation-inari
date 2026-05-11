@@ -1116,7 +1116,10 @@ ${microSentence}`
       reportVersionId: resolvedReportVersion?.id,
       patientId: effectivePatientRef,
       patientName: patientContextLabel ?? undefined,
-      patientIndication: effectivePatient?.indication ?? resolvedReportVersion?.patientIndication ?? resolvedReport?.patientIndication,
+      patientIndication:
+        (effectivePatient?.indications?.length ? effectivePatient.indications.join(", ") : undefined) ??
+        resolvedReportVersion?.patientIndication ??
+        resolvedReport?.patientIndication,
       planId: selectedPlan.id,
       protocolId: effectiveProtocolId,
       planDateLabel,
@@ -1189,7 +1192,7 @@ ${microSentence}`
     }
   }, [
     activeReportId,
-    effectivePatient?.indication,
+    effectivePatient?.indications,
     effectivePatientRef,
     effectiveProtocolId,
     patientContextLabel,
@@ -1426,7 +1429,10 @@ ${microSentence}`
       <ArchivedReportView
         version={resolvedReportVersion}
         patientContextLabel={patientContextLabel}
-        patientIndication={effectivePatient?.indication ?? resolvedReportVersion.patientIndication}
+        patientIndication={
+          (effectivePatient?.indications?.length ? effectivePatient.indications.join(", ") : undefined) ??
+          resolvedReportVersion.patientIndication
+        }
         isFileAvailable={isArchivedFileAvailable}
       />
     )
@@ -1441,7 +1447,12 @@ ${microSentence}`
             <CardHeader>
               <CardTitle className="text-base">Bericht für {patientContextLabel}</CardTitle>
               <CardDescription>
-                {(effectivePatient?.indication ?? resolvedReport?.patientIndication) ? `${effectivePatient?.indication ?? resolvedReport?.patientIndication} · ` : ""}
+                {(() => {
+                  const label = effectivePatient?.indications?.length
+                    ? effectivePatient.indications.join(", ")
+                    : resolvedReport?.patientIndication
+                  return label ? `${label} · ` : ""
+                })()}
                 Der Patienten-Kontext wurde übernommen. Für die Analyse wird weiterhin ein Ernährungsplan benötigt.
                 {effectiveProtocolId ? " Geöffnet aus Protokoll-Kontext." : ""}
               </CardDescription>
@@ -1468,7 +1479,12 @@ ${microSentence}`
           <CardHeader>
             <CardTitle className="text-base">Bericht für {patientContextLabel}</CardTitle>
             <CardDescription>
-              {(effectivePatient?.indication ?? resolvedReport?.patientIndication) ? `${effectivePatient?.indication ?? resolvedReport?.patientIndication} · ` : ""}
+              {(() => {
+                const label = effectivePatient?.indications?.length
+                  ? effectivePatient.indications.join(", ")
+                  : resolvedReport?.patientIndication
+                return label ? `${label} · ` : ""
+              })()}
               Der Patienten-Kontext wurde übernommen. Die Auswertung basiert weiterhin auf dem ausgewählten Ernährungsplan.
               {effectiveProtocolId ? " Geöffnet aus Protokoll-Kontext." : ""}
             </CardDescription>

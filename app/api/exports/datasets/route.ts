@@ -158,7 +158,7 @@ export async function POST(request: Request) {
               subject: `${patient.lastName}, ${patient.firstName}`,
               body: [
                 `Geburtsdatum: ${patient.dateOfBirth}`,
-                `Indikation: ${patient.indication ?? "-"}`,
+                `Indikationen: ${patient.indications?.length ? patient.indications.join(", ") : "-"}`,
                 `E-Mail: ${patient.email ?? "-"}`,
                 `Telefon: ${patient.phone ?? "-"}`,
                 `Krankenkasse: ${patient.insuranceProvider ?? "-"}`,
@@ -177,13 +177,13 @@ export async function POST(request: Request) {
       contentType = "application/json";
     } else {
       payload = toCsv([
-        ["ID", "Vorname", "Nachname", "Geburtsdatum", "Indikation", "E-Mail"],
+        ["ID", "Vorname", "Nachname", "Geburtsdatum", "Indikationen", "E-Mail"],
         ...patients.map((patient) => [
           patient.id,
           patient.firstName,
           patient.lastName,
           patient.dateOfBirth,
-          patient.indication ?? "",
+          patient.indications?.join(", ") ?? "",
           patient.email ?? "",
         ]),
       ]);

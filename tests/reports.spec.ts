@@ -16,7 +16,7 @@ test.describe("Berichte", () => {
     const patient = await createClinicDemoPatient({
       firstName: "Maria",
       lastName: "Schneider",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
     const fixture = await createClinicDemoReportPlanFixture();
 
@@ -92,7 +92,7 @@ test.describe("Berichte", () => {
   });
 
   test("creates an immutable patient report version on export and reopens it from history", async ({ page }) => {
-    const patient = await createClinicDemoPatient({ firstName: "Report", lastName: "History", indication: "Adipositas" });
+    const patient = await createClinicDemoPatient({ firstName: "Report", lastName: "History", indications: ["Adipositas"] });
     const fixture = await createClinicDemoReportPlanFixture();
 
     try {
@@ -159,7 +159,7 @@ test.describe("Berichte", () => {
   });
 
   test("reopens an archived report version after the source plan changes", async ({ page }) => {
-    const patient = await createClinicDemoPatient({ firstName: "Report", lastName: "History", indication: "Adipositas" });
+    const patient = await createClinicDemoPatient({ firstName: "Report", lastName: "History", indications: ["Adipositas"] });
     const fixture = await createClinicDemoReportPlanFixture();
 
     try {
@@ -185,7 +185,7 @@ test.describe("Berichte", () => {
   });
 
   test("shows a non-blocking warning when an archived export file is missing", async ({ page }) => {
-    const patient = await createClinicDemoPatient({ firstName: "Report", lastName: "History", indication: "Adipositas" });
+    const patient = await createClinicDemoPatient({ firstName: "Report", lastName: "History", indications: ["Adipositas"] });
     const fixture = await createClinicDemoReportPlanFixture();
 
     try {

@@ -19,7 +19,7 @@ export interface Patient extends Timestamped {
   city?: string;
   insuranceProvider?: string;
   insuranceNumber?: string;
-  indication?: string;
+  indications?: string[];
   notes?: string;
   amputations?: string[];
   status?: PatientStatus;

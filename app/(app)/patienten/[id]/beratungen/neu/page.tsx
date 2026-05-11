@@ -32,7 +32,7 @@ export default function NeueBeratungPage({
       />
       <CounselingSessionForm
         patientId={id}
-        defaultIndication={patient.indication}
+        defaultIndication={patient.indications?.[0]}
         onSubmit={addSession}
       />
     </div>

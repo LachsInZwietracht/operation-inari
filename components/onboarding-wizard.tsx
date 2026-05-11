@@ -42,7 +42,7 @@ const patientSchema = z.object({
   lastName: z.string().min(1, "Nachname ist erforderlich"),
   dateOfBirth: z.string().min(1, "Geburtsdatum ist erforderlich"),
   gender: z.enum(["m", "w", "d"]),
-  indication: z.string(),
+  indications: z.array(z.string()),
 })
 
 type PatientFormData = z.infer<typeof patientSchema>
@@ -81,7 +81,7 @@ export function OnboardingWizard() {
 
   const patientForm = useForm<PatientFormData>({
     resolver: zodResolver(patientSchema),
-    defaultValues: { firstName: "", lastName: "", dateOfBirth: "", gender: "w", indication: "" },
+    defaultValues: { firstName: "", lastName: "", dateOfBirth: "", gender: "w", indications: [] },
   })
 
   if (!showOnboarding) return null
@@ -102,7 +102,7 @@ export function OnboardingWizard() {
       lastName: data.lastName,
       dateOfBirth: data.dateOfBirth,
       gender: data.gender as Gender,
-      indication: data.indication || undefined,
+      indications: data.indications.length > 0 ? data.indications : undefined,
     })
     setStep(2)
   }
@@ -270,22 +270,37 @@ export function OnboardingWizard() {
                 </Select>
               </div>
               <div className="sm:col-span-2">
-                <Label htmlFor="patient-indication">Indikation</Label>
-                <Select
-                  value={patientForm.watch("indication") || ""}
-                  onValueChange={(val) => patientForm.setValue("indication", val)}
-                >
-                  <SelectTrigger id="patient-indication">
-                    <SelectValue placeholder="Optional auswählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INDICATION_OPTIONS.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
+                <Label>Indikationen</Label>
+                <p className="text-muted-foreground text-xs">
+                  Optional, Mehrfachauswahl möglich.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {INDICATION_OPTIONS.map((opt) => {
+                    const selected = patientForm.watch("indications") ?? []
+                    const isActive = selected.includes(opt)
+                    return (
+                      <Button
+                        key={opt}
+                        type="button"
+                        size="sm"
+                        variant={isActive ? "secondary" : "outline"}
+                        onClick={() => {
+                          const current = new Set(patientForm.getValues("indications"))
+                          if (current.has(opt)) {
+                            current.delete(opt)
+                          } else {
+                            current.add(opt)
+                          }
+                          patientForm.setValue("indications", Array.from(current), {
+                            shouldDirty: true,
+                          })
+                        }}
+                      >
                         {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </Button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
             <div className="flex items-center justify-between pt-2">

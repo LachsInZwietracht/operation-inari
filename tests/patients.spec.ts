@@ -352,9 +352,9 @@ async function openPatientDetail(page: Page, patient: CreatedPatient) {
 
 test.describe("Patient Management", () => {
   test("displays patient list with backend data", async ({ page }) => {
-    const primary = await createPatientFixture({ firstName: "Maria", lastName: "Schneider", indication: "Adipositas" });
-    const secondary = await createPatientFixture({ firstName: "Thomas", lastName: "Weber", indication: "Diabetes mellitus Typ 2" });
-    const tertiary = await createPatientFixture({ firstName: "Lisa", lastName: "Hoffmann", indication: "Zöliakie" });
+    const primary = await createPatientFixture({ firstName: "Maria", lastName: "Schneider", indications: ["Adipositas"] });
+    const secondary = await createPatientFixture({ firstName: "Thomas", lastName: "Weber", indications: ["Diabetes mellitus Typ 2"] });
+    const tertiary = await createPatientFixture({ firstName: "Lisa", lastName: "Hoffmann", indications: ["Zöliakie"] });
 
     try {
       await openPatientList(page);
@@ -369,8 +369,8 @@ test.describe("Patient Management", () => {
   });
 
   test("searches patients by name", async ({ page }) => {
-    const primary = await createPatientFixture({ firstName: "Search", lastName: "Alpha", indication: "Adipositas" });
-    const secondary = await createPatientFixture({ firstName: "Search", lastName: "Beta", indication: "Zöliakie" });
+    const primary = await createPatientFixture({ firstName: "Search", lastName: "Alpha", indications: ["Adipositas"] });
+    const secondary = await createPatientFixture({ firstName: "Search", lastName: "Beta", indications: ["Zöliakie"] });
 
     try {
       await openPatientList(page);
@@ -386,8 +386,8 @@ test.describe("Patient Management", () => {
   });
 
   test("filters patients by indication", async ({ page }) => {
-    const primary = await createPatientFixture({ firstName: "Filter", lastName: "Adipositas", indication: "Adipositas" });
-    const secondary = await createPatientFixture({ firstName: "Filter", lastName: "Zoeliakie", indication: "Zöliakie" });
+    const primary = await createPatientFixture({ firstName: "Filter", lastName: "Adipositas", indications: ["Adipositas"] });
+    const secondary = await createPatientFixture({ firstName: "Filter", lastName: "Zoeliakie", indications: ["Zöliakie"] });
 
     try {
       await openPatientList(page);
@@ -407,7 +407,7 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({
       firstName: "Counseling",
       lastName: "Latest",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
     const olderSession = await createCounselingSessionFixture(patient.id, "2026-04-10");
     const newerSession = await createCounselingSessionFixture(patient.id, "2026-05-15");
@@ -426,7 +426,7 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({
       firstName: "Counseling",
       lastName: "None",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
 
     try {
@@ -441,7 +441,7 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({
       firstName: "Mailing",
       lastName: "Defaults",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
 
     try {
@@ -498,7 +498,7 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({
       firstName: "Detail",
       lastName: "Patient",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
       insuranceProvider: "AOK Bayern",
     });
 
@@ -526,7 +526,7 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({
       firstName: "Workflow",
       lastName: "Journey",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
     const fixture = await createWorkflowFixture(patient.id);
 
@@ -549,7 +549,7 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({
       firstName: "Report",
       lastName: "Workflow",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
     });
     const report = await createPatientReportFixture(patient);
 
@@ -949,7 +949,7 @@ test.describe("Patient Management", () => {
   });
 
   test("creates mail merge PDF for selected patients", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Export", lastName: "Patient", indication: "Adipositas" });
+    const patient = await createPatientFixture({ firstName: "Export", lastName: "Patient", indications: ["Adipositas"] });
 
     try {
       await openPatientList(page);
