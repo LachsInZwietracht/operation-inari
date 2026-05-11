@@ -178,14 +178,58 @@ export async function persistMealPlan(
     approved_by: plan.approvedBy ?? null,
   };
 
-  const { data: persistedPlan, error: planError } = await client
-    .from("daily_meal_plans")
-    .upsert(planPayload, { onConflict: canonicalId ? "id" : "user_id,date" })
-    .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by")
-    .single();
+  let persistedPlan: MealPlanRow | null = null;
+  let planError: { message: string } | null = null;
+
+  if (canonicalId) {
+    const { data, error } = await client
+      .from("daily_meal_plans")
+      .upsert(planPayload, { onConflict: "id" })
+      .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by")
+      .single();
+    persistedPlan = data as MealPlanRow | null;
+    planError = error;
+  } else {
+    let lookup = client
+      .from("daily_meal_plans")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("date", plan.date)
+      .limit(1);
+
+    lookup = plan.patientId
+      ? lookup.eq("patient_id", plan.patientId)
+      : lookup.is("patient_id", null);
+
+    const { data: existingPlans, error: lookupError } = await lookup;
+
+    if (lookupError) {
+      planError = lookupError;
+    } else {
+      const existingId = existingPlans?.[0]?.id as string | undefined;
+      const request = existingId
+        ? client
+            .from("daily_meal_plans")
+            .update(planPayload)
+            .eq("id", existingId)
+        : client
+            .from("daily_meal_plans")
+            .insert(planPayload);
+
+      const { data, error } = await request
+        .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by")
+        .single();
+      persistedPlan = data as MealPlanRow | null;
+      planError = error;
+    }
+  }
 
   if (planError) {
     throw new Error(planError.message);
+  }
+
+  if (!persistedPlan) {
+    throw new Error("Meal plan persistence returned no row");
   }
 
   const planId = persistedPlan.id;

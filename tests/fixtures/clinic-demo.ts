@@ -241,7 +241,10 @@ export async function createClinicDemoReportPlanFixture(): Promise<ClinicDemoRep
       break;
     }
 
-    if (!planError.message.includes("daily_meal_plans_user_id_date_key")) {
+    if (
+      !planError.message.includes("daily_meal_plans_user_id_date_key") &&
+      !planError.message.includes("daily_meal_plans_user_unassigned_date_unique_idx")
+    ) {
       throw new Error(planError.message);
     }
   }

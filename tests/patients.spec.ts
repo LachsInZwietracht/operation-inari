@@ -15,7 +15,7 @@ type TestPatientInput = {
   lastName: string;
   dateOfBirth?: string;
   gender?: "m" | "w" | "d";
-  indication?: string;
+  indications?: string[];
   insuranceProvider?: string;
   insuranceNumber?: string;
 };
@@ -24,7 +24,7 @@ type CreatedPatient = {
   id: string;
   firstName: string;
   lastName: string;
-  indication?: string;
+  indications?: string[];
   insuranceProvider?: string;
 };
 
@@ -63,7 +63,7 @@ async function createPatientFixture(input: TestPatientInput): Promise<CreatedPat
     last_name: `${input.lastName} ${suffix}`,
     date_of_birth: input.dateOfBirth ?? "1990-01-01",
     gender: input.gender ?? "w",
-    indication: input.indication ?? null,
+    indications: input.indications ?? [],
     insurance_provider: input.insuranceProvider ?? "AOK Test",
     insurance_number: input.insuranceNumber ?? `TEST-${suffix}`,
   };
@@ -71,7 +71,7 @@ async function createPatientFixture(input: TestPatientInput): Promise<CreatedPat
   const { data, error } = await admin
     .from("patients")
     .insert(payload)
-    .select("id, first_name, last_name, indication, insurance_provider")
+    .select("id, first_name, last_name, indications, insurance_provider")
     .single();
 
   if (error) {
@@ -82,7 +82,7 @@ async function createPatientFixture(input: TestPatientInput): Promise<CreatedPat
     id: data.id,
     firstName: data.first_name,
     lastName: data.last_name,
-    indication: data.indication ?? undefined,
+    indications: data.indications ?? undefined,
     insuranceProvider: data.insurance_provider ?? undefined,
   };
 }
@@ -220,7 +220,7 @@ async function createPatientReportFixture(patient: CreatedPatient): Promise<Pati
     user_id: userId,
     patient_ref: patient.id,
     patient_name: `${patient.firstName} ${patient.lastName}`,
-    patient_indication: patient.indication ?? null,
+    patient_indication: patient.indications?.length ? patient.indications.join(", ") : null,
     title: "Operation Prodi Bericht",
     plan_id: "fixture_plan_ref",
     protocol_id: null,
@@ -248,7 +248,7 @@ async function createPatientReportFixture(patient: CreatedPatient): Promise<Pati
     user_id: userId,
     patient_ref: patient.id,
     patient_name: `${patient.firstName} ${patient.lastName}`,
-    patient_indication: patient.indication ?? null,
+    patient_indication: patient.indications?.length ? patient.indications.join(", ") : null,
     title: "Operation Prodi Bericht",
     plan_id: "fixture_plan_ref",
     protocol_id: null,
@@ -266,7 +266,7 @@ async function createPatientReportFixture(patient: CreatedPatient): Promise<Pati
       reportId,
       patientId: patient.id,
       patientName: `${patient.firstName} ${patient.lastName}`,
-      patientIndication: patient.indication ?? undefined,
+      patientIndication: patient.indications?.length ? patient.indications.join(", ") : undefined,
       planId: "fixture_plan_ref",
       planDateLabel: "15.06.2026",
       reportLength: "full",
@@ -512,6 +512,9 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("tab", { name: "Beratungen" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
       await expect(page.getByText("Patient Journey")).toBeVisible();
+      await page.getByRole("button", { name: "Löschen" }).click();
+      await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
+      await page.getByRole("button", { name: "Abbrechen" }).click();
       await page.getByRole("tab", { name: "Stammdaten" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
     } finally {
@@ -532,10 +535,10 @@ test.describe("Patient Management", () => {
 
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
       await expect(page.getByText("3/5 Schritte abgeschlossen")).toBeVisible();
-      await expect(page.getByRole("link", { name: "Protokoll öffnen" }).first()).toBeVisible();
       await expect(page.getByText("Ein patientenbezogener Kontrolltermin ist bereits im Kalender hinterlegt.")).toBeVisible();
       await expect(page.getByText("Digitale Einreichung", { exact: true })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Kontrolltermin planen" }).first()).toHaveAttribute("href", `/termine?patientId=${patient.id}`);
+      await expect(page.getByRole("link", { name: "Plan anlegen" })).toHaveAttribute("href", `/ernaehrungsplan?patientId=${patient.id}`);
+      await expect(page.getByText("Quick Links")).toHaveCount(0);
     } finally {
       await deleteWorkflowFixture(patient.id, fixture);
       await deletePatientFixture(patient.id);

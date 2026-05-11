@@ -4,29 +4,34 @@ import { fetchMealPlansClient } from "@/lib/data/meal-plans-client";
 import { getLocalMealPlansRecord } from "@/lib/data/local-meal-plans";
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization";
 
+function getPlanKey(plan: DailyMealPlan) {
+  return `${plan.patientId ?? "unassigned"}:${plan.date}`;
+}
+
 function mergeMealPlans(
   basePlans: DailyMealPlan[],
   persistedPlans: DailyMealPlan[],
   localPlans: DailyMealPlan[],
   foods: Food[],
 ): DailyMealPlan[] {
-  const mergedByDate = new Map<string, DailyMealPlan>();
+  const mergedByContextDate = new Map<string, DailyMealPlan>();
 
   for (const plan of basePlans) {
-    mergedByDate.set(plan.date, normalizeMealPlanFoodReferences(plan, foods));
+    mergedByContextDate.set(getPlanKey(plan), normalizeMealPlanFoodReferences(plan, foods));
   }
 
   for (const plan of persistedPlans) {
-    mergedByDate.set(plan.date, normalizeMealPlanFoodReferences(plan, foods));
+    mergedByContextDate.set(getPlanKey(plan), normalizeMealPlanFoodReferences(plan, foods));
   }
 
   for (const plan of localPlans) {
-    if (!mergedByDate.has(plan.date)) {
-      mergedByDate.set(plan.date, normalizeMealPlanFoodReferences(plan, foods));
+    const key = getPlanKey(plan);
+    if (!mergedByContextDate.has(key)) {
+      mergedByContextDate.set(key, normalizeMealPlanFoodReferences(plan, foods));
     }
   }
 
-  return [...mergedByDate.values()].sort(
+  return [...mergedByContextDate.values()].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
 }

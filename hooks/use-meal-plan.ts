@@ -36,12 +36,20 @@ type MealPlanSnapshotReason = MealPlanVersion["reason"]
 
 function createEmptyPlan(date: string, defaults: MealPlanMetadataPatch = {}): DailyMealPlan {
   return {
-    id: `plan_${date}`,
+    id: `plan_${defaults.patientId ?? "unassigned"}_${date}`,
     date,
     status: "draft",
     ...defaults,
     slots: ALL_SLOT_TYPES.map((type) => ({ type, entries: [] })),
   }
+}
+
+function getPlanKey(date: string, patientId?: string | null): string {
+  return `${patientId ?? "unassigned"}:${date}`
+}
+
+function getPlanContext(defaults: MealPlanMetadataPatch): string | undefined {
+  return defaults.patientId ?? undefined
 }
 
 function generateId(): string {
@@ -94,10 +102,10 @@ function buildInitialPlans(initialPlans: DailyMealPlan[], foods: Food[]): Record
 
   const merged: Record<string, DailyMealPlan> = {}
   for (const plan of initialPlans) {
-    merged[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+    merged[getPlanKey(plan.date, plan.patientId)] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
   }
   for (const [date, plan] of Object.entries(stored)) {
-    merged[date] = ensureAllSlots(plan)
+    merged[getPlanKey(plan.date ?? date, plan.patientId)] = ensureAllSlots(plan)
   }
 
   return merged
@@ -113,6 +121,7 @@ export function useMealPlan(
   const [currentDate, setCurrentDate] = useState(() =>
     initialDate ?? format(new Date(), "yyyy-MM-dd")
   )
+  const contextPatientId = getPlanContext(defaultMetadata)
   const [plans, setPlans] = useState<Record<string, DailyMealPlan>>(() =>
     buildInitialPlans(initialPlans, foods)
   )
@@ -145,21 +154,23 @@ export function useMealPlan(
 
         const nextPlans: Record<string, DailyMealPlan> = {}
         for (const plan of initialPlans) {
-          nextPlans[plan.date] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+          nextPlans[getPlanKey(plan.date, plan.patientId)] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
         }
         for (const plan of persistedPlans) {
-          const dirtyPlan = dirtyDatesRef.current.has(plan.date)
-            ? plansRef.current[plan.date]
+          const key = getPlanKey(plan.date, plan.patientId)
+          const dirtyPlan = dirtyDatesRef.current.has(key)
+            ? plansRef.current[key]
             : undefined
-          nextPlans[plan.date] = ensureAllSlots(
+          nextPlans[key] = ensureAllSlots(
             normalizeMealPlanFoodReferences(dirtyPlan ?? plan, foods),
           )
         }
 
         const localCandidates = Object.values(plansRef.current).filter(isLocalMigrationCandidate)
         for (const plan of localCandidates) {
-          if (!nextPlans[plan.date]) {
-            nextPlans[plan.date] = ensureAllSlots(plan)
+          const key = getPlanKey(plan.date, plan.patientId)
+          if (!nextPlans[key]) {
+            nextPlans[key] = ensureAllSlots(plan)
           }
         }
 
@@ -176,7 +187,7 @@ export function useMealPlan(
 
               setPlans((prev) => ({
                 ...prev,
-                [persistedPlan.date]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
+                [getPlanKey(persistedPlan.date, persistedPlan.patientId)]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
               }))
             } catch (err) {
               console.error(`Failed to migrate meal plan for ${plan.date}:`, err)
@@ -199,11 +210,11 @@ export function useMealPlan(
 
   const getPlanForDate = useCallback(
     (date: string): DailyMealPlan => {
-      const existing = plans[date]
+      const existing = plans[getPlanKey(date, contextPatientId)]
       if (existing) return ensureAllSlots(existing)
       return createEmptyPlan(date, defaultMetadata)
     },
-    [defaultMetadata, plans],
+    [contextPatientId, defaultMetadata, plans],
   )
 
   const getCurrentPlan = useCallback((): DailyMealPlan => {
@@ -228,7 +239,7 @@ export function useMealPlan(
         const persistedPlan = await persistMealPlan(plan)
         setPlans((prev) => ({
           ...prev,
-          [persistedPlan.date]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
+          [getPlanKey(persistedPlan.date, persistedPlan.patientId)]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
         }))
 
         if (options.snapshotReason && isUuid(persistedPlan.id)) {
@@ -254,9 +265,10 @@ export function useMealPlan(
       let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
-        dirtyDatesRef.current.add(currentDate)
-        const currentPlan = prev[currentDate]
-          ? ensureAllSlots(prev[currentDate])
+        const key = getPlanKey(currentDate, contextPatientId)
+        dirtyDatesRef.current.add(key)
+        const currentPlan = prev[key]
+          ? ensureAllSlots(prev[key])
           : createEmptyPlan(currentDate, defaultMetadata)
         updatedPlan = updater(currentPlan)
         snapshotReason =
@@ -266,7 +278,7 @@ export function useMealPlan(
 
         return {
           ...prev,
-          [currentDate]: updatedPlan,
+          [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
         }
       })
 
@@ -274,7 +286,7 @@ export function useMealPlan(
         void syncPlanToSupabase(updatedPlan, { snapshotReason })
       }
     },
-    [currentDate, defaultMetadata, syncPlanToSupabase]
+    [contextPatientId, currentDate, defaultMetadata, syncPlanToSupabase]
   )
 
   const updatePlanForDate = useCallback(
@@ -283,9 +295,10 @@ export function useMealPlan(
       let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
-        dirtyDatesRef.current.add(date)
-        const basePlan = prev[date]
-          ? ensureAllSlots(prev[date])
+        const key = getPlanKey(date, contextPatientId)
+        dirtyDatesRef.current.add(key)
+        const basePlan = prev[key]
+          ? ensureAllSlots(prev[key])
           : createEmptyPlan(date, defaultMetadata)
         updatedPlan = updater(basePlan)
         snapshotReason =
@@ -295,7 +308,7 @@ export function useMealPlan(
 
         return {
           ...prev,
-          [date]: updatedPlan,
+          [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
         }
       })
 
@@ -303,12 +316,12 @@ export function useMealPlan(
         void syncPlanToSupabase(updatedPlan, { snapshotReason })
       }
     },
-    [defaultMetadata, syncPlanToSupabase],
+    [contextPatientId, defaultMetadata, syncPlanToSupabase],
   )
 
   const isPlanLocked = useCallback(
-    (date: string) => plans[date]?.status === "approved",
-    [plans],
+    (date: string) => plans[getPlanKey(date, contextPatientId)]?.status === "approved",
+    [contextPatientId, plans],
   )
 
   const addEntry = useCallback(
@@ -455,11 +468,12 @@ export function useMealPlan(
       if (isPlanLocked(targetDate)) return
       const sourcePlan = getPlanForDate(sourceDate)
       const copiedPlan = clonePlanForDate(sourcePlan, targetDate)
-      dirtyDatesRef.current.add(targetDate)
+      const copiedKey = getPlanKey(copiedPlan.date, copiedPlan.patientId)
+      dirtyDatesRef.current.add(copiedKey)
 
       setPlans((prev) => ({
         ...prev,
-        [targetDate]: copiedPlan,
+        [copiedKey]: copiedPlan,
       }))
 
       void syncPlanToSupabase(copiedPlan)
@@ -546,9 +560,10 @@ export function useMealPlan(
       let approvedPlan: DailyMealPlan | null = null
 
       setPlans((prev) => {
-        dirtyDatesRef.current.add(date)
-        const basePlan = prev[date]
-          ? ensureAllSlots(prev[date])
+        const key = getPlanKey(date, contextPatientId)
+        dirtyDatesRef.current.add(key)
+        const basePlan = prev[key]
+          ? ensureAllSlots(prev[key])
           : createEmptyPlan(date, defaultMetadata)
         approvedPlan = {
           ...basePlan,
@@ -559,7 +574,7 @@ export function useMealPlan(
 
         return {
           ...prev,
-          [date]: approvedPlan,
+          [getPlanKey(approvedPlan.date, approvedPlan.patientId)]: approvedPlan,
         }
       })
 
@@ -575,7 +590,7 @@ export function useMealPlan(
         return false
       }
     },
-    [defaultMetadata, syncPlanToSupabase],
+    [contextPatientId, defaultMetadata, syncPlanToSupabase],
   )
 
   const reopenPlan = useCallback(
@@ -584,8 +599,9 @@ export function useMealPlan(
       let snapshotReason: MealPlanSnapshotReason | undefined
 
       setPlans((prev) => {
-        const basePlan = prev[date]
-          ? ensureAllSlots(prev[date])
+        const key = getPlanKey(date, contextPatientId)
+        const basePlan = prev[key]
+          ? ensureAllSlots(prev[key])
           : createEmptyPlan(date, defaultMetadata)
         snapshotReason = basePlan.status === "approved" ? "reopened" : undefined
         updatedPlan = {
@@ -597,7 +613,7 @@ export function useMealPlan(
 
         return {
           ...prev,
-          [date]: updatedPlan,
+          [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
         }
       })
 
@@ -605,7 +621,7 @@ export function useMealPlan(
         void syncPlanToSupabase(updatedPlan, { snapshotReason })
       }
     },
-    [defaultMetadata, syncPlanToSupabase],
+    [contextPatientId, defaultMetadata, syncPlanToSupabase],
   )
 
   const restorePlanVersion = useCallback(

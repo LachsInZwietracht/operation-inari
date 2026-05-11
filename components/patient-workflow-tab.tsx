@@ -6,15 +6,12 @@ import {
   Activity,
   Archive,
   ArrowRight,
-  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   Copy,
-  FileText,
   QrCode,
-  Stethoscope,
   UserRound,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -658,7 +655,9 @@ export function PatientWorkflowTab({
               {STATUS_META[nextStage.status].label}
             </Badge>
             <p className="text-sm text-muted-foreground">{nextStage.summary}</p>
-            {nextStage.primaryAction ? <WorkflowActionButton action={nextStage.primaryAction} /> : null}
+            {nextStage.primaryAction && nextStage.key !== "plan" ? (
+              <WorkflowActionButton action={nextStage.primaryAction} />
+            ) : null}
           </CardContent>
         </Card>
 
@@ -697,7 +696,7 @@ export function PatientWorkflowTab({
 
       <div className="grid gap-4 lg:grid-cols-5">
         {stages.map((stage) => (
-          <Card key={stage.key} className="flex h-full flex-col">
+          <Card key={stage.key}>
             <CardHeader className="space-y-3 pb-3">
               <div className="flex items-start justify-between gap-3">
                 <CardTitle className="text-base">{stage.label}</CardTitle>
@@ -707,20 +706,16 @@ export function PatientWorkflowTab({
               </div>
               <CardDescription>{stage.summary}</CardDescription>
             </CardHeader>
-            <CardContent className="mt-auto space-y-3">
+            <CardContent>
               <div className="text-xs text-muted-foreground">
                 {stage.dateLabel ? `Zuletzt aktualisiert: ${stage.dateLabel}` : "Noch keine Aktivität"}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {stage.primaryAction ? <WorkflowActionButton action={stage.primaryAction} /> : null}
-                {stage.secondaryAction ? <WorkflowActionButton action={stage.secondaryAction} /> : null}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Patient Journey</CardTitle>
@@ -760,60 +755,6 @@ export function PatientWorkflowTab({
             ) : (
               <p className="text-sm text-muted-foreground">Noch keine Workflow-Aktivität vorhanden.</p>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Links</CardTitle>
-            <CardDescription>Direkte Einstiege in die wichtigsten Patienten-Workflows.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={`/patienten/${patient.id}/protokolle/neu`} prefetch={false}>
-                <span className="flex items-center gap-2">
-                  <Stethoscope className="h-4 w-4" />
-                  Neues Protokoll
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={`/patienten/${patient.id}/beratungen/neu`} prefetch={false}>
-                <span className="flex items-center gap-2">
-                  <ClipboardCheck className="h-4 w-4" />
-                  Neue Beratung
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={mealPlanHref(patient.id, latestPlan)} prefetch={false}>
-                <span className="flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4" />
-                  {latestPlan ? "Ernährungsplan öffnen" : "Ernährungsplan anlegen"}
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={reportHref} prefetch={false}>
-                <span className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Berichte öffnen
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link href={`/termine?patientId=${patient.id}`} prefetch={false}>
-                <span className="flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4" />
-                  Kontrolltermin planen
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
           </CardContent>
         </Card>
       </div>

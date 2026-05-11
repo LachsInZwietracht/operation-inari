@@ -189,12 +189,26 @@ export function usePatients(options: UsePatientsOptions = {}) {
     })
   }, [isAuthenticated])
 
-  const deletePatient = useCallback((id: string) => {
-    setPatients((prev) => prev.filter((p) => p.id !== id && p.legacyId !== id))
-    if (isAuthenticated) {
-      void deletePatientClient(id).catch((err) => {
-        console.error("Failed to delete patient in Supabase:", err)
-      })
+  const deletePatient = useCallback(async (id: string) => {
+    let removedPatient: Patient | undefined
+
+    setPatients((prev) => {
+      removedPatient = prev.find((p) => p.id === id || p.legacyId === id)
+      return prev.filter((p) => p.id !== id && p.legacyId !== id)
+    })
+
+    if (!isAuthenticated) return true
+
+    try {
+      await deletePatientClient(id)
+      return true
+    } catch (err) {
+      console.error("Failed to delete patient in Supabase:", err)
+      if (removedPatient) {
+        const patientToRestore = removedPatient
+        setPatients((prev) => sortPatients([...prev, patientToRestore]))
+      }
+      return false
     }
   }, [isAuthenticated])
 

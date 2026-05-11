@@ -1,4 +1,51 @@
 import { expect, test } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+
+const TEST_EMAIL = "test@prodi.local";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const admin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+
+async function getTestUserId() {
+  const { data, error } = await admin.auth.admin.listUsers();
+  if (error) throw new Error(error.message);
+  const user = data.users.find((entry) => entry.email === TEST_EMAIL);
+  if (!user) throw new Error("Test user not found");
+  return user.id;
+}
+
+async function createPatientFixture(firstName: string, lastName: string) {
+  const userId = await getTestUserId();
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const { data, error } = await admin
+    .from("patients")
+    .insert({
+      user_id: userId,
+      first_name: firstName,
+      last_name: `${lastName} ${suffix}`,
+      date_of_birth: "1990-01-01",
+      gender: "w",
+      indication: "Adipositas",
+      insurance_number: `PLAN-${suffix}`,
+    })
+    .select("id, first_name, last_name")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return {
+    id: data.id as string,
+    firstName: data.first_name as string,
+    lastName: data.last_name as string,
+  };
+}
+
+async function deletePatientFixture(patientId: string) {
+  await admin.from("patients").delete().eq("id", patientId);
+}
 
 function uniquePlannerDate(offset = 0) {
   const seed = Date.now() + offset;
@@ -23,6 +70,28 @@ test.describe("Ernährungsplan", () => {
 
     // Just verify date is displayed (any German date format)
     await expect(page.locator("text=/\\d{1,2}\\./").first()).toBeVisible();
+  });
+
+  test("switches patient context from the Planakte patient selector", async ({ page }) => {
+    const planDate = uniquePlannerDate(500);
+    const firstPatient = await createPatientFixture("Plan", "SelectorA");
+    const secondPatient = await createPatientFixture("Plan", "SelectorB");
+
+    try {
+      await page.goto(`/ernaehrungsplan?patientId=${firstPatient.id}&date=${planDate}`);
+
+      const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
+      await expect(planRecord.getByText(`${firstPatient.firstName} ${firstPatient.lastName}`).first()).toBeVisible();
+
+      await planRecord.getByRole("combobox", { name: "Patient" }).click();
+      await page.getByRole("option", { name: new RegExp(secondPatient.lastName) }).click();
+
+      await expect(page).toHaveURL(new RegExp(`/ernaehrungsplan\\?date=${planDate}&patientId=${secondPatient.id}`));
+      await expect(planRecord.getByText(`${secondPatient.firstName} ${secondPatient.lastName}`).first()).toBeVisible();
+    } finally {
+      await deletePatientFixture(firstPatient.id);
+      await deletePatientFixture(secondPatient.id);
+    }
   });
 
   test("adds food entry to a meal slot", async ({ page }) => {
@@ -68,7 +137,7 @@ test.describe("Ernährungsplan", () => {
     await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
     await expect(page.getByText(/Hafer/i).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Plan exportieren" }).click();
+    await page.getByRole("button", { name: "Export" }).click();
     const pdfDownload = page.waitForEvent("download");
     await page.getByRole("menuitem", { name: /Klinischer Bericht/ }).click();
     const pdf = await pdfDownload;
@@ -132,7 +201,7 @@ test.describe("Ernährungsplan", () => {
     await expect(page.getByText(/Hafer/i).first()).toBeVisible();
 
     const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-    await planRecord.getByRole("combobox").click();
+    await planRecord.getByRole("combobox", { name: "Planstatus" }).click();
     await page.getByRole("option", { name: "Freigegeben" }).click();
 
     await expect(planRecord.getByText("Bearbeitung")).toBeVisible();

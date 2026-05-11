@@ -2,9 +2,23 @@
 
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { Pencil } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
+import { Loader2, Pencil, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { usePatients } from "@/hooks/use-patients"
 import { useAuth } from "@/hooks/use-auth"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
@@ -29,10 +43,12 @@ export function PatientDetailClient({
   patientId: string
   initialData?: PatientWorkspaceData | null
 }) {
-  const { getPatient, isLoadingRemote } = usePatients({
+  const router = useRouter()
+  const { getPatient, deletePatient, isLoadingRemote } = usePatients({
     initialPatients: initialData?.patient ? initialData.patients : undefined,
   })
   const { loading: authLoading, isAuthenticated } = useAuth()
+  const [isDeleting, setIsDeleting] = useState(false)
   const patient = initialData?.patient ?? getPatient(patientId)
   const resolvedInitialData = initialData?.patient ? initialData : undefined
 
@@ -58,18 +74,64 @@ export function PatientDetailClient({
     )
   }
 
+  const handleDeletePatient = async () => {
+    setIsDeleting(true)
+    const deleted = await deletePatient(patient.id)
+    setIsDeleting(false)
+
+    if (!deleted) {
+      toast.error("Patient konnte nicht gelöscht werden.")
+      return
+    }
+
+    toast.success("Patient gelöscht.")
+    router.push("/patienten")
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${patient.firstName} ${patient.lastName}`}
-        description={patient.indication ?? undefined}
+        description={patient.indications?.length ? patient.indications.join(" · ") : undefined}
       >
-        <Button variant="outline" asChild>
-          <Link href={`/patienten/${patient.id}/bearbeiten`}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Bearbeiten
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/patienten/${patient.id}/bearbeiten`}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Bearbeiten
+            </Link>
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Löschen
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Patient löschen?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {patient.firstName} {patient.lastName} wird aus der Patientenliste entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={isDeleting}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void handleDeletePatient()
+                  }}
+                >
+                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Löschen
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </PageHeader>
       <PatientTabs patient={patient} initialData={resolvedInitialData} />
     </div>
