@@ -36,6 +36,10 @@ const PatientTabs = dynamic(
   },
 )
 
+function getPatientDescription(patient: { indication?: string; indications?: string[] }) {
+  return patient.indications?.length ? patient.indications.join(" · ") : patient.indication
+}
+
 export function PatientDetailClient({
   patientId,
   initialData,
@@ -92,7 +96,7 @@ export function PatientDetailClient({
     <div className="space-y-6">
       <PageHeader
         title={`${patient.firstName} ${patient.lastName}`}
-        description={patient.indications?.length ? patient.indications.join(" · ") : undefined}
+        description={getPatientDescription(patient)}
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
