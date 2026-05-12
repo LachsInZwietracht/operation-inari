@@ -2,7 +2,6 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "@/components/app-sidebar"
 import { ContextualFoodSearchTrigger } from "@/components/food-search-command"
 import { Separator } from "@/components/ui/separator"
-import { PwaStatus } from "@/components/pwa-status"
 import { FoodSearchProvider } from "@/components/foods-provider"
 import { AuthProvider } from "@/components/auth-provider"
 import { INSTITUTION_ROLES, hasAnyRole, mapLegacyUserRole } from "@/lib/auth/rbac"
@@ -53,9 +52,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Separator orientation="vertical" className="mr-1 h-4 shrink-0 sm:mr-2" />
               <div className="min-w-0 flex-1 sm:flex-none">
                 <ContextualFoodSearchTrigger />
-              </div>
-              <div className="shrink-0">
-                <PwaStatus />
               </div>
             </header>
             <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
