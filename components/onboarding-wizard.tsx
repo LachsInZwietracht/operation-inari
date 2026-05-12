@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Building2, UserPlus, Lightbulb, UtensilsCrossed, FileText, CalendarDays } from "lucide-react"
+import { Building2, UserPlus, Lightbulb, UtensilsCrossed, FileText, CalendarDays, ChevronDown } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -274,33 +281,66 @@ export function OnboardingWizard() {
                 <p className="text-muted-foreground text-xs">
                   Optional, Mehrfachauswahl möglich.
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {INDICATION_OPTIONS.map((opt) => {
-                    const selected = patientForm.watch("indications") ?? []
-                    const isActive = selected.includes(opt)
-                    return (
-                      <Button
-                        key={opt}
-                        type="button"
-                        size="sm"
-                        variant={isActive ? "secondary" : "outline"}
-                        onClick={() => {
-                          const current = new Set(patientForm.getValues("indications"))
-                          if (current.has(opt)) {
-                            current.delete(opt)
-                          } else {
-                            current.add(opt)
-                          }
-                          patientForm.setValue("indications", Array.from(current), {
-                            shouldDirty: true,
-                          })
-                        }}
+                {(() => {
+                  const selected = patientForm.watch("indications") ?? []
+                  const toggleIndication = (indication: string) => {
+                    const current = new Set(patientForm.getValues("indications"))
+                    if (current.has(indication)) {
+                      current.delete(indication)
+                    } else {
+                      current.add(indication)
+                    }
+                    patientForm.setValue("indications", Array.from(current), {
+                      shouldDirty: true,
+                    })
+                  }
+                  return (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-2 h-auto min-h-10 w-full justify-between gap-2 px-3 py-2 text-left font-normal"
+                        >
+                          <div className="flex flex-1 flex-wrap gap-1.5">
+                            {selected.length === 0 ? (
+                              <span className="text-muted-foreground">Indikationen auswählen</span>
+                            ) : (
+                              selected.map((indication) => (
+                                <Badge key={indication} variant="secondary" className="font-normal">
+                                  {indication}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-[var(--radix-popover-trigger-width)] p-1"
+                        align="start"
                       >
-                        {opt}
-                      </Button>
-                    )
-                  })}
-                </div>
+                        <div className="max-h-72 overflow-y-auto">
+                          {INDICATION_OPTIONS.map((indication) => {
+                            const isActive = selected.includes(indication)
+                            return (
+                              <label
+                                key={indication}
+                                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                              >
+                                <Checkbox
+                                  checked={isActive}
+                                  onCheckedChange={() => toggleIndication(indication)}
+                                />
+                                <span>{indication}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )
+                })()}
               </div>
             </div>
             <div className="flex items-center justify-between pt-2">
