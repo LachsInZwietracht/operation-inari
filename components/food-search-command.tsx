@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Loader2, SearchIcon, Sparkles } from "lucide-react"
 import {
   Command,
@@ -271,4 +271,32 @@ export function FoodSearchTrigger() {
       <SearchDialog open={open} onOpenChange={setOpen} />
     </>
   )
+}
+
+const FOOD_SEARCH_ROUTE_PREFIXES = [
+  "/lebensmittel",
+  "/rezepte",
+  "/ernaehrungsplan",
+  "/austauschtabellen",
+  "/datenbank",
+  "/institution/menueplaene",
+  "/institution/produktion",
+]
+
+function isProtocolRoute(pathname: string) {
+  return /^\/patienten\/[^/]+\/protokolle(?:\/|$)/.test(pathname)
+}
+
+function shouldShowFoodSearch(pathname: string | null) {
+  if (!pathname) return false
+
+  return FOOD_SEARCH_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix)) || isProtocolRoute(pathname)
+}
+
+export function ContextualFoodSearchTrigger() {
+  const pathname = usePathname()
+
+  if (!shouldShowFoodSearch(pathname)) return null
+
+  return <FoodSearchTrigger />
 }

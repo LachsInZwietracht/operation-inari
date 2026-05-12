@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
-import { FoodSearchTrigger } from "@/components/food-search-command"
+import { ContextualFoodSearchTrigger } from "@/components/food-search-command"
 import { Separator } from "@/components/ui/separator"
 import { PwaStatus } from "@/components/pwa-status"
 import { FoodSearchProvider } from "@/components/foods-provider"
@@ -52,7 +52,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <SidebarTrigger className="-ml-1 shrink-0" />
               <Separator orientation="vertical" className="mr-1 h-4 shrink-0 sm:mr-2" />
               <div className="min-w-0 flex-1 sm:flex-none">
-                <FoodSearchTrigger />
+                <ContextualFoodSearchTrigger />
               </div>
               <div className="shrink-0">
                 <PwaStatus />

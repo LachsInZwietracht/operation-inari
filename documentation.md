@@ -35,10 +35,10 @@ Agent quick index:
 ## 2. Global Architecture Overview
 - **Rendering:** Next.js 15 with server rendering and `<Suspense>` boundaries for heavier routes.
 - **Caching:** BLS food data is cached via `unstable_cache` where applicable.
-- **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and global search. It is **non-blocking** (search index is lazy-loaded on demand) and keeps the header/search/status row responsive at mobile widths.
-- **Responsive contract:** Shared layout primitives (`PageHeader`, `SidebarInset`, `Card`, `TabsList`, `Table`, and the global food search trigger) should keep document-level width within the viewport. Wide tables scroll inside their own container rather than widening the page. `tests/responsive-layout.spec.ts` checks 390 px, 768 px, and desktop widths across dashboard, foods, patients, reports, institution, and API/export routes.
+- **Layout stack:** `app/layout.tsx` applies fonts, theme provider, toasts. `app/(app)/layout.tsx` wires the `SidebarProvider`, `AppSidebar`, and contextual food search. Food search is shown only on food-heavy routes and remains **non-blocking** because the search index is lazy-loaded on demand.
+- **Responsive contract:** Shared layout primitives (`PageHeader`, `SidebarInset`, `Card`, `TabsList`, `Table`, and the contextual food search trigger) should keep document-level width within the viewport. Wide tables scroll inside their own container rather than widening the page. `tests/responsive-layout.spec.ts` checks 390 px, 768 px, and desktop widths across dashboard, foods, patients, reports, institution, and API/export routes.
 - **Clinical status tokens:** `lib/clinical-status.ts` defines reusable tone classes for source trust, review, risk, and success states. Use these instead of one-off color choices when a badge communicates clinical meaning.
-- **Command palette:** `components/food-search-command.tsx` provides global `cmd+k` food search. The search index is loaded on first use via `/api/foods/search-index`.
+- **Contextual food search:** `components/food-search-command.tsx` provides the `cmd+k` food search trigger on food-heavy routes. The search index is loaded on first use via `/api/foods/search-index`.
 - **Mock data + utilities:**
   - `@/lib/nutrients.ts`, `@/lib/reference-values.ts`, `@/lib/inari-score.ts`, `@/lib/sustainability.ts` implement calculation logic shared across features.
 - **Stateful hooks:** CRUD hooks in `hooks/` (e.g., `usePatients`, `useCustomFoods`, `useRecipes`) follow a **Supabase-first with local fallback** pattern where implemented. Data is synced to the cloud when authenticated but remains available in `localStorage` for offline use.
