@@ -56,6 +56,7 @@ import {
   getFoodGroupName,
 } from "@/lib/data/food-groups";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
+import { canAccessDataSource } from "@/lib/data/entitlements";
 import { formatNumber } from "@/lib/format";
 import { getClinicalStatusClass, getFoodSourceTrustTone } from "@/lib/clinical-status";
 import { calculateInariScore, getInariScoreBadge } from "@/lib/inari-score";
@@ -71,6 +72,7 @@ const FoodSynonymManager = dynamic(
 
 const PAGE_SIZE = 25;
 const BRAND_PAGE_SIZE = 12;
+const ACTIVE_FOOD_BROWSER_SOURCE_IDS = new Set<FoodSourceId>(["bls", "sfk", "off", "custom"]);
 
 const EMPTY_BRANDED_RESULT: FoodBrowserResult = {
   foods: [],
@@ -417,6 +419,10 @@ export function LebensmittelPageClient({
     activeSource === "all"
       ? null
       : FOOD_SOURCES.find((source) => source.id === activeSource);
+  const selectableFoodSources = useMemo(
+    () => FOOD_SOURCES.filter((source) => ACTIVE_FOOD_BROWSER_SOURCE_IDS.has(source.id) && canAccessDataSource(source.id)),
+    [],
+  );
   const pageCount = result.hasMore
     ? Math.max(page + 1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize))
     : Math.max(1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize));
@@ -457,7 +463,7 @@ export function LebensmittelPageClient({
         </TabsList>
 
         <TabsContent value="datenbank" className="space-y-4">
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className={`grid min-w-0 gap-4 ${activeSource === "off" ? "lg:grid-cols-[minmax(0,1fr)_280px]" : ""}`}>
             <div className="min-w-0 space-y-4">
               <div className="overflow-x-auto rounded-lg border bg-muted/30 p-1">
                 <div className="flex min-w-max items-center gap-1">
@@ -539,7 +545,7 @@ export function LebensmittelPageClient({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Alle Quellen</SelectItem>
-                    {FOOD_SOURCES.map((source) => (
+                    {selectableFoodSources.map((source) => (
                       <SelectItem key={source.id} value={source.id}>
                         {source.name}
                       </SelectItem>
@@ -684,7 +690,7 @@ export function LebensmittelPageClient({
               </div>
 
               <div className="hidden overflow-x-auto rounded-md border md:block">
-                <Table className="min-w-[920px]">
+                <Table className="min-w-[820px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
@@ -692,7 +698,6 @@ export function LebensmittelPageClient({
                       {searchMode === "group" && <TableHead>Gruppe</TableHead>}
                       <TableHead>Kategorie</TableHead>
                       <TableHead className="text-right">Inari Score</TableHead>
-                      <TableHead className="text-right">Quelle</TableHead>
                       <TableHead className="text-right">Energie (kcal)</TableHead>
                       <TableHead className="text-right">Eiweiß (g)</TableHead>
                       <TableHead className="text-right">Fett (g)</TableHead>
@@ -703,7 +708,7 @@ export function LebensmittelPageClient({
                     {isLoading ? (
                       <TableRow>
                         <TableCell
-                          colSpan={searchMode === "code" || searchMode === "group" ? 10 : 9}
+                          colSpan={searchMode === "code" || searchMode === "group" ? 9 : 8}
                           className="text-muted-foreground h-24 text-center"
                         >
                           Ergebnisse werden geladen...
@@ -712,7 +717,7 @@ export function LebensmittelPageClient({
                     ) : visibleFoods.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={searchMode === "code" || searchMode === "group" ? 10 : 9}
+                          colSpan={searchMode === "code" || searchMode === "group" ? 9 : 8}
                           className="text-muted-foreground h-24 text-center"
                         >
                           Keine Lebensmittel gefunden.
@@ -808,11 +813,6 @@ export function LebensmittelPageClient({
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right text-xs">
-                              <Badge variant="outline" className={getClinicalStatusClass(getFoodSourceTrustTone(food.sourceId))}>
-                                {food.source}
-                              </Badge>
-                            </TableCell>
                             <TableCell className="text-right">
                               {formatNumber(getNutrientValue(food.nutrients, "energie"))}
                             </TableCell>
@@ -848,50 +848,8 @@ export function LebensmittelPageClient({
               </div>
             </div>
 
-            <div className="space-y-4">
-              <Card className="h-fit">
-                <CardHeader>
-                  <CardTitle className="text-base">Metadaten & Versionen</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {currentSource ? (
-                    <>
-                      <div>
-                        <p className="font-semibold">{currentSource.name}</p>
-                        <p className="text-muted-foreground text-xs">
-                          Version {currentSource.version} · Stand {currentSource.updatedAt}
-                        </p>
-                      </div>
-                      <p>{currentSource.description}</p>
-                      <div className="rounded-lg bg-muted/50 p-3">
-                        <p className="text-xs text-muted-foreground">Abdeckung</p>
-                        <p className="font-medium">{currentSource.coverage}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      Wählen Sie eine Quelle aus, um Release Notes und Umfang zu sehen.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {searchMode === "name" && (
-                <Card className="h-fit">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-1.5 text-sm">
-                      <Sparkles className="h-3.5 w-3.5 text-purple-400" />
-                      Intelligente Suche
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs text-muted-foreground">
-                    <p>Die Suche erkennt automatisch Tippfehler, Umlaute und phonetische Varianten.</p>
-                    <p>Beispiel: &quot;Brokoli&quot; findet weiterhin &quot;Broccoli&quot; ueber die serverseitige Suche.</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {activeSource === "off" && (
+            {activeSource === "off" && (
+              <div className="space-y-4">
                 <Card className="h-fit">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Open Food Facts</CardTitle>
@@ -901,8 +859,8 @@ export function LebensmittelPageClient({
                     <p>Nur validierte und in den Hauptkatalog uebernommene Produkte erscheinen hier.</p>
                   </CardContent>
                 </Card>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </TabsContent>
 
