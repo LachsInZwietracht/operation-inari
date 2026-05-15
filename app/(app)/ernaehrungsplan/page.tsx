@@ -52,9 +52,9 @@ function extractFoodIds(
 export default async function ErnaehrungsplanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ patientId?: string; date?: string }>;
+  searchParams: Promise<{ patientId?: string; date?: string; template?: string }>;
 }) {
-  const { patientId, date } = await searchParams;
+  const { patientId, date, template } = await searchParams;
   const [recipes, mealPlans, templates] = await Promise.all([
     fetchRecipes(),
     fetchMealPlans(),
@@ -75,6 +75,7 @@ export default async function ErnaehrungsplanPage({
         initialTemplates={templates}
         patientId={patientId}
         initialDate={date}
+        initialApplyTemplateId={template}
       />
     </FoodsProvider>
   );

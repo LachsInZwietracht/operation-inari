@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   format,
   parseISO,
@@ -320,9 +320,16 @@ interface ErnaehrungsplanPageClientProps {
   initialTemplates?: MealPlanTemplate[]
   patientId?: string
   initialDate?: string
+  /**
+   * Template id passed via `?template=…` (used by the Plan-Bibliothek to
+   * deep-link "anwenden"). When present, the planner consumes it once on
+   * mount: applies the template's slots to the active date and rewrites the
+   * URL without the param so a refresh does not re-apply silently.
+   */
+  initialApplyTemplateId?: string
 }
 
-export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTemplates, patientId, initialDate }: ErnaehrungsplanPageClientProps) {
+export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTemplates, patientId, initialDate, initialApplyTemplateId }: ErnaehrungsplanPageClientProps) {
   const router = useRouter()
   const serverFoods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
@@ -388,6 +395,37 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     isLoading: templatesLoading,
     saveTemplate: saveMealPlanTemplateFromHook,
   } = useMealPlanTemplates({ initialTemplates })
+
+  // Plan-Bibliothek deep-link handler. Applies a system template once when the
+  // planner mounts with `?template=…`, then rewrites the URL to drop the param
+  // so a refresh or share-link does not silently re-apply on top of edits.
+  const appliedTemplateRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialApplyTemplateId) return
+    if (appliedTemplateRef.current === initialApplyTemplateId) return
+    if (mealPlanTemplates.length === 0) return
+    const template = mealPlanTemplates.find(
+      (item) => item.id === initialApplyTemplateId || item.legacyId === initialApplyTemplateId,
+    )
+    if (!template) return
+    appliedTemplateRef.current = initialApplyTemplateId
+    applyTemplateToDate(currentDate, template.slots, {
+      title: template.name,
+      dietLineId: template.dietLineId ?? undefined,
+      targetProfileId: template.targetProfileId ?? undefined,
+    })
+    const params = new URLSearchParams()
+    params.set("date", currentDate)
+    if (patientId) params.set("patientId", patientId)
+    router.replace(`/ernaehrungsplan?${params.toString()}`)
+  }, [
+    initialApplyTemplateId,
+    mealPlanTemplates,
+    applyTemplateToDate,
+    currentDate,
+    patientId,
+    router,
+  ])
 
   const [commandOpen, setCommandOpen] = useState(false)
   const [foodCommandQuery, setFoodCommandQuery] = useState("")
