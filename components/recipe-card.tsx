@@ -22,15 +22,6 @@ interface RecipeCardProps {
   onImport?: () => void;
 }
 
-function getInariScoreBadge(score: number | undefined) {
-  if (score === undefined) return { label: "–", color: "bg-slate-200 text-slate-900" };
-  if (score >= 85) return { label: "A", color: "bg-emerald-100 text-emerald-900" };
-  if (score >= 70) return { label: "B", color: "bg-lime-100 text-lime-900" };
-  if (score >= 55) return { label: "C", color: "bg-amber-100 text-amber-900" };
-  if (score >= 40) return { label: "D", color: "bg-orange-100 text-orange-900" };
-  return { label: "E", color: "bg-red-100 text-red-900" };
-}
-
 export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
   const totalKcal = recipe.cachedKcalPerPortion ?? (() => {
     const nutrients = calculateRecipeNutrients(recipe, foods);
@@ -38,7 +29,6 @@ export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
   })();
   
   const totalTime = recipe.prepTime + recipe.cookTime;
-  const scoreBadge = getInariScoreBadge(recipe.prodScore);
 
   return (
     <Link href={`/rezepte/${recipe.id}`} className="group block">
@@ -54,13 +44,7 @@ export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
                 }
               : undefined
           }
-        >
-          <div className="absolute right-3 top-3">
-            <Badge className={`${scoreBadge.color} border-none px-2 py-1 text-xs font-bold`}>
-              Inari Score {scoreBadge.label}
-            </Badge>
-          </div>
-        </div>
+        />
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="line-clamp-1">{recipe.name}</CardTitle>

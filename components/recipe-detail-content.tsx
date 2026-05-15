@@ -22,7 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
@@ -32,7 +31,6 @@ import {
   getNutrientValue,
   scaleNutrients,
 } from "@/lib/nutrients";
-import { calculateInariScore } from "@/lib/inari-score";
 import { formatNumber, formatNutrient } from "@/lib/format";
 import type { Recipe, Food, PatientAllergenEntry } from "@/lib/types";
 import { useFoods } from "@/components/foods-provider";
@@ -95,30 +93,6 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
 
   const foodMap = new Map(availableFoods.map((f) => [f.id, f]));
 
-  // ── Dynamic Inari Score ──
-  const prodScore = useMemo(() => {
-    if (perServing.length > 0) return calculateInariScore(perServing);
-    return null;
-  }, [perServing]);
-
-  const positiveDrivers = useMemo(
-    () =>
-      prodScore?.drivers
-        .filter((d) => d.impact > 0)
-        .sort((a, b) => b.impact - a.impact)
-        .slice(0, 2) ?? [],
-    [prodScore],
-  );
-
-  const negativeDrivers = useMemo(
-    () =>
-      prodScore?.drivers
-        .filter((d) => d.impact < 0)
-        .sort((a, b) => a.impact - b.impact)
-        .slice(0, 2) ?? [],
-    [prodScore],
-  );
-
   // ── Dynamic CO₂ ──
   const co2Breakdown = useMemo(
     () => computeIngredientCo2(recipe.ingredients, availableFoods),
@@ -167,8 +141,6 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
     toast.success("Rezept als Lebensmittel gespeichert");
   }, [convertRecipeToFood, recipe]);
 
-  const badge = prodScore?.badge ?? { label: "–" as const, color: "bg-slate-200 text-slate-900", description: "Keine Daten" };
-
   return (
     <div className="space-y-6">
       <div
@@ -182,13 +154,7 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
               }
             : undefined
         }
-      >
-        <div className="absolute right-4 top-4">
-          <Badge className={`${badge.color} border-none px-3 py-1 text-sm font-bold`}>
-            Inari Score {badge.label}
-          </Badge>
-        </div>
-      </div>
+      />
 
       <PageHeader title={recipe.name}>
         <Badge variant="secondary">{recipe.category}</Badge>
@@ -378,41 +344,6 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* ── Inari Score Card ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Inari Score</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-2xl font-semibold">{prodScore ? Math.round(prodScore.score) : "–"}</p>
-                  <p className="text-muted-foreground text-xs">{prodScore?.summary ?? "Keine Nährstoffdaten"}</p>
-                </div>
-                <Badge className={`${badge.color} border-none px-3 py-1 text-xs font-bold`}>
-                  {badge.label}
-                </Badge>
-              </div>
-              {prodScore && <Progress value={prodScore.score} />}
-              {(positiveDrivers.length > 0 || negativeDrivers.length > 0) && (
-                <div className="grid gap-2 text-xs sm:grid-cols-2">
-                  {positiveDrivers.map((driver) => (
-                    <div key={driver.id} className="rounded-md bg-emerald-50/70 p-2">
-                      <p className="font-medium">{driver.label}</p>
-                      <p className="text-muted-foreground">{driver.description}</p>
-                    </div>
-                  ))}
-                  {negativeDrivers.map((driver) => (
-                    <div key={driver.id} className="rounded-md bg-red-50/70 p-2">
-                      <p className="font-medium">{driver.label}</p>
-                      <p className="text-muted-foreground">{driver.description}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
 

@@ -22,7 +22,6 @@ interface FoodRow {
   is_recipe_derived: boolean;
   co2_per_portion: number | null;
   sustainability_score: number | null;
-  prod_score: number | null;
   created_at: string;
   updated_at: string;
   food_nutrients: FoodNutrientRow[] | null;
@@ -79,7 +78,6 @@ function mapFoodRow(row: FoodRow): Food {
     additives: row.additives ?? undefined,
     co2PerPortion: row.co2_per_portion ?? undefined,
     sustainabilityScore: row.sustainability_score ?? undefined,
-    prodScore: row.prod_score ?? undefined,
     isBranded: row.is_branded,
     isCustom: row.is_custom,
     isRecipeDerived: row.is_recipe_derived,
@@ -99,7 +97,7 @@ async function fetchCustomFoodRowByIdentity(
     client
       .from("foods")
       .select(
-        "id, name, data_source_id, source_food_id, source_version, bls_code, food_group_id, category_id, manufacturer, allergens, additives, tags, is_branded, is_custom, is_recipe_derived, co2_per_portion, sustainability_score, prod_score, created_at, updated_at, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)"
+        "id, name, data_source_id, source_food_id, source_version, bls_code, food_group_id, category_id, manufacturer, allergens, additives, tags, is_branded, is_custom, is_recipe_derived, co2_per_portion, sustainability_score, created_at, updated_at, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)"
       )
       .eq("is_custom", true)
       .eq(column, foodId)
@@ -119,7 +117,7 @@ export async function fetchCustomFoodsClient(supabase?: SupabaseClient): Promise
     client
       .from("foods")
       .select(
-        "id, name, data_source_id, source_food_id, source_version, bls_code, food_group_id, category_id, manufacturer, allergens, additives, tags, is_branded, is_custom, is_recipe_derived, co2_per_portion, sustainability_score, prod_score, created_at, updated_at, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)"
+        "id, name, data_source_id, source_food_id, source_version, bls_code, food_group_id, category_id, manufacturer, allergens, additives, tags, is_branded, is_custom, is_recipe_derived, co2_per_portion, sustainability_score, created_at, updated_at, food_nutrients(nutrient_id, amount, per_amount), food_portions(label, amount_grams)"
       )
       .eq("is_custom", true),
     5000,
@@ -165,7 +163,6 @@ export async function persistCustomFood(
         is_recipe_derived: food.isRecipeDerived ?? false,
         co2_per_portion: food.co2PerPortion ?? null,
         sustainability_score: food.sustainabilityScore ?? null,
-        prod_score: food.prodScore ?? null,
         user_id: userId,
         updated_at: new Date().toISOString(),
       },

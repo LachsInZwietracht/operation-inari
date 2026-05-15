@@ -296,7 +296,7 @@ async function createPatientReportFixture(patient: CreatedPatient): Promise<Pati
       notes: "Verlauf stabil, Fokus auf Ballaststoffe.",
       narrative: "Archivierte Patientenfassung.",
       badges: ["Plan 15.06.2026", "Vollversion"],
-      specialNotes: ["Inari Score 82"],
+      specialNotes: ["Verlauf stabil"],
     },
   });
 

@@ -29,7 +29,6 @@ export interface Recipe extends Timestamped {
   imageUrl?: string;
   allergens?: string[];
   additives?: string[];
-  prodScore?: number; // 0-100
   co2PerPortion?: number;
   referenceTargets?: RecipeReferenceTarget[];
   tags?: string[];

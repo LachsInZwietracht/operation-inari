@@ -24,7 +24,6 @@ interface FoodRow {
   is_recipe_derived: boolean;
   co2_per_portion: number | null;
   sustainability_score: number | null;
-  prod_score: number | null;
   data_quality_score: number | null;
   created_at: string;
   updated_at: string;
@@ -76,7 +75,6 @@ function mapFoodRow(row: FoodRow): Food {
     additives: row.additives ?? undefined,
     co2PerPortion: row.co2_per_portion ?? undefined,
     sustainabilityScore: row.sustainability_score ?? undefined,
-    prodScore: row.prod_score ?? undefined,
     dataQualityScore: row.data_quality_score ?? undefined,
     isBranded: row.is_branded,
     isCustom: row.is_custom,

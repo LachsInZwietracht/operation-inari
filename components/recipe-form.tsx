@@ -35,7 +35,6 @@ import {
 
 import { useNutrientCalculation } from "@/hooks/use-nutrient-calculation";
 import { getNutrientValue } from "@/lib/nutrients";
-import { calculateInariScore } from "@/lib/inari-score";
 import { formatNumber } from "@/lib/format";
 import type { Recipe, Ingredient, Food } from "@/lib/types";
 import { useFoodSearch } from "@/components/foods-provider";
@@ -70,7 +69,6 @@ const recipeSchema = z.object({
   prepTime: z.coerce.number().min(0, "Darf nicht negativ sein"),
   cookTime: z.coerce.number().min(0, "Darf nicht negativ sein"),
   imageUrl: z.string().optional(),
-  prodScore: z.coerce.number().min(0).max(100).optional(),
   co2PerPortion: z.coerce.number().min(0).optional(),
   allergens: z.array(z.string()).optional(),
   additives: z.array(z.string()).optional(),
@@ -141,7 +139,6 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
       prepTime: recipe?.prepTime ?? 10,
       cookTime: recipe?.cookTime ?? 20,
       imageUrl: recipe?.imageUrl ?? "",
-      prodScore: recipe?.prodScore ?? 75,
       co2PerPortion: recipe?.co2PerPortion ?? 0,
       allergens: recipe?.allergens ?? [],
       additives: recipe?.additives ?? [],
@@ -218,11 +215,6 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
     try {
       const ingredients = values.ingredients.map(i => ({ foodId: i.foodId, amount: i.amount }));
 
-      // Compute Inari Score from live nutrients
-      const computedInariScore = perServingNutrients.length > 0
-        ? Math.round(calculateInariScore(perServingNutrients).score)
-        : values.prodScore;
-
       // Compute CO₂ per portion from ingredient breakdown
       const co2Result = computeIngredientCo2(ingredients, availableFoods);
       const computedCo2 = co2Result.totalCo2 > 0
@@ -244,7 +236,6 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         prepTime: values.prepTime,
         cookTime: values.cookTime,
         imageUrl: values.imageUrl || undefined,
-        prodScore: computedInariScore,
         co2PerPortion: computedCo2,
         allergens: mergedAllergens,
         additives: values.additives?.length

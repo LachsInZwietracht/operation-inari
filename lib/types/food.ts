@@ -68,7 +68,6 @@ export interface Food extends Timestamped {
   additives?: string[];
   co2PerPortion?: number;
   sustainabilityScore?: number;
-  prodScore?: number;
   dataQualityScore?: number;
   isBranded?: boolean;
   isCustom?: boolean;

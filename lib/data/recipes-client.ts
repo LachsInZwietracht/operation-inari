@@ -24,7 +24,6 @@ interface RecipeRow {
   allergens: string[] | null;
   additives: string[] | null;
   tags: string[] | null;
-  prod_score: number | null;
   co2_per_portion: number | null;
   source_type: string | null;
   teaching_kitchen_notes: string | null;
@@ -96,7 +95,6 @@ function mapRecipeRow(row: RecipeRowWithRelations): Recipe {
     allergens: row.allergens ?? undefined,
     additives: row.additives ?? undefined,
     tags: row.tags ?? undefined,
-    prodScore: row.prod_score ?? undefined,
     co2PerPortion: row.co2_per_portion ?? undefined,
     sourceType: (row.source_type as Recipe["sourceType"]) ?? "community",
     referenceTargets: undefined,
@@ -137,7 +135,6 @@ function baseRecipeQuery(client: SupabaseClient) {
         "allergens",
         "additives",
         "tags",
-        "prod_score",
         "co2_per_portion",
         "source_type",
         "teaching_kitchen_notes",
@@ -224,7 +221,6 @@ export async function persistPersonalRecipe(
     allergens: recipe.allergens ?? null,
     additives: recipe.additives ?? null,
     tags: recipe.tags ?? null,
-    prod_score: recipe.prodScore ?? null,
     co2_per_portion: recipe.co2PerPortion ?? null,
     source_type: "personal",
     teaching_kitchen_notes: recipe.teachingKitchenNotes ?? null,

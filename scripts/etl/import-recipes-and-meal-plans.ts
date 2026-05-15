@@ -161,7 +161,6 @@ async function upsertRecipes(codeToFoodId: Map<string, string>): Promise<Map<str
     allergens: recipe.allergens ?? [],
     additives: recipe.additives ?? [],
     tags: recipe.tags ?? [],
-    prod_score: recipe.prodScore ?? null,
     co2_per_portion: recipe.co2PerPortion ?? null,
     source_type: recipe.sourceType ?? "community",
     teaching_kitchen_notes: recipe.teachingKitchenNotes ?? null,

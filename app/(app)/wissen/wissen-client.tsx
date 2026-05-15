@@ -1,26 +1,21 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
-import { Search, BookOpenCheck, Award, ArrowUpRight, Leaf } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Search, BookOpenCheck, ArrowUpRight, Leaf } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { KNOWLEDGE_LIBRARY_DEFAULTS } from "@/lib/content/knowledge-library"
-import { calculateRecipeNutrients, calculatePerServing, scaleNutrients, sumNutrients } from "@/lib/nutrients"
-import { calculateInariScore } from "@/lib/inari-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { formatNumber } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import type { DailyMealPlan, MealEntry, NutrientValue, Recipe } from "@/lib/types"
+import type { DailyMealPlan, Recipe } from "@/lib/types"
 import { useFoods } from "@/components/foods-provider"
-import { createRecipeLookup } from "@/lib/recipes"
 
 const knowledgeCategories = Array.from(new Set(KNOWLEDGE_LIBRARY_DEFAULTS.map((card) => card.category)))
-const categoryMap = new Map(FOOD_CATEGORIES.map((category) => [category.id, category.name]))
 
 interface WissenPageClientProps {
   recipes: Recipe[]
@@ -32,31 +27,6 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("all")
 
-  const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
-  const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
-
-  const nutrientsForEntry = useCallback(
-    (entry: MealEntry): NutrientValue[] => {
-      if (entry.type === "food") {
-        const food = foodMap.get(entry.referenceId)
-        if (!food) return []
-        return scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
-      }
-      const recipe = recipeMap.get(entry.referenceId)
-      if (!recipe) return []
-      const total = calculateRecipeNutrients(recipe, foods)
-      const perServing = calculatePerServing(total, recipe.servings)
-      return scaleNutrients(perServing, 1, entry.amount)
-    },
-    [foodMap, foods, recipeMap],
-  )
-
-  const aggregatePlanNutrients = useCallback(
-    (plan: DailyMealPlan): NutrientValue[] =>
-      sumNutrients(plan.slots.flatMap((slot) => slot.entries.map(nutrientsForEntry))),
-    [nutrientsForEntry],
-  )
-
   const filteredCards = useMemo(() => {
     return KNOWLEDGE_LIBRARY_DEFAULTS.filter((card) => {
       const matchesCategory = category === "all" || card.category === category
@@ -67,46 +37,21 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
     })
   }, [query, category])
 
-  const referenceRecipe = recipes[0]
-  const recipeScore = useMemo(() => {
-    if (!referenceRecipe) return null
-    const nutrients = calculatePerServing(
-      calculateRecipeNutrients(referenceRecipe, foods),
-      referenceRecipe.servings,
-    )
-    return calculateInariScore(nutrients)
-  }, [foods, referenceRecipe])
-
   const samplePlan = mealPlans[0]
-  const planScore = useMemo(() => {
-    if (!samplePlan) return null
-    const nutrients = aggregatePlanNutrients(samplePlan)
-    return calculateInariScore(nutrients)
-  }, [aggregatePlanNutrients, samplePlan])
-
   const sustainability = useMemo(() => {
     if (!samplePlan) return null
     return evaluatePlanSustainability(samplePlan, foods, recipes)
   }, [foods, recipes, samplePlan])
-
-  const topFoods = useMemo(() => {
-    return foods.slice(0, 4).map((food) => ({
-      id: food.id,
-      name: food.name,
-      categoryId: food.categoryId,
-      score: calculateInariScore(food.nutrients).score,
-    }))
-  }, [foods])
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Wissensbibliothek"
         description="Bundled Fachkarten plus live berechnete Kennzahlen aus Ihren Daten"
-        helpText="Die Fachkarten in dieser Ansicht sind aktuell gebuendelte Produktinhalte. Inari Score- und Nachhaltigkeitskarten werden dagegen live aus Lebensmitteln, Rezepten und gespeicherten Plaenen berechnet."
+        helpText="Die Fachkarten in dieser Ansicht sind aktuell gebuendelte Produktinhalte. Nachhaltigkeitskarten werden live aus Lebensmitteln, Rezepten und gespeicherten Plaenen berechnet."
       />
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-6">
         <Card className="lg:col-span-2">
           <CardHeader className="gap-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -183,110 +128,9 @@ export function WissenPageClient({ recipes, mealPlans }: WissenPageClientProps) 
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Award className="text-primary h-5 w-5" /> Inari Score Monitor
-              </CardTitle>
-              <Badge>Live-Analyse</Badge>
-            </div>
-            <CardDescription>Lebensmittel- und Rezeptqualitaet aus aktuell geladenen Runtime-Daten.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {recipeScore && (
-              <div className="rounded-md border p-3">
-                <p className="text-xs uppercase text-muted-foreground">Referenzrezept</p>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-semibold">{formatNumber(recipeScore.score, 0)}</span>
-                  <Badge className={`${recipeScore.badge.color} border-none px-2 py-0.5 text-xs font-bold`}>
-                    {recipeScore.badge.label}
-                  </Badge>
-                </div>
-                <p className="text-muted-foreground text-xs">{recipeScore.summary}</p>
-              </div>
-            )}
-            {planScore && (
-              <div className="rounded-md bg-muted/60 p-3 text-sm">
-                <p className="text-xs uppercase text-muted-foreground">Aktueller Tagesplan</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-3xl font-semibold">{formatNumber(planScore.score, 0)}</span>
-                  <span className="text-muted-foreground text-xs">Ø Score</span>
-                </div>
-                <Progress value={planScore.score} className="mt-2" />
-              </div>
-            )}
-            <div className="space-y-2">
-              {topFoods.map((food) => (
-                <div key={food.id} className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{food.name}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {categoryMap.get(food.categoryId) ?? food.categoryId}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-20">
-                      <Progress value={food.score} />
-                    </div>
-                    <span className="text-sm font-semibold">{formatNumber(food.score, 0)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Treiber des Inari Score</CardTitle>
-            <CardDescription>Positive und kritische Faktoren fuer das aktuelle Referenzrezept.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recipeScore ? (
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-3">
-                  <p className="text-xs uppercase text-muted-foreground">Stärken</p>
-                  {recipeScore.drivers
-                    .filter((driver) => driver.impact > 0)
-                    .sort((a, b) => b.impact - a.impact)
-                    .slice(0, 3)
-                    .map((driver) => (
-                      <div key={driver.id} className="rounded-md bg-emerald-50/70 p-3">
-                        <p className="text-sm font-medium">{driver.label}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {driver.description}
-                        </p>
-                        <Progress value={Math.min(100, (driver.impact / 22) * 100)} className="mt-2" />
-                      </div>
-                    ))}
-                </div>
-                <div className="space-y-3">
-                  <p className="text-xs uppercase text-muted-foreground">Risiken</p>
-                  {recipeScore.drivers
-                    .filter((driver) => driver.impact < 0)
-                    .sort((a, b) => a.impact - b.impact)
-                    .slice(0, 3)
-                    .map((driver) => (
-                      <div key={driver.id} className="rounded-md bg-red-50 p-3">
-                        <p className="text-sm font-medium">{driver.label}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {driver.description}
-                        </p>
-                        <Progress value={Math.min(100, Math.abs((driver.impact / 22) * 100))} className="mt-2" />
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">Keine Auswertung vorhanden.</p>
-            )}
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-6">
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">

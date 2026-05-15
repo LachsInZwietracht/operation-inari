@@ -135,7 +135,6 @@ import type {
   Recipe,
   DietLinePreset,
 } from "@/lib/types"
-import { calculateInariScore } from "@/lib/inari-score"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useFoods, useFoodSearch } from "@/components/foods-provider"
@@ -824,23 +823,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       einzelPerKgEnabled,
       latestPatientWeightKg,
     ],
-  )
-  const planInariScore = useMemo(() => calculateInariScore(dailyNutrients), [dailyNutrients])
-  const positivePlanDrivers = useMemo(
-    () =>
-      planInariScore.drivers
-        .filter((driver) => driver.impact > 0)
-        .sort((a, b) => b.impact - a.impact)
-        .slice(0, 2),
-    [planInariScore],
-  )
-  const negativePlanDrivers = useMemo(
-    () =>
-      planInariScore.drivers
-        .filter((driver) => driver.impact < 0)
-        .sort((a, b) => a.impact - b.impact)
-        .slice(0, 2),
-    [planInariScore],
   )
   const planSustainability = useMemo(
     () => evaluatePlanSustainability(currentPlan, foods, recipes),
@@ -1628,13 +1610,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       severity: missingCoreSlots.length > 0 ? "warning" : "ok",
     })
 
-    items.push({
-      id: "inari-score",
-      label: "Inari Score",
-      description: `${formatNumber(planInariScore.score, 0)} Punkte: ${planInariScore.summary}`,
-      severity: planInariScore.score < 60 ? "warning" : "ok",
-    })
-
     const blockingItems = items.filter((item) => item.severity === "critical")
     const warningItems = items.filter((item) => item.severity === "warning")
 
@@ -1652,8 +1627,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     entryAllergenWarnings,
     patientAllergens.length,
     patientId,
-    planInariScore.score,
-    planInariScore.summary,
   ])
 
   const filteredTemplates = useMemo(() => {
@@ -1848,7 +1821,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       <PageHeader
         title="Ernährungsplan"
         description={formattedDate}
-        helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen. Der Inari Score zeigt die Qualität der Planung an und vergleicht die Nährstoffzufuhr mit den DGE-Referenzwerten."
+        helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen und vergleichen Sie die Nährstoffzufuhr mit Zielprofilen und DGE-Referenzwerten."
       />
 
       <Card>
@@ -2110,32 +2083,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-muted-foreground text-xs uppercase tracking-wide">Inari Score</p>
-                <p className="mt-1 text-3xl font-semibold leading-none">
-                  {formatNumber(planInariScore.score, 0)}
-                </p>
-                <p className="text-muted-foreground mt-1.5 line-clamp-1 text-xs">
-                  {planInariScore.summary}
-                </p>
-              </div>
-              <Badge
-                className={cn(
-                  planInariScore.badge.color,
-                  "border-none px-2 py-0.5 text-[11px] font-semibold",
-                )}
-              >
-                {planInariScore.badge.label}
-              </Badge>
-            </div>
-            <Progress value={planInariScore.score} className="mt-3 h-1.5" />
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-3 sm:grid-cols-2">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -3674,7 +3622,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               Planakte – Detailansicht
             </SheetTitle>
             <SheetDescription>
-              Hinweise, Score-Treiber, Nachhaltigkeit und vollständige Versionshistorie.
+              Hinweise, Nachhaltigkeit und vollständige Versionshistorie.
             </SheetDescription>
           </SheetHeader>
           <ScrollArea className="flex-1">
@@ -3699,40 +3647,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                     }
                   }}
                 />
-              </section>
-
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Inari Score-Treiber</p>
-                  <Badge variant="outline" className="font-normal">
-                    {formatNumber(planInariScore.score, 0)} Punkte
-                  </Badge>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {positivePlanDrivers.map((driver) => (
-                    <div
-                      key={driver.id}
-                      className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 text-xs"
-                    >
-                      <p className="font-medium text-emerald-900">{driver.label}</p>
-                      <p className="text-muted-foreground mt-0.5">{driver.description}</p>
-                    </div>
-                  ))}
-                  {negativePlanDrivers.map((driver) => (
-                    <div
-                      key={driver.id}
-                      className="rounded-md border border-red-100 bg-red-50/70 p-2 text-xs"
-                    >
-                      <p className="font-medium text-red-900">{driver.label}</p>
-                      <p className="text-muted-foreground mt-0.5">{driver.description}</p>
-                    </div>
-                  ))}
-                  {positivePlanDrivers.length === 0 && negativePlanDrivers.length === 0 && (
-                    <p className="text-muted-foreground text-xs">
-                      Noch keine Treiber – Plan enthält wenig Inhalt.
-                    </p>
-                  )}
-                </div>
               </section>
 
               <section className="space-y-2">
@@ -3972,9 +3886,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                     <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                       <span>{formatNumber(kcal, 0)} kcal/Portion</span>
                       {totalTime > 0 && <span>· {totalTime} min</span>}
-                      {typeof recipe.prodScore === "number" && (
-                        <span>· Inari Score {Math.round(recipe.prodScore)}</span>
-                      )}
                       {conflictCount > 0 && (
                         <Badge
                           variant="outline"

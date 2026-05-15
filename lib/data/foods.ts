@@ -36,7 +36,6 @@ const FOOD_BASE_COLUMNS = [
   "is_recipe_derived",
   "co2_per_portion",
   "sustainability_score",
-  "prod_score",
   "data_quality_score",
   "imported_at",
   "created_at",
@@ -62,7 +61,6 @@ interface FoodRow {
   is_recipe_derived: boolean;
   co2_per_portion: number | null;
   sustainability_score: number | null;
-  prod_score: number | null;
   data_quality_score: number | null;
   imported_at: string;
   created_at: string;
@@ -139,7 +137,6 @@ export async function fetchFoods(options: FoodQueryOptions = {}, isAdmin = false
       "is_recipe_derived",
       "co2_per_portion",
       "sustainability_score",
-      "prod_score",
       "data_quality_score",
       "imported_at",
       "created_at",
@@ -305,7 +302,6 @@ export async function fetchFoodById(
       "is_recipe_derived",
       "co2_per_portion",
       "sustainability_score",
-      "prod_score",
       "data_quality_score",
       "imported_at",
       "created_at",
@@ -364,7 +360,6 @@ export const fetchBrandedFoods = cache(async () => {
       "is_recipe_derived",
       "co2_per_portion",
       "sustainability_score",
-      "prod_score",
       "data_quality_score",
       "imported_at",
       "created_at",
@@ -450,7 +445,6 @@ function mapFoodRow(row: FoodRowWithRelations): Food {
     additives: row.additives ?? undefined,
     co2PerPortion: row.co2_per_portion ?? undefined,
     sustainabilityScore: row.sustainability_score ?? undefined,
-    prodScore: row.prod_score ?? undefined,
     dataQualityScore: row.data_quality_score ?? undefined,
     isBranded: row.is_branded,
     isCustom: row.is_custom,
@@ -510,7 +504,6 @@ interface RpcFoodRow {
   is_recipe_derived: boolean;
   co2_per_portion: number | null;
   sustainability_score: number | null;
-  prod_score: number | null;
   data_quality_score: number | null;
   imported_at: string;
   created_at: string;
@@ -546,7 +539,6 @@ function mapRpcFoodRow(row: RpcFoodRow): Food {
     additives: row.additives ?? undefined,
     co2PerPortion: row.co2_per_portion ?? undefined,
     sustainabilityScore: row.sustainability_score ?? undefined,
-    prodScore: row.prod_score ?? undefined,
     dataQualityScore: row.data_quality_score ?? undefined,
     isBranded: row.is_branded,
     isCustom: row.is_custom,

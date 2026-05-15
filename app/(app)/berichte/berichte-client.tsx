@@ -5,7 +5,6 @@ import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   AlertTriangle,
-  Award,
   CheckCircle2,
   Download,
   FileText,
@@ -121,7 +120,7 @@ const REPORT_SECTIONS = [
   {
     id: "summary",
     label: "Kurzfazit & Indikatoren",
-    description: "Inari Score, Energie- und Makroabdeckung in Stichpunkten",
+    description: "Energie- und Makroabdeckung in Stichpunkten",
   },
   {
     id: "table",
@@ -1056,18 +1055,6 @@ ${microSentence}`
     met: rule.condition(claimData),
   }))
 
-  const combinedMicroAverage = previewMicronutrients.length
-    ? previewMicronutrients.reduce((sum, entry) => sum + entry.percent, 0) / previewMicronutrients.length
-    : 0
-  const macroAverage = macroHighlights.length
-    ? macroHighlights.reduce((sum, entry) => sum + Math.min(120, entry.percent), 0) / macroHighlights.length
-    : 0
-  const prodiScoreValue = Math.round(
-    Math.min(100, macroAverage * 0.6 + Math.min(120, combinedMicroAverage) * 0.4),
-  )
-  const prodiLevel = prodiScoreValue >= 85 ? 5 : prodiScoreValue >= 70 ? 4 : prodiScoreValue >= 55 ? 3 : prodiScoreValue >= 40 ? 2 : 1
-  const prodiLabel = ["kritisch", "ausbaufähig", "solide", "gut", "exzellent"][prodiLevel - 1]
-
   const placeholderValues = useMemo(
     () => ({
       patientName: effectivePatient
@@ -1181,7 +1168,6 @@ ${microSentence}`
       ],
       specialNotes: [
         `CO₂ gesamt: ${formatNumber(totalCo2, 1)} kg`,
-        `Inari Score: ${prodiScoreValue} (${prodiLabel})`,
         `Health Claims: ${healthClaimResults.filter((claim) => claim.met).length}/${healthClaimResults.length}`,
         `LMIV-Deklaration: ${aggregatedAllergens.length} Allergene, ${aggregatedAdditives.length} Zusatzstoffe`,
       ],
@@ -1219,8 +1205,6 @@ ${microSentence}`
     analysisNarrative,
     selectedSectionCount,
     totalCo2,
-    prodiScoreValue,
-    prodiLabel,
     healthClaimResults,
     aggregatedAllergens,
     aggregatedAdditives,
@@ -2314,28 +2298,14 @@ ${microSentence}`
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Award className="h-4 w-4" /> Health Claims & Inari Score
+                  <CheckCircle2 className="h-4 w-4" /> Health Claims
                 </CardTitle>
                 <CardDescription>Prüft, welche Claims erlaubt sind.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center gap-3">
-                  <Badge
-                    variant="secondary"
-                    className={`text-xs ${
-                      prodiLevel >= 4
-                        ? "bg-emerald-100 text-emerald-800"
-                        : prodiLevel === 3
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-rose-100 text-rose-800"
-                    }`}
-                  >
-                    Inari Score {prodiScoreValue} · {prodiLabel}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {healthClaimResults.filter((claim) => claim.met).length} / {healthClaimResults.length} Claims
-                  </span>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  {healthClaimResults.filter((claim) => claim.met).length} / {healthClaimResults.length} Claims
+                </p>
                 <div className="space-y-2">
                   {healthClaimResults.map((claim) => (
                     <div
