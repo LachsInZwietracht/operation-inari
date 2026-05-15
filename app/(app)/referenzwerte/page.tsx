@@ -454,101 +454,105 @@ function CustomProfileEditor() {
 
       {/* Create dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,900px)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-6 py-5">
             <DialogTitle>Neues Referenzprofil erstellen</DialogTitle>
             <DialogDescription>
               Wählen Sie einen Standard als Grundlage und passen Sie einzelne Nährstoffwerte an.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="z.B. Diabetiker-Profil"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Basiert auf</Label>
-              <Select value={newBaseStandard} onValueChange={(v) => setNewBaseStandard(v as Exclude<ReferenceStandardId, "custom">)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {REFERENCE_STANDARDS.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.shortName} ({s.country})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Altersgruppe</Label>
-              <Select value={newAgeGroup} onValueChange={setNewAgeGroup}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AGE_GROUPS.filter((g) => g.minAge >= 1).map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Geschlecht</Label>
-              <Select value={newGender} onValueChange={(v) => setNewGender(v as "m" | "w")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="m">Männlich</SelectItem>
-                  <SelectItem value="w">Weiblich</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {newGender === "w" && (
-              <div className="col-span-2 space-y-1.5">
-                <Label>Lebensphase</Label>
-                <Select value={newLifeStage} onValueChange={(v) => setNewLifeStage(v as LifeStage)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(LIFE_STAGE_LABELS) as [LifeStage, string][]).map(
-                      ([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Name</Label>
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="z.B. Diabetiker-Profil"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Basiert auf</Label>
+                  <Select value={newBaseStandard} onValueChange={(v) => setNewBaseStandard(v as Exclude<ReferenceStandardId, "custom">)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REFERENCE_STANDARDS.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.shortName} ({s.country})
                         </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Altersgruppe</Label>
+                  <Select value={newAgeGroup} onValueChange={setNewAgeGroup}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGE_GROUPS.filter((g) => g.minAge >= 1).map((g) => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Geschlecht</Label>
+                  <Select value={newGender} onValueChange={(v) => setNewGender(v as "m" | "w")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="m">Männlich</SelectItem>
+                      <SelectItem value="w">Weiblich</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {newGender === "w" && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Lebensphase</Label>
+                    <Select value={newLifeStage} onValueChange={(v) => setNewLifeStage(v as LifeStage)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.entries(LIFE_STAGE_LABELS) as [LifeStage, string][]).map(
+                          ([key, label]) => (
+                            <SelectItem key={key} value={key}>
+                              {label}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-            )}
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>Nährstoffwerte anpassen (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Klicken Sie auf einen Wert, um ihn zu ändern. Nicht geänderte Werte werden vom Basis-Standard übernommen.
+                </p>
+                <NutrientOverrideTable
+                  baseValues={baseValues}
+                  overrides={editOverrides}
+                  onOverrideChange={setEditOverrides}
+                />
+              </div>
+            </div>
           </div>
 
-          <Separator />
-
-          <div className="space-y-2">
-            <Label>Nährstoffwerte anpassen (optional)</Label>
-            <p className="text-xs text-muted-foreground">
-              Klicken Sie auf einen Wert, um ihn zu ändern. Nicht geänderte Werte werden vom Basis-Standard übernommen.
-            </p>
-            <NutrientOverrideTable
-              baseValues={baseValues}
-              overrides={editOverrides}
-              onOverrideChange={setEditOverrides}
-            />
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setShowCreate(false)}>
               Abbrechen
             </Button>
