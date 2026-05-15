@@ -44,6 +44,8 @@ import { deleteLocalRecipeById, upsertLocalRecipe } from "@/lib/data/local-recip
 import { FoodSearchDialog } from "@/components/food-search-dialog";
 import { fetchFoodsByIds } from "@/lib/data/foods-client";
 import { deriveRecipeAllergens, computeIngredientCo2 } from "@/lib/allergen-derivation";
+import { normalizeAdditiveCode } from "@/lib/additives";
+import { AdditivePicker } from "@/components/additive-picker";
 
 const UNIQUE_CATEGORIES = [
   "Suppe",
@@ -71,7 +73,7 @@ const recipeSchema = z.object({
   prodScore: z.coerce.number().min(0).max(100).optional(),
   co2PerPortion: z.coerce.number().min(0).optional(),
   allergens: z.array(z.string()).optional(),
-  additives: z.string().optional(),
+  additives: z.array(z.string()).optional(),
   ingredients: z
     .array(
       z.object({
@@ -142,7 +144,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
       prodScore: recipe?.prodScore ?? 75,
       co2PerPortion: recipe?.co2PerPortion ?? 0,
       allergens: recipe?.allergens ?? [],
-      additives: recipe?.additives?.join(", ") ?? "",
+      additives: recipe?.additives ?? [],
       ingredients: defaultIngredients.length > 0 ? defaultIngredients : [],
       instructions: defaultInstructions,
     },
@@ -245,7 +247,15 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
         prodScore: computedInariScore,
         co2PerPortion: computedCo2,
         allergens: mergedAllergens,
-        additives: values.additives ? values.additives.split(",").map(s => s.trim()) : undefined,
+        additives: values.additives?.length
+          ? Array.from(
+              new Set(
+                values.additives
+                  .map((token) => normalizeAdditiveCode(token))
+                  .filter((token) => token.length > 0),
+              ),
+            )
+          : undefined,
         ingredients,
         instructions: values.instructions.map(s => s.value),
         sourceType: recipe?.sourceType ?? "personal",
@@ -648,9 +658,12 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
                     name="additives"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-xs text-muted-foreground">Zusatzstoffe (kommagetrennt)</FormLabel>
+                        <FormLabel className="text-xs text-muted-foreground">Zusatzstoffe</FormLabel>
                         <FormControl>
-                          <Input placeholder="z.B. E300, E471" {...field} />
+                          <AdditivePicker
+                            value={field.value ?? []}
+                            onChange={field.onChange}
+                          />
                         </FormControl>
                       </FormItem>
                     )}

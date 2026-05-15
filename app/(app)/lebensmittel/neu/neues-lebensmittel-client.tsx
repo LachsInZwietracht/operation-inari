@@ -29,6 +29,8 @@ import {
 import { useCustomFoods } from "@/hooks/use-custom-foods";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
+import { normalizeAdditiveCode } from "@/lib/additives";
+import { AdditivePicker } from "@/components/additive-picker";
 import type { Food, FoodSourceId } from "@/lib/types";
 
 const ALLERGENS = [
@@ -56,7 +58,7 @@ const nutrientSchema = z.object({
   kohlenhydrate: z.coerce.number().min(0),
   ballaststoffe: z.coerce.number().min(0),
   co2PerPortion: z.coerce.number().min(0).optional(),
-  additives: z.string().optional(),
+  additives: z.array(z.string()).optional(),
   notes: z.string().optional(),
   allergens: z.array(z.string()).optional(),
   portionSizes: z
@@ -87,6 +89,7 @@ export function NeuesLebensmittelPageClient() {
       ballaststoffe: 0,
       portionSizes: [{ label: "Portion", amount: 100 }],
       allergens: [],
+      additives: [],
     },
   });
 
@@ -102,8 +105,14 @@ export function NeuesLebensmittelPageClient() {
       { nutrientId: "ballaststoffe", amount: values.ballaststoffe },
     ];
 
-    const additives = values.additives
-      ? values.additives.split(",").map((token) => token.trim()).filter(Boolean)
+    const additives = values.additives?.length
+      ? Array.from(
+          new Set(
+            values.additives
+              .map((token) => normalizeAdditiveCode(token))
+              .filter((token) => token.length > 0),
+          ),
+        )
       : undefined;
 
     const food = await addFood({
@@ -347,9 +356,12 @@ export function NeuesLebensmittelPageClient() {
                       name="additives"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs text-muted-foreground">Zusatzstoffe (kommagetrennt)</FormLabel>
+                          <FormLabel className="text-xs text-muted-foreground">Zusatzstoffe</FormLabel>
                           <FormControl>
-                            <Input placeholder="z.B. E300, E471" {...field} />
+                            <AdditivePicker
+                              value={field.value ?? []}
+                              onChange={field.onChange}
+                            />
                           </FormControl>
                         </FormItem>
                       )}

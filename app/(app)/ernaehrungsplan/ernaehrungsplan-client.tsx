@@ -117,6 +117,7 @@ import {
 } from "@/lib/nutrients"
 import { buildEinzelanalyseTable } from "@/lib/einzelanalyse"
 import { EinzelanalyseTableView } from "@/components/einzelanalyse-table"
+import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
@@ -2540,6 +2541,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   )}
                 </CardContent>
               </Card>
+
+              <PlanAdditiveSummary
+                plan={currentPlan}
+                foodMap={foodMap}
+                recipeMap={recipeMap}
+              />
             </div>
           </div>
         </TabsContent>

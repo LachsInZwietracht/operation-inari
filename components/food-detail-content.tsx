@@ -34,6 +34,7 @@ import { estimateFoodCo2 } from "@/lib/sustainability";
 import { checkAllergenConflicts } from "@/lib/allergen-warnings";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { AdditiveList } from "@/components/additive-list";
 
 const categoryMap = new Map(FOOD_CATEGORIES.map((c) => [c.id, c.name]));
 
@@ -275,15 +276,6 @@ export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentP
                 ))}
               </div>
             )}
-            {(food.additives?.length || 0) > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {food.additives?.map((additive) => (
-                  <Badge key={additive} variant="secondary" className="text-xs">
-                    {additive}
-                  </Badge>
-                ))}
-              </div>
-            )}
           </CardContent>
         </Card>
         <Card>
@@ -327,6 +319,17 @@ export function FoodDetailContent({ food, patientAllergens }: FoodDetailContentP
           </CardContent>
         </Card>
       </div>
+
+      {(food.additives?.length || 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Zusatzstoffe</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AdditiveList codes={food.additives ?? []} variant="detailed" />
+          </CardContent>
+        </Card>
+      )}
 
       <p className="text-muted-foreground text-sm">
         Nährwerte pro {formatNumber(food.baseAmount)} g · Quelle: {food.source}

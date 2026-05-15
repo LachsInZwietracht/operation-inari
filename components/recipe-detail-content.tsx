@@ -41,6 +41,7 @@ import { useEffect, useMemo, useState } from "react";
 import { checkAllergenConflicts } from "@/lib/allergen-warnings";
 import { deriveRecipeAllergens, computeIngredientCo2 } from "@/lib/allergen-derivation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AdditiveList } from "@/components/additive-list";
 
 interface RecipeDetailContentProps {
   recipe: Recipe;
@@ -262,12 +263,11 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
                 </div>
               )}
               {recipe.additives && recipe.additives.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {recipe.additives.map((additive) => (
-                    <Badge key={additive} variant="outline" className="text-xs">
-                      {additive}
-                    </Badge>
-                  ))}
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                    Zusatzstoffe
+                  </p>
+                  <AdditiveList codes={recipe.additives} variant="compact" />
                 </div>
               )}
             </CardContent>
