@@ -7,6 +7,10 @@ export const NUTRIENT_DEFINITIONS: NutrientDefinition[] = [
   { id: "eiweiss", name: "Eiweiß", shortName: "Eiweiß", unit: "g", group: "makronaehrstoffe", sortOrder: 3 },
   { id: "fett", name: "Fett", shortName: "Fett", unit: "g", group: "makronaehrstoffe", sortOrder: 4 },
   { id: "kohlenhydrate", name: "Kohlenhydrate", shortName: "Kohlenhydrate", unit: "g", group: "makronaehrstoffe", sortOrder: 5 },
+  // Derived display nutrient (BE = kohlenhydrate / 12). Not populated by ETL —
+  // computed at display time via `getBroteinheiten()`. Listed here so labels,
+  // units, and compliance-target lookups resolve through the same code path.
+  { id: "broteinheiten", name: "Broteinheiten", shortName: "BE", unit: "BE", group: "makronaehrstoffe", sortOrder: 12 },
   { id: "ballaststoffe", name: "Ballaststoffe", shortName: "Ballastst.", unit: "g", group: "makronaehrstoffe", sortOrder: 6 },
   { id: "zucker", name: "Zucker", shortName: "Zucker", unit: "g", group: "makronaehrstoffe", sortOrder: 7 },
   { id: "gesaettigte_fettsaeuren", name: "Gesättigte Fettsäuren", shortName: "Ges. FS", unit: "g", group: "makronaehrstoffe", sortOrder: 8 },

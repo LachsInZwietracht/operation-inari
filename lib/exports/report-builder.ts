@@ -2,6 +2,7 @@ import type { DailyMealPlan, Food, ReportExportRequest, Recipe, ResolvedReferenc
 import {
   calculatePerServing,
   calculateRecipeNutrients,
+  getBroteinheiten,
   getNutrientValue,
   percentOfReference,
   scaleNutrients,
@@ -136,17 +137,35 @@ export function buildDefaultReportExportRequest(
     });
 
   const nutrientRows = variantConfig.selectedSections.table
-    ? DEFAULT_NUTRIENT_IDS.map((id) => {
-        const def = NUTRIENT_DEFINITIONS.find((item) => item.id === id)!;
-        const value = getNutrientValue(planNutrients, id);
-        const reference = getReferenceAmount(effectiveRefConfig, id);
-        return {
-          label: def.name,
-          value: `${formatNumber(value, 1)} ${def.unit}`,
-          reference: `${formatNumber(reference, 1)} ${def.unit}`,
-          coverage: formatPercent(percentOfReference(value, reference)),
+    ? (() => {
+        const rows = DEFAULT_NUTRIENT_IDS.map((id) => {
+          const def = NUTRIENT_DEFINITIONS.find((item) => item.id === id)!;
+          const value = getNutrientValue(planNutrients, id);
+          const reference = getReferenceAmount(effectiveRefConfig, id);
+          return {
+            label: def.name,
+            value: `${formatNumber(value, 1)} ${def.unit}`,
+            reference: `${formatNumber(reference, 1)} ${def.unit}`,
+            coverage: formatPercent(percentOfReference(value, reference)),
+          };
+        });
+        // Broteinheiten: derived from carbs, no reference target by default —
+        // shown next to the carb row so clinicians can read both side-by-side.
+        const beValue = getBroteinheiten(getNutrientValue(planNutrients, "kohlenhydrate"));
+        const carbsIndex = rows.findIndex((row) => row.label === "Kohlenhydrate");
+        const beRow = {
+          label: "Broteinheiten",
+          value: `${formatNumber(beValue, 1)} BE`,
+          reference: "—",
+          coverage: "—",
         };
-      })
+        if (carbsIndex >= 0) {
+          rows.splice(carbsIndex + 1, 0, beRow);
+        } else {
+          rows.push(beRow);
+        }
+        return rows;
+      })()
     : [];
 
   const vitaminRows = variantConfig.selectedSections.table
@@ -185,6 +204,7 @@ export function buildDefaultReportExportRequest(
   const proteinReference = getReferenceAmount(effectiveRefConfig, "eiweiss");
   const fiber = getNutrientValue(planNutrients, "ballaststoffe");
   const fiberReference = getReferenceAmount(effectiveRefConfig, "ballaststoffe");
+  const beValue = getBroteinheiten(getNutrientValue(planNutrients, "kohlenhydrate"));
 
   const mealRows = plan.slots
     .filter((slot) => variant !== "patient" || slot.entries.length > 0)
@@ -232,6 +252,10 @@ export function buildDefaultReportExportRequest(
           reference: `${formatNumber(fiberReference, 1)} g`,
           coverage: formatPercent(percentOfReference(fiber, fiberReference)),
         },
+        {
+          label: "Broteinheiten",
+          value: `${formatNumber(beValue, 1)} BE`,
+        },
       ];
     }
     return [
@@ -246,6 +270,10 @@ export function buildDefaultReportExportRequest(
         value: `${formatNumber(fiber, 1)} g`,
         reference: `${formatNumber(fiberReference, 1)} g`,
         coverage: formatPercent(percentOfReference(fiber, fiberReference)),
+      },
+      {
+        label: "Broteinheiten",
+        value: `${formatNumber(beValue, 1)} BE`,
       },
       {
         label: "Plangewicht",
@@ -347,6 +375,7 @@ export function buildTeachingKitchenExportRequest(
       plan,
       kcal: getNutrientValue(nutrients, "energie"),
       protein: getNutrientValue(nutrients, "eiweiss"),
+      be: getBroteinheiten(getNutrientValue(nutrients, "kohlenhydrate")),
     };
   });
 
@@ -354,6 +383,8 @@ export function buildTeachingKitchenExportRequest(
   const avgKcal = dailyTotals.length > 0 ? totalKcal / dailyTotals.length : 0;
   const totalProtein = dailyTotals.reduce((sum, day) => sum + day.protein, 0);
   const avgProtein = dailyTotals.length > 0 ? totalProtein / dailyTotals.length : 0;
+  const totalBE = dailyTotals.reduce((sum, day) => sum + day.be, 0);
+  const avgBE = dailyTotals.length > 0 ? totalBE / dailyTotals.length : 0;
   const energyReference = getReferenceAmount(effectiveRefConfig, "energie");
 
   const formatSlotEntry = (
@@ -375,7 +406,7 @@ export function buildTeachingKitchenExportRequest(
       .join(", ");
   };
 
-  const mealRows = dailyTotals.map(({ plan, kcal }) => {
+  const mealRows = dailyTotals.map(({ plan, kcal, be }) => {
     const dateObj = new Date(`${plan.date}T00:00:00`);
     const dayShort = dateObj.toLocaleDateString("de-DE", { weekday: "short" });
     const dateShort = dateObj.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
@@ -384,7 +415,7 @@ export function buildTeachingKitchenExportRequest(
       summary: `Mittag: ${formatSlotEntry(plan, "mittagessen")} · Abend: ${formatSlotEntry(
         plan,
         "abendessen",
-      )} · ${formatNumber(Math.round(kcal))} kcal`,
+      )} · ${formatNumber(Math.round(kcal))} kcal · ${formatNumber(be, 1)} BE`,
     };
   });
 
@@ -398,6 +429,10 @@ export function buildTeachingKitchenExportRequest(
     {
       label: "Ø Eiweiß / Tag",
       value: `${formatNumber(avgProtein, 1)} g`,
+    },
+    {
+      label: "Ø BE / Tag",
+      value: `${formatNumber(avgBE, 1)} BE`,
     },
     {
       label: "Tage im Plan",

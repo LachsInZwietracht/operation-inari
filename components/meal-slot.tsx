@@ -8,7 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import { scaleNutrients, getNutrientValue, calculateRecipeNutrients, calculatePerServing } from "@/lib/nutrients"
+import {
+  scaleNutrients,
+  getNutrientValue,
+  calculateRecipeNutrients,
+  calculatePerServing,
+  getBroteinheiten,
+} from "@/lib/nutrients"
 import { formatNumber } from "@/lib/format"
 import type { MealSlot, MealSlotType, MealEntry, Food, Recipe } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -57,25 +63,41 @@ function getEntryName(
   return recipeMap.get(entry.referenceId)?.name ?? "Unbekannt"
 }
 
+function getEntryNutrients(
+  entry: MealEntry,
+  foodMap: Map<string, Food>,
+  recipeMap: Map<string, Recipe>,
+  foods: Food[],
+) {
+  if (entry.type === "food") {
+    const food = foodMap.get(entry.referenceId)
+    if (!food) return []
+    return scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
+  }
+
+  const recipe = recipeMap.get(entry.referenceId)
+  if (!recipe) return []
+  const totalNutrients = calculateRecipeNutrients(recipe, foods)
+  const perServing = calculatePerServing(totalNutrients, recipe.servings)
+  return scaleNutrients(perServing, 1, entry.amount)
+}
+
 function getEntryKcal(
   entry: MealEntry,
   foodMap: Map<string, Food>,
   recipeMap: Map<string, Recipe>,
   foods: Food[],
 ): number {
-  if (entry.type === "food") {
-    const food = foodMap.get(entry.referenceId)
-    if (!food) return 0
-    const scaled = scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
-    return getNutrientValue(scaled, "energie")
-  }
+  return getNutrientValue(getEntryNutrients(entry, foodMap, recipeMap, foods), "energie")
+}
 
-  const recipe = recipeMap.get(entry.referenceId)
-  if (!recipe) return 0
-  const totalNutrients = calculateRecipeNutrients(recipe, foods)
-  const perServing = calculatePerServing(totalNutrients, recipe.servings)
-  const scaled = scaleNutrients(perServing, 1, entry.amount)
-  return getNutrientValue(scaled, "energie")
+function getEntryCarbs(
+  entry: MealEntry,
+  foodMap: Map<string, Food>,
+  recipeMap: Map<string, Recipe>,
+  foods: Food[],
+): number {
+  return getNutrientValue(getEntryNutrients(entry, foodMap, recipeMap, foods), "kohlenhydrate")
 }
 
 const STATUS_STYLES: Record<ComplianceIndicator["status"], string> = {
@@ -104,6 +126,11 @@ export function MealSlotCard({
     (sum, entry) => sum + getEntryKcal(entry, foodMap, recipeMap, foods),
     0,
   )
+  const totalSlotCarbs = slot.entries.reduce(
+    (sum, entry) => sum + getEntryCarbs(entry, foodMap, recipeMap, foods),
+    0,
+  )
+  const totalSlotBE = getBroteinheiten(totalSlotCarbs)
   const [isDragOver, setIsDragOver] = useState(false)
   const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null)
   const [activeDropIndex, setActiveDropIndex] = useState<number | null>(null)
@@ -223,6 +250,15 @@ export function MealSlotCard({
             </Button>
           )}
           <Badge variant="secondary">{formatNumber(Math.round(totalKcal))} kcal</Badge>
+          {totalSlotBE > 0 && (
+            <Badge
+              variant="outline"
+              className="border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200"
+              title="Broteinheiten (1 BE = 12 g Kohlenhydrate)"
+            >
+              {formatNumber(totalSlotBE, 1)} BE
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">

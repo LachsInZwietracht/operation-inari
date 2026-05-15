@@ -20,6 +20,9 @@ export const DIET_LINES: DietLinePreset[] = [
     targets: [
       { nutrientId: "energie", label: "Energie", unit: "kcal", min: 1600, max: 2000 },
       { nutrientId: "kohlenhydrate", label: "Kohlenhydrate", unit: "g", max: 180 },
+      // Daily BE upper bound is set; no min so the optimization assistant does
+      // not try to push a diabetic patient toward *more* carbs to hit a floor.
+      { nutrientId: "broteinheiten", label: "Broteinheiten", unit: "BE", max: 15 },
       { nutrientId: "ballaststoffe", label: "Ballaststoffe", unit: "g", min: 30 },
       { nutrientId: "fett", label: "Fett", unit: "g", max: 70 },
       { nutrientId: "zucker", label: "Zucker", unit: "g", max: 40 },

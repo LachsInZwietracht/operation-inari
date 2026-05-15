@@ -13,6 +13,11 @@ export const MEAL_SLOT_LABELS: Record<MealSlotType, string> = {
   abendessen: "Abendessen",
 };
 
+// German diabetes-counseling unit. 1 BE = 12 g utilizable carbohydrates by
+// DDG / DGE convention (some legacy sources use 10 g — surface as a constant
+// so a future per-clinic override is a one-line change, not a code hunt).
+export const BE_GRAMS_PER_UNIT = 12;
+
 // DGE-typical share of daily intake per meal slot, used to scale daily
 // macronutrient targets down to a realistic per-slot range. Dividing a daily
 // target by slot count would treat snacks and main meals as equally large,

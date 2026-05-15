@@ -1,4 +1,7 @@
-import type { Food, NutrientValue, Recipe } from "@/lib/types";
+import type { Food, MealEntry, NutrientValue, Recipe } from "@/lib/types";
+import { BE_GRAMS_PER_UNIT } from "@/lib/constants";
+
+export const BROTEINHEITEN_NUTRIENT_ID = "broteinheiten";
 
 /**
  * Scales nutrient values from a base amount to a target amount.
@@ -83,4 +86,53 @@ export function calculatePerServing(
 export function percentOfReference(value: number, referenceValue: number): number {
   if (referenceValue === 0) return 0;
   return (value / referenceValue) * 100;
+}
+
+/**
+ * Derives Broteinheiten (BE) from a carbohydrate amount in grams.
+ *
+ * BE is a derived display value, not stored in nutrient arrays — keeping it
+ * out of `NutrientValue[]` avoids confusing it with ingested BLS/SFK data and
+ * lets the divisor stay tunable (DDG default 12 g/BE; some legacy clinics 10).
+ */
+export function getBroteinheiten(
+  carbsInGrams: number,
+  gramsPerUnit: number = BE_GRAMS_PER_UNIT,
+): number {
+  if (gramsPerUnit <= 0) return 0;
+  return carbsInGrams / gramsPerUnit;
+}
+
+/**
+ * Convenience for nutrient arrays. Looks up `kohlenhydrate` and divides by BE.
+ */
+export function getBroteinheitenFromNutrients(
+  nutrients: NutrientValue[],
+  gramsPerUnit?: number,
+): number {
+  return getBroteinheiten(getNutrientValue(nutrients, "kohlenhydrate"), gramsPerUnit);
+}
+
+/**
+ * Resolves a single meal-plan entry to its nutrient contribution. Food entries
+ * scale per-100g BLS data to the entered grams; recipe entries scale the
+ * recipe's per-serving totals by the entered serving count.
+ */
+export function calculateMealEntryNutrients(
+  entry: MealEntry,
+  foodMap: Map<string, Food>,
+  recipeMap: Map<string, Recipe>,
+  foods: Food[],
+): NutrientValue[] {
+  if (entry.type === "food") {
+    const food = foodMap.get(entry.referenceId);
+    if (!food) return [];
+    return scaleNutrients(food.nutrients, food.baseAmount, entry.amount);
+  }
+
+  const recipe = recipeMap.get(entry.referenceId);
+  if (!recipe) return [];
+  const totalNutrients = calculateRecipeNutrients(recipe, foods);
+  const perServing = calculatePerServing(totalNutrients, recipe.servings);
+  return scaleNutrients(perServing, 1, entry.amount);
 }

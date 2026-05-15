@@ -12,6 +12,7 @@ import {
 import { de } from "date-fns/locale"
 import {
   Activity,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CalendarIcon,
@@ -112,7 +113,13 @@ import {
   getNutrientValue,
   calculateRecipeNutrients,
   calculatePerServing,
+  getBroteinheiten,
 } from "@/lib/nutrients"
+import { buildEinzelanalyseTable } from "@/lib/einzelanalyse"
+import { EinzelanalyseTableView } from "@/components/einzelanalyse-table"
+import { useAnthropometric } from "@/hooks/use-anthropometric"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { formatNumber, formatNutrient } from "@/lib/format"
 import { MEAL_SLOT_LABELS, MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
 import type {
@@ -334,6 +341,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     () => (patientId ? getAllergensForPatient(patientId) : []),
     [patientId, getAllergensForPatient],
   )
+  const { getForPatient: getAnthropometricsForPatient } = useAnthropometric()
+  // Einzelanalyse needs the most recent weight measurement; if no patient is
+  // linked or no entries exist the per-kg toggle stays disabled.
+  const latestPatientWeightKg = useMemo(() => {
+    if (!patientId) return undefined
+    const entries = getAnthropometricsForPatient(patientId)
+    return entries.length > 0 ? entries[entries.length - 1].weight : undefined
+  }, [patientId, getAnthropometricsForPatient])
   const {
     currentDate,
     currentPlan,
@@ -410,6 +425,19 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
   const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
   const [planAkteOpen, setPlanAkteOpen] = useState(false)
+  // Default Einzelanalyse columns mirror the macros surfaced in the daily-total
+  // card (Energie/Eiweiß/Fett/KH/BE) plus Ballaststoffe — the same nutrients
+  // clinicians scan when reviewing whether a single food carries the plan.
+  const [einzelNutrientIds, setEinzelNutrientIds] = useState<string[]>([
+    "energie",
+    "eiweiss",
+    "fett",
+    "kohlenhydrate",
+    "broteinheiten",
+    "ballaststoffe",
+  ])
+  const [einzelPerKgEnabled, setEinzelPerKgEnabled] = useState(false)
+  const [einzelPickerOpen, setEinzelPickerOpen] = useState(false)
   const {
     values: exchangeNutrientValues,
     isLoading: exchangeNutrientLoading,
@@ -731,6 +759,33 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const totalProtein = getNutrientValue(dailyNutrients, "eiweiss")
   const totalFat = getNutrientValue(dailyNutrients, "fett")
   const totalCarbs = getNutrientValue(dailyNutrients, "kohlenhydrate")
+  const totalBE = getBroteinheiten(totalCarbs)
+
+  const einzelanalyseTable = useMemo(
+    () =>
+      buildEinzelanalyseTable(
+        currentPlan,
+        foodMap,
+        recipeMap,
+        foods,
+        einzelNutrientIds,
+        {
+          perKgBodyWeight:
+            einzelPerKgEnabled && typeof latestPatientWeightKg === "number"
+              ? latestPatientWeightKg
+              : undefined,
+        },
+      ),
+    [
+      currentPlan,
+      foodMap,
+      recipeMap,
+      foods,
+      einzelNutrientIds,
+      einzelPerKgEnabled,
+      latestPatientWeightKg,
+    ],
+  )
   const planInariScore = useMemo(() => calculateInariScore(dailyNutrients), [dailyNutrients])
   const positivePlanDrivers = useMemo(
     () =>
@@ -800,7 +855,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       )
 
       map[slot.type] = macroTargets.map((target) => {
-        const value = getNutrientValue(summed, target.nutrientId)
+        const value =
+          target.nutrientId === "broteinheiten"
+            ? getBroteinheiten(getNutrientValue(summed, "kohlenhydrate"))
+            : getNutrientValue(summed, target.nutrientId)
         const perSlotMin = typeof target.min === "number" ? target.min * fraction : undefined
         const perSlotMax = typeof target.max === "number" ? target.max * fraction : undefined
         return {
@@ -1348,7 +1406,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       }[]
 
     return dietLine.targets.map((target) => {
-      const value = getNutrientValue(dailyNutrients, target.nutrientId)
+      const value =
+        target.nutrientId === "broteinheiten"
+          ? getBroteinheiten(getNutrientValue(dailyNutrients, "kohlenhydrate"))
+          : getNutrientValue(dailyNutrients, target.nutrientId)
       return {
         nutrientId: target.nutrientId,
         label: target.label,
@@ -1377,12 +1438,21 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         if (deficit <= 0) return [] as OptimizationSuggestion[]
 
         const slotType = chooseOptimizationSlot(target.nutrientId, currentPlan)
+        // BE is a derived display nutrient — a food's BE contribution = its
+        // carb contribution / 12. Translate the lookup so suggestions still
+        // rank correctly if a custom preset ever defines a BE minimum.
+        const lookupNutrientId =
+          target.nutrientId === "broteinheiten" ? "kohlenhydrate" : target.nutrientId
+        const projectContribution = (raw: number) =>
+          target.nutrientId === "broteinheiten" ? getBroteinheiten(raw) : raw
         const foodSuggestions = foods
           .filter((food) => !existingKeys.has(`food:${food.id}`) && food.nutrients.length > 0)
           .map((food) => {
-            const contribution = getNutrientValue(
-              scaleNutrients(food.nutrients, food.baseAmount, 100),
-              target.nutrientId,
+            const contribution = projectContribution(
+              getNutrientValue(
+                scaleNutrients(food.nutrients, food.baseAmount, 100),
+                lookupNutrientId,
+              ),
             )
             const severeConflict =
               patientAllergens.length > 0 && food.allergens?.length
@@ -1409,7 +1479,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           .filter((recipe) => !existingKeys.has(`recipe:${recipe.id}`))
           .map((recipe) => {
             const perServing = calculatePerServing(calculateRecipeNutrients(recipe, foods), recipe.servings)
-            const contribution = getNutrientValue(perServing, target.nutrientId)
+            const contribution = projectContribution(getNutrientValue(perServing, lookupNutrientId))
             const severeConflict =
               patientAllergens.length > 0 && recipe.allergens?.length
                 ? checkAllergenConflicts(recipe.allergens, patientAllergens).some((warning) => warning.severity === "severe")
@@ -2068,12 +2138,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   <span className="text-muted-foreground ml-1 text-sm font-normal">kcal</span>
                 </p>
                 <p className="text-muted-foreground mt-1.5 line-clamp-1 text-xs">
-                  Energie · Eiweiß · Fett · Kohlenhydrate
+                  Energie · Eiweiß · Fett · KH · BE
                 </p>
               </div>
               <Activity className="text-muted-foreground h-5 w-5 shrink-0" />
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+            <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
               <div>
                 <p className="font-semibold">{formatNumber(totalProtein, 0)} g</p>
                 <p className="text-muted-foreground text-[11px]">Eiweiß</p>
@@ -2086,6 +2156,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <p className="font-semibold">{formatNumber(totalCarbs, 0)} g</p>
                 <p className="text-muted-foreground text-[11px]">KH</p>
               </div>
+              <div>
+                <p className="font-semibold">{formatNumber(totalBE, 1)}</p>
+                <p className="text-muted-foreground text-[11px]">BE</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -2096,6 +2170,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           <TabsTrigger value="day">Tag</TabsTrigger>
           <TabsTrigger value="week">Woche</TabsTrigger>
           <TabsTrigger value="cycle">4-Wochen-Zyklus</TabsTrigger>
+          <TabsTrigger value="einzelanalyse">Einzelanalyse</TabsTrigger>
         </TabsList>
 
         <TabsContent value="day" className="space-y-4">
@@ -2737,6 +2812,98 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="einzelanalyse" className="space-y-4">
+          <Card>
+            <CardHeader className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-base">Einzelanalyse</CardTitle>
+                  <CardDescription>
+                    Beitrag jedes Lebensmittels und Rezepts zum Tagestotal. Die größte
+                    Quelle pro Nährstoff ist hervorgehoben.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="einzel-per-kg"
+                      checked={einzelPerKgEnabled}
+                      onCheckedChange={setEinzelPerKgEnabled}
+                      disabled={typeof latestPatientWeightKg !== "number"}
+                    />
+                    <Label
+                      htmlFor="einzel-per-kg"
+                      className="cursor-pointer text-sm font-normal"
+                    >
+                      pro kg KG
+                      {typeof latestPatientWeightKg === "number" ? (
+                        <span className="text-muted-foreground ml-1 text-xs">
+                          ({formatNumber(latestPatientWeightKg, 0)} kg)
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground ml-1 text-xs">
+                          (Gewicht fehlt)
+                        </span>
+                      )}
+                    </Label>
+                  </div>
+                  <Popover open={einzelPickerOpen} onOpenChange={setEinzelPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8">
+                        Nährstoffe ({einzelNutrientIds.length})
+                        <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-1" align="end">
+                      <div className="max-h-80 overflow-y-auto">
+                        {NUTRIENT_DEFINITIONS.map((def) => {
+                          const isActive = einzelNutrientIds.includes(def.id)
+                          // Block deselecting the last column — an empty table
+                          // has no rows to render and offers no signal.
+                          const isLastSelected = isActive && einzelNutrientIds.length === 1
+                          return (
+                            <label
+                              key={def.id}
+                              className={cn(
+                                "hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
+                                isLastSelected && "cursor-not-allowed opacity-60",
+                              )}
+                            >
+                              <Checkbox
+                                checked={isActive}
+                                disabled={isLastSelected}
+                                onCheckedChange={() => {
+                                  setEinzelNutrientIds((prev) =>
+                                    prev.includes(def.id)
+                                      ? prev.filter((id) => id !== def.id)
+                                      : [...prev, def.id],
+                                  )
+                                }}
+                              />
+                              <span className="flex-1">{def.name}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {def.unit}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <EinzelanalyseTableView
+                table={einzelanalyseTable}
+                nutrientDefinitions={NUTRIENT_DEFINITIONS}
+                slotLabels={MEAL_SLOT_LABELS}
+                bodyWeightKg={latestPatientWeightKg}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
