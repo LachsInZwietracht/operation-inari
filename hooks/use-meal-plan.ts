@@ -553,10 +553,18 @@ export function useMealPlan(
   )
 
   const savePlanForDate = useCallback(
-    async (date: string) => {
-      const plan = getPlanForDate(date)
+    async (date: string, metadata: MealPlanMetadataPatch = {}) => {
+      const plan = {
+        ...getPlanForDate(date),
+        ...metadata,
+      }
       const key = getPlanKey(plan.date, plan.patientId)
       dirtyDatesRef.current.add(key)
+
+      setPlans((prev) => ({
+        ...prev,
+        [key]: ensureAllSlots(plan),
+      }))
 
       const persistedPlan = await syncPlanToSupabase(plan)
       if (isAuthenticated && !persistedPlan) return null

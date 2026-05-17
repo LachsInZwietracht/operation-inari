@@ -4,13 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, format, parseISO } from "date-fns"
 import { toast } from "sonner"
 
-import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
+import { deleteMealPlanClient, fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
 import { useAuth } from "@/hooks/use-auth"
 import type { DailyMealPlan, MealEntry, Patient } from "@/lib/types"
-
-function matchesPatient(plan: DailyMealPlan, patient: Patient) {
-  return plan.patientId === patient.id || Boolean(patient.legacyId && plan.patientId === patient.legacyId)
-}
 
 function generateEntryId(): string {
   return `entry_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -40,11 +36,17 @@ function sortPlans(plans: DailyMealPlan[]) {
   return [...plans].sort((a, b) => b.date.localeCompare(a.date))
 }
 
+function isPatientPlan(plan: DailyMealPlan, patientId: string, patientLegacyId?: string) {
+  return plan.patientId === patientId || Boolean(patientLegacyId && plan.patientId === patientLegacyId)
+}
+
 export function usePatientMealPlans(
   patient: Patient,
   initialPlans?: DailyMealPlan[],
 ) {
   const { isAuthenticated, loading: authLoading } = useAuth()
+  const patientId = patient.id
+  const patientLegacyId = patient.legacyId
   const [plans, setPlans] = useState<DailyMealPlan[]>(() => sortPlans(initialPlans ?? []))
   const [isLoadingRemote, setIsLoadingRemote] = useState(false)
 
@@ -55,7 +57,6 @@ export function usePatientMealPlans(
   }, [initialPlans])
 
   useEffect(() => {
-    if (initialPlans) return
     if (!isAuthenticated || authLoading) return
 
     let cancelled = false
@@ -65,7 +66,11 @@ export function usePatientMealPlans(
       try {
         const remotePlans = await fetchMealPlansClient()
         if (cancelled) return
-        setPlans(sortPlans(remotePlans.filter((plan) => matchesPatient(plan, patient))))
+        setPlans(
+          sortPlans(
+            remotePlans.filter((plan) => isPatientPlan(plan, patientId, patientLegacyId)),
+          ),
+        )
       } catch (error) {
         console.error("Failed to load patient meal plans:", error)
       } finally {
@@ -78,7 +83,7 @@ export function usePatientMealPlans(
     return () => {
       cancelled = true
     }
-  }, [authLoading, initialPlans, isAuthenticated, patient])
+  }, [authLoading, isAuthenticated, patientId, patientLegacyId])
 
   const activePlans = useMemo(
     () => plans.filter((plan) => plan.status !== "archived"),
@@ -115,7 +120,7 @@ export function usePatientMealPlans(
         id: `plan_${date}_${Date.now()}`,
         legacyId: undefined,
         date,
-        patientId: patient.id,
+        patientId,
         title: `${plan.title ?? "Ernährungsplan"} (Kopie)`,
         status: "draft",
         approvedAt: undefined,
@@ -141,7 +146,99 @@ export function usePatientMealPlans(
         return null
       }
     },
-    [patient.id, plans],
+    [patientId, plans],
+  )
+
+  const copyPlanToPatient = useCallback(
+    async (
+      plan: DailyMealPlan,
+      targetPatient: Patient,
+      targetDate: string,
+      options: { includeNotes: boolean; includeDietLine: boolean },
+    ) => {
+      if (!targetDate) {
+        toast.error("Bitte ein Datum für die Kopie wählen.")
+        return null
+      }
+
+      try {
+        const remotePlans = isAuthenticated ? await fetchMealPlansClient() : plans
+        const targetHasPlanOnDate = remotePlans.some(
+          (item) =>
+            isPatientPlan(item, targetPatient.id, targetPatient.legacyId) &&
+            item.date === targetDate,
+        )
+
+        if (targetHasPlanOnDate) {
+          toast.error("Der Zielpatient hat an diesem Datum bereits einen Ernährungsplan.")
+          return null
+        }
+      } catch (error) {
+        console.error("Failed to check target patient meal plans:", error)
+        toast.error("Zielpatient konnte nicht geprüft werden.")
+        return null
+      }
+
+      const copiedPlan: DailyMealPlan = {
+        ...plan,
+        id: `plan_${targetPatient.id}_${targetDate}_${Date.now()}`,
+        legacyId: undefined,
+        date: targetDate,
+        patientId: targetPatient.id,
+        title: `${plan.title ?? "Ernährungsplan"} (Kopie)`,
+        status: "draft",
+        notes: options.includeNotes ? plan.notes : undefined,
+        dietLineId: options.includeDietLine ? plan.dietLineId : undefined,
+        approvedAt: undefined,
+        approvedBy: undefined,
+        slots: plan.slots.map((slot) => ({
+          ...slot,
+          entries: slot.entries.map(cloneEntry),
+        })),
+      }
+
+      try {
+        const persisted = await persistMealPlan(copiedPlan)
+        if (isPatientPlan({ ...persisted, patientId: targetPatient.id }, patientId, patientLegacyId)) {
+          setPlans((prev) => sortPlans([persisted, ...prev]))
+        }
+        toast.success(`Ernährungsplan wurde für ${targetPatient.firstName} ${targetPatient.lastName} kopiert.`)
+        return persisted
+      } catch (error) {
+        console.error("Failed to copy meal plan to patient:", error)
+        toast.error("Ernährungsplan konnte nicht kopiert werden.")
+        return null
+      }
+    },
+    [isAuthenticated, patientId, patientLegacyId, plans],
+  )
+
+  const deletePlan = useCallback(
+    async (plan: DailyMealPlan) => {
+      if (plan.status === "approved") {
+        toast.error("Freigegebene Pläne bitte archivieren statt löschen.")
+        return false
+      }
+
+      setPlans((prev) => prev.filter((item) => item.id !== plan.id))
+
+      if (!isAuthenticated) {
+        toast.success("Ernährungsplan gelöscht.")
+        return true
+      }
+
+      try {
+        await deleteMealPlanClient(plan.id)
+        toast.success("Ernährungsplan gelöscht.")
+        return true
+      } catch (error) {
+        console.error("Failed to delete meal plan:", error)
+        setPlans((prev) => sortPlans([plan, ...prev]))
+        toast.error("Ernährungsplan konnte nicht gelöscht werden.")
+        return false
+      }
+    },
+    [isAuthenticated],
   )
 
   return {
@@ -151,5 +248,7 @@ export function usePatientMealPlans(
     isLoadingRemote,
     archivePlan,
     duplicatePlan,
+    copyPlanToPatient,
+    deletePlan,
   }
 }

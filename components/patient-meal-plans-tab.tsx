@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   Archive,
   CalendarDays,
@@ -9,14 +9,46 @@ import {
   ExternalLink,
   FileText,
   Flame,
+  Loader2,
   Plus,
+  Trash2,
+  UserPlus,
   Utensils,
 } from "lucide-react"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { usePatients } from "@/hooks/use-patients"
 import { DIET_LINES } from "@/lib/reference-data/diet-lines"
 import { formatDate, formatNumber } from "@/lib/format"
 import { getBroteinheiten, getNutrientValue } from "@/lib/nutrients"
@@ -30,6 +62,10 @@ interface PatientMealPlansTabProps {
   initialPlans?: DailyMealPlan[]
   foods?: Food[]
   recipes?: Recipe[]
+}
+
+function isoDateToday() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 const STATUS_META: Record<NonNullable<DailyMealPlan["status"]>, { label: string; className: string }> = {
@@ -104,7 +140,18 @@ export function PatientMealPlansTab({
     isLoadingRemote,
     archivePlan,
     duplicatePlan,
+    copyPlanToPatient,
+    deletePlan,
   } = usePatientMealPlans(patient, initialPlans)
+  const { patients } = usePatients()
+  const [copyDialogPlan, setCopyDialogPlan] = useState<DailyMealPlan | null>(null)
+  const [copyTargetPatientId, setCopyTargetPatientId] = useState("")
+  const [copyTargetDate, setCopyTargetDate] = useState(isoDateToday)
+  const [copyNotes, setCopyNotes] = useState(true)
+  const [copyDietLine, setCopyDietLine] = useState(true)
+  const [isCopying, setIsCopying] = useState(false)
+  const [deleteDialogPlan, setDeleteDialogPlan] = useState<DailyMealPlan | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const foodMap = useMemo(() => {
     const map = new Map<string, Food>()
@@ -150,6 +197,51 @@ export function PatientMealPlansTab({
   const approvedCount = plans.filter((plan) => plan.status === "approved").length
   const archivedCount = plans.filter((plan) => plan.status === "archived").length
   const hasPlans = plans.length > 0
+  const copyTargetPatients = patients.filter(
+    (item) => item.id !== patient.id && item.legacyId !== patient.id && item.id !== patient.legacyId,
+  )
+  const selectedCopyTarget = copyTargetPatients.find(
+    (item) => item.id === copyTargetPatientId || item.legacyId === copyTargetPatientId,
+  )
+
+  const openCopyDialog = (plan: DailyMealPlan) => {
+    setCopyDialogPlan(plan)
+    setCopyTargetPatientId("")
+    setCopyTargetDate(isoDateToday())
+    setCopyNotes(true)
+    setCopyDietLine(true)
+  }
+
+  const handleCopyToPatient = async () => {
+    if (!copyDialogPlan || !selectedCopyTarget) return
+
+    setIsCopying(true)
+    try {
+      const copied = await copyPlanToPatient(copyDialogPlan, selectedCopyTarget, copyTargetDate, {
+        includeNotes: copyNotes,
+        includeDietLine: copyDietLine,
+      })
+      if (copied) {
+        setCopyDialogPlan(null)
+      }
+    } finally {
+      setIsCopying(false)
+    }
+  }
+
+  const handleDeletePlan = async () => {
+    if (!deleteDialogPlan) return
+
+    setIsDeleting(true)
+    try {
+      const deleted = await deletePlan(deleteDialogPlan)
+      if (deleted) {
+        setDeleteDialogPlan(null)
+      }
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   if (isLoadingRemote && !hasPlans) {
     return (
@@ -242,10 +334,20 @@ export function PatientMealPlansTab({
                         <Copy className="mr-2 h-4 w-4" />
                         Duplizieren
                       </Button>
+                      <Button size="sm" variant="outline" onClick={() => openCopyDialog(plan)}>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Für anderen Patienten
+                      </Button>
                       {!isArchived && (
                         <Button size="sm" variant="ghost" onClick={() => void archivePlan(plan)}>
                           <Archive className="mr-2 h-4 w-4" />
                           Archivieren
+                        </Button>
+                      )}
+                      {status !== "approved" && (
+                        <Button size="sm" variant="ghost" onClick={() => setDeleteDialogPlan(plan)}>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Löschen
                         </Button>
                       )}
                     </div>
@@ -306,6 +408,110 @@ export function PatientMealPlansTab({
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={Boolean(copyDialogPlan)} onOpenChange={(open) => !open && setCopyDialogPlan(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Für anderen Patienten kopieren</DialogTitle>
+            <DialogDescription>
+              Der ursprüngliche Plan bleibt unverändert. Die Kopie wird beim Zielpatienten als Entwurf angelegt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Zielpatient</Label>
+              <Select value={copyTargetPatientId} onValueChange={setCopyTargetPatientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Patient auswählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {copyTargetPatients.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.lastName}, {item.firstName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {copyTargetPatients.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Es gibt aktuell keinen weiteren Patienten als Kopierziel.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="copy-plan-date">Datum der Kopie</Label>
+              <Input
+                id="copy-plan-date"
+                type="date"
+                value={copyTargetDate}
+                onChange={(event) => setCopyTargetDate(event.currentTarget.value)}
+              />
+            </div>
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={copyNotes}
+                  onCheckedChange={(checked) => setCopyNotes(checked === true)}
+                />
+                Notizen übernehmen
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={copyDietLine}
+                  onCheckedChange={(checked) => setCopyDietLine(checked === true)}
+                />
+                Kostform übernehmen
+              </label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Freigabe, Versionierung und Patientenbezug werden zurückgesetzt. Allergene und Zielwerte werden
+              beim Öffnen im Kontext des Zielpatienten neu geprüft.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogPlan(null)} disabled={isCopying}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => void handleCopyToPatient()}
+              disabled={!selectedCopyTarget || !copyTargetDate || isCopying}
+            >
+              {isCopying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Plan kopieren
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteDialogPlan)}
+        onOpenChange={(open) => !open && setDeleteDialogPlan(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ernährungsplan endgültig löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialogPlan ? `${getPlanTitle(deleteDialogPlan)} wird dauerhaft entfernt. ` : ""}
+              Einträge und Versionen dieses Plans werden ebenfalls gelöscht. Freigegebene Pläne können nur
+              archiviert werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDeletePlan()
+              }}
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

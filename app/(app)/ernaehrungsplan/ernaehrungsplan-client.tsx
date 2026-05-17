@@ -466,6 +466,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
   const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
   const [planAkteOpen, setPlanAkteOpen] = useState(false)
+  const planTitleInputRef = useRef<HTMLInputElement | null>(null)
   // Default Einzelanalyse columns mirror the macros surfaced in the daily-total
   // card (Energie/Eiweiß/Fett/KH/BE) plus Ballaststoffe — the same nutrients
   // clinicians scan when reviewing whether a single food carries the plan.
@@ -1146,7 +1147,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const saveCurrentPlan = async () => {
     setIsSavingPlan(true)
     try {
-      const savedPlan = await savePlanForDate(currentDate)
+      const title = planTitleInputRef.current?.value.trim()
+      const savedPlan = await savePlanForDate(currentDate, {
+        title: title || undefined,
+      })
       if (!savedPlan) {
         toast.error("Ernährungsplan konnte nicht gespeichert werden.")
         return
@@ -1958,6 +1962,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               </Label>
               <Input
                 id="planakte-title"
+                ref={planTitleInputRef}
                 key={`title-${currentPlan.id}-${currentPlan.date}`}
                 defaultValue={currentPlan.title ?? ""}
                 placeholder="z. B. Reduktionskost Woche 1"

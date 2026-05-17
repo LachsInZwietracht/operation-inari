@@ -4,15 +4,12 @@ import Link from "next/link"
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react"
 import {
   Activity,
-  Archive,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   Copy,
   QrCode,
-  UserRound,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -197,9 +194,6 @@ export function PatientWorkflowTab({
   const {
     plans: patientMealPlans,
     latestPlan,
-    isLoadingRemote: mealPlansPending,
-    archivePlan,
-    duplicatePlan,
   } = usePatientMealPlans(patient, initialMealPlans)
   const latestProtocol = useMemo(
     () => getLatestByDate(protocols, (protocol) => protocol.updatedAt ?? protocol.startDate),
@@ -414,7 +408,7 @@ export function PatientWorkflowTab({
         status: "attention",
         summary: "Eine Beratungssitzung liegt vor. Der patientengebundene Ernährungsplan sollte als nächster Schritt angelegt werden.",
         dateLabel: formatDate(latestSession.date),
-        primaryAction: buildAction("Ernährungsplan anlegen", mealPlanHref(patient.id)),
+        primaryAction: buildAction("Plan anlegen", mealPlanHref(patient.id)),
         secondaryAction: buildAction("Beratung öffnen", `/patienten/${patient.id}/beratungen/${latestSession.id}`, undefined, "outline"),
       }
     }
@@ -426,7 +420,7 @@ export function PatientWorkflowTab({
         status: "attention",
         summary: "Assessment liegt vor. Als nächster Schritt sollte ein patientengebundener Ernährungsplan erstellt werden.",
         dateLabel: formatDate(latestProtocol.startDate),
-        primaryAction: buildAction("Ernährungsplan anlegen", mealPlanHref(patient.id)),
+        primaryAction: buildAction("Plan anlegen", mealPlanHref(patient.id)),
         secondaryAction: buildAction("Beratung anlegen", `/patienten/${patient.id}/beratungen/neu`, undefined, "outline"),
       }
     }
@@ -436,7 +430,7 @@ export function PatientWorkflowTab({
       label: "Plan",
       status: "not_started",
       summary: "Noch kein patientengebundener Ernährungsplan vorhanden.",
-      primaryAction: buildAction("Ernährungsplan anlegen", mealPlanHref(patient.id)),
+      primaryAction: buildAction("Plan anlegen", mealPlanHref(patient.id)),
     }
   }, [latestPlan, latestProtocol, latestSession, patient.id])
 
@@ -641,205 +635,137 @@ export function PatientWorkflowTab({
   const latestActivity = timelineEvents[0] ?? null
   const completedCount = stages.filter((stage) => stage.status === "done").length
   const readinessSummary = `${completedCount}/5 Schritte abgeschlossen`
+  const openItems = stages.filter((stage) => stage.status !== "done").map((stage) => stage.label)
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Nächster empfohlener Schritt</CardDescription>
-            <CardTitle className="text-xl">{nextStage.label}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Badge variant="outline" className={STATUS_META[nextStage.status].className}>
-              {STATUS_META[nextStage.status].label}
-            </Badge>
-            <p className="text-sm text-muted-foreground">{nextStage.summary}</p>
-            {nextStage.primaryAction && nextStage.key !== "plan" ? (
-              <WorkflowActionButton action={nextStage.primaryAction} />
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Letzte Patientenaktivität</CardDescription>
-            <CardTitle className="text-xl">{latestActivity?.title ?? "Noch keine Aktivität"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">{latestActivity?.description ?? "Workflow startet mit digitaler Erfassung oder internem Assessment."}</p>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock3 className="h-4 w-4" />
-              <span>{latestActivity ? formatDate(latestActivity.date) : "–"}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Readiness</CardDescription>
-            <CardTitle className="text-xl">{readinessSummary}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              {intakeStage.status === "done" ? "Intake übernommen" : "Intake offen"},{" "}
-              {assessmentStage.status === "done" ? "Assessment dokumentiert" : "Assessment offen"},{" "}
-              {planStage.status === "done" ? "Plan vorhanden" : "Plan offen"}.
-            </p>
-            <p className="flex items-center gap-2">
-              <UserRound className="h-4 w-4" />
-              {patient.firstName} {patient.lastName}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        {stages.map((stage) => (
-          <Card key={stage.key}>
-            <CardHeader className="space-y-3 pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <CardTitle className="text-base">{stage.label}</CardTitle>
-                <Badge variant="outline" className={STATUS_META[stage.status].className}>
-                  {STATUS_META[stage.status].label}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl space-y-2">
+              <CardDescription>Nächster empfohlener Schritt</CardDescription>
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-2xl">{nextStage.label}</CardTitle>
+                <Badge variant="outline" className={STATUS_META[nextStage.status].className}>
+                  {STATUS_META[nextStage.status].label}
                 </Badge>
               </div>
-              <CardDescription>{stage.summary}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xs text-muted-foreground">
-                {stage.dateLabel ? `Zuletzt aktualisiert: ${stage.dateLabel}` : "Noch keine Aktivität"}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Patient Journey</CardTitle>
-            <CardDescription>Die wichtigsten Schritte aus Intake, Assessment, Beratung und Follow-up.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {timelineEvents.length > 0 ? (
-              <div className="space-y-4">
-                {timelineEvents.map((event) => (
-                  <div key={event.id} className="flex gap-3">
-                    <div className="mt-1">
-                      {event.tone === "success" ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      ) : event.tone === "warning" ? (
-                        <Clock3 className="h-4 w-4 text-amber-600" />
-                      ) : (
-                        <Activity className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{event.title}</p>
-                      <p className="text-sm text-muted-foreground">{event.description}</p>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{formatDate(event.date)}</span>
-                        {event.href ? (
-                        <Link href={event.href} prefetch={false} className="font-medium text-foreground hover:underline">
-                            Öffnen
-                          </Link>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : isLoadingSubmissions || digitalLinksPending || counselingPending ? (
-              <p className="text-sm text-muted-foreground">Workflow-Daten werden synchronisiert.</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Noch keine Workflow-Aktivität vorhanden.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
-          <div>
-            <CardTitle>Ernährungspläne</CardTitle>
-            <CardDescription>
-              Patientengebundene Tagespläne mit Status, Datum und direktem Einstieg in den Planner.
-            </CardDescription>
+              <p className="text-sm text-muted-foreground">{nextStage.summary}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {nextStage.primaryAction ? <WorkflowActionButton action={nextStage.primaryAction} /> : null}
+              {nextStage.secondaryAction ? <WorkflowActionButton action={nextStage.secondaryAction} /> : null}
+            </div>
           </div>
-          <Button asChild size="sm">
-            <Link href={mealPlanHref(patient.id)} prefetch={false}>
-              <CalendarDays className="mr-2 h-4 w-4" />
-              Plan anlegen
-            </Link>
-          </Button>
         </CardHeader>
         <CardContent>
-          {patientMealPlans.length > 0 ? (
-            <div className="space-y-3">
-              {patientMealPlans.slice(0, 8).map((plan) => {
-                const status = plan.status ?? "draft"
-                return (
-                  <div
-                    key={plan.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{plan.title ?? "Ernährungsplan"}</p>
-                        <Badge variant="outline" className={MEAL_PLAN_STATUS_META[status].className}>
-                          {MEAL_PLAN_STATUS_META[status].label}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {formatDate(plan.date)} · {countPlanEntries(plan)} Einträge
-                        {plan.notes ? ` · ${plan.notes}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={mealPlanHref(patient.id, plan)} prefetch={false}>Öffnen</Link>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void duplicatePlan(plan)}
-                      >
-                        <Copy className="mr-2 h-4 w-4" />
-                        Duplizieren
-                      </Button>
-                      {status !== "archived" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => void archivePlan(plan)}
-                        >
-                          <Archive className="mr-2 h-4 w-4" />
-                          Archivieren
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-              {patientMealPlans.length > 8 && (
-                <p className="text-sm text-muted-foreground">
-                  {patientMealPlans.length - 8} weitere Pläne sind über die Datumsauswahl im Planner erreichbar.
-                </p>
-              )}
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Readiness</p>
+              <p className="text-sm font-semibold">{readinessSummary}</p>
             </div>
-          ) : mealPlansPending ? (
-            <p className="text-sm text-muted-foreground">Ernährungspläne werden synchronisiert.</p>
-          ) : (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Noch kein patientengebundener Ernährungsplan vorhanden. Lege einen Plan an, damit er hier,
-              in der Timeline und in der Berichtsauswahl auftaucht.
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Letzte Aktivität</p>
+              <p className="truncate text-sm font-semibold">
+                {latestActivity ? `${latestActivity.title} · ${formatDate(latestActivity.date)}` : "Noch keine Aktivität"}
+              </p>
             </div>
-          )}
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Offen</p>
+              <p className="truncate text-sm font-semibold">
+                {openItems.length > 0 ? openItems.join(", ") : "Keine offenen Schritte"}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle>Behandlungspfad</CardTitle>
+          <CardDescription>Der aktuelle Stand von Intake bis Follow-up, kompakt für die tägliche Arbeit.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 lg:grid-cols-5">
+            {stages.map((stage, index) => {
+              const showStageAction =
+                stage.key === "plan" && stage.primaryAction && stage.status !== "done"
+
+              return (
+                <div key={stage.key} className="relative rounded-md border bg-card p-3">
+                  {index < stages.length - 1 && (
+                    <div className="absolute left-[calc(100%-0.25rem)] top-6 hidden h-px w-4 bg-border lg:block" />
+                  )}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{stage.label}</p>
+                      {stage.dateLabel ? (
+                        <p className="mt-1 text-xs text-muted-foreground">{stage.dateLabel}</p>
+                      ) : null}
+                    </div>
+                    <Badge variant="outline" className={STATUS_META[stage.status].className}>
+                      {STATUS_META[stage.status].label}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{stage.summary}</p>
+                  {showStageAction && stage.primaryAction ? (
+                    <div className="mt-3">
+                      <WorkflowActionButton action={stage.primaryAction} />
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Aktivität</CardTitle>
+          <CardDescription>Eine gemeinsame Timeline für Intake, Protokolle, Beratung, Pläne, Berichte und Termine.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {timelineEvents.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {timelineEvents.map((event) => (
+                <div key={event.id} className="flex min-w-0 gap-3 rounded-md border p-3">
+                  <div className="mt-0.5 shrink-0">
+                    {event.tone === "success" ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    ) : event.tone === "warning" ? (
+                      <Clock3 className="h-4 w-4 text-amber-600" />
+                    ) : (
+                      <Activity className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{event.title}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{formatDate(event.date)}</span>
+                      {event.href ? (
+                        <Link href={event.href} prefetch={false} className="font-medium text-foreground hover:underline">
+                          Öffnen
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : isLoadingSubmissions || digitalLinksPending || counselingPending ? (
+            <p className="text-sm text-muted-foreground">Workflow-Daten werden synchronisiert.</p>
+          ) : (
+            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              Noch keine Workflow-Aktivität vorhanden. Der erste Eintrag entsteht durch Intake-Link, Protokoll, Beratung oder Plan.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {patientReports.length > 0 && (
+        <Card>
         <CardHeader>
           <CardTitle>Berichtshistorie</CardTitle>
           <CardDescription>Patientengebundene Berichte werden beim Export angelegt und können von hier erneut geöffnet werden.</CardDescription>
@@ -925,7 +851,8 @@ export function PatientWorkflowTab({
             <p className="text-sm text-muted-foreground">Noch keine patientengebundenen Berichte vorhanden.</p>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
     </div>
   )
 }

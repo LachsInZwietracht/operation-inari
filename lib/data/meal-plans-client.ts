@@ -276,3 +276,25 @@ export async function persistMealPlan(
 
   return mapMealPlanRow(reloadedPlan as MealPlanRow);
 }
+
+export async function deleteMealPlanClient(
+  planId: string,
+  options: PersistMealPlanOptions = {},
+): Promise<void> {
+  const client = resolveBrowserClient(options.supabase);
+  const userId = await getAuthenticatedUserId(client);
+
+  if (!userId) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  const { error } = await client
+    .from("daily_meal_plans")
+    .delete()
+    .eq("id", planId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
