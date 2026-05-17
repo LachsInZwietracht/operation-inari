@@ -350,6 +350,16 @@ async function openPatientDetail(page: Page, patient: CreatedPatient) {
   await expect(page.getByRole("heading", { name: patientHeading(patient) })).toBeVisible({ timeout: 30_000 });
 }
 
+async function openAssessmentSection(page: Page, section: string) {
+  await page.getByRole("tab", { name: "Assessment" }).click();
+  await page.getByRole("tab", { name: section }).click();
+}
+
+async function openNutritionSection(page: Page, section: string) {
+  await page.getByRole("tab", { name: "Ernährung" }).click();
+  await page.getByRole("tab", { name: section }).click();
+}
+
 test.describe("Patient Management", () => {
   test("displays patient list with backend data", async ({ page }) => {
     const primary = await createPatientFixture({ firstName: "Maria", lastName: "Schneider", indications: ["Adipositas"] });
@@ -506,16 +516,17 @@ test.describe("Patient Management", () => {
       await openPatientDetail(page, patient);
 
       await expect(page.getByRole("tab", { name: "Workflow" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Stammdaten" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Anthropometrie" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Protokolle" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Beratungen" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Assessment" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Therapien" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Ernährung" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Beratung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText("Patient Journey")).toBeVisible();
+      await expect(page.getByText("Behandlungspfad")).toBeVisible();
       await page.getByRole("button", { name: "Löschen" }).click();
       await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
-      await page.getByRole("tab", { name: "Stammdaten" }).click();
+      await page.getByRole("tab", { name: "Profil" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
@@ -572,9 +583,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      const anthropometryTab = page.getByRole("tab", { name: "Anthropometrie" });
-      await expect(anthropometryTab).toBeVisible();
-      await anthropometryTab.click();
+      await openAssessmentSection(page, "Anthropometrie");
 
       await expect(page.getByRole("button", { name: "Neue Messung" })).toBeVisible();
       await expect(page.getByText("Noch keine Messwerte vorhanden.")).toBeVisible();
@@ -588,8 +597,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      const anthropometryTab = page.getByRole("tab", { name: "Anthropometrie" });
-      await anthropometryTab.click();
+      await openAssessmentSection(page, "Anthropometrie");
 
       await page.getByRole("button", { name: "Neue Messung" }).click();
       await page.locator('input[type="number"][placeholder="kg"]').fill("84");
@@ -605,7 +613,7 @@ test.describe("Patient Management", () => {
         .toBe(true);
 
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Anthropometrie" }).click();
+      await openAssessmentSection(page, "Anthropometrie");
       await expect(page.getByRole("cell", { name: "84,0" })).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
@@ -617,7 +625,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+      await openAssessmentSection(page, "Diagnosen & Medikamente");
 
       await page.getByRole("button", { name: "Diagnose erfassen" }).click();
       await page.locator("#diagnosis-name").fill("Diabetes mellitus Typ 2");
@@ -633,7 +641,7 @@ test.describe("Patient Management", () => {
         .toBe(true);
 
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+      await openAssessmentSection(page, "Diagnosen & Medikamente");
       await expect(page.getByRole("cell", { name: "Diabetes mellitus Typ 2" })).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
@@ -645,7 +653,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+      await openAssessmentSection(page, "Diagnosen & Medikamente");
 
       await page.getByRole("button", { name: "Medikation erfassen" }).click();
       await page.getByLabel("Name").fill("Metformin");
@@ -662,7 +670,7 @@ test.describe("Patient Management", () => {
         .toBe(true);
 
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Diagnosen & Medikamente" }).click();
+      await openAssessmentSection(page, "Diagnosen & Medikamente");
       await expect(page.getByRole("cell", { name: "Metformin" })).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
@@ -700,7 +708,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Laborwerte" }).click();
+      await openAssessmentSection(page, "Laborwerte");
 
       await page.getByPlaceholder("z. B. 5.6").fill("6.4");
       await page.locator('input[type="date"]').fill("2026-04-18");
@@ -742,7 +750,7 @@ test.describe("Patient Management", () => {
       }
 
       await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Laborwerte" }).click();
+      await openAssessmentSection(page, "Laborwerte");
 
       await page.getByRole("combobox").first().click();
       await page.getByRole("option", { name: "Nüchternglucose" }).click();
@@ -751,7 +759,7 @@ test.describe("Patient Management", () => {
       await expect(page.getByText("Praxislabor")).toBeVisible();
 
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Laborwerte" }).click();
+      await openAssessmentSection(page, "Laborwerte");
       await page.getByRole("combobox").first().click();
       await page.getByRole("option", { name: "Nüchternglucose" }).click();
       await expect(page.getByRole("cell", { name: /98 mg\/dl/i })).toBeVisible();
@@ -766,7 +774,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Aktivität & Energie" }).click();
+      await openAssessmentSection(page, "Aktivität & Energie");
       const activityTab = page.locator('[role="tabpanel"][data-state="active"]').first();
 
       await activityTab.getByPlaceholder("Spaziergang").fill("Nordic Walking");
@@ -786,7 +794,7 @@ test.describe("Patient Management", () => {
         .toBe(true);
 
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Aktivität & Energie" }).click();
+      await openAssessmentSection(page, "Aktivität & Energie");
       await expect(page.getByText(/Nordic Walking/i)).toBeVisible();
     } finally {
       await deleteClinicalRows("patient_activities", patient.id).catch(() => {});
@@ -911,7 +919,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Protokolle" }).click();
+      await openNutritionSection(page, "Protokolle");
 
       await page.getByRole("button", { name: "Link erstellen" }).click();
       await expect(page.getByText("Digitales 24h Recall", { exact: true }).last()).toBeVisible();
@@ -939,7 +947,7 @@ test.describe("Patient Management", () => {
         .toBe(true);
 
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Protokolle" }).click();
+      await openNutritionSection(page, "Protokolle");
       await expect(page.getByText("Digitales 24h Recall", { exact: true }).last()).toBeVisible();
       await expect(page.getByText("eingetroffen")).toBeVisible();
     } finally {

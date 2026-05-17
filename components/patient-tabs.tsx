@@ -116,6 +116,9 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
 
 const EMPTY_PROTOCOL_FOODS: Food[] = []
 
+const ASSESSMENT_TAB_VALUES = ["anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
+const NUTRITION_TAB_VALUES = ["ernaehrungsplaene", "protokolle"] as const
+
 const AnthropometricChart = dynamic(
   () => import("@/components/anthropometric-chart").then((mod) => mod.AnthropometricChart),
   { ssr: false, loading: () => <div className="h-[300px] rounded-md bg-muted/40" /> },
@@ -899,20 +902,23 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const patientAppointments = appointments.filter(
     (appointment) => appointment.patientId === patient.id || appointment.patientId === patient.legacyId,
   )
+  const [activeTab, setActiveTab] = useState("workflow")
+  const assessmentTriggerValue = ASSESSMENT_TAB_VALUES.includes(activeTab as (typeof ASSESSMENT_TAB_VALUES)[number])
+    ? activeTab
+    : "anthropometrie"
+  const nutritionTriggerValue = NUTRITION_TAB_VALUES.includes(activeTab as (typeof NUTRITION_TAB_VALUES)[number])
+    ? activeTab
+    : "ernaehrungsplaene"
 
   return (
-    <Tabs defaultValue="workflow">
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
         <TabsTrigger value="workflow">Workflow</TabsTrigger>
-        <TabsTrigger value="stammdaten">Stammdaten</TabsTrigger>
-        <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-        <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-        <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-        <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+        <TabsTrigger value="stammdaten">Profil</TabsTrigger>
+        <TabsTrigger value={assessmentTriggerValue}>Assessment</TabsTrigger>
         <TabsTrigger value="therapien">Therapien</TabsTrigger>
-        <TabsTrigger value="ernaehrungsplaene">Ernährungspläne</TabsTrigger>
-        <TabsTrigger value="protokolle">Protokolle</TabsTrigger>
-        <TabsTrigger value="beratungen">Beratungen</TabsTrigger>
+        <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
+        <TabsTrigger value="beratungen">Beratung</TabsTrigger>
       </TabsList>
 
       <TabsContent value="workflow" className="space-y-4">
@@ -944,6 +950,10 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="ernaehrungsplaene" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="ernaehrungsplaene">Ernährungspläne</TabsTrigger>
+          <TabsTrigger value="protokolle">Protokolle</TabsTrigger>
+        </TabsList>
         <PatientMealPlansTab
           patient={patient}
           initialPlans={initialData?.mealPlans ?? []}
@@ -1180,6 +1190,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="anthropometrie" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
+          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
+          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
+          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+        </TabsList>
         {chartEntries.length > 1 && (
           <AnthropometricChart entries={chartEntries} />
         )}
@@ -1379,6 +1395,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="diagnosen" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
+          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
+          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
+          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+        </TabsList>
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -1717,6 +1739,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="laborwerte" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
+          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
+          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
+          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+        </TabsList>
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -1914,6 +1942,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="aktivitaet" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
+          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
+          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
+          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+        </TabsList>
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -2512,6 +2546,10 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="protokolle" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="ernaehrungsplaene">Ernährungspläne</TabsTrigger>
+          <TabsTrigger value="protokolle">Protokolle</TabsTrigger>
+        </TabsList>
         <div className="flex justify-end">
           <Button asChild>
             <Link href={`/patienten/${patient.id}/protokolle/neu`}>

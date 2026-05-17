@@ -10,7 +10,7 @@ async function openCounselingTab(page: Page) {
   });
   await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { name: `${COUNSELING_PATIENT.firstName} ${COUNSELING_PATIENT.lastName}` })).toBeVisible({ timeout: 30_000 });
-  const counselingTab = page.getByRole("tab", { name: "Beratungen" });
+  const counselingTab = page.getByRole("tab", { name: "Beratung" });
   await expect(counselingTab).toBeVisible({ timeout: 30_000 });
   await counselingTab.click();
 }

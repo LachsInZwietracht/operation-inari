@@ -330,7 +330,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Files:** `lib/allergen-constants.ts`, `lib/allergen-warnings.ts`, `lib/data/patient-allergens-client.ts`, `hooks/use-patient-allergens.ts`
 - **DB:** `patient_allergens` table (migration `20260507000023`)
 - **Constants:** `ALLERGEN_DEFINITIONS` — EU 14 mandatory allergens + histamine, fructose, sorbit intolerances. Each entry has `foodMatchTokens` for matching against free-text allergen strings on foods/recipes.
-- **Patient UI:** In the Diagnosen tab (`components/patient-tabs.tsx`), a dedicated "Allergien & Intoleranzen" card lets counselors add/remove allergen entries with type (allergy/intolerance/preference) and severity (mild/moderate/severe). Entries display as color-coded badges.
+- **Patient UI:** In the patient `Assessment` tab under `Diagnosen & Medikamente` (`components/patient-tabs.tsx`), a dedicated "Allergien & Intoleranzen" card lets counselors add/remove allergen entries with type (allergy/intolerance/preference) and severity (mild/moderate/severe). Entries display as color-coded badges.
 - **Therapy tab:** `AllergenAutomationCard` (`components/therapy-panels.tsx`) shows a read-only view of the patient's allergen profile.
 - **Meal plan warnings:** When a `patientId` query param is provided on `/ernaehrungsplan`, the day view aggregates conflicts in a severity-coded banner (`PlanAllergenBanner`), shows per-entry warning icons, and blocks adding entries that match a `severe`-severity allergen behind a confirmation dialog. Moderate/mild matches surface as severity-aware toasts.
 - **Food/Recipe detail:** `FoodDetailContent` and `RecipeDetailContent` accept optional `patientAllergens` prop. When conflicts are detected, a destructive Alert is shown above allergen badges.
@@ -385,7 +385,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Fallback behavior:** The pages no longer own local mock analytics datasets or server-side canned institution records. They render from shared derived data and show an empty state when no active cycle is available.
 
 ### 4.22 Patient Workflow Hub (`/patienten/[id]`)
-- **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab before `Stammdaten`.
+- **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab. The patient record uses six top-level tabs: `Workflow`, `Profil`, `Assessment`, `Therapien`, `Ernährung`, and `Beratung`.
 - **Purpose:** Present the investor/demo-ready ambulatory patient journey in one place without introducing a new backend workflow entity.
 - **Core component:** `components/patient-workflow-tab.tsx`.
 - **Derived stages:** `Intake`, `Assessment`, `Plan`, `Report`, `Follow-up`.
@@ -396,6 +396,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Renders `Intake → Assessment → Plan → Report → Follow-up` as a compact treatment-path strip instead of large repeated cards.
   - Aggregates a single activity timeline from digital submissions, protocols, counseling milestones, patient plans, reports, and follow-up appointments.
   - Keeps plan creation as a contextual action on the `Plan` step; the full plan archive lives only in the dedicated patient `Ernährungspläne` tab.
+- **Patient tab grouping:** `Profil` contains former Stammdaten; `Assessment` groups Anthropometrie, Diagnosen & Medikamente, Laborwerte, and Aktivität & Energie as second-level tabs; `Ernährung` groups Ernährungspläne and Protokolle as second-level tabs; `Therapien` and `Beratung` remain direct top-level work areas.
 - **Patient Ernährungspläne tab:** `components/patient-meal-plans-tab.tsx` lists all `daily_meal_plans` assigned to the patient, with status, date, diet line, entry count, kcal/EW/F/KH/BE summaries, notes, and direct actions to open in `/ernaehrungsplan`, duplicate to the next free date for the same patient, copy as a new draft for another patient, archive, delete non-approved plans, create a new plan, or jump to plan comparison. The cross-patient copy dialog requires target patient and date, blocks patient/date collisions, clears approval metadata, and optionally carries over notes and diet line. Patient workspace loading hydrates only foods referenced by the patient plans and their recipes, using the macro nutrient subset required for those summaries. `usePatientMealPlans()` treats server-provided plans as initial render data and still refreshes from Supabase on mount, so plans saved from `/ernaehrungsplan?patientId=...` appear after navigation without a hard reload.
 - **Report history:** The workflow now lists patient-bound report records from `patient_reports`. The `Report` stage becomes `done` once a report record exists and deep-links back into `/berichte?reportId=...`.
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.

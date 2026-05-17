@@ -10,6 +10,7 @@ async function openProtocolsTab(page: Page) {
   });
   await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { name: `${PROTOCOL_PATIENT.firstName} ${PROTOCOL_PATIENT.lastName}` })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("tab", { name: "Ernährung" }).click();
   const protocolsTab = page.getByRole("tab", { name: "Protokolle" });
   await expect(protocolsTab).toBeVisible({ timeout: 30_000 });
   await protocolsTab.click();
@@ -64,12 +65,14 @@ test.describe("Nutrition Protocols", () => {
     await page.getByRole("button", { name: "Protokoll erstellen" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/patienten/${PROTOCOL_PATIENT.id}$`), { timeout: 30_000 });
+    await page.getByRole("tab", { name: "Ernährung" }).click();
     const protocolsTab = page.getByRole("tab", { name: "Protokolle" });
     await protocolsTab.click();
     await expect(page.getByRole("link", { name: new RegExp(protocolTitle) })).toBeVisible({ timeout: 30_000 });
 
     await page.evaluate(() => localStorage.removeItem("prodi_protocols"));
     await page.reload();
+    await page.getByRole("tab", { name: "Ernährung" }).click();
     await page.getByRole("tab", { name: "Protokolle" }).click();
     await expect(page.getByRole("link", { name: new RegExp(protocolTitle) })).toBeVisible({ timeout: 30_000 });
   });
