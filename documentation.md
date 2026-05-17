@@ -395,7 +395,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Shows a top summary with next recommended action, latest activity, and readiness count.
   - Renders per-stage status cards as lightweight progress summaries; primary workflow actions stay in the dedicated detail sections to avoid duplicate CTAs.
   - Aggregates a compact patient timeline from digital submissions, protocols, counseling milestones, and follow-up appointments.
-  - Lists patient-bound Ernährungspläne from `daily_meal_plans.patient_id`, with direct open links, duplicate-to-next-free-date, and archive actions.
+  - Keeps a compact patient-bound Ernährungsplan section for the current workflow stage. The complete archive lives in the dedicated patient `Ernährungspläne` tab.
+- **Patient Ernährungspläne tab:** `components/patient-meal-plans-tab.tsx` lists all `daily_meal_plans` assigned to the patient, with status, date, diet line, entry count, kcal/EW/F/KH/BE summaries, notes, and direct actions to open in `/ernaehrungsplan`, duplicate to the next free date, archive, create a new plan, or jump to plan comparison. Patient workspace loading hydrates only foods referenced by the patient plans and their recipes, using the macro nutrient subset required for those summaries.
 - **Report history:** The workflow now lists patient-bound report records from `patient_reports`. The `Report` stage becomes `done` once a report record exists and deep-links back into `/berichte?reportId=...`.
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
 - **Plan handoff:** `/ernaehrungsplan` accepts `patientId` and `date` query params so patient workflow links can open or create the exact patient plan date.

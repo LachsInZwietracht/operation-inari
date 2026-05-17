@@ -152,6 +152,10 @@ const PatientWorkflowTab = dynamic(
   () => import("@/components/patient-workflow-tab").then((mod) => mod.PatientWorkflowTab),
   { ssr: false },
 )
+const PatientMealPlansTab = dynamic(
+  () => import("@/components/patient-meal-plans-tab").then((mod) => mod.PatientMealPlansTab),
+  { ssr: false },
+)
 const ReferenceProfileSelector = dynamic(
   () => import("@/components/reference-profile-selector").then((mod) => mod.ReferenceProfileSelector),
   { ssr: false },
@@ -906,6 +910,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
         <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
         <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
         <TabsTrigger value="therapien">Therapien</TabsTrigger>
+        <TabsTrigger value="ernaehrungsplaene">Ernährungspläne</TabsTrigger>
         <TabsTrigger value="protokolle">Protokolle</TabsTrigger>
         <TabsTrigger value="beratungen">Beratungen</TabsTrigger>
       </TabsList>
@@ -935,6 +940,15 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
           isLoadingSubmissions={isLoadingSubmissions}
           digitalLinksPending={digitalLinksPending}
           counselingPending={counselingPending}
+        />
+      </TabsContent>
+
+      <TabsContent value="ernaehrungsplaene" className="space-y-4">
+        <PatientMealPlansTab
+          patient={patient}
+          initialPlans={initialData?.mealPlans ?? []}
+          foods={initialData?.mealPlanFoods ?? []}
+          recipes={initialData?.recipes ?? []}
         />
       </TabsContent>
 

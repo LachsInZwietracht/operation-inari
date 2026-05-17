@@ -14,10 +14,12 @@ import type {
   PatientReportRecord,
   PracticeAppointment,
   ProcamResult,
+  Recipe,
   ScreeningResult,
   TherapyDeviceIntegration,
   TherapySetting,
   DailyMealPlan,
+  Food,
 } from "@/lib/types"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { fetchActivitiesClient } from "@/lib/data/patient-activities-client"
@@ -32,6 +34,8 @@ import { fetchPatientAllergensClient } from "@/lib/data/patient-allergens-client
 import { fetchPatientReportsClient } from "@/lib/data/patient-reports-client"
 import { fetchPatientByRef, fetchPatientByRefForUser } from "@/lib/data/patients"
 import { fetchMealPlans } from "@/lib/data/meal-plans"
+import { fetchFoodsByIds } from "@/lib/data/foods"
+import { fetchRecipes } from "@/lib/data/recipes"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchProcamResultsClient } from "@/lib/data/patient-procam-client"
 import { fetchProtocolsClient } from "@/lib/data/protocols-client"
@@ -57,6 +61,8 @@ export interface PatientWorkspaceData {
   patientAllergens: PatientAllergenEntry[]
   patientReports: PatientReportRecord[]
   mealPlans: DailyMealPlan[]
+  mealPlanFoods: Food[]
+  recipes: Recipe[]
   procamResults: ProcamResult[]
   protocols: NutritionProtocol[]
   screenings: ScreeningResult[]
@@ -139,6 +145,8 @@ export async function fetchPatientWorkspaceData(
       patientAllergens: [],
       patientReports: [],
       mealPlans: [],
+      mealPlanFoods: [],
+      recipes: [],
       procamResults: [],
       protocols: [],
       screenings: [],
@@ -162,6 +170,7 @@ export async function fetchPatientWorkspaceData(
         "counseling",
         "diagnoses",
         "labs",
+        "mealPlans",
         "medications",
         "protocols",
         "reports",
@@ -184,6 +193,7 @@ export async function fetchPatientWorkspaceData(
     patientAllergens,
     patientReports,
     mealPlans,
+    recipes,
     procamResults,
     protocols,
     screenings,
@@ -203,12 +213,46 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
     orEmpty(fetchPatientReportsClient(patient.id, supabase), "patient reports"),
     orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
+    orEmpty(fetchRecipes({ supabase }), "recipes"),
     orEmpty(fetchProcamResultsClient(supabase), "PROCAM results"),
     orEmpty(fetchProtocolsClient(supabase, { patientRefs }), "protocols"),
     orEmpty(fetchScreeningsClient(supabase), "screenings"),
     orEmpty(fetchTherapyIntegrationsClient(supabase), "therapy integrations"),
     orEmpty(fetchTherapySettingsClient(supabase), "therapy settings"),
   ])
+
+  const patientMealPlans = filterForPatient(mealPlans, patient)
+  const referencedRecipeIds = new Set<string>()
+  const referencedFoodIds = new Set<string>()
+
+  for (const plan of patientMealPlans) {
+    for (const slot of plan.slots) {
+      for (const entry of slot.entries) {
+        if (entry.type === "food") {
+          referencedFoodIds.add(entry.referenceId)
+        } else {
+          referencedRecipeIds.add(entry.referenceId)
+        }
+      }
+    }
+  }
+
+  const mealPlanRecipes = recipes.filter(
+    (recipe) =>
+      referencedRecipeIds.has(recipe.id) ||
+      Boolean(recipe.legacyId && referencedRecipeIds.has(recipe.legacyId)),
+  )
+
+  for (const recipe of mealPlanRecipes) {
+    for (const ingredient of recipe.ingredients) {
+      referencedFoodIds.add(ingredient.foodId)
+    }
+  }
+
+  const mealPlanFoods = await fetchFoodsByIds(Array.from(referencedFoodIds), supabase, {
+    nutrientIds: ["energie", "eiweiss", "fett", "kohlenhydrate"],
+    includePortions: false,
+  })
 
   return {
     patient,
@@ -225,7 +269,9 @@ export async function fetchPatientWorkspaceData(
     medications: filterForPatient(medications, patient),
     patientAllergens: filterForPatient(patientAllergens, patient),
     patientReports,
-    mealPlans: filterForPatient(mealPlans, patient),
+    mealPlans: patientMealPlans,
+    mealPlanFoods,
+    recipes: mealPlanRecipes,
     procamResults: filterForPatient(procamResults, patient),
     protocols: filterForPatient(protocols, patient),
     screenings: filterForPatient(screenings, patient),
