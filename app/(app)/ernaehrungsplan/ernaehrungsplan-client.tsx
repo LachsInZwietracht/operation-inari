@@ -369,6 +369,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    savePlanForDate,
     createPlanCheckpoint,
     approvePlan,
     reopenPlan,
@@ -459,6 +460,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [templateDraftIndication, setTemplateDraftIndication] = useState("")
   const [templateDraftDietLineId, setTemplateDraftDietLineId] = useState<string>("")
   const [isCheckpointing, setIsCheckpointing] = useState(false)
+  const [isSavingPlan, setIsSavingPlan] = useState(false)
+  const [isApprovingPlan, setIsApprovingPlan] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
   const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
@@ -1140,13 +1143,31 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     toast.success("Planhinweise gespeichert.")
   }
 
-  const updateCurrentPlanStatus = async (status: NonNullable<DailyMealPlan["status"]>) => {
-    if (status === "approved" && clinicalReview.blockingItems.length > 0) {
+  const saveCurrentPlan = async () => {
+    setIsSavingPlan(true)
+    try {
+      const savedPlan = await savePlanForDate(currentDate)
+      if (!savedPlan) {
+        toast.error("Ernährungsplan konnte nicht gespeichert werden.")
+        return
+      }
+
+      toast.success("Ernährungsplan gespeichert.")
+    } finally {
+      setIsSavingPlan(false)
+    }
+  }
+
+  const approveCurrentPlan = async () => {
+    if (currentPlan.status === "approved") return
+
+    if (clinicalReview.blockingItems.length > 0) {
       toast.error("Freigabe blockiert: Bitte kritische Prüfpunkte klären.")
       return
     }
 
-    if (status === "approved") {
+    setIsApprovingPlan(true)
+    try {
       const version = await approvePlan(currentDate, {
         approvedAt: currentPlan.approvedAt ?? new Date().toISOString(),
         approvedBy: currentPlan.approvedBy,
@@ -1154,16 +1175,19 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       if (version) {
         recordMealPlanVersion(version)
       }
-      toast.success(`Planstatus: ${PLAN_STATUS_LABELS[status]}`)
+      toast.success("Ernährungsplan freigegeben.")
+    } finally {
+      setIsApprovingPlan(false)
+    }
+  }
+
+  const cancelCurrentPlan = () => {
+    if (patientId) {
+      router.push(`/patienten/${patientId}`)
       return
     }
 
-    updatePlanMetadata(currentDate, {
-      status,
-      approvedAt: undefined,
-      approvedBy: undefined,
-    })
-    toast.success(`Planstatus: ${PLAN_STATUS_LABELS[status]}`)
+    router.back()
   }
 
   const attachCurrentPatient = () => {
@@ -1924,7 +1948,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)_minmax(160px,200px)_auto]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)_auto]">
             <div className="space-y-1.5">
               <Label
                 htmlFor="planakte-title"
@@ -1969,43 +1993,49 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-                Status
-              </Label>
-              <Select
-                value={currentPlan.status ?? "draft"}
-                onValueChange={(value) =>
-                  void updateCurrentPlanStatus(value as NonNullable<DailyMealPlan["status"]>)
-                }
-              >
-                <SelectTrigger aria-label="Planstatus">
-                  <SelectValue placeholder="Status wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PLAN_STATUS_LABELS).map(([value, label]) => (
-                    <SelectItem
-                      key={value}
-                      value={value}
-                      disabled={value === "approved" && !clinicalReview.canApprove}
-                    >
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap items-end gap-1.5">
+            <div className="flex flex-wrap items-end justify-end gap-1.5">
               {patientId && currentPlan.patientId !== patientId && (
                 <Button size="sm" variant="outline" onClick={attachCurrentPatient}>
                   Patient zuordnen
                 </Button>
               )}
+              <Button size="sm" variant="outline" onClick={cancelCurrentPlan}>
+                Abbrechen
+              </Button>
               {currentPlan.status === "approved" && (
                 <Button size="sm" variant="outline" onClick={reopenCurrentPlan}>
                   <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                   Entwurf öffnen
                 </Button>
+              )}
+              {currentPlan.status !== "approved" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void saveCurrentPlan()}
+                    disabled={isSavingPlan || isApprovingPlan}
+                  >
+                    {isSavingPlan ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Ernährungsplan speichern
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => void approveCurrentPlan()}
+                    disabled={!clinicalReview.canApprove || isSavingPlan || isApprovingPlan}
+                  >
+                    {isApprovingPlan ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Freigeben
+                  </Button>
+                </>
               )}
               <Button size="sm" variant="outline" onClick={() => setPlanAkteOpen(true)}>
                 <FolderOpen className="mr-1.5 h-3.5 w-3.5" />

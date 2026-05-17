@@ -201,8 +201,7 @@ test.describe("Ernährungsplan", () => {
     await expect(page.getByText(/Hafer/i).first()).toBeVisible();
 
     const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-    await planRecord.getByRole("combobox", { name: "Planstatus" }).click();
-    await page.getByRole("option", { name: "Freigegeben" }).click();
+    await planRecord.getByRole("button", { name: "Freigeben" }).click();
 
     await expect(planRecord.getByText("Bearbeitung")).toBeVisible();
     await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });

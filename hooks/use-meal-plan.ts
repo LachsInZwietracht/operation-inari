@@ -552,6 +552,19 @@ export function useMealPlan(
     [getPlanForDate, syncPlanToSupabase],
   )
 
+  const savePlanForDate = useCallback(
+    async (date: string) => {
+      const plan = getPlanForDate(date)
+      const key = getPlanKey(plan.date, plan.patientId)
+      dirtyDatesRef.current.add(key)
+
+      const persistedPlan = await syncPlanToSupabase(plan)
+      if (isAuthenticated && !persistedPlan) return null
+      return persistedPlan ?? plan
+    },
+    [getPlanForDate, isAuthenticated, syncPlanToSupabase],
+  )
+
   const approvePlan = useCallback(
     async (
       date: string,
@@ -678,6 +691,7 @@ export function useMealPlan(
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    savePlanForDate,
     createPlanCheckpoint,
     approvePlan,
     reopenPlan,
