@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react"
+import { useMemo, type Dispatch, type SetStateAction } from "react"
 import {
   Activity,
   ArrowRight,
@@ -16,14 +16,6 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { formatDate } from "@/lib/format"
 import type {
   AnthropometricEntry,
@@ -226,21 +218,6 @@ export function PatientWorkflowTab({
     () => patientReportVersions[0] ?? null,
     [patientReportVersions],
   )
-  const [reportSearch, setReportSearch] = useState("")
-  const [reportFormatFilter, setReportFormatFilter] = useState<"all" | "PDF" | "CSV">("all")
-  const filteredPatientReportVersions = useMemo(() => {
-    const query = reportSearch.trim().toLowerCase()
-    return patientReportVersions.filter((version) => {
-      const matchesFormat = reportFormatFilter === "all" || version.format === reportFormatFilter
-      const haystack = [
-        version.title,
-        version.snapshot.planDateLabel,
-        version.snapshot.reportLength === "short" ? "Kurzbericht" : "Vollversion",
-        version.format,
-      ].join(" ").toLowerCase()
-      return matchesFormat && (!query || haystack.includes(query))
-    })
-  }, [patientReportVersions, reportFormatFilter, reportSearch])
   const latestFollowUpAppointment = useMemo(
     () =>
       getLatestByDate(
@@ -764,95 +741,6 @@ export function PatientWorkflowTab({
         </CardContent>
       </Card>
 
-      {patientReports.length > 0 && (
-        <Card>
-        <CardHeader>
-          <CardTitle>Berichtshistorie</CardTitle>
-          <CardDescription>Patientengebundene Berichte werden beim Export angelegt und können von hier erneut geöffnet werden.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {patientReports.length > 0 ? (
-            <div className="space-y-3">
-              {patientReportVersions.length > 0 ? (
-                <>
-                  <div className="grid gap-2 sm:grid-cols-[1fr_180px]">
-                    <Input
-                      value={reportSearch}
-                      onChange={(event) => setReportSearch(event.target.value)}
-                      placeholder="Archiv nach Titel, Datum oder Umfang filtern..."
-                    />
-                    <Select value={reportFormatFilter} onValueChange={(value) => setReportFormatFilter(value as "all" | "PDF" | "CSV")}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Alle Formate</SelectItem>
-                        <SelectItem value="PDF">PDF</SelectItem>
-                        <SelectItem value="CSV">CSV</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {filteredPatientReportVersions.length > 0 ? filteredPatientReportVersions.map((version) => (
-                    <div
-                      key={version.id}
-                      className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="space-y-1">
-                        <p className="font-medium">{version.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Version {version.versionNumber} · {version.snapshot.planDateLabel} · {version.format} · exportiert {formatDate(version.exportedAt)}
-                        </p>
-                        {version.retentionUntil ? (
-                          <p className="text-xs text-muted-foreground">
-                            Aufbewahrung bis {formatDate(version.retentionUntil)}
-                            {version.retentionStatus ? ` · ${version.retentionStatus}` : ""}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex gap-2">
-                        <Badge variant="outline">{version.snapshot.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
-                        <Button asChild size="sm">
-                          <Link href={`/berichte?reportVersionId=${version.id}`} prefetch={false}>Historie öffnen</Link>
-                        </Button>
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/api/patient-report-versions/${version.id}/download`} prefetch={false}>
-                            {version.format} herunterladen
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  )) : (
-                    <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                      Keine archivierte Berichtsversion passt zum aktuellen Filter.
-                    </p>
-                  )}
-                </>
-              ) : patientReports.map((report) => (
-                <div
-                  key={report.id}
-                  className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="space-y-1">
-                    <p className="font-medium">{report.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Legacy-Eintrag · {report.planDateLabel} · {report.lastFormat} · aktualisiert {formatDate(report.updatedAt ?? report.createdAt)}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Badge variant="outline">{report.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
-                    <Button asChild size="sm">
-                      <Link href={`/berichte?reportId=${report.id}`} prefetch={false}>Bericht öffnen</Link>
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Noch keine patientengebundenen Berichte vorhanden.</p>
-          )}
-        </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

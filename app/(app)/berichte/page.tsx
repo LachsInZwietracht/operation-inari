@@ -1,9 +1,13 @@
 import { Suspense } from "react";
 
+import { BerichteIndexClient } from "./berichte-index-client";
 import { BerichtePageClient } from "./berichte-client";
 import { fetchFoodsViaRpc } from "@/lib/data/foods";
+import { fetchPatients } from "@/lib/data/patients";
+import { fetchPatientReportsClient } from "@/lib/data/patient-reports-client";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { FoodsProvider } from "@/components/foods-provider";
 import { PageHeader } from "@/components/page-header";
 import type { DailyMealPlan, Recipe } from "@/lib/types";
@@ -24,6 +28,14 @@ const REPORTS_HEADER = {
   helpText:
     "Erstellen Sie detaillierte Nährstoffanalysen Ihrer Ernährungspläne. Vergleichen Sie Ist- und Sollwerte nach DGE-Referenzen und exportieren Sie Berichte für Ihre Patienten.",
 };
+
+interface BerichteSearchParams {
+  patientId?: string;
+  planId?: string;
+  protocolId?: string;
+  reportId?: string;
+  reportVersionId?: string;
+}
 
 function extractFoodIds(recipes: Recipe[], mealPlans: DailyMealPlan[]): string[] {
   const ids = new Set<string>();
@@ -65,6 +77,19 @@ async function ReportsContent() {
   );
 }
 
+async function IndexContent() {
+  const supabase = await createServerSupabaseClient();
+  const [reports, patients] = await Promise.all([
+    fetchPatientReportsClient(undefined, supabase).catch((error) => {
+      console.warn("Falling back to empty patient report list:", error);
+      return [];
+    }),
+    fetchPatients(supabase),
+  ]);
+
+  return <BerichteIndexClient reports={reports} patients={patients} />;
+}
+
 function ReportsSkeleton() {
   return (
     <div className="space-y-6">
@@ -81,10 +106,41 @@ function ReportsSkeleton() {
   );
 }
 
-export default function BerichtePage() {
+function IndexSkeleton() {
   return (
-    <Suspense fallback={<ReportsSkeleton />}>
-      <ReportsContent />
+    <div className="space-y-6">
+      <PageHeader {...REPORTS_HEADER} />
+      <div className="h-12 rounded-lg bg-muted animate-pulse" />
+      <div className="space-y-3">
+        <div className="h-24 rounded-xl border bg-muted animate-pulse" />
+        <div className="h-24 rounded-xl border bg-muted animate-pulse" />
+        <div className="h-24 rounded-xl border bg-muted animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
+export default async function BerichtePage({
+  searchParams,
+}: {
+  searchParams: Promise<BerichteSearchParams>;
+}) {
+  const params = await searchParams;
+  const hasAnalyzerContext = Boolean(
+    params.patientId ?? params.reportId ?? params.reportVersionId,
+  );
+
+  if (hasAnalyzerContext) {
+    return (
+      <Suspense fallback={<ReportsSkeleton />}>
+        <ReportsContent />
+      </Suspense>
+    );
+  }
+
+  return (
+    <Suspense fallback={<IndexSkeleton />}>
+      <IndexContent />
     </Suspense>
   );
 }

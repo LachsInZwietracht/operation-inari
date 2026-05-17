@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import {
   Activity as ActivityIcon,
   CheckCircle2,
@@ -118,6 +119,16 @@ const EMPTY_PROTOCOL_FOODS: Food[] = []
 
 const ASSESSMENT_TAB_VALUES = ["anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
 const NUTRITION_TAB_VALUES = ["ernaehrungsplaene", "protokolle"] as const
+const BERATUNG_TAB_VALUES = ["beratungen", "patientenberichte"] as const
+
+const KNOWN_TAB_VALUES = new Set<string>([
+  "workflow",
+  "stammdaten",
+  "therapien",
+  ...ASSESSMENT_TAB_VALUES,
+  ...NUTRITION_TAB_VALUES,
+  ...BERATUNG_TAB_VALUES,
+])
 
 const AnthropometricChart = dynamic(
   () => import("@/components/anthropometric-chart").then((mod) => mod.AnthropometricChart),
@@ -157,6 +168,10 @@ const PatientWorkflowTab = dynamic(
 )
 const PatientMealPlansTab = dynamic(
   () => import("@/components/patient-meal-plans-tab").then((mod) => mod.PatientMealPlansTab),
+  { ssr: false },
+)
+const PatientBerichteTab = dynamic(
+  () => import("@/components/patient-berichte-tab").then((mod) => mod.PatientBerichteTab),
   { ssr: false },
 )
 const ReferenceProfileSelector = dynamic(
@@ -902,13 +917,19 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const patientAppointments = appointments.filter(
     (appointment) => appointment.patientId === patient.id || appointment.patientId === patient.legacyId,
   )
-  const [activeTab, setActiveTab] = useState("workflow")
+  const searchParams = useSearchParams()
+  const initialTabParam = searchParams.get("tab")
+  const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "workflow"
+  const [activeTab, setActiveTab] = useState(initialTab)
   const assessmentTriggerValue = ASSESSMENT_TAB_VALUES.includes(activeTab as (typeof ASSESSMENT_TAB_VALUES)[number])
     ? activeTab
     : "anthropometrie"
   const nutritionTriggerValue = NUTRITION_TAB_VALUES.includes(activeTab as (typeof NUTRITION_TAB_VALUES)[number])
     ? activeTab
     : "ernaehrungsplaene"
+  const beratungTriggerValue = BERATUNG_TAB_VALUES.includes(activeTab as (typeof BERATUNG_TAB_VALUES)[number])
+    ? activeTab
+    : "beratungen"
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -918,7 +939,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
         <TabsTrigger value={assessmentTriggerValue}>Assessment</TabsTrigger>
         <TabsTrigger value="therapien">Therapien</TabsTrigger>
         <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
-        <TabsTrigger value="beratungen">Beratung</TabsTrigger>
+        <TabsTrigger value={beratungTriggerValue}>Beratung</TabsTrigger>
       </TabsList>
 
       <TabsContent value="workflow" className="space-y-4">
@@ -2871,6 +2892,10 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="beratungen" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="beratungen">Sitzungen</TabsTrigger>
+          <TabsTrigger value="patientenberichte">Berichte</TabsTrigger>
+        </TabsList>
         <div className="flex justify-end">
           <Button asChild>
             <Link href={`/patienten/${patient.id}/beratungen/neu`}>
@@ -2921,6 +2946,19 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
             </CardContent>
           </Card>
         )}
+      </TabsContent>
+
+      <TabsContent value="patientenberichte" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="beratungen">Sitzungen</TabsTrigger>
+          <TabsTrigger value="patientenberichte">Berichte</TabsTrigger>
+        </TabsList>
+        <PatientBerichteTab
+          patient={patient}
+          reports={patientReports}
+          mealPlans={initialData?.mealPlans ?? []}
+          protocols={protocols}
+        />
       </TabsContent>
     </Tabs>
   )
