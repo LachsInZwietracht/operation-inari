@@ -83,12 +83,12 @@ test.describe("Berichte", () => {
     const pdfDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "PDF erstellen" }).click();
     const pdf = await pdfDownload;
-    expect(await pdf.suggestedFilename()).toMatch(/inari-bericht-.*\.pdf/);
+    expect(await pdf.suggestedFilename()).toMatch(/bericht-.*\.pdf/);
 
     const csvDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "CSV/Nährstoffdaten" }).click();
     const csv = await csvDownload;
-    expect(await csv.suggestedFilename()).toMatch(/inari-bericht-.*\.csv/);
+    expect(await csv.suggestedFilename()).toMatch(/bericht-.*\.csv/);
   });
 
   test("creates an immutable patient report version on export and reopens it from history", async ({ page }) => {
@@ -99,7 +99,6 @@ test.describe("Berichte", () => {
       await page.goto(`/berichte?patientId=${patient.id}&planId=${fixture.planId}`);
       await expect(page.getByText(`Bericht für ${patient.firstName} ${patient.lastName}`)).toBeVisible();
 
-      await page.getByRole("button", { name: "Vollversion" }).click();
       await page.getByPlaceholder("z. B. Fokus auf Ballaststoffe, Laborkontrolle in 4 Wochen, ...").fill("Follow-up Fokus");
 
       const pdfDownload = page.waitForEvent("download");
@@ -114,7 +113,6 @@ test.describe("Berichte", () => {
       const report = reports[0];
       const version = versions[0];
       expect(report.plan_id).toBe(fixture.planId);
-      expect(report.report_length).toBe("full");
       expect(report.notes).toContain("Follow-up Fokus");
       expect(report.latest_version_id).toBe(version.id);
       expect(version.snapshot.notes).toContain("Follow-up Fokus");

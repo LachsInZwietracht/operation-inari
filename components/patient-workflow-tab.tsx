@@ -412,15 +412,25 @@ export function PatientWorkflowTab({
   }, [latestPlan, latestProtocol, latestSession, patient.id])
 
   const reportStage: PatientWorkflowStage = useMemo(() => {
+    const berichteTabHref = `/patienten/${patient.id}?tab=patientenberichte`
+
     if (latestPatientReportVersion) {
+      const planChanged = Boolean(
+        latestPlan && latestPatientReport?.planId && latestPlan.id !== latestPatientReport.planId,
+      )
       return {
         key: "report",
         label: "Report",
-        status: "done",
-        summary: "Eine archivierte Berichtsversion liegt vor und kann unverändert erneut geöffnet oder heruntergeladen werden.",
+        status: planChanged ? "attention" : "done",
+        summary: planChanged
+          ? "Es liegt ein archivierter Bericht vor, der aktuelle Ernährungsplan wurde aber seitdem geändert. Eine Aktualisierung wird empfohlen."
+          : `Aktueller Bericht v${latestPatientReportVersion.versionNumber} liegt archiviert vor.`,
         dateLabel: formatDate(latestPatientReportVersion.exportedAt),
-        primaryAction: buildAction("Historie öffnen", `/berichte?reportVersionId=${latestPatientReportVersion.id}`),
-        secondaryAction: buildAction("Neuen Bericht erstellen", reportHref, undefined, "outline"),
+        primaryAction: buildAction(
+          planChanged ? "Bericht aktualisieren" : "Bericht öffnen",
+          planChanged ? reportHref : berichteTabHref,
+        ),
+        secondaryAction: buildAction("Versionshistorie", berichteTabHref, undefined, "outline"),
       }
     }
 
@@ -429,10 +439,10 @@ export function PatientWorkflowTab({
         key: "report",
         label: "Report",
         status: "in_progress",
-        summary: "Ein älterer Berichtseintrag liegt vor, aber noch keine archivierte Exportversion.",
+        summary: "Ein Berichtseintrag liegt vor, aber noch keine archivierte Exportversion.",
         dateLabel: formatDate(latestPatientReport.updatedAt ?? latestPatientReport.createdAt),
-        primaryAction: buildAction("Bericht öffnen", `/berichte?reportId=${latestPatientReport.id}`),
-        secondaryAction: buildAction("Neuen Bericht erstellen", reportHref, undefined, "outline"),
+        primaryAction: buildAction("Bericht exportieren", reportHref),
+        secondaryAction: buildAction("Bericht öffnen", berichteTabHref, undefined, "outline"),
       }
     }
 
@@ -441,7 +451,7 @@ export function PatientWorkflowTab({
         key: "report",
         label: "Report",
         status: "in_progress",
-        summary: "Die Patientendaten sind weit genug fortgeschritten, um einen Analysebericht zu erstellen.",
+        summary: "Die Patientendaten sind weit genug fortgeschritten, um einen Bericht zu erstellen.",
         dateLabel: formatDate((latestSession?.date ?? latestProtocol?.startDate) ?? new Date().toISOString()),
         primaryAction: buildAction("Bericht erstellen", reportHref),
         secondaryAction: latestProtocol
@@ -455,9 +465,9 @@ export function PatientWorkflowTab({
       label: "Report",
       status: "not_started",
       summary: "Ein Bericht wird sinnvoll, sobald Assessment und Beratung dokumentiert sind.",
-      primaryAction: buildAction("Berichte öffnen", reportHref),
+      primaryAction: buildAction("Bericht erstellen", reportHref),
     }
-  }, [latestPatientReport, latestPatientReportVersion, latestProtocol, latestSession, patient.id, reportHref])
+  }, [latestPatientReport, latestPatientReportVersion, latestPlan, latestProtocol, latestSession, patient.id, reportHref])
 
   const followUpStage: PatientWorkflowStage = useMemo(() => {
     const completedTimelineEntry = latestSession?.timeline?.find((entry) => entry.status === "done")
@@ -597,8 +607,8 @@ export function PatientWorkflowTab({
       events.push({
         id: `patient_report_version_${version.id}`,
         date: version.exportedAt,
-        title: version.title,
-        description: `Archivierter Bericht ${version.format} · Version ${version.versionNumber}`,
+        title: `Bericht v${version.versionNumber}`,
+        description: `Archivierter Bericht ${version.format} · ${version.snapshot.planDateLabel}`,
         href: `/berichte?reportVersionId=${version.id}`,
         tone: "success",
       })

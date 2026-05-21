@@ -388,7 +388,6 @@ function ArchivedReportView({
 
       <div className="flex flex-wrap items-center gap-3">
         <Badge variant="outline">Version {version.versionNumber}</Badge>
-        <Badge variant="outline">{snapshot.reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
         <Badge variant="outline">{version.format}</Badge>
         <Button asChild>
           <a href={`/api/patient-report-versions/${version.id}/download`}>
@@ -554,9 +553,9 @@ export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientPro
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [allPlans, setAllPlans] = useState<DailyMealPlan[]>(basePlans)
   const [selectedPlanId, setSelectedPlanId] = useState<string>("")
-  const [reportLength, setReportLength] = useState<"short" | "full">("short")
+  const [reportLength] = useState<"short" | "full">("full")
   const [customNotes, setCustomNotes] = useState("")
-  const [selectedSections, setSelectedSections] = useState<Record<ReportSectionId, boolean>>(() => {
+  const [selectedSections] = useState<Record<ReportSectionId, boolean>>(() => {
     return REPORT_SECTIONS.reduce((acc, section) => {
       acc[section.id] = true
       return acc
@@ -741,8 +740,6 @@ export function BerichtePageClient({ recipes, basePlans }: BerichtePageClientPro
     }
 
     hasAppliedSavedConfig.current = true
-    setReportLength(resolvedReport.reportLength)
-    setSelectedSections(resolvedReport.selectedSections)
     setCustomNotes(resolvedReport.notes ?? "")
   }, [resolvedReport])
 
@@ -1097,8 +1094,10 @@ ${microSentence}`
 
     return {
       format: "PDF",
-      title: "Inari Bericht",
-      fileBaseName: `inari-bericht-${selectedPlan.date}`,
+      title: patientContextLabel
+        ? `Bericht – ${patientContextLabel}, ${planDateLabel}`
+        : `Bericht – ${planDateLabel}`,
+      fileBaseName: `bericht-${selectedPlan.date}`,
       reportId: activeReportId,
       reportVersionId: resolvedReportVersion?.id,
       patientId: effectivePatientRef,
@@ -1163,9 +1162,8 @@ ${microSentence}`
       narrative: analysisNarrative,
       badges: [
         `Plan ${planDateLabel}`,
-        reportLength === "short" ? "Kurzbericht" : "Vollversion",
-        `${selectedSectionCount} Abschnitte`,
-      ],
+        patientContextLabel ?? "Bericht",
+      ].filter((badge): badge is string => Boolean(badge)),
       specialNotes: [
         `CO₂ gesamt: ${formatNumber(totalCo2, 1)} kg`,
         `Health Claims: ${healthClaimResults.filter((claim) => claim.met).length}/${healthClaimResults.length}`,
@@ -1203,21 +1201,12 @@ ${microSentence}`
     planPreviewRows,
     resolvedNotes,
     analysisNarrative,
-    selectedSectionCount,
     totalCo2,
     healthClaimResults,
     aggregatedAllergens,
     aggregatedAdditives,
     lmivExportRows,
   ])
-
-  const handleSectionToggle = (sectionId: ReportSectionId) => {
-    setSelectedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }))
-  }
-
-  const handleReportLengthChange = (length: "short" | "full") => {
-    setReportLength(length)
-  }
 
   const handleExport = async (format: "pdf" | "csv") => {
     if (!reportPayload) return
@@ -1791,67 +1780,20 @@ ${microSentence}`
 
       {/* Report builder */}
       <div className="space-y-4">
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Berichtskonfiguration</CardTitle>
-              <p className="text-muted-foreground text-sm">
-                Wähle Umfang und Abschnitte für die druckbare Auswertung.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant={reportLength === "short" ? "default" : "outline"}
-                  onClick={() => handleReportLengthChange("short")}
-                >
-                  Kurzbericht
-                </Button>
-                <Button
-                  size="sm"
-                  variant={reportLength === "full" ? "default" : "outline"}
-                  onClick={() => handleReportLengthChange("full")}
-                >
-                  Vollversion
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Aktive Abschnitte: {selectedSectionCount} / {REPORT_SECTIONS.length}
-              </p>
-              <div className="space-y-3">
-                {REPORT_SECTIONS.map((section) => (
-                  <div
-                    key={section.id}
-                    className="flex items-start justify-between gap-3 rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{section.label}</p>
-                      <p className="text-xs text-muted-foreground">{section.description}</p>
-                    </div>
-                    <Switch
-                      checked={selectedSections[section.id]}
-                      onCheckedChange={() => handleSectionToggle(section.id)}
-                      aria-label={`${section.label} aktivieren`}
-                    />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="text-base">Druckvorschau</CardTitle>
               <p className="text-muted-foreground text-sm">
-                Zusammenfassung der ausgewählten Elemente für den PDF-Export.
+                Standard-Bericht mit Kurzfazit, Nährstofftabellen, Diagrammen, Speiseplan und Hinweisen.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2 text-xs">
                 {planDateLabel && <Badge variant="secondary">Plan {planDateLabel}</Badge>}
-                <Badge variant="outline">{reportLength === "short" ? "Kurzbericht" : "Vollversion"}</Badge>
-                <Badge variant="outline">{selectedSectionCount} Abschnitte</Badge>
+                {patientContextLabel ? (
+                  <Badge variant="outline">{patientContextLabel}</Badge>
+                ) : null}
               </div>
               <div className="rounded-xl border bg-muted/40 p-4 shadow-sm">
                 {selectedSectionCount > 0 ? (

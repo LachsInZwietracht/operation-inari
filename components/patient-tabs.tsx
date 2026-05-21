@@ -2775,10 +2775,10 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                       </div>
                     </div>
                     <CollapsibleContent className="mt-1 space-y-2 px-3 pb-2">
-                      {submission.days.map((day, dayIdx) => (
+                      {(submission.days ?? []).map((day, dayIdx) => (
                         <div key={dayIdx} className="rounded border p-2 text-sm">
                           <p className="font-medium">{day.date}</p>
-                          {day.entries.map((entry, entryIdx) => (
+                          {(day.entries ?? []).map((entry, entryIdx) => (
                             <div key={entryIdx} className="mt-1 ml-2">
                               <span className="text-muted-foreground">{entry.mealSlot}:</span>{" "}
                               {entry.freeText}

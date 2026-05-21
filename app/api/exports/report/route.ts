@@ -118,17 +118,12 @@ export async function POST(request: Request) {
 
     const report = await persistPatientReportRecord(
       {
-        id: body.reportId,
         patientRef: body.patientId,
         patientName: body.patientName,
         patientIndication: body.patientIndication,
-        title: body.title,
         planId: body.planId,
         protocolId: body.protocolId,
         planDateLabel: body.planDateLabel,
-        reportLength: body.reportLength,
-        selectedSections: body.selectedSections,
-        activeSectionLabels: body.activeSectionLabels,
         notes: body.notes,
         lastFormat: format,
         lastFileName: fileName,
@@ -166,7 +161,6 @@ export async function POST(request: Request) {
           patientRef: body.patientId,
           patientName: body.patientName,
           patientIndication: body.patientIndication,
-          title: body.title,
           planId: body.planId,
           protocolId: body.protocolId,
           format,

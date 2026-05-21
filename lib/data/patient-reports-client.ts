@@ -4,8 +4,6 @@ import type { PatientReportRecord, PatientReportSnapshot, PatientReportVersion }
 import { withTimeout } from "@/lib/data/utils"
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client"
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export const PATIENT_REPORT_FILES_BUCKET = "patient-report-files"
 
 interface PatientReportRow {
@@ -14,13 +12,9 @@ interface PatientReportRow {
   patient_ref: string
   patient_name: string
   patient_indication: string | null
-  title: string
   plan_id: string
   protocol_id: string | null
   plan_date_label: string
-  report_length: "short" | "full"
-  selected_sections: PatientReportRecord["selectedSections"] | null
-  active_section_labels: string[] | null
   notes: string | null
   last_format: PatientReportRecord["lastFormat"]
   last_file_name: string | null
@@ -41,7 +35,6 @@ interface PatientReportVersionRow {
   patient_ref: string
   patient_name: string
   patient_indication: string | null
-  title: string
   plan_id: string
   protocol_id: string | null
   version_number: number
@@ -71,7 +64,6 @@ interface PersistPatientReportVersionInput {
   patientRef: string
   patientName: string
   patientIndication?: string
-  title: string
   planId: string
   protocolId?: string
   format: "CSV" | "PDF"
@@ -85,10 +77,6 @@ interface PersistPatientReportVersionInput {
   retentionUntil?: string
   retentionStatus?: PatientReportVersion["retentionStatus"]
   retentionNotes?: string
-}
-
-function isUuid(value: string): boolean {
-  return UUID_REGEX.test(value)
 }
 
 function resolveClient(supabase?: SupabaseClient) {
@@ -113,7 +101,6 @@ function mapPatientReportVersionRow(row: PatientReportVersionRow): PatientReport
     patientRef: row.patient_ref,
     patientName: row.patient_name,
     patientIndication: row.patient_indication ?? undefined,
-    title: row.title,
     planId: row.plan_id,
     protocolId: row.protocol_id ?? undefined,
     versionNumber: row.version_number,
@@ -144,19 +131,9 @@ function mapPatientReportRow(
     patientRef: row.patient_ref,
     patientName: row.patient_name,
     patientIndication: row.patient_indication ?? undefined,
-    title: row.title,
     planId: row.plan_id,
     protocolId: row.protocol_id ?? undefined,
     planDateLabel: row.plan_date_label,
-    reportLength: row.report_length,
-    selectedSections: row.selected_sections ?? {
-      summary: true,
-      table: true,
-      charts: true,
-      meals: true,
-      notes: true,
-    },
-    activeSectionLabels: row.active_section_labels ?? [],
     notes: row.notes ?? undefined,
     lastFormat: row.last_format,
     lastFileName: row.last_file_name ?? undefined,
@@ -295,24 +272,17 @@ export async function persistPatientReportRecord(
     throw new Error("AUTH_REQUIRED")
   }
 
-  const canonicalId = report.id && isUuid(report.id) ? report.id : null
-
   const { data, error } = await client
     .from("patient_reports")
     .upsert(
       {
-        ...(canonicalId ? { id: canonicalId } : {}),
         user_id: userId,
         patient_ref: report.patientRef,
         patient_name: report.patientName,
         patient_indication: report.patientIndication ?? null,
-        title: report.title,
         plan_id: report.planId,
         protocol_id: report.protocolId ?? null,
         plan_date_label: report.planDateLabel,
-        report_length: report.reportLength,
-        selected_sections: report.selectedSections,
-        active_section_labels: report.activeSectionLabels,
         notes: report.notes ?? null,
         last_format: report.lastFormat,
         last_file_name: report.lastFileName ?? null,
@@ -323,7 +293,7 @@ export async function persistPatientReportRecord(
         retention_status: report.retentionStatus ?? "active",
         retention_notes: report.retentionNotes ?? null,
       },
-      canonicalId ? { onConflict: "id" } : undefined,
+      { onConflict: "user_id,patient_ref" },
     )
     .select("*")
     .single()
@@ -370,7 +340,6 @@ export async function persistPatientReportVersion(
       patient_ref: input.patientRef,
       patient_name: input.patientName,
       patient_indication: input.patientIndication ?? null,
-      title: input.title,
       plan_id: input.planId,
       protocol_id: input.protocolId ?? null,
       version_number: nextVersionNumber,
@@ -400,13 +369,9 @@ export async function persistPatientReportVersion(
     .update({
       patient_name: input.patientName,
       patient_indication: input.patientIndication ?? null,
-      title: input.title,
       plan_id: input.planId,
       protocol_id: input.protocolId ?? null,
       plan_date_label: input.snapshot.planDateLabel,
-      report_length: input.snapshot.reportLength,
-      selected_sections: input.snapshot.selectedSections,
-      active_section_labels: input.snapshot.activeSectionLabels,
       notes: input.snapshot.notes,
       last_format: input.format,
       last_file_name: input.fileName,

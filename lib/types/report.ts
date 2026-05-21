@@ -86,7 +86,6 @@ export interface PatientReportVersion extends Timestamped {
   patientRef: ID
   patientName: string
   patientIndication?: string
-  title: string
   planId: ID
   protocolId?: ID
   versionNumber: number
@@ -110,13 +109,9 @@ export interface PatientReportRecord extends Timestamped {
   patientRef: ID
   patientName: string
   patientIndication?: string
-  title: string
   planId: ID
   protocolId?: ID
   planDateLabel: string
-  reportLength: "short" | "full"
-  selectedSections: ReportExportSectionState
-  activeSectionLabels: string[]
   notes?: string
   lastFormat: "CSV" | "PDF"
   lastFileName?: string

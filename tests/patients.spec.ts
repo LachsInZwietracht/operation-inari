@@ -221,19 +221,9 @@ async function createPatientReportFixture(patient: CreatedPatient): Promise<Pati
     patient_ref: patient.id,
     patient_name: `${patient.firstName} ${patient.lastName}`,
     patient_indication: patient.indications?.length ? patient.indications.join(", ") : null,
-    title: "Operation Prodi Bericht",
     plan_id: "fixture_plan_ref",
     protocol_id: null,
     plan_date_label: "15.06.2026",
-    report_length: "full",
-    selected_sections: {
-      summary: true,
-      table: true,
-      charts: true,
-      meals: true,
-      notes: true,
-    },
-    active_section_labels: ["Kurzfazit & Indikatoren", "Nährstofftabellen", "Diagramme", "Speiseplanübersicht", "Individuelle Hinweise"],
     notes: "Verlauf stabil, Fokus auf Ballaststoffe.",
     last_format: "PDF",
     last_file_name: "prodi-bericht-2026-06-15.pdf",
@@ -249,7 +239,6 @@ async function createPatientReportFixture(patient: CreatedPatient): Promise<Pati
     patient_ref: patient.id,
     patient_name: `${patient.firstName} ${patient.lastName}`,
     patient_indication: patient.indications?.length ? patient.indications.join(", ") : null,
-    title: "Operation Prodi Bericht",
     plan_id: "fixture_plan_ref",
     protocol_id: null,
     version_number: 1,
@@ -556,7 +545,7 @@ test.describe("Patient Management", () => {
     }
   });
 
-  test("shows patient report history in workflow", async ({ page }) => {
+  test("shows patient report history in the Berichte sub-tab", async ({ page }) => {
     const patient = await createPatientFixture({
       firstName: "Report",
       lastName: "Workflow",
@@ -568,11 +557,15 @@ test.describe("Patient Management", () => {
       await openPatientDetail(page, patient);
 
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText("Berichtshistorie")).toBeVisible();
-      await expect(page.getByText("Operation Prodi Bericht").first()).toBeVisible();
-      await expect(page.getByRole("link", { name: "Historie öffnen" }).first()).toHaveAttribute("href", `/berichte?reportVersionId=${report.versionId}`);
-      await expect(page.getByRole("link", { name: "PDF herunterladen" }).first()).toHaveAttribute("href", `/api/patient-report-versions/${report.versionId}/download`);
-      await expect(page.getByText("Eine archivierte Berichtsversion liegt vor und kann unverändert erneut geöffnet oder heruntergeladen werden.")).toBeVisible();
+      await expect(page.getByText(/Aktueller Bericht v1 liegt archiviert vor\./)).toBeVisible();
+
+      await page.goto(`/patienten/${patient.id}?tab=patientenberichte`);
+      await expect(page.getByRole("heading", { name: "Versionshistorie" })).toBeVisible();
+      await expect(page.getByText(`Standard-Nährwertauswertung für ${patient.firstName} ${patient.lastName}`)).toBeVisible();
+      await expect(page.getByRole("cell", { name: "v1" })).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: `Version 1 (PDF) herunterladen` }),
+      ).toHaveAttribute("href", `/api/patient-report-versions/${report.versionId}/download`);
     } finally {
       await deletePatientFixture(patient.id);
     }
