@@ -267,19 +267,21 @@ export function TemplateDetailClient({
   const backHref = patientId
     ? `/ernaehrungsplan/bibliothek?patientId=${patientId}`
     : "/ernaehrungsplan/bibliothek";
+  const templateScopeLabel =
+    template.sourceType === "system" ? "System-Vorlage" : "Eigene Vorlage";
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={template.name}
-        description={template.description || "Kuratierte System-Vorlage."}
-        helpText="Diese Detailansicht zeigt alle Slots der Vorlage mit Tagesummen und – falls ein Patient gewählt ist – den Vergleich gegen das aktive Referenzprofil. Über 'Anwenden' lädt die Vorlage einen Tagesplan im Planer; 'Als eigene Vorlage speichern' erzeugt eine bearbeitbare Kopie unter deinen persönlichen Vorlagen."
+        description={template.description || templateScopeLabel}
+        helpText="Diese Detailansicht zeigt alle Slots der Vorlage mit Tagessummen und – falls ein Patient gewählt ist – den Vergleich gegen das aktive Referenzprofil. Über 'Anwenden' lädt die Vorlage einen Tagesplan im Planer; 'Als eigene Vorlage speichern' erzeugt eine bearbeitbare Kopie unter deinen persönlichen Vorlagen."
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href={backHref}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Zur Bibliothek
+              Zu Planvorlagen
             </Link>
           </Button>
           <Button
@@ -314,7 +316,7 @@ export function TemplateDetailClient({
           <Layers className="h-3 w-3" />
           {filledSlots.length} Slot{filledSlots.length === 1 ? "" : "s"} · {entryCount} Einträge
         </Badge>
-        <Badge variant="outline">System-Vorlage</Badge>
+        <Badge variant="outline">{templateScopeLabel}</Badge>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -510,7 +512,7 @@ export function TemplateDetailClient({
                 <span>Vorlage erfolgreich gespeichert.</span>
               </div>
               <p className="text-muted-foreground">
-                Du findest die Kopie ab sofort im Planer unter „Vorlagen“.
+                Du findest die Kopie ab sofort hier unter „Eigene“ und im Planer unter „Vorlagen“.
                 {personalTemplates.length > 0 &&
                   ` Insgesamt sind ${personalTemplates.length} eigene Vorlage${personalTemplates.length === 1 ? "" : "n"} hinterlegt.`}
               </p>

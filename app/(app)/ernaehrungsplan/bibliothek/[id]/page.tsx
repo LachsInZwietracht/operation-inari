@@ -4,6 +4,7 @@ import { TemplateDetailClient } from "./template-detail-client";
 import { fetchFoodsViaRpc } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { FoodsProvider } from "@/components/foods-provider";
 import type { MealPlanTemplate, Recipe } from "@/lib/types";
 
@@ -59,9 +60,18 @@ export default async function BibliothekDetailPage({
   searchParams: Promise<{ patientId?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const [recipes, templates] = await Promise.all([
     fetchRecipes(),
-    fetchMealPlanTemplates(),
+    fetchMealPlanTemplates({
+      supabase,
+      userId: user?.id,
+      includeSystem: true,
+    }),
   ]);
 
   const template = templates.find(

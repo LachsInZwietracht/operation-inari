@@ -86,12 +86,12 @@ Product direction:
 ### 3.1 Daily Meal Plans
 **Status:** Implemented (Supabase-backed persistence with offline fallback, drag & drop, full plan lifecycle: create → analyze → compare → shop → discover).
 - Automatic nutritional calculation for entire day across breakfast, snack, lunch, etc.
-- **Broteinheiten (BE) display** — virtual nutrient (kohlenhydrate / 12) surfaced in totals, slot chips, Einzelanalyse, Plan-Vergleich, and Plan-Bibliothek; bundled Diabetes-Diätlinie includes a BE target.
+- **Broteinheiten (BE) display** — virtual nutrient (kohlenhydrate / 12) surfaced in totals, slot chips, Einzelanalyse, Plan-Vergleich, and Planvorlagen; bundled Diabetes-Diätlinie includes a BE target.
 - **Einzelanalyse-Modus** — per-entry tab showing one row per food/recipe with configurable nutrient columns, %-of-total micro-bars, and an optional per-kg-body-weight normalization driven by the patient's latest anthropometric weight.
 - **Zusatzstoffe / E-Nummern** — additive catalogue (`lib/reference-data/additives.ts`) with categories and clinical flags; canonicalising resolver displays badges on food, recipe, and plan-entry contexts and feeds the LMIV/Zusatzstoff sections in PDF exports.
 - **Plan-Vergleich (`/ernaehrungsplan/vergleich`)** — pick up to 8 stored plans and view descriptive statistics per nutrient (Min/Max/⌀/Median/Stichproben-SD/CV) plus a per-nutrient bar chart with reference overlay. Matches PRODI's "Soll-Ist comparison" feature parity.
 - **Einkaufsliste (`/ernaehrungsplan/einkaufsliste`)** — aggregate ingredients across up to 14 plans (≈ two weeks), expand recipes by `entry.amount / recipe.servings`, group by food category, foodId-key collapses synonyms; checkable list with `window.print()` export.
-- **Plan-Bibliothek (`/ernaehrungsplan/bibliothek`)** — browseable catalog of system templates with indication/diet-line filters and macro cards; detail page applies via Calendar date picker (deep-link to planner with `?template=ID`) or clones into a personal-scope template.
+- **Planvorlagen (`/ernaehrungsplan/bibliothek`)** — browseable catalog of system and personal templates with scope, indication, and diet-line filters plus macro cards; overview can create a personal template from a saved Ernährungsplan, while the detail page applies via Calendar date picker (deep-link to planner with `?template=ID`) or clones into a personal-scope template.
 
 ### 3.2 Menu Plans
 **Status:** Implemented (Supabase-backed persistence with offline fallback, week/4-week cycle planners).

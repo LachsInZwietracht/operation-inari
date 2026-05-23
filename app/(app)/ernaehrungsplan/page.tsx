@@ -3,6 +3,7 @@ import { fetchFoodsViaRpc } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { FoodsProvider } from "@/components/foods-provider";
 import type { DailyMealPlan, MealPlanTemplate, Recipe } from "@/lib/types";
 
@@ -55,10 +56,19 @@ export default async function ErnaehrungsplanPage({
   searchParams: Promise<{ patientId?: string; date?: string; template?: string }>;
 }) {
   const { patientId, date, template } = await searchParams;
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const [recipes, mealPlans, templates] = await Promise.all([
     fetchRecipes(),
-    fetchMealPlans(),
-    fetchMealPlanTemplates(),
+    fetchMealPlans({ supabase, userId: user?.id, includeSystem: true }),
+    fetchMealPlanTemplates({
+      supabase,
+      userId: user?.id,
+      includeSystem: true,
+    }),
   ]);
 
   const foodIds = extractFoodIds(recipes, mealPlans, templates);

@@ -320,7 +320,7 @@ interface ErnaehrungsplanPageClientProps {
   patientId?: string
   initialDate?: string
   /**
-   * Template id passed via `?template=…` (used by the Plan-Bibliothek to
+   * Template id passed via `?template=…` (used by Planvorlagen to
    * deep-link "anwenden"). When present, the planner consumes it once on
    * mount: applies the template's slots to the active date and rewrites the
    * URL without the param so a refresh does not re-apply silently.
@@ -396,7 +396,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     saveTemplate: saveMealPlanTemplateFromHook,
   } = useMealPlanTemplates({ initialTemplates })
 
-  // Plan-Bibliothek deep-link handler. Applies a system template once when the
+  // Planvorlagen deep-link handler. Applies a template once when the
   // planner mounts with `?template=…`, then rewrites the URL to drop the param
   // so a refresh or share-link does not silently re-apply on top of edits.
   const appliedTemplateRef = useRef<string | null>(null)
@@ -1156,7 +1156,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         return
       }
 
-      toast.success("Ernährungsplan gespeichert.")
+      toast.success("Ernährungsplan gespeichert.", {
+        action: {
+          label: "Als Vorlage speichern",
+          onClick: openSaveTemplateDialog,
+        },
+      })
     } finally {
       setIsSavingPlan(false)
     }
@@ -2027,6 +2032,15 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                       <Save className="mr-1.5 h-3.5 w-3.5" />
                     )}
                     Ernährungsplan speichern
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={openSaveTemplateDialog}
+                    disabled={isSavingPlan || isApprovingPlan}
+                  >
+                    <BookmarkPlus className="mr-1.5 h-3.5 w-3.5" />
+                    Als Vorlage speichern
                   </Button>
                   <Button
                     size="sm"

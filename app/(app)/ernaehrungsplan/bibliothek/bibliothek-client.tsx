@@ -12,10 +12,19 @@ import {
   SortAsc,
   Stethoscope,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -31,8 +40,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 import { useFoods } from "@/components/foods-provider";
+import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates";
 import { DIET_LINES } from "@/lib/reference-data/diet-lines";
 import { createRecipeLookup } from "@/lib/recipes";
 import {
@@ -41,10 +53,11 @@ import {
   sumNutrients,
 } from "@/lib/nutrients";
 import { cn } from "@/lib/utils";
-import type { MealPlanTemplate, Recipe } from "@/lib/types";
+import type { DailyMealPlan, MealPlanTemplate, Recipe } from "@/lib/types";
 
 interface BibliothekClientProps {
   templates: MealPlanTemplate[];
+  mealPlans: DailyMealPlan[];
   recipes: Recipe[];
   patientId?: string;
   initialIndication?: string;
@@ -61,6 +74,7 @@ interface TemplateStats {
 }
 
 type SortKey = "name" | "kcalAsc" | "kcalDesc";
+type TemplateScope = "alle" | "system" | "personal";
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
@@ -79,26 +93,65 @@ function formatGrams(value: number, decimals = 0): string {
   });
 }
 
+function formatDateLabel(date: string): string {
+  return new Intl.DateTimeFormat("de-DE").format(new Date(`${date}T00:00:00`));
+}
+
+function countPlanEntries(plan: DailyMealPlan): number {
+  return plan.slots.reduce((sum, slot) => sum + slot.entries.length, 0);
+}
+
+function defaultTemplateName(plan: DailyMealPlan | undefined): string {
+  if (!plan) return "";
+  return plan.title?.trim() || `Vorlage vom ${formatDateLabel(plan.date)}`;
+}
+
 export function BibliothekClient({
   templates,
+  mealPlans,
   recipes,
   patientId,
   initialIndication,
 }: BibliothekClientProps) {
   const foods = useFoods();
+  const { templates: managedTemplates, saveTemplate } = useMealPlanTemplates({
+    initialTemplates: templates,
+  });
   const [search, setSearch] = useState("");
   const [indicationFilter, setIndicationFilter] = useState<string>(
     initialIndication ?? "alle",
   );
   const [dietLineFilter, setDietLineFilter] = useState<string>("alle");
+  const [scopeFilter, setScopeFilter] = useState<TemplateScope>("alle");
   const [sort, setSort] = useState<SortKey>("name");
+  const plansWithEntries = useMemo(
+    () => mealPlans.filter((plan) => countPlanEntries(plan) > 0),
+    [mealPlans],
+  );
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [sourcePlanId, setSourcePlanId] = useState<string>(
+    plansWithEntries[0]?.id ?? "",
+  );
+  const selectedSourcePlan = useMemo(
+    () => plansWithEntries.find((plan) => plan.id === sourcePlanId),
+    [plansWithEntries, sourcePlanId],
+  );
+  const [templateName, setTemplateName] = useState(
+    defaultTemplateName(selectedSourcePlan),
+  );
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [templateIndication, setTemplateIndication] = useState(initialIndication ?? "");
+  const [templateDietLineId, setTemplateDietLineId] = useState(
+    selectedSourcePlan?.dietLineId ?? "",
+  );
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
 
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes]);
 
   const statsByTemplate = useMemo(() => {
     const map = new Map<string, TemplateStats>();
-    for (const template of templates) {
+    for (const template of managedTemplates) {
       const perEntry = template.slots.flatMap((slot) =>
         slot.entries.map((entry) =>
           calculateMealEntryNutrients(entry, foodMap, recipeMap, foods),
@@ -123,27 +176,30 @@ export function BibliothekClient({
       });
     }
     return map;
-  }, [templates, foodMap, recipeMap, foods]);
+  }, [managedTemplates, foodMap, recipeMap, foods]);
 
   const availableIndications = useMemo(() => {
     const set = new Set<string>();
-    for (const template of templates) {
+    for (const template of managedTemplates) {
       if (template.indication) set.add(template.indication);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "de"));
-  }, [templates]);
+  }, [managedTemplates]);
 
   const availableDietLines = useMemo(() => {
     const set = new Set<string>();
-    for (const template of templates) {
+    for (const template of managedTemplates) {
       if (template.dietLineId) set.add(template.dietLineId);
     }
     return DIET_LINES.filter((line) => set.has(line.id));
-  }, [templates]);
+  }, [managedTemplates]);
 
   const filteredTemplates = useMemo(() => {
     const trimmed = search.trim().toLowerCase();
-    const filtered = templates.filter((template) => {
+    const filtered = managedTemplates.filter((template) => {
+      if (scopeFilter !== "alle" && template.sourceType !== scopeFilter) {
+        return false;
+      }
       if (
         indicationFilter !== "alle" &&
         template.indication !== indicationFilter
@@ -173,7 +229,7 @@ export function BibliothekClient({
       const energieB = statsByTemplate.get(b.id)?.energie ?? 0;
       return sort === "kcalAsc" ? energieA - energieB : energieB - energieA;
     });
-  }, [templates, search, indicationFilter, dietLineFilter, sort, statsByTemplate]);
+  }, [managedTemplates, search, scopeFilter, indicationFilter, dietLineFilter, sort, statsByTemplate]);
 
   const detailHrefFor = (templateId: string): string => {
     const params = new URLSearchParams();
@@ -182,25 +238,85 @@ export function BibliothekClient({
     return `/ernaehrungsplan/bibliothek/${templateId}${query ? `?${query}` : ""}`;
   };
 
-  const totalAvailable = templates.length;
+  const totalAvailable = managedTemplates.length;
   const visibleCount = filteredTemplates.length;
+  const systemCount = managedTemplates.filter((template) => template.sourceType === "system").length;
+  const personalCount = managedTemplates.filter((template) => template.sourceType === "personal").length;
   const hasActiveFilters =
     search.trim().length > 0 ||
+    scopeFilter !== "alle" ||
     indicationFilter !== "alle" ||
     dietLineFilter !== "alle";
+
+  const openCreateDialog = () => {
+    const fallbackPlan = selectedSourcePlan ?? plansWithEntries[0];
+    setSourcePlanId(fallbackPlan?.id ?? "");
+    setTemplateName(defaultTemplateName(fallbackPlan));
+    setTemplateDescription("");
+    setTemplateIndication(initialIndication ?? "");
+    setTemplateDietLineId(fallbackPlan?.dietLineId ?? "");
+    setCreateDialogOpen(true);
+  };
+
+  const handleSourcePlanChange = (planId: string) => {
+    const nextPlan = plansWithEntries.find((plan) => plan.id === planId);
+    setSourcePlanId(planId);
+    if (nextPlan) {
+      setTemplateName((current) => current.trim() || defaultTemplateName(nextPlan));
+      setTemplateDietLineId(nextPlan.dietLineId ?? "");
+    }
+  };
+
+  const createTemplateFromPlan = async () => {
+    const sourcePlan = plansWithEntries.find((plan) => plan.id === sourcePlanId);
+    if (!sourcePlan) {
+      toast.error("Bitte wähle einen gespeicherten Ernährungsplan aus.");
+      return;
+    }
+    const trimmedName = templateName.trim();
+    if (!trimmedName) {
+      toast.error("Bitte gib einen Namen für die Vorlage ein.");
+      return;
+    }
+
+    setIsCreatingTemplate(true);
+    try {
+      await saveTemplate({
+        name: trimmedName,
+        description: templateDescription.trim() || undefined,
+        indication: templateIndication.trim() || undefined,
+        dietLineId: templateDietLineId || undefined,
+        targetProfileId: sourcePlan.targetProfileId,
+        slots: sourcePlan.slots,
+        notes: sourcePlan.notes,
+      });
+      setCreateDialogOpen(false);
+      setScopeFilter("personal");
+      toast.success("Vorlage erstellt.");
+    } catch (error) {
+      console.error("Failed to create meal plan template:", error);
+      toast.error("Vorlage konnte nicht erstellt werden.");
+    } finally {
+      setIsCreatingTemplate(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Plan-Bibliothek"
-        description="Kuratierte System-Vorlagen für Tagespläne nach Indikation und Kostform. Auswählen, vorab prüfen und auf ein Datum übernehmen."
-        helpText="Die Bibliothek bündelt alle als System-Vorlagen hinterlegten Tagespläne. Klicke auf eine Karte, um die Slots, Tagessummen und Referenzvergleiche im Detail zu sehen. Über 'Anwenden' wird die Vorlage auf einen Wunschtermin im Planer geladen."
+        title="Planvorlagen"
+        description="Wiederverwendbare Tagesplan-Vorlagen prüfen und auf ein Datum übernehmen."
+        helpText="Planvorlagen bündeln kuratierte System-Vorlagen und eigene Vorlagen. Klicke auf eine Karte, um Slots, Tagessummen und Referenzvergleiche zu prüfen. Über 'Anwenden' wird die Vorlage auf einen Wunschtermin im Planer geladen."
       >
         <Button variant="outline" size="sm" asChild>
           <Link href="/ernaehrungsplan">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Zum Plan
           </Link>
+        </Button>
+        <Button size="sm" onClick={openCreateDialog} disabled={plansWithEntries.length === 0}>
+          <BookMarked className="mr-2 h-4 w-4" />
+          Vorlage erstellen
         </Button>
       </PageHeader>
 
@@ -212,7 +328,7 @@ export function BibliothekClient({
           </CardTitle>
           <CardDescription>
             {visibleCount === totalAvailable
-              ? `${totalAvailable} System-Vorlage${totalAvailable === 1 ? "" : "n"} verfügbar`
+              ? `${totalAvailable} Vorlage${totalAvailable === 1 ? "" : "n"} verfügbar`
               : `${visibleCount} von ${totalAvailable} Vorlagen sichtbar`}
           </CardDescription>
         </CardHeader>
@@ -256,6 +372,35 @@ export function BibliothekClient({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <BookMarked className="text-muted-foreground h-4 w-4" />
+              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Sammlung
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <FilterChip
+                active={scopeFilter === "alle"}
+                onClick={() => setScopeFilter("alle")}
+              >
+                Alle ({totalAvailable})
+              </FilterChip>
+              <FilterChip
+                active={scopeFilter === "system"}
+                onClick={() => setScopeFilter("system")}
+              >
+                System ({systemCount})
+              </FilterChip>
+              <FilterChip
+                active={scopeFilter === "personal"}
+                onClick={() => setScopeFilter("personal")}
+              >
+                Eigene ({personalCount})
+              </FilterChip>
             </div>
           </div>
 
@@ -322,7 +467,7 @@ export function BibliothekClient({
             <p>
               {hasActiveFilters
                 ? "Keine Vorlagen treffen auf die aktuelle Filterkombination zu."
-                : "Es sind aktuell keine System-Vorlagen verfügbar."}
+                : "Es sind aktuell keine Planvorlagen verfügbar."}
             </p>
             {hasActiveFilters && (
               <Button
@@ -330,6 +475,7 @@ export function BibliothekClient({
                 size="sm"
                 onClick={() => {
                   setSearch("");
+                  setScopeFilter("alle");
                   setIndicationFilter("alle");
                   setDietLineFilter("alle");
                 }}
@@ -355,6 +501,9 @@ export function BibliothekClient({
                 <Card className="hover:border-primary/50 group-focus-visible:ring-ring h-full transition-colors group-focus-visible:ring-2">
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant={template.sourceType === "system" ? "outline" : "secondary"} className="text-xs">
+                        {template.sourceType === "system" ? "System" : "Eigene"}
+                      </Badge>
                       {template.indication && (
                         <Badge variant="secondary" className="text-xs">
                           {template.indication}
@@ -406,6 +555,92 @@ export function BibliothekClient({
           })}
         </div>
       )}
+
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Vorlage erstellen</DialogTitle>
+            <DialogDescription>
+              Wähle einen gespeicherten Ernährungsplan als Grundlage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="space-y-1.5">
+              <Label>Ernährungsplan</Label>
+              <Select value={sourcePlanId} onValueChange={handleSourcePlanChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Plan auswählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {plansWithEntries.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {defaultTemplateName(plan)} · {formatDateLabel(plan.date)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="template-name">Name</Label>
+              <Input
+                id="template-name"
+                value={templateName}
+                onChange={(event) => setTemplateName(event.target.value)}
+                placeholder="z. B. Reduktion 1500 kcal Tag 1"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="template-description">Beschreibung</Label>
+              <Textarea
+                id="template-description"
+                value={templateDescription}
+                onChange={(event) => setTemplateDescription(event.target.value)}
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="template-indication">Indikation</Label>
+                <Input
+                  id="template-indication"
+                  value={templateIndication}
+                  onChange={(event) => setTemplateIndication(event.target.value)}
+                  placeholder="z. B. Diabetes mellitus Typ 2"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Kostform</Label>
+                <Select
+                  value={templateDietLineId || "none"}
+                  onValueChange={(value) =>
+                    setTemplateDietLineId(value === "none" ? "" : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Kostform" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Keine Zuordnung</SelectItem>
+                    {DIET_LINES.map((line) => (
+                      <SelectItem key={line.id} value={line.id}>
+                        {line.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={() => void createTemplateFromPlan()} disabled={isCreatingTemplate}>
+              {isCreatingTemplate ? "Speichert..." : "Vorlage speichern"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
