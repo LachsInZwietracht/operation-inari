@@ -4,7 +4,7 @@ Last updated: 2026-05-07
 
 Purpose:
 - Track currently open development tasks for the next engineer or agent.
-- Keep this list grounded in current code, migrations, tests, `documentation.md`, `docs/database-guide.md`, `docs/product-requirements.md`, `docs/competitive-audit.md`, and `docs/design-audit-2026-04-27.md`.
+- Keep this list grounded in current code, migrations, tests, `documentation.md`, `docs/database-guide.md`, `docs/product-requirements.md`, and `docs/competitive-audit.md`.
 - Treat this as an execution backlog, not as proof that a feature is missing. Before starting work, verify the current implementation and update this file when the task is completed, split, or superseded.
 
 Priority guide:
@@ -15,7 +15,13 @@ Priority guide:
 
 ## Recommended Next Sprint
 
-Start here unless product priorities have changed:
+Top guideline is now `docs/user-priority-feedback.md`. Start with the user-priority items below; the clinic-IT track follows.
+
+1. **Nutrient sort & threshold filter on `/lebensmittel`** — sort foods by any single nutrient and filter by threshold (e.g. `> 10 g protein / 100 g`). User-flagged "very important" PRODI parity feature.
+2. **Selectable PAL levels** in reference/energy targets per patient (DGE/ÖGE built-in but individually adjustable).
+3. **Word/Excel export** of plans/results (`.docx`/`.xlsx`) beyond the current PDF/CSV, with DSGVO constraints intact.
+
+Clinic-IT track (continue once the user-priority items above are in motion):
 
 1. Add richer HL7 resolution workflows for mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
 2. Reuse the SSO callback audit pattern for outbound webhook retry workers and operational retry visibility.
@@ -41,6 +47,23 @@ Recently completed sprint work:
 - `/institution/produktion` now persists kitchen production batch states in `kitchen_production_batches`, appends `kitchen_production_events`, and verifies state survives reload.
 - `/ernaehrungsplan` now supports immutable approval snapshots, manual checkpoints, and reopen snapshots in the Planakte version history.
 - `/ernaehrungsplan` now includes a deterministic Optimierungsassistent that suggests loaded foods/recipes for low target values and applies them through the allergen guard.
+
+## P0: User-Priority Feedback (Top Guideline)
+
+Source: `docs/user-priority-feedback.md`. These outrank other tracks unless the user re-prioritizes.
+
+Must-have gaps:
+- [ ] Add nutrient sort and threshold filtering to `/lebensmittel` (sort by a single nutrient; filter e.g. `> 10 g protein / 100 g`).
+- [ ] Support selectable PAL levels in reference/energy target calculations per patient.
+- [ ] Add Word (`.docx`) and Excel (`.xlsx`) export for plans/results; keep DSGVO constraints; evaluate API export into clinic cloud/software environments.
+- [ ] Verify the source database is clearly selectable or visibly labeled per food, since available nutrients differ by source.
+- [ ] Confirm intuitive-design / low-onboarding posture across core counseling workflows (treat as an ongoing acceptance lens, not a one-off task).
+
+High-interest gaps (feasibility TBD):
+- [ ] Group raw/cooked/steamed BLS variants under one food via a preparation-state submenu/dropdown.
+- [ ] Add food category/tag system for intolerances (e.g. contains lactose/fructose) and recommended / not-recommended lists.
+- [ ] Add condition/goal profiles that color-code and annotate the nutrients that matter (requires legal review for patient-facing recommendations).
+- [ ] Confirm cross-platform reach: web for Windows/Linux/macOS, plus a mobile path (PWA/native) for Android/Apple.
 
 ## P0: Stabilize Clinic Demo Quality
 

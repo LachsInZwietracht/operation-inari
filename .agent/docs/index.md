@@ -14,7 +14,6 @@ This folder contains agent playbooks and narrow technical notes. The canonical p
 |---|---|---|
 | `supabase.md` | Supabase, migrations, RLS, ETL credentials, auth behavior | Verify commands against `package.json`; use `npx supabase` unless scripts exist. |
 | `billing.md` | Tariffs, subscriptions, checkout, provider selection | Billing is preview-only; no provider is active unless code proves otherwise. |
-| `roadmap.md` | Agent-readable backlog and strategic priorities | Product requirements and competitive audit are the higher-level sources. |
 
 ## Maintenance Rules
 

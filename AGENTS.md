@@ -6,6 +6,10 @@ Operation Prodi is a German clinical nutrition counseling and therapy platform. 
 
 Primary buyer lens: German clinics and clinical nutrition departments.
 
+## Current #1 Priority
+
+Our current top guideline is to build a product that satisfies the PRODI-user feedback in `docs/user-priority-feedback.md`. This is the single most important reference for prioritization right now. Before starting new feature work, confirm it advances one of those requirements or supports them. Re-evaluate this priority only with explicit user direction.
+
 Core product areas:
 - Food and nutrient database workflows with BLS 4.0 data.
 - Recipes, daily meal plans, menu cycles, nutrient analysis, and reports.
@@ -18,6 +22,7 @@ Core product areas:
 Code and migrations win over docs.
 
 Use this order when facts conflict:
+0. `docs/user-priority-feedback.md` is the current #1 product guideline for prioritization (what to build/polish next), but it does not override code as a factual source of truth.
 1. Current code, migrations, tests, and package files.
 2. `documentation.md` for implemented feature map and workflows.
 3. `docs/database-guide.md` for Supabase, ETL, food data, search, and schema context.
@@ -125,6 +130,7 @@ If a check is too expensive or blocked by environment, report it explicitly.
 
 ## Documentation Routing
 
+- Current #1 product priority and acceptance lens: `docs/user-priority-feedback.md`.
 - Feature routes, components, hooks, and workflows: `documentation.md`.
 - Database schema, migrations, ETL, food data, search, performance constraints: `docs/database-guide.md`.
 - Product goals, roadmap, scope, and prioritization: `docs/product-requirements.md`.

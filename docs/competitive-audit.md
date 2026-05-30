@@ -59,6 +59,8 @@ The most important missing or incomplete capabilities for German clinic sales ar
 
 ## Recommended Priority
 
+> **Note:** This ordering is clinic-first strategy input. It is now subordinate to `docs/user-priority-feedback.md`, the current #1 product guideline, which leans toward practitioner/counseling usability (intuitive UX, PAL-adjustable references, nutrient sort/filter, custom foods/recipes, portions, Word/Excel export). Treat the list below as the clinic-readiness track, not as the default next-up order.
+
 For German clinics, prioritize work in this order:
 
 1. **Data credibility:** SFK/full BLS expansion, source/version visibility, calculation validation, and database update workflows.

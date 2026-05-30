@@ -41,14 +41,16 @@ Product direction:
 - Ability to add and manage custom food entries with nutrient values, portions, and allergens.
 
 ### 1.3 Reference Values
-**Status:** Implemented (Supabase-backed official standards, persisted custom profiles, patient-level assignment).
+**Status:** Implemented (Supabase-backed official standards, persisted custom profiles, patient-level assignment). **Gap (user-priority):** selectable PAL levels are not yet wired into reference/energy calculations.
 - DGE (German), OeGE (Austrian), SGE (Swiss), and RDA values.
 - Reference values adjustable by age, gender, pregnancy, lactation.
+- **PAL (physical activity level) selection** — energy/reference targets must support multiple selectable PAL values per patient. Required by `docs/user-priority-feedback.md` (DGE/ÖGE built-in but individually adjustable, including PAL). Not yet implemented.
 
 ### 1.4 Advanced Food Search
 **Status:** Implemented (Kölner Phonetik, trigram search, synonym management, and paginated server-backed `/lebensmittel` browsing).
 - **Phonetic / fuzzy search (Kölner Phonetik)** — tolerate typos and umlaut variations. Implement using phonetic indexing (e.g., pg_trgm trigram index in PostgreSQL) to generate codes at food-insert time. This is a primary competitive advantage over international SaaS.
 - **Multiple search modes** — food name, database code (BLS code), food group hierarchy, and full browse.
+- **Nutrient sort & threshold filter (Gap, user-priority)** — sort the food list by any single nutrient (e.g. by protein) and filter by a nutrient threshold (e.g. foods with `> 10 g protein / 100 g`). Highlighted as a "very important" PRODI feature in `docs/user-priority-feedback.md`. Not yet implemented.
 - **Food synonym management** — `food_synonyms` table linking user-defined names to food IDs; synonyms replace original names in search and printouts.
 
 ### 1.5 Database Management
@@ -141,6 +143,7 @@ Product direction:
 - **API keys** — owner/admin users can issue and revoke hashed `prodi_` tokens for `exports:datasets:read`; API-key access is currently limited to non-custom Lebensmittel dataset exports.
 - **Webhooks** — owner/admin users can create/disable HTTPS endpoints and inspect queued delivery attempts for export, report, and digital-protocol events.
 - **Patient report history** — patient detail/workflow now surfaces immutable report versions with archived reopen and direct file download instead of relying only on the generic export journal.
+- **Word/Excel export formats (Gap, user-priority)** — current exports are PDF and CSV. `docs/user-priority-feedback.md` asks for export of plans/results into Word and Excel (and possibly other clinic tools, ideally via API into clinic cloud/software environments, with DSGVO as a hard constraint). Native `.docx`/`.xlsx` output is not yet implemented; CSV is the only spreadsheet-compatible path today.
 - **Remaining deferred scope:** scheduled exports, advanced backend print pipelines, and document-retention policies beyond patient report exports.
 
 ### 5.4 Anthropometric Data & Weight Analysis
@@ -201,6 +204,7 @@ Product direction:
 ## 9. Prioritization (Market-Leader Roadmap)
 
 Roadmap notes:
+- **Top guideline override:** `docs/user-priority-feedback.md` is the current #1 prioritization lens. Where it pulls toward practitioner/counseling usability (intuitive UX, PAL-adjustable references, nutrient sort/filter, custom foods/recipes, sensible portions, Word/Excel export) and these clinic-first phases pull the other way, the user-priority feedback wins for sequencing until the user says otherwise. The clinic-IT phases below remain valid scope, not the default next-up order.
 - These phases describe intended sequencing, not a strict delivery history.
 - Individual items may already be partially or fully implemented ahead of their listed phase.
 

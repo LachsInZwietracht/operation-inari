@@ -2,6 +2,10 @@
 
 Use this file to decide which documentation to read before editing. Do not load every long document by default.
 
+## Top Priority
+
+`docs/user-priority-feedback.md` is the current **#1 product guideline** — direct PRODI-user feedback on what the software must do. Align prioritization with it before other roadmap inputs.
+
 ## Source Of Truth
 
 1. Code, migrations, tests, and package files are authoritative.
@@ -16,6 +20,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 
 | Task area | Read first | Notes |
 |---|---|---|
+| Current #1 product priority and acceptance lens | `docs/user-priority-feedback.md` | Direct PRODI-user requirements; align all prioritization here first. |
 | App routes, workflows, components, hooks | `documentation.md` | Use as a map, then verify code. |
 | Clinic demo path and hardening priorities | `docs/clinic-demo-runbook.md` | Repeatable buyer-demo path from intake to kitchen; includes open demo risks. |
 | Open development tasks and next sprint | `docs/development-backlog.md` | Execution backlog; verify code before starting. |
@@ -34,6 +39,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 - `CLAUDE.md` - Claude wrapper that imports `AGENTS.md`.
 - `GEMINI.md` - Gemini wrapper that imports `AGENTS.md`.
 - `AGENT.md` - compatibility pointer only.
+- `docs/user-priority-feedback.md` - current #1 product guideline from a PRODI user; primary prioritization lens.
 - `documentation.md` - feature implementation guide.
 - `docs/clinic-demo-runbook.md` - repeatable clinic-first demo path and demo-hardening checklist.
 - `docs/development-backlog.md` - current open development backlog and recommended next sprint.
@@ -41,7 +47,6 @@ When docs conflict with code, inspect the implementation and update the stale do
 - `docs/product-requirements.md` - roadmap and requirements direction.
 - `docs/competitive-audit.md` - April 2026 competitor and gap audit.
 - `docs/clinic-it-integration-plan.md` - LDAP/AD mapping, HL7 MVP, and first FHIR sync boundary.
-- `docs/debinet-import.md` - planning notes for a future DEBInet import workflow.
 
 ## Maintenance Rules
 
