@@ -123,6 +123,8 @@ export interface PatientReferenceAssignment extends Timestamped {
   standardId?: Exclude<ReferenceStandardId, "custom">;
   profileId?: ID;
   lifeStage: LifeStage;
+  /** Physical Activity Level factor for energy targets (BMR x PAL). Undefined falls back to the UI default. */
+  palValue?: number;
 }
 
 export interface ReferenceDemographicContext {

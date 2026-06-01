@@ -71,6 +71,7 @@ interface PatientReferenceAssignmentRowDb {
   standard_id: PatientReferenceAssignment["standardId"] | null;
   profile_id: string | null;
   life_stage: PatientReferenceAssignment["lifeStage"];
+  pal_value: string | number | null;
   created_at: string;
   updated_at: string;
 }
@@ -154,6 +155,7 @@ function mapPatientAssignmentRow(row: PatientReferenceAssignmentRowDb): PatientR
     standardId: row.standard_id ?? undefined,
     profileId: row.profile_id ?? undefined,
     lifeStage: row.life_stage,
+    palValue: row.pal_value != null ? Number(row.pal_value) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -326,6 +328,7 @@ export async function persistPatientReferenceAssignment(
         standard_id: assignment.standardId ?? null,
         profile_id: assignment.profileId ?? null,
         life_stage: assignment.lifeStage,
+        pal_value: assignment.palValue ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "patient_id" },

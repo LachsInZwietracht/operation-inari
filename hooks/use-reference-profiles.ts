@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import {
   deleteReferenceProfile,
@@ -46,7 +46,13 @@ function emitChange() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot() {
+  return store;
 }
 
 function readStorage(): Omit<ReferenceStoreState, "officialRows" | "initialized" | "loading"> {
@@ -145,14 +151,10 @@ async function ensureLoaded(isAuthenticated: boolean) {
 
 export function useReferenceProfiles() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const unsubscribe = subscribe(() => setTick((value) => value + 1));
-    return () => {
-      unsubscribe();
-    };
-  }, []);
+  // Subscribe to the module-level store via React's external-store contract so
+  // every consumer re-renders synchronously on create/update/delete — robust
+  // under the React Compiler, unlike a manual tick-state subscription.
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   useEffect(() => {
     if (authLoading) return;
@@ -169,6 +171,7 @@ export function useReferenceProfiles() {
           standardId: id,
           profileId: undefined,
           lifeStage: existing?.lifeStage ?? "none",
+          palValue: existing?.palValue,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -184,6 +187,7 @@ export function useReferenceProfiles() {
             standardId: id,
             profileId: undefined,
             lifeStage: assignment.lifeStage,
+            palValue: assignment.palValue,
           });
           updateStore({
             patientAssignments: [
@@ -227,9 +231,10 @@ export function useReferenceProfiles() {
         const assignment: PatientReferenceAssignment = {
           patientId,
           userId: existing?.userId ?? "local",
-          standardId: existing?.standardId ?? "dge",
+          standardId: existing?.profileId ? undefined : existing?.standardId ?? "dge",
           profileId: existing?.profileId,
           lifeStage,
+          palValue: existing?.palValue,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -245,6 +250,7 @@ export function useReferenceProfiles() {
             standardId: assignment.standardId,
             profileId: assignment.profileId,
             lifeStage,
+            palValue: assignment.palValue,
           });
           updateStore({
             patientAssignments: [
@@ -292,6 +298,7 @@ export function useReferenceProfiles() {
           standardId: undefined,
           profileId,
           lifeStage: profile?.lifeStage ?? existing?.lifeStage ?? "none",
+          palValue: existing?.palValue,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -307,6 +314,7 @@ export function useReferenceProfiles() {
             standardId: undefined,
             profileId,
             lifeStage: assignment.lifeStage,
+            palValue: assignment.palValue,
           });
           updateStore({
             patientAssignments: [
@@ -339,6 +347,47 @@ export function useReferenceProfiles() {
           lifeStage: nextPreference.lifeStage,
         });
         updateStore({ userPreference: persisted });
+      }
+    },
+    [isAuthenticated],
+  );
+
+  const setPal = useCallback(
+    async (palValue: number, patientId: string) => {
+      const existing = store.patientAssignments.find((item) => item.patientId === patientId);
+      // The assignment row requires exactly one of standard/profile; default to
+      // DGE when PAL is set before any reference standard has been chosen.
+      const standardId = existing?.profileId ? undefined : existing?.standardId ?? "dge";
+      const assignment: PatientReferenceAssignment = {
+        patientId,
+        userId: existing?.userId ?? "local",
+        standardId,
+        profileId: existing?.profileId,
+        lifeStage: existing?.lifeStage ?? "none",
+        palValue,
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      updateStore({
+        patientAssignments: [
+          ...store.patientAssignments.filter((item) => item.patientId !== patientId),
+          assignment,
+        ],
+      });
+      if (isAuthenticated) {
+        const persisted = await persistPatientReferenceAssignment({
+          patientId,
+          standardId: assignment.standardId,
+          profileId: assignment.profileId,
+          lifeStage: assignment.lifeStage,
+          palValue,
+        });
+        updateStore({
+          patientAssignments: [
+            ...store.patientAssignments.filter((item) => item.patientId !== patientId),
+            persisted,
+          ],
+        });
       }
     },
     [isAuthenticated],
@@ -419,17 +468,18 @@ export function useReferenceProfiles() {
   );
 
   return {
-    officialRows: store.officialRows,
-    customProfiles: store.customProfiles,
-    userPreference: store.userPreference,
-    patientAssignments: store.patientAssignments,
-    standardId: store.userPreference?.standardId ?? "dge",
-    selectedProfileId: store.userPreference?.profileId,
-    lifeStage: store.userPreference?.lifeStage ?? "none",
-    isLoadingRemote: store.loading || authLoading,
+    officialRows: snapshot.officialRows,
+    customProfiles: snapshot.customProfiles,
+    userPreference: snapshot.userPreference,
+    patientAssignments: snapshot.patientAssignments,
+    standardId: snapshot.userPreference?.standardId ?? "dge",
+    selectedProfileId: snapshot.userPreference?.profileId,
+    lifeStage: snapshot.userPreference?.lifeStage ?? "none",
+    isLoadingRemote: snapshot.loading || authLoading,
     setStandard,
     setLifeStage,
     setProfile,
+    setPal,
     saveCustomProfile,
     deleteCustomProfile: removeCustomProfile,
     getPatientAssignment,

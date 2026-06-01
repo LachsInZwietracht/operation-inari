@@ -63,6 +63,7 @@ import { useDiagnoses } from "@/hooks/use-diagnoses"
 import { useMedications } from "@/hooks/use-medications"
 import { useLabValues } from "@/hooks/use-lab-values"
 import { useActivities } from "@/hooks/use-activities"
+import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useTherapySettings } from "@/hooks/use-therapy-settings"
 import { useTherapyIntegrations } from "@/hooks/use-therapy-integrations"
 import { useScreenings } from "@/hooks/use-screenings"
@@ -320,6 +321,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
     addEntry: addActivity,
     isLoadingRemote: isLoadingActivities,
   } = useActivities({ initialEntries: initialData?.activities })
+  const { getPatientAssignment, setPal } = useReferenceProfiles()
   const {
     getForPatient: getTherapiesForPatient,
     upsertSetting,
@@ -390,7 +392,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const [labValueInput, setLabValueInput] = useState("")
   const [labDateInput, setLabDateInput] = useState("")
   const [labNotesInput, setLabNotesInput] = useState("")
-  const [palValue, setPalValue] = useState("1.4")
+  const referenceAssignment = getPatientAssignment(patient.id)
+  const palPersisted = referenceAssignment?.palValue != null
+  const palValue = palPersisted ? String(referenceAssignment!.palValue) : "1.4"
+  const handlePalChange = (value: string) => {
+    void setPal(parseFloat(value), patient.id)
+  }
   const [activityForm, setActivityForm] = useState({
     type: "Spaziergang",
     durationMinutes: "30",
@@ -1973,47 +1980,65 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ActivityIcon className="h-4 w-4" /> Energie & PAL
+                <ActivityIcon className="h-4 w-4" /> Referenzwerte & Energiebedarf
               </CardTitle>
-              <CardDescription>WHO-BMR mit PAL-Szenario für Tagesbedarf.</CardDescription>
+              <CardDescription>
+                Referenzstandard, Lebensphase und Energiebedarf (Grundumsatz × PAL) des Patienten.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Grundumsatz</p>
-                  <p className="text-2xl font-semibold">{basalMetabolicRate} kcal</p>
+              <ReferenceProfileSelector
+                patientId={patient.id}
+                dateOfBirth={patient.dateOfBirth}
+                gender={patient.gender}
+              />
+              <div className="space-y-3 border-t pt-4">
+                <p className="text-xs uppercase text-muted-foreground">Energiebedarf</p>
+                <div className="flex flex-wrap items-stretch gap-2">
+                  <div className="flex-1 min-w-[88px] rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Grundumsatz</p>
+                    <p className="text-xl font-semibold">
+                      {basalMetabolicRate}
+                      <span className="text-xs font-normal text-muted-foreground"> kcal</span>
+                    </p>
+                  </div>
+                  <span className="self-center text-lg text-muted-foreground">×</span>
+                  <div className="flex-1 min-w-[88px] rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">PAL</p>
+                    <p className="text-xl font-semibold">{palValue}</p>
+                  </div>
+                  <span className="self-center text-lg text-muted-foreground">=</span>
+                  <div className="flex-1 min-w-[88px] rounded-lg border border-primary/40 bg-primary/5 p-3">
+                    <p className="text-xs text-muted-foreground">Tagesbedarf</p>
+                    <p className="text-xl font-semibold">
+                      {totalEnergyExpenditure}
+                      <span className="text-xs font-normal text-muted-foreground"> kcal</span>
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Gesamtumsatz</p>
-                  <p className="text-2xl font-semibold">{totalEnergyExpenditure} kcal</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>PAL-Faktor</Label>
+                    <Badge variant={palPersisted ? "secondary" : "outline"} className="text-xs font-normal">
+                      {palPersisted ? "Gespeichert" : "Standardwert"}
+                    </Badge>
+                  </div>
+                  <Select value={palValue} onValueChange={handlePalChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {palOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Aktivität (Log)</p>
-                  <p className="text-2xl font-semibold">{activityKcal} kcal</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">PAL-Faktor</p>
-                  <p className="text-2xl font-semibold">{palValue}</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>PAL auswählen</Label>
-                <Select value={palValue} onValueChange={setPalValue}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {palOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">Progress zur Empfehlung</p>
-                <Progress value={Math.min(100, (totalEnergyExpenditure / 2600) * 100)} className="mt-2" />
+                {activityKcal > 0 && (
+                  <p className="text-xs text-muted-foreground">Aktivität (Log): {activityKcal} kcal</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2302,7 +2327,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
           <CardHeader>
             <CardTitle>Medizinische Rechner</CardTitle>
             <CardDescription>Creatinin-Clearance, MNA und SGA im Schnellzugriff.</CardDescription>
-            <ReferenceProfileSelector patientId={patient.id} dateOfBirth={patient.dateOfBirth} gender={patient.gender} />
           </CardHeader>
           <CardContent>
             <Tabs value={calculatorTab} onValueChange={setCalculatorTab}>

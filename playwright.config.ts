@@ -1,10 +1,20 @@
 import { defineConfig, devices } from "@playwright/test";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
-// Load .env.local so Playwright tests have access to Supabase env vars
-const envPath = resolve(__dirname, ".env.local");
-try {
+/**
+ * Load Supabase env vars for the test run.
+ *
+ * Prefers `.env.test` when present so the E2E suite targets a dedicated
+ * local/throwaway Supabase instead of whatever `.env.local` points at — which
+ * is typically the live cloud project, where the fixtures (test users,
+ * patients, appointments) would otherwise be written. Falls back to
+ * `.env.local` only when no `.env.test` exists, preserving prior behavior.
+ * Existing `process.env` values always win, so CI can override either file.
+ */
+function loadEnvFile(fileName: string): boolean {
+  const envPath = resolve(__dirname, fileName);
+  if (!existsSync(envPath)) return false;
   const envContent = readFileSync(envPath, "utf-8");
   for (const line of envContent.split("\n")) {
     const trimmed = line.trim();
@@ -15,9 +25,24 @@ try {
     const value = trimmed.slice(eqIndex + 1);
     if (!process.env[key]) process.env[key] = value;
   }
-} catch {
-  // .env.local is optional
+  return true;
 }
+
+const loadedEnvFile = loadEnvFile(".env.test")
+  ? ".env.test"
+  : loadEnvFile(".env.local")
+    ? ".env.local"
+    : null;
+
+const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(
+  /^(https?:\/\/[^.]+).*/,
+  "$1…",
+);
+console.log(
+  loadedEnvFile
+    ? `[playwright] Loaded env from ${loadedEnvFile} → Supabase ${supabaseHost ?? "(unset)"}`
+    : "[playwright] No .env.test or .env.local found; using process env only",
+);
 
 const STORAGE_STATE = "tests/.auth/user.json";
 

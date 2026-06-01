@@ -7,6 +7,7 @@ import {
   Globe,
   Pencil,
   Plus,
+  RotateCcw,
   Save,
   Trash2,
   X,
@@ -25,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
 import {
   Table,
   TableBody,
@@ -46,7 +48,7 @@ import { toast } from "sonner";
 import { REFERENCE_STANDARDS, AGE_GROUPS } from "@/lib/reference-metadata";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
-import { resolveReferenceValues } from "@/lib/reference-values";
+import { resolveCustomProfile, resolveReferenceValues } from "@/lib/reference-values";
 import { LIFE_STAGE_LABELS } from "@/lib/types/reference-values";
 import { formatNutrient } from "@/lib/format";
 import type {
@@ -57,21 +59,53 @@ import type {
   ReferenceStandardId,
 } from "@/lib/types";
 import { NUTRIENT_GROUP_LABELS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+
+/** Slider bounds for relative nutrient scaling (percentage of the base value). */
+const SCALE_MIN = 10;
+const SCALE_MAX = 300;
+const SCALE_STEP = 5;
+
+/** Derived nutrients that are computed from others — not independently adjustable. */
+const NON_ADJUSTABLE_NUTRIENTS = new Set(["energie_kj", "broteinheiten"]);
+
+function roundAmount(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function amountFromPercent(percent: number, base: number): number {
+  return roundAmount((base * percent) / 100);
+}
 
 function ComparisonView() {
-  const { officialRows } = useReferenceProfiles();
+  const { officialRows, customProfiles } = useReferenceProfiles();
   const [selectedStandards, setSelectedStandards] = useState<Exclude<ReferenceStandardId, "custom">[]>(["dge"]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [ageGroupId, setAgeGroupId] = useState("25-51");
   const [gender, setGender] = useState<"m" | "w">("w");
   const [nutrientGroup, setNutrientGroup] = useState<NutrientGroup>("makronaehrstoffe");
 
   const resolvedValues = useMemo(() => {
-    return selectedStandards.map((sid) => ({
-      standardId: sid,
-      standard: REFERENCE_STANDARDS.find((s) => s.id === sid)!,
+    const standardColumns = selectedStandards.map((sid) => ({
+      key: sid,
+      label: REFERENCE_STANDARDS.find((s) => s.id === sid)?.shortName ?? sid.toUpperCase(),
+      // Custom profiles carry their own demographic; standards follow the selectors above.
+      sublabel: undefined as string | undefined,
       values: resolveReferenceValues(sid, ageGroupId, gender, "none", officialRows),
     }));
-  }, [selectedStandards, ageGroupId, gender, officialRows]);
+
+    const profileColumns = selectedProfileIds
+      .map((id) => customProfiles.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p))
+      .map((profile) => ({
+        key: profile.id,
+        label: profile.name,
+        sublabel: `${AGE_GROUPS.find((g) => g.id === profile.ageGroupId)?.label ?? profile.ageGroupId} · ${profile.gender === "m" ? "M" : "W"}`,
+        values: resolveCustomProfile(profile, officialRows),
+      }));
+
+    return [...standardColumns, ...profileColumns];
+  }, [selectedStandards, selectedProfileIds, customProfiles, ageGroupId, gender, officialRows]);
 
   const nutrients = useMemo(
     () =>
@@ -84,6 +118,12 @@ function ComparisonView() {
   const toggleStandard = (sid: Exclude<ReferenceStandardId, "custom">) => {
     setSelectedStandards((prev) =>
       prev.includes(sid) ? prev.filter((s) => s !== sid) : [...prev, sid],
+    );
+  };
+
+  const toggleProfile = (id: string) => {
+    setSelectedProfileIds((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
     );
   };
 
@@ -106,6 +146,25 @@ function ComparisonView() {
             ))}
           </div>
         </div>
+        {customProfiles.length > 0 && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Eigene Profile</Label>
+            <div className="flex flex-wrap gap-1">
+              {customProfiles.map((profile) => (
+                <Button
+                  key={profile.id}
+                  variant={selectedProfileIds.includes(profile.id) ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 max-w-[160px] text-xs"
+                  title={profile.name}
+                  onClick={() => toggleProfile(profile.id)}
+                >
+                  <span className="truncate">{profile.name}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label className="text-xs">Altersgruppe</Label>
           <Select value={ageGroupId} onValueChange={setAgeGroupId}>
@@ -154,8 +213,17 @@ function ComparisonView() {
                   <TableHead className="w-[200px]">Nährstoff</TableHead>
                   <TableHead className="w-[80px]">Einheit</TableHead>
                   {resolvedValues.map((rv) => (
-                    <TableHead key={rv.standardId} className="text-right">
-                      {rv.standard.shortName}
+                    <TableHead key={rv.key} className="text-right">
+                      <div className="flex flex-col items-end leading-tight">
+                        <span className="truncate max-w-[140px]" title={rv.label}>
+                          {rv.label}
+                        </span>
+                        {rv.sublabel && (
+                          <span className="text-[10px] font-normal text-muted-foreground">
+                            {rv.sublabel}
+                          </span>
+                        )}
+                      </div>
                     </TableHead>
                   ))}
                   {resolvedValues.length >= 2 && (
@@ -182,7 +250,7 @@ function ComparisonView() {
                       </TableCell>
                       {amounts.map((amount, i) => (
                         <TableCell
-                          key={resolvedValues[i].standardId}
+                          key={resolvedValues[i].key}
                           className="text-right tabular-nums"
                         >
                           {formatNutrient(amount, nutrient.unit)}
@@ -335,7 +403,9 @@ function CustomProfileEditor() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Erstellen Sie eigene Referenzprofile basierend auf einem Standard mit individuellen Anpassungen.
+          Erstellen Sie eigene Referenzprofile auf Basis eines Standards und skalieren Sie
+          einzelne Nährstoffe per Schieberegler hoch oder runter — z. B. mehr Eiweiß oder
+          weniger Natrium.
         </p>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="mr-1 h-4 w-4" />
@@ -358,6 +428,16 @@ function CustomProfileEditor() {
         const isEditing = editingId === profile.id;
         const standard = REFERENCE_STANDARDS.find((s) => s.id === profile.basedOn);
         const ageGroup = AGE_GROUPS.find((g) => g.id === profile.ageGroupId);
+        const summaryBase =
+          !isEditing && profile.overrides.length > 0
+            ? resolveReferenceValues(
+                (profile.basedOn ?? "dge") as Exclude<ReferenceStandardId, "custom">,
+                profile.ageGroupId,
+                profile.gender,
+                profile.lifeStage,
+                officialRows,
+              )
+            : [];
 
         return (
           <Card key={profile.id}>
@@ -439,9 +519,17 @@ function CustomProfileEditor() {
                 <div className="flex flex-wrap gap-1">
                   {profile.overrides.map((ov) => {
                     const def = NUTRIENT_DEFINITIONS.find((d) => d.id === ov.nutrientId);
+                    const base = summaryBase.find((v) => v.nutrientId === ov.nutrientId)?.amount ?? 0;
+                    const delta = base > 0 ? Math.round(((ov.amount - base) / base) * 100) : null;
                     return (
                       <Badge key={ov.nutrientId} variant="secondary" className="text-xs">
                         {def?.shortName ?? ov.nutrientId}: {formatNutrient(ov.amount, def?.unit ?? "")}
+                        {delta != null && delta !== 0 && (
+                          <span className="ml-1 text-primary">
+                            ({delta > 0 ? "+" : ""}
+                            {delta}%)
+                          </span>
+                        )}
                       </Badge>
                     );
                   })}
@@ -454,7 +542,7 @@ function CustomProfileEditor() {
 
       {/* Create dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="flex max-h-[min(90dvh,900px)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className="flex max-h-[min(90dvh,900px)] w-[calc(100vw-2rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 border-b px-6 py-5">
             <DialogTitle>Neues Referenzprofil erstellen</DialogTitle>
             <DialogDescription>
@@ -541,7 +629,9 @@ function CustomProfileEditor() {
               <div className="space-y-2">
                 <Label>Nährstoffwerte anpassen (optional)</Label>
                 <p className="text-xs text-muted-foreground">
-                  Klicken Sie auf einen Wert, um ihn zu ändern. Nicht geänderte Werte werden vom Basis-Standard übernommen.
+                  Skalieren Sie einzelne Nährstoffe per Schieberegler relativ zum Basiswert
+                  (100 % = Standard) oder tragen Sie einen Zielwert direkt ein. Nicht geänderte
+                  Werte werden vom Basis-Standard übernommen.
                 </p>
                 <NutrientOverrideTable
                   baseValues={baseValues}
@@ -576,28 +666,39 @@ function NutrientOverrideTable({
   overrides: Map<string, number>;
   onOverrideChange: (overrides: Map<string, number>) => void;
 }) {
-  const [editingNutrient, setEditingNutrient] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
+  // Raw text drafts while a numeric field is being typed, so intermediate
+  // states like "1," or "" don't get clobbered before they parse.
+  const [drafts, setDrafts] = useState<Map<string, string>>(new Map());
 
-  const handleStartEdit = (nutrientId: string, currentValue: number) => {
-    setEditingNutrient(nutrientId);
-    setEditValue(String(currentValue));
-  };
-
-  const handleConfirmEdit = (nutrientId: string) => {
-    const parsed = parseFloat(editValue.replace(",", "."));
-    if (!isNaN(parsed) && parsed >= 0) {
-      const next = new Map(overrides);
-      next.set(nutrientId, parsed);
-      onOverrideChange(next);
+  const setAmount = (nutrientId: string, amount: number, base: number) => {
+    const next = new Map(overrides);
+    // A value that rounds back to the base is treated as "no override".
+    if (base > 0 && Math.abs(amount - base) < 0.005) {
+      next.delete(nutrientId);
+    } else {
+      next.set(nutrientId, roundAmount(amount));
     }
-    setEditingNutrient(null);
+    onOverrideChange(next);
   };
 
-  const handleResetOverride = (nutrientId: string) => {
+  const resetOverride = (nutrientId: string) => {
     const next = new Map(overrides);
     next.delete(nutrientId);
     onOverrideChange(next);
+    clearDraft(nutrientId);
+  };
+
+  const setDraft = (nutrientId: string, raw: string) => {
+    setDrafts((prev) => new Map(prev).set(nutrientId, raw));
+  };
+
+  const clearDraft = (nutrientId: string) => {
+    setDrafts((prev) => {
+      if (!prev.has(nutrientId)) return prev;
+      const next = new Map(prev);
+      next.delete(nutrientId);
+      return next;
+    });
   };
 
   const groups: NutrientGroup[] = ["makronaehrstoffe", "vitamine", "mineralstoffe"];
@@ -605,9 +706,9 @@ function NutrientOverrideTable({
   return (
     <div className="space-y-4">
       {groups.map((group) => {
-        const nutrients = NUTRIENT_DEFINITIONS.filter((d) => d.group === group).sort(
-          (a, b) => a.sortOrder - b.sortOrder,
-        );
+        const nutrients = NUTRIENT_DEFINITIONS.filter(
+          (d) => d.group === group && !NON_ADJUSTABLE_NUTRIENTS.has(d.id),
+        ).sort((a, b) => a.sortOrder - b.sortOrder);
 
         return (
           <div key={group}>
@@ -615,68 +716,94 @@ function NutrientOverrideTable({
               {NUTRIENT_GROUP_LABELS[group]}
             </h5>
             <div className="rounded-md border">
-              <Table>
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[160px]">Nährstoff</TableHead>
-                    <TableHead className="w-[60px]">Einheit</TableHead>
-                    <TableHead className="text-right w-[100px]">Basis</TableHead>
-                    <TableHead className="text-right w-[120px]">Wert</TableHead>
-                    <TableHead className="w-[40px]" />
+                    <TableHead className="w-[32%]">Nährstoff</TableHead>
+                    <TableHead className="text-right w-[16%]">Basis</TableHead>
+                    <TableHead className="w-[30%]">Skalierung</TableHead>
+                    <TableHead className="text-right w-[18%]">Zielwert</TableHead>
+                    <TableHead className="w-[4%]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {nutrients.map((nutrient) => {
-                    const baseVal =
+                    const base =
                       baseValues.find((v) => v.nutrientId === nutrient.id)?.amount ?? 0;
                     const hasOverride = overrides.has(nutrient.id);
-                    const currentVal = hasOverride ? overrides.get(nutrient.id)! : baseVal;
-                    const isEditing = editingNutrient === nutrient.id;
+                    const currentVal = hasOverride ? overrides.get(nutrient.id)! : base;
+                    const canScale = base > 0;
+                    const percent = canScale ? Math.round((currentVal / base) * 100) : 100;
+                    const sliderPercent = Math.min(
+                      SCALE_MAX,
+                      Math.max(SCALE_MIN, percent),
+                    );
+                    const draft = drafts.get(nutrient.id);
+                    const inputValue =
+                      draft !== undefined
+                        ? draft
+                        : formatNutrient(currentVal, nutrient.unit);
 
                     return (
                       <TableRow
                         key={nutrient.id}
-                        className={hasOverride ? "bg-accent/50" : ""}
+                        className={hasOverride ? "bg-accent/40" : ""}
                       >
-                        <TableCell className="text-sm">{nutrient.name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {nutrient.unit}
+                        <TableCell className="text-sm">
+                          {nutrient.name}
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({nutrient.unit})
+                          </span>
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground text-sm">
-                          {formatNutrient(baseVal, nutrient.unit)}
+                          {formatNutrient(base, nutrient.unit)}
+                        </TableCell>
+                        <TableCell>
+                          {canScale ? (
+                            <div className="flex items-center gap-2">
+                              <Slider
+                                value={[sliderPercent]}
+                                min={SCALE_MIN}
+                                max={SCALE_MAX}
+                                step={SCALE_STEP}
+                                aria-label={`${nutrient.name} skalieren`}
+                                className="min-w-0 flex-1"
+                                onValueChange={([next]) => {
+                                  clearDraft(nutrient.id);
+                                  setAmount(nutrient.id, amountFromPercent(next, base), base);
+                                }}
+                              />
+                              <span
+                                className={cn(
+                                  "w-11 shrink-0 text-right text-xs tabular-nums",
+                                  hasOverride
+                                    ? "font-medium text-primary"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                {percent}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Kein Basiswert – Zielwert direkt eingeben
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {isEditing ? (
-                            <form
-                              className="flex justify-end"
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                handleConfirmEdit(nutrient.id);
-                              }}
-                            >
-                              <Input
-                                autoFocus
-                                className="h-7 w-20 text-right text-sm"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={() => handleConfirmEdit(nutrient.id)}
-                              />
-                            </form>
-                          ) : (
-                            <button
-                              type="button"
-                              className="tabular-nums text-sm hover:underline cursor-pointer font-medium"
-                              onClick={() => handleStartEdit(nutrient.id, currentVal)}
-                            >
-                              {formatNutrient(currentVal, nutrient.unit)}
-                              {hasOverride && currentVal !== baseVal && (
-                                <span className="ml-1 text-xs text-blue-600">
-                                  ({currentVal > baseVal ? "+" : ""}
-                                  {Math.round(((currentVal - baseVal) / baseVal) * 100)}%)
-                                </span>
-                              )}
-                            </button>
-                          )}
+                          <Input
+                            inputMode="decimal"
+                            className="ml-auto h-7 w-full text-right text-sm tabular-nums"
+                            value={inputValue}
+                            onChange={(e) => {
+                              setDraft(nutrient.id, e.target.value);
+                              const parsed = parseFloat(e.target.value.replace(",", "."));
+                              if (!isNaN(parsed) && parsed >= 0) {
+                                setAmount(nutrient.id, parsed, base);
+                              }
+                            }}
+                            onBlur={() => clearDraft(nutrient.id)}
+                          />
                         </TableCell>
                         <TableCell>
                           {hasOverride && (
@@ -684,9 +811,11 @@ function NutrientOverrideTable({
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0"
-                              onClick={() => handleResetOverride(nutrient.id)}
+                              title="Auf Basiswert zurücksetzen"
+                              aria-label="Auf Basiswert zurücksetzen"
+                              onClick={() => resetOverride(nutrient.id)}
                             >
-                              <X className="h-3 w-3" />
+                              <RotateCcw className="h-3 w-3" />
                             </Button>
                           )}
                         </TableCell>
@@ -708,8 +837,8 @@ export default function ReferenzwertePage() {
     <div className="flex flex-col gap-6 p-6">
       <PageHeader
         title="Referenzwerte"
-        description="Nährstoff-Referenzwerte nach DGE — mit Vergleich und eigenen Profilen"
-        helpText="Referenzwerte bilden die Grundlage für die Nährstoffanalyse. Aktuell sind die DGE-Werte hinterlegt; weitere Standards folgen."
+        description="Nährstoff-Referenzwerte nach DGE, ÖGE, SGE und RDA — mit Vergleich und eigenen Profilen"
+        helpText="Referenzwerte bilden die Grundlage für die Nährstoffanalyse. Vergleichen Sie die hinterlegten Standards (DGE, ÖGE, SGE, RDA) oder erstellen Sie eigene Profile, in denen Sie einzelne Nährstoffe per Schieberegler an Ziel oder Indikation anpassen."
       />
 
       <Tabs defaultValue="comparison">

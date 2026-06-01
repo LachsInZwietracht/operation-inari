@@ -49,7 +49,12 @@ export const REFERENCE_STANDARD_METADATA: Record<
   },
 };
 
-const ENABLED_REFERENCE_STANDARDS: Exclude<ReferenceStandardId, "custom">[] = ["dge"];
+const ENABLED_REFERENCE_STANDARDS: Exclude<ReferenceStandardId, "custom">[] = [
+  "dge",
+  "oege",
+  "sge",
+  "rda",
+];
 
 export const REFERENCE_STANDARDS = (
   Object.entries(REFERENCE_STANDARD_METADATA) as [
