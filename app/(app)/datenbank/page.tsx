@@ -1,11 +1,19 @@
-import { ArrowRightLeft, Clock3, Database, FileClock, GitCompareArrows, Globe, Scale, TestTube2, Upload } from "lucide-react"
+import Link from "next/link"
+import { ArrowRightLeft, Check, Clock3, Database, FileClock, GitCompareArrows, Globe, Lock, PlugZap, Scale, TestTube2, Upload } from "lucide-react"
 
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchDataSources } from "@/lib/data/data-sources"
 import { fetchDataSourceEvents, fetchFoodReferenceReplacements } from "@/lib/data/database-lifecycle"
+import { canAccessDataSource } from "@/lib/data/entitlements"
+import { FOOD_SOURCES } from "@/lib/data/food-sources"
 import { formatDate, formatNumber } from "@/lib/format"
+import type { FoodSourceId } from "@/lib/types"
+
+// Sources the foods browser can scope to — mirrors ACTIVE_FOOD_BROWSER_SOURCE_IDS
+// in the foods browser so the governance view and the working selector agree.
+const CONNECTABLE_SOURCE_IDS: FoodSourceId[] = ["bls", "sfk", "off", "custom"]
 import { BulkReplacementForm } from "./bulk-replacement-form"
 import { FoodReplacementForm } from "./food-replacement-form"
 import { NutrientDiffCard } from "./nutrient-diff-card"
@@ -82,6 +90,59 @@ export default async function DatenbankPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <PlugZap className="h-5 w-5 text-muted-foreground" />
+              Verbundene Datenbanken
+            </CardTitle>
+          </div>
+          <CardDescription>
+            Diese Quellen stehen in der Lebensmittelsuche zur Auswahl. Die aktive Datenbank wählen
+            Sie direkt in der Lebensmittel-Suche; gesperrte Quellen werden über den Tarif
+            freigeschaltet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {CONNECTABLE_SOURCE_IDS.map((id) => {
+            const meta = FOOD_SOURCES.find((source) => source.id === id)
+            if (!meta) return null
+            const active = canAccessDataSource(id)
+            return (
+              <div key={id} className="rounded-lg border p-4 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{meta.name}</p>
+                    <p className="text-xs text-muted-foreground">{meta.coverage}</p>
+                  </div>
+                  {active ? (
+                    <Badge className="shrink-0 gap-1">
+                      <Check className="h-3 w-3" />
+                      Aktiv
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="shrink-0 gap-1">
+                      <Lock className="h-3 w-3" />
+                      Tarif
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-3 text-muted-foreground">{meta.description}</p>
+                {!active && (
+                  <Link
+                    href="/admin/tarife"
+                    className="mt-3 inline-block text-primary underline-offset-4 hover:underline"
+                  >
+                    Im Tarif freischalten
+                  </Link>
+                )}
+              </div>
+            )
+          })}
+        </CardContent>
+      </Card>
 
       {error ? (
         <Card className="border-destructive/40">

@@ -62,6 +62,9 @@ interface NutrientTabContentProps {
 
 function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentProps) {
   const definitions = getNutrientsByGroup(group);
+  const hasUnmeasured = definitions.some(
+    (def) => !nutrients.some((n) => n.nutrientId === def.id),
+  );
 
   return (
     <div className="space-y-4">
@@ -76,18 +79,33 @@ function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentP
         </TableHeader>
         <TableBody>
           {definitions.map((def) => {
+            // A nutrient with no entry in this food's source is "not measured",
+            // which is clinically different from a measured zero — show it as
+            // such instead of collapsing both to 0 (PRODI-feedback #3).
+            const measured = nutrients.some((n) => n.nutrientId === def.id);
             const value = getNutrientValue(nutrients, def.id);
             const ref = getReferenceAmount(refConfig, def.id);
 
             return (
               <TableRow key={def.id}>
                 <TableCell className="font-medium">{def.name}</TableCell>
-                <TableCell className="text-right">{formatNutrient(value, def.unit)}</TableCell>
+                <TableCell className="text-right">
+                  {measured ? (
+                    formatNutrient(value, def.unit)
+                  ) : (
+                    <span
+                      className="text-muted-foreground italic"
+                      title="In dieser Datenquelle nicht erfasst"
+                    >
+                      n. e.
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground text-right">
                   {ref > 0 ? formatNutrient(ref, def.unit) : "–"}
                 </TableCell>
                 <TableCell>
-                  {ref > 0 ? (
+                  {measured && ref > 0 ? (
                     <NutrientBar label="" value={value} unit={def.unit} referenceValue={ref} />
                   ) : (
                     <span className="text-muted-foreground text-sm">–</span>
@@ -98,6 +116,12 @@ function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentP
           })}
         </TableBody>
       </Table>
+      {hasUnmeasured && (
+        <p className="text-muted-foreground text-xs">
+          <span className="italic">n. e.</span> = in dieser Datenquelle nicht erfasst (nicht
+          gleichbedeutend mit dem Wert 0).
+        </p>
+      )}
     </div>
   );
 }

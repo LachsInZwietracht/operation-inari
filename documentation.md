@@ -78,14 +78,16 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Listing + search:** `app/(app)/lebensmittel/page.tsx`
   - Server page calls `fetchFoodsBrowserPage()` for the initial result set and the initial OFF-branded tab payload.
   - Client page (`lebensmittel-client.tsx`) keeps the existing search modes and filters, but fetches page changes through `/api/foods/browser`.
-  - Hooks: `useCustomFoods`, `useFoodSynonyms`.
+  - Hooks: `useCustomFoods`, `useFoodSynonyms`, `useFoodSourcePreference`.
   - UI: Search mode buttons, filters (source, categories), paginated desktop results table, mobile result cards, OFF-branded products tab.
+  - **Active database (PRODI-feedback #3):** the source selector is the persisted "Aktive Datenbank" choice, not a throwaway filter. `useFoodSourcePreference` (`hooks/use-food-source-preference.ts`) stores the selected `FoodSourceId | "all"` in `localStorage` (module-store + `useSyncExternalStore`, default `"all"`) so it sticks across visits; a "Gespeichert"/"Alle Quellen" badge sits next to the selector. Each food row still shows its own source as a trust-tone badge (`getFoodSourceTrustTone`).
   - Mobile food cards prioritize identification and nutrient scanning: name, source/category badges, kcal, Eiweiß, Fett, and KH. Alias management is available as a secondary expandable action so lookup cards stay compact.
   - Data: `FOOD_CATEGORIES`, `FOOD_SOURCES`, `FOOD_GROUPS`, `fetchFoodsBrowserPage()`, `/api/foods/browser`.
 - **Group navigation:** `FoodGroupTree` uses `FOOD_GROUPS`; ensure new groups update `getFoodGroupDescendants`.
 - **Search contract:** name-mode search prefers the `search_foods_with_total` RPC, falls back to `search_foods()` if the new migration has not been applied yet, and finally falls back to a direct paginated Supabase name query if both RPCs are unavailable or out of sync. Code/group/browse modes use direct paginated Supabase queries.
 - **Custom foods:** Page 1 still merges local custom-food migration candidates so offline or unauthenticated entries remain visible, but authenticated saves now canonicalize to Supabase IDs immediately and localStorage keeps only unmigrated/offline entries.
 - **Synonyms:** `useFoodSynonyms()` now reads seeded system aliases from Supabase `food_synonyms` via `lib/data/food-synonyms-client.ts` and merges them with local user-created aliases stored in `localStorage`. The foods UI no longer bootstraps synonym seeds from `lib/mock-data`.
+- **Source coverage transparency (PRODI-feedback #3):** the food detail nutrient tables distinguish a nutrient the source does **not measure** (no entry in `food.nutrients`, rendered as italic `n. e.` with a legend) from a measured `0`, since coverage differs per database. Implemented in `components/food-detail-content.tsx` (`NutrientTabContent`).
 - **OFF details:** Foods with `sourceId === "off"` show attribution ("Produktdaten von Open Food Facts") and `dataQualityScore` in the detail page.
 - **SFK foods:** Foods with `sourceId === "sfk"` come from the Souci-Fachmann-Kraut database (second primary data source alongside BLS). SFK foods expose expanded nutrient groups — `aminosaeuren` (18 amino acids) and `fettsaeuren` (13 detailed fatty acids) — in the food detail page nutrient breakdown when those values are present. SFK access is gated by `NEXT_PUBLIC_SFK_ENABLED`; when disabled, `canAccessDataSource("sfk")` returns false, SFK foods are filtered from search results and the food search index, and the food detail page shows a `Lizenzhinweis` banner. Entitlement logic lives in `lib/data/entitlements.ts`.
 - **New custom food:** `/lebensmittel/neu` does not hydrate the catalog. It uses `useCustomFoods([])` only for the create/persist flow because submission does not need base foods.
@@ -208,6 +210,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 ### 4.12 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`
   - The route now reads the live source catalog from `data_sources` through `fetchDataSources()`.
+  - **Verbundene Datenbanken (PRODI-feedback #3):** a governance card lists the connectable browser sources (`bls`, `sfk`, `off`, `custom`) with an **Aktiv**/**Tarif** badge derived from `canAccessDataSource`; locked sources link to `/admin/tarife`. This is the org-level "which databases are connected" home; the day-to-day active database is chosen in the foods browser. (Org-level enable/disable *writes* are deferred until billing is wired through `canAccessDataSource`.)
   - It shows version, import timestamp, record count, nutrient count, license, and source URL for each imported database.
   - Database lifecycle events now have a real persistence target in `data_source_events`, surfaced as the `Datenbankhistorie` section. Empty states are honest when no ETL/import job has written events yet.
   - Missing lifecycle/replacement tables are shown as inline recovery states that name the expected table and point developers to applying migrations instead of silently falling back to static notes.

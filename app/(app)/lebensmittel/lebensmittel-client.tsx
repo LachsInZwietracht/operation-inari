@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,6 +49,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCustomFoods } from "@/hooks/use-custom-foods";
+import { useFoodSourcePreference } from "@/hooks/use-food-source-preference";
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import {
@@ -247,7 +249,7 @@ export function LebensmittelPageClient({
   initialResult: FoodBrowserResult;
 }) {
   const router = useRouter();
-  const [activeSource, setActiveSource] = useState<FoodSourceId | "all">("all");
+  const { activeSource, setActiveSource } = useFoodSourcePreference();
   const [activeTab, setActiveTab] = useState("datenbank");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -526,23 +528,34 @@ export function LebensmittelPageClient({
               </div>
 
               <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <Select
-                  value={activeSource}
-                  onValueChange={(value) => setActiveSource(value as FoodSourceId | "all")}
-                >
-                  <SelectTrigger className="w-full md:w-[240px]">
-                    <SelectValue placeholder="Quelle waehlen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Quellen</SelectItem>
-                    {selectableFoodSources.map((source) => (
-                      <SelectItem key={source.id} value={source.id}>
-                        {source.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-muted-foreground text-sm">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs">Aktive Datenbank</Label>
+                    <Badge
+                      variant={activeSource === "all" ? "outline" : "secondary"}
+                      className="text-[10px]"
+                    >
+                      {activeSource === "all" ? "Alle Quellen" : "Gespeichert"}
+                    </Badge>
+                  </div>
+                  <Select
+                    value={activeSource}
+                    onValueChange={(value) => setActiveSource(value as FoodSourceId | "all")}
+                  >
+                    <SelectTrigger className="w-full md:w-[240px]">
+                      <SelectValue placeholder="Quelle waehlen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alle Quellen</SelectItem>
+                      {selectableFoodSources.map((source) => (
+                        <SelectItem key={source.id} value={source.id}>
+                          {source.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-muted-foreground text-sm md:self-end md:pb-2">
                   {resultCountLabel} Lebensmittel
                   {activeSource !== "all" && currentSource ? ` · ${currentSource.version}` : " · alle Quellen"}
                   {searchQuery.trim() && searchMode === "name" && (
