@@ -841,6 +841,10 @@ The paginated foods browser adds `search_foods_with_total()` in `supabase/migrat
 
 **Important rollout note:** apply `20260503000019_search_foods_with_total.sql` before expecting accurate paginated totals in `/lebensmittel`. Without it, the UI falls back to `search_foods()` and still works, but total counts are approximate.
 
+#### Nutrient sort/threshold RPC (`filter_foods_by_nutrient`)
+
+`supabase/migrations/20260604000054_filter_foods_by_nutrient.sql` adds `filter_foods_by_nutrient()`, which powers the foods browser's "Nach Nährstoff sortieren & filtern" panel (PRODI-feedback #4). It joins `food_nutrients` for a single `nutrient_id`, normalizes the amount to a per-100 g basis (`amount * 100 / NULLIF(per_amount, 0)` — `per_amount` is 100 for BLS/SFK rows but can differ for branded foods), applies the same source/category/group/custom-visibility filters as `search_foods_with_total`, optional `min_per_100g`/`max_per_100g` thresholds, and orders by the normalized amount (`asc`/`desc`). A composite `idx_food_nutrients_nutrient_amount (nutrient_id, amount)` index keeps the per-nutrient scan efficient. `group_filter` is a `TEXT[]` so the browser can pass `getFoodGroupDescendants(groupId)`. `fetchFoodsBrowserPageByNutrient` in `lib/data/foods.ts` calls it and falls back to the direct query path if the function is absent.
+
 ### Search RPC Migration Path
 
 The client code in `fetchFoodsBrowserPageByName()` (`lib/data/foods.ts`) uses a three-tier fallback chain:

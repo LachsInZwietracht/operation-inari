@@ -621,9 +621,17 @@ function clampPageSize(value: number | undefined) {
   return Math.min(100, Math.max(10, Math.floor(value)));
 }
 
+function normalizeNutrientBound(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return null;
+  return value;
+}
+
 function normalizeFoodBrowserQuery(query: FoodBrowserQuery) {
   const page = clampPage(query.page);
   const pageSize = clampPageSize(query.pageSize);
+  const nutrientId = query.nutrientId?.trim() || null;
+  const nutrientSort: "asc" | "desc" | null =
+    query.nutrientSort === "asc" || query.nutrientSort === "desc" ? query.nutrientSort : null;
   return {
     q: query.q?.trim() ?? "",
     mode: query.mode ?? "name",
@@ -631,6 +639,10 @@ function normalizeFoodBrowserQuery(query: FoodBrowserQuery) {
     dataSourceId:
       query.dataSourceId && query.dataSourceId !== "all" ? query.dataSourceId : null,
     groupId: query.groupId ?? null,
+    nutrientId,
+    nutrientMin: normalizeNutrientBound(query.nutrientMin),
+    nutrientMax: normalizeNutrientBound(query.nutrientMax),
+    nutrientSort,
     page,
     pageSize,
     offset: (page - 1) * pageSize,
@@ -824,6 +836,98 @@ function shouldUseExactFoodBrowserCount(query: ReturnType<typeof normalizeFoodBr
   );
 }
 
+interface FilterFoodsByNutrientRpcRow {
+  food_id: string;
+  nutrient_amount: number | null;
+  total_count: number | null;
+}
+
+/**
+ * Nutrient-mode browsing: sort and/or threshold-filter foods by a single
+ * nutrient (PRODI-feedback #4) via the `filter_foods_by_nutrient` RPC. Falls
+ * back to the plain query path if the RPC is unavailable so results still load.
+ */
+async function fetchFoodsBrowserPageByNutrient(
+  query: ReturnType<typeof normalizeFoodBrowserQuery>,
+  client: SupabaseClient,
+): Promise<FoodBrowserResult> {
+  if (!query.nutrientId) {
+    return fetchFoodsBrowserPageByQuery(query, client);
+  }
+  try {
+    const params = {
+      nutrient_key: query.nutrientId,
+      min_per_100g: query.nutrientMin,
+      max_per_100g: query.nutrientMax,
+      sort_direction: query.nutrientSort ?? "desc",
+      source_filter: query.dataSourceId,
+      category_filter: query.categoryId,
+      group_filter: query.groupId ? getFoodGroupDescendants(query.groupId) : null,
+      branded_only: query.dataSourceId === "off" ? true : null,
+      name_query: query.mode === "code" ? null : query.q || null,
+      requesting_user_id: null,
+      result_limit: query.pageSize,
+      result_offset: query.offset,
+    };
+
+    const { data, error } = await withTimeout(
+      client.rpc("filter_foods_by_nutrient", params),
+      10000,
+      "Supabase filter_foods_by_nutrient request timed out",
+    );
+
+    if (error) {
+      console.error(
+        `Food browser nutrient sort RPC failed; falling back to direct query: ${error.message}`,
+      );
+      return fetchFoodsBrowserPageByQuery(query, client);
+    }
+
+    const rows = (data ?? []) as FilterFoodsByNutrientRpcRow[];
+    const totalCount = rows[0]?.total_count ? Number(rows[0].total_count) : 0;
+
+    if (rows.length === 0) {
+      return {
+        foods: [],
+        totalCount,
+        page: query.page,
+        pageSize: query.pageSize,
+        hasMore: false,
+      };
+    }
+
+    const foods = await fetchFoodsByIds(
+      rows.map((row) => row.food_id),
+      client,
+      {
+        nutrientIds: Array.from(new Set([...FOOD_BROWSER_NUTRIENT_IDS, query.nutrientId])),
+        includePortions: false,
+      },
+    );
+    const byId = new Map(foods.map((food) => [food.id, food]));
+    const orderedFoods = rows
+      .map((row) => byId.get(row.food_id))
+      .filter((food): food is Food => Boolean(food));
+
+    return {
+      foods: orderedFoods,
+      totalCount,
+      page: query.page,
+      pageSize: query.pageSize,
+      hasMore: query.offset + orderedFoods.length < totalCount,
+    };
+  } catch (error) {
+    console.error("fetchFoodsBrowserPageByNutrient error:", error);
+    return {
+      foods: [],
+      totalCount: 0,
+      page: query.page,
+      pageSize: query.pageSize,
+      hasMore: false,
+    };
+  }
+}
+
 export async function fetchFoodsBrowserPage(
   query: FoodBrowserQuery,
   supabase?: SupabaseClient,
@@ -831,8 +935,17 @@ export async function fetchFoodsBrowserPage(
   const normalized = normalizeFoodBrowserQuery(query);
   const client = await resolveClient(supabase);
 
+  const nutrientModeActive = Boolean(
+    normalized.nutrientId &&
+      (normalized.nutrientSort ||
+        normalized.nutrientMin != null ||
+        normalized.nutrientMax != null),
+  );
+
   let result: FoodBrowserResult;
-  if (normalized.mode === "name" && normalized.q) {
+  if (nutrientModeActive) {
+    result = await fetchFoodsBrowserPageByNutrient(normalized, client);
+  } else if (normalized.mode === "name" && normalized.q) {
     result = await fetchFoodsBrowserPageByName(normalized, client);
   } else {
     result = await fetchFoodsBrowserPageByQuery(normalized, client);

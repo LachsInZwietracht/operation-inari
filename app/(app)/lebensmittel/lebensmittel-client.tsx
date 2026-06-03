@@ -5,22 +5,28 @@ import dynamic from "next/dynamic";
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
   ChevronRight,
   Hash,
   Layers3,
   List,
   Scale,
   Search,
+  SlidersHorizontal,
   Sparkles,
   TextSearch,
   TreePine,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -58,14 +64,66 @@ import {
   getFoodGroupName,
 } from "@/lib/data/food-groups";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { canAccessDataSource } from "@/lib/data/entitlements";
 import { formatNumber } from "@/lib/format";
 import { getClinicalStatusClass, getFoodSourceTrustTone } from "@/lib/clinical-status";
 import { fuzzySearchFoods, normalizeText } from "@/lib/search";
 import { getNutrientValue } from "@/lib/nutrients";
-import type { Food, FoodBrowserResult, FoodSourceId, FoodGroupNode } from "@/lib/types";
+import type {
+  Food,
+  FoodBrowserResult,
+  FoodSourceId,
+  FoodGroupNode,
+  NutrientSortDirection,
+} from "@/lib/types";
 
 const categoryMap = new Map(FOOD_CATEGORIES.map((c) => [c.id, c.name]));
+
+// Nutrient sort/filter (PRODI-feedback #4): pick one nutrient, order by it and
+// optionally threshold-filter (per 100 g). Energy in kJ and Broteinheiten are
+// excluded — they duplicate / derive from values already offered.
+const NUTRIENT_GROUP_LABELS: Record<string, string> = {
+  makronaehrstoffe: "Makronährstoffe",
+  vitamine: "Vitamine",
+  mineralstoffe: "Mineralstoffe & Spurenelemente",
+  fettsaeuren: "Fettsäuren",
+  aminosaeuren: "Aminosäuren",
+  sonstige: "Sonstige",
+};
+const NUTRIENT_GROUP_ORDER = [
+  "makronaehrstoffe",
+  "vitamine",
+  "mineralstoffe",
+  "fettsaeuren",
+  "aminosaeuren",
+  "sonstige",
+];
+const EXCLUDED_SORT_NUTRIENT_IDS = new Set(["energie_kj", "broteinheiten"]);
+const BASE_MACRO_NUTRIENT_IDS = new Set(["energie", "eiweiss", "fett", "kohlenhydrate"]);
+const SORT_NUTRIENT_GROUPS = NUTRIENT_GROUP_ORDER.map((group) => ({
+  group,
+  label: NUTRIENT_GROUP_LABELS[group] ?? group,
+  items: NUTRIENT_DEFINITIONS.filter(
+    (definition) => definition.group === group && !EXCLUDED_SORT_NUTRIENT_IDS.has(definition.id),
+  ).sort((a, b) => a.sortOrder - b.sortOrder),
+})).filter((entry) => entry.items.length > 0);
+const nutrientDefinitionById = new Map(
+  NUTRIENT_DEFINITIONS.map((definition) => [definition.id, definition]),
+);
+
+function parseNutrientBound(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed.replace(",", "."));
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function nutrientDecimalsForUnit(unit: string): number {
+  if (unit === "kcal" || unit === "kJ") return 0;
+  if (unit === "g") return 1;
+  return 2;
+}
 const FoodSynonymManager = dynamic(
   () => import("@/components/food-synonym-manager").then((mod) => mod.FoodSynonymManager),
   { ssr: false },
@@ -188,6 +246,10 @@ function buildBrowserUrl(params: {
   categoryId: string | null;
   dataSourceId: FoodSourceId | "all";
   groupId: string | null;
+  nutrientId?: string | null;
+  nutrientSort?: NutrientSortDirection | null;
+  nutrientMin?: number | null;
+  nutrientMax?: number | null;
   page: number;
   pageSize: number;
 }) {
@@ -197,6 +259,12 @@ function buildBrowserUrl(params: {
   if (params.categoryId) searchParams.set("categoryId", params.categoryId);
   if (params.dataSourceId !== "all") searchParams.set("dataSourceId", params.dataSourceId);
   if (params.groupId) searchParams.set("groupId", params.groupId);
+  if (params.nutrientId) {
+    searchParams.set("nutrientId", params.nutrientId);
+    if (params.nutrientSort) searchParams.set("nutrientSort", params.nutrientSort);
+    if (params.nutrientMin != null) searchParams.set("nutrientMin", String(params.nutrientMin));
+    if (params.nutrientMax != null) searchParams.set("nutrientMax", String(params.nutrientMax));
+  }
   searchParams.set("page", String(params.page));
   searchParams.set("pageSize", String(params.pageSize));
   return `/api/foods/browser?${searchParams.toString()}`;
@@ -209,6 +277,10 @@ function filterLocalCustomFoods(params: {
   categoryId: string | null;
   dataSourceId: FoodSourceId | "all";
   groupId: string | null;
+  nutrientId: string | null;
+  nutrientMin: number | null;
+  nutrientMax: number | null;
+  nutrientSort: NutrientSortDirection;
   getAliases: (food: Food) => string[];
 }) {
   let filtered = params.foods.filter((food) => food.isCustom);
@@ -225,19 +297,37 @@ function filterLocalCustomFoods(params: {
   }
 
   const query = params.q.trim();
-  if (!query) return filtered;
-
-  if (params.mode === "name" || params.mode === "browse" || params.mode === "group") {
-    return fuzzySearchFoods(query, filtered, { getAliases: params.getAliases });
+  if (query) {
+    if (params.mode === "name" || params.mode === "browse" || params.mode === "group") {
+      filtered = fuzzySearchFoods(query, filtered, { getAliases: params.getAliases });
+    } else if (params.mode === "code") {
+      const normalized = normalizeText(query);
+      filtered = filtered.filter((food) => {
+        const code = food.blsCode?.toLowerCase() ?? "";
+        const id = food.id.toLowerCase();
+        return code.includes(normalized) || id.includes(normalized);
+      });
+    }
   }
 
-  if (params.mode === "code") {
-    const normalized = normalizeText(query);
-    return filtered.filter((food) => {
-      const code = food.blsCode?.toLowerCase() ?? "";
-      const id = food.id.toLowerCase();
-      return code.includes(normalized) || id.includes(normalized);
-    });
+  if (params.nutrientId) {
+    const nutrientId = params.nutrientId;
+    if (params.nutrientMin != null) {
+      filtered = filtered.filter(
+        (food) => getNutrientValue(food.nutrients, nutrientId) >= params.nutrientMin!,
+      );
+    }
+    if (params.nutrientMax != null) {
+      filtered = filtered.filter(
+        (food) => getNutrientValue(food.nutrients, nutrientId) <= params.nutrientMax!,
+      );
+    }
+    const direction = params.nutrientSort === "asc" ? 1 : -1;
+    filtered = [...filtered].sort(
+      (a, b) =>
+        (getNutrientValue(a.nutrients, nutrientId) - getNutrientValue(b.nutrients, nutrientId)) *
+        direction,
+    );
   }
 
   return filtered;
@@ -255,6 +345,11 @@ export function LebensmittelPageClient({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState<SearchMode>("name");
   const [selectedFoodGroupId, setSelectedFoodGroupId] = useState<string | null>(null);
+  const [nutrientFilterId, setNutrientFilterId] = useState<string | null>(null);
+  const [nutrientSort, setNutrientSort] = useState<NutrientSortDirection>("desc");
+  const [nutrientMin, setNutrientMin] = useState("");
+  const [nutrientMax, setNutrientMax] = useState("");
+  const [nutrientPanelOpen, setNutrientPanelOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(initialResult);
   const [brandsResult, setBrandsResult] = useState(EMPTY_BRANDED_RESULT);
@@ -272,9 +367,33 @@ export function LebensmittelPageClient({
     preferredSynonymMap,
   } = useFoodSynonyms();
 
+  const nutrientActive = Boolean(nutrientFilterId);
+  const nutrientDef = nutrientFilterId ? nutrientDefinitionById.get(nutrientFilterId) ?? null : null;
+  const nutrientMinValue = parseNutrientBound(nutrientMin);
+  const nutrientMaxValue = parseNutrientBound(nutrientMax);
+  const showNutrientColumn = Boolean(nutrientDef) && !BASE_MACRO_NUTRIENT_IDS.has(nutrientFilterId ?? "");
+  const nutrientDecimals = nutrientDef ? nutrientDecimalsForUnit(nutrientDef.unit) : 1;
+
+  function clearNutrientFilter() {
+    setNutrientFilterId(null);
+    setNutrientSort("desc");
+    setNutrientMin("");
+    setNutrientMax("");
+  }
+
   useEffect(() => {
     setPage(1);
-  }, [deferredQuery, selectedCategoryId, activeSource, selectedFoodGroupId, searchMode]);
+  }, [
+    deferredQuery,
+    selectedCategoryId,
+    activeSource,
+    selectedFoodGroupId,
+    searchMode,
+    nutrientFilterId,
+    nutrientSort,
+    nutrientMinValue,
+    nutrientMaxValue,
+  ]);
 
   useEffect(() => {
     if (!skippedInitialFetch.current) {
@@ -284,6 +403,7 @@ export function LebensmittelPageClient({
         searchMode === "name" &&
         !selectedCategoryId &&
         !selectedFoodGroupId &&
+        !nutrientFilterId &&
         page === 1 &&
         deferredQuery.trim() === ""
       ) {
@@ -303,6 +423,10 @@ export function LebensmittelPageClient({
             categoryId: selectedCategoryId,
             dataSourceId: activeSource,
             groupId: selectedFoodGroupId,
+            nutrientId: nutrientFilterId,
+            nutrientSort: nutrientFilterId ? nutrientSort : null,
+            nutrientMin: nutrientFilterId ? nutrientMinValue : null,
+            nutrientMax: nutrientFilterId ? nutrientMaxValue : null,
             page,
             pageSize: PAGE_SIZE,
           }),
@@ -336,7 +460,18 @@ export function LebensmittelPageClient({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [activeSource, deferredQuery, page, searchMode, selectedCategoryId, selectedFoodGroupId]);
+  }, [
+    activeSource,
+    deferredQuery,
+    page,
+    searchMode,
+    selectedCategoryId,
+    selectedFoodGroupId,
+    nutrientFilterId,
+    nutrientSort,
+    nutrientMinValue,
+    nutrientMaxValue,
+  ]);
 
   useEffect(() => {
     if (activeTab !== "brands") return;
@@ -383,6 +518,10 @@ export function LebensmittelPageClient({
         categoryId: selectedCategoryId,
         dataSourceId: activeSource,
         groupId: selectedFoodGroupId,
+        nutrientId: nutrientFilterId,
+        nutrientMin: nutrientFilterId ? nutrientMinValue : null,
+        nutrientMax: nutrientFilterId ? nutrientMaxValue : null,
+        nutrientSort,
         getAliases: (food) => getSynonymsForFood(food.id).map((synonym) => synonym.name),
       }),
     [
@@ -393,14 +532,30 @@ export function LebensmittelPageClient({
       searchMode,
       selectedCategoryId,
       selectedFoodGroupId,
+      nutrientFilterId,
+      nutrientMinValue,
+      nutrientMaxValue,
+      nutrientSort,
     ],
   );
 
   const visibleFoods = useMemo(() => {
     if (page !== 1 || localCustomMatches.length === 0) return result.foods;
     const ids = new Set(localCustomMatches.map((food) => food.id));
-    return [...localCustomMatches, ...result.foods.filter((food) => !ids.has(food.id))];
-  }, [localCustomMatches, page, result.foods]);
+    const merged = [...localCustomMatches, ...result.foods.filter((food) => !ids.has(food.id))];
+    // When sorting by a nutrient, re-order the merged page so locally-held
+    // custom foods slot into the correct position instead of pinning to the top.
+    if (nutrientActive && nutrientFilterId) {
+      const direction = nutrientSort === "asc" ? 1 : -1;
+      return [...merged].sort(
+        (a, b) =>
+          (getNutrientValue(a.nutrients, nutrientFilterId) -
+            getNutrientValue(b.nutrients, nutrientFilterId)) *
+          direction,
+      );
+    }
+    return merged;
+  }, [localCustomMatches, page, result.foods, nutrientActive, nutrientFilterId, nutrientSort]);
 
   const resultCount = result.totalCount + (page === 1 ? localCustomMatches.length : 0);
   const resultCountLabel =
@@ -418,6 +573,11 @@ export function LebensmittelPageClient({
   const pageCount = result.hasMore
     ? Math.max(page + 1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize))
     : Math.max(1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize));
+  const tableColSpan =
+    6 +
+    (searchMode === "code" ? 1 : 0) +
+    (searchMode === "group" ? 1 : 0) +
+    (showNutrientColumn ? 1 : 0);
 
   function handleSearchModeChange(mode: SearchMode) {
     setSearchMode(mode);
@@ -561,8 +721,142 @@ export function LebensmittelPageClient({
                   {searchQuery.trim() && searchMode === "name" && (
                     <span className="ml-1 text-purple-500">· Fuzzy-Suche aktiv</span>
                   )}
+                  {nutrientActive && nutrientDef && (
+                    <span className="ml-1 text-primary">
+                      · nach {nutrientDef.shortName} {nutrientSort === "desc" ? "↓" : "↑"}
+                    </span>
+                  )}
                 </p>
               </div>
+
+              <Collapsible
+                open={nutrientPanelOpen}
+                onOpenChange={setNutrientPanelOpen}
+                className="rounded-lg border bg-muted/20"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Nach Nährstoff sortieren &amp; filtern</span>
+                    {nutrientActive && nutrientDef && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {nutrientDef.shortName} ·{" "}
+                        {nutrientSort === "desc" ? "höchste zuerst" : "niedrigste zuerst"}
+                        {nutrientMinValue != null || nutrientMaxValue != null ? " · gefiltert" : ""}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {nutrientActive && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={clearNutrientFilter}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5" />
+                        Zurücksetzen
+                      </Button>
+                    )}
+                    <CollapsibleTrigger asChild>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 px-2">
+                        <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </div>
+                <CollapsibleContent className="space-y-3 border-t p-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nährstoff</Label>
+                      <Select
+                        value={nutrientFilterId ?? "none"}
+                        onValueChange={(value) =>
+                          setNutrientFilterId(value === "none" ? null : value)
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Nährstoff wählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Kein Nährstoff</SelectItem>
+                          {SORT_NUTRIENT_GROUPS.map((entry) => (
+                            <SelectGroup key={entry.group}>
+                              <SelectLabel>{entry.label}</SelectLabel>
+                              {entry.items.map((definition) => (
+                                <SelectItem key={definition.id} value={definition.id}>
+                                  {definition.name}
+                                  {definition.unit ? ` (${definition.unit})` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Reihenfolge</Label>
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant={nutrientSort === "desc" ? "default" : "outline"}
+                          size="sm"
+                          className="flex-1"
+                          disabled={!nutrientActive}
+                          onClick={() => setNutrientSort("desc")}
+                        >
+                          <ArrowDownWideNarrow className="mr-1 h-3.5 w-3.5" />
+                          Höchste
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={nutrientSort === "asc" ? "default" : "outline"}
+                          size="sm"
+                          className="flex-1"
+                          disabled={!nutrientActive}
+                          onClick={() => setNutrientSort("asc")}
+                        >
+                          <ArrowUpWideNarrow className="mr-1 h-3.5 w-3.5" />
+                          Niedrigste
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        Min.{nutrientDef ? ` (${nutrientDef.unit})` : ""}
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        placeholder="z. B. 10"
+                        value={nutrientMin}
+                        disabled={!nutrientActive}
+                        onChange={(event) => setNutrientMin(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        Max.{nutrientDef ? ` (${nutrientDef.unit})` : ""}
+                      </Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        placeholder="optional"
+                        value={nutrientMax}
+                        disabled={!nutrientActive}
+                        onChange={(event) => setNutrientMax(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Werte beziehen sich auf 100&nbsp;g. Beispiel: Eiweiß, „Höchste&quot;, Min.&nbsp;10
+                    zeigt Lebensmittel mit mehr als 10&nbsp;g Eiweiß je 100&nbsp;g.
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
 
               {searchMode === "group" && (
                 <Card>
@@ -643,6 +937,18 @@ export function LebensmittelPageClient({
                               ))}
                             </div>
                           )}
+                          {showNutrientColumn && nutrientDef && nutrientFilterId && (
+                            <div className="mt-2">
+                              <Badge variant="secondary" className="text-[11px] text-primary">
+                                {nutrientDef.shortName}:{" "}
+                                {formatNumber(
+                                  getNutrientValue(food.nutrients, nutrientFilterId),
+                                  nutrientDecimals,
+                                )}{" "}
+                                {nutrientDef.unit}
+                              </Badge>
+                            </div>
+                          )}
                           <div className="mt-3 grid grid-cols-4 gap-2 text-sm">
                             <div>
                               <p className="text-muted-foreground text-[11px]">kcal</p>
@@ -691,6 +997,11 @@ export function LebensmittelPageClient({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      {showNutrientColumn && nutrientDef && (
+                        <TableHead className="text-right text-primary">
+                          {nutrientDef.shortName} ({nutrientDef.unit})
+                        </TableHead>
+                      )}
                       {searchMode === "code" && <TableHead>BLS-Code</TableHead>}
                       {searchMode === "group" && <TableHead>Gruppe</TableHead>}
                       <TableHead>Kategorie</TableHead>
@@ -704,7 +1015,7 @@ export function LebensmittelPageClient({
                     {isLoading ? (
                       <TableRow>
                         <TableCell
-                          colSpan={searchMode === "code" || searchMode === "group" ? 7 : 6}
+                          colSpan={tableColSpan}
                           className="text-muted-foreground h-24 text-center"
                         >
                           Ergebnisse werden geladen...
@@ -713,7 +1024,7 @@ export function LebensmittelPageClient({
                     ) : visibleFoods.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={searchMode === "code" || searchMode === "group" ? 7 : 6}
+                          colSpan={tableColSpan}
                           className="text-muted-foreground h-24 text-center"
                         >
                           Keine Lebensmittel gefunden.
@@ -779,6 +1090,14 @@ export function LebensmittelPageClient({
                                 />
                               </div>
                             </TableCell>
+                            {showNutrientColumn && nutrientFilterId && (
+                              <TableCell className="text-right font-semibold text-primary">
+                                {formatNumber(
+                                  getNutrientValue(food.nutrients, nutrientFilterId),
+                                  nutrientDecimals,
+                                )}
+                              </TableCell>
+                            )}
                             {searchMode === "code" && (
                               <TableCell>
                                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">

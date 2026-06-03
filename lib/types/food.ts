@@ -99,12 +99,19 @@ export interface FoodSearchItem {
   isCustom?: boolean;
 }
 
+export type NutrientSortDirection = "asc" | "desc";
+
 export interface FoodBrowserQuery {
   q?: string;
   mode?: "name" | "code" | "group" | "browse";
   categoryId?: string | null;
   dataSourceId?: FoodSourceId | "all" | null;
   groupId?: string | null;
+  /** Sort/threshold-filter results by a single nutrient (per 100 g). */
+  nutrientId?: string | null;
+  nutrientMin?: number | null;
+  nutrientMax?: number | null;
+  nutrientSort?: NutrientSortDirection | null;
   page?: number;
   pageSize?: number;
 }
