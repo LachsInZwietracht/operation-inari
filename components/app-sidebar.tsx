@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import {
   LayoutDashboard,
   Apple,
@@ -30,6 +31,7 @@ import {
   Gauge,
   Ruler,
   Lock,
+  ChevronDown,
 } from "lucide-react"
 import {
   Sidebar,
@@ -57,6 +59,8 @@ interface NavItem {
 interface NavSection {
   title: string
   items: NavItem[]
+  /** Visually de-emphasize this section while we focus on the MVP. */
+  deEmphasized?: boolean
 }
 
 const NAV_SECTIONS: NavSection[] = [
@@ -90,6 +94,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Institution",
+    deEmphasized: true,
     items: [
       { label: "Menüpläne", icon: Factory, route: "/institution/menueplaene", requiresInstitutionAccess: true },
       { label: "Produktion", icon: Boxes, route: "/institution/produktion", requiresInstitutionAccess: true },
@@ -100,6 +105,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Praxis",
+    deEmphasized: true,
     items: [
       { label: "Termine", icon: CalendarClock, route: "/termine" },
       { label: "Abrechnung", icon: Receipt, route: "/abrechnung" },
@@ -108,6 +114,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Wissen & Technik",
+    deEmphasized: true,
     items: [
       { label: "Wissen", icon: BookOpen, route: "/wissen" },
       { label: "API & Export", icon: Network, route: "/api-export" },
@@ -125,8 +132,61 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 const INSTITUTION_LOCKED_LABEL = "Institution-Zugriff erforderlich"
 
+const PRIMARY_SECTIONS = NAV_SECTIONS.filter((section) => !section.deEmphasized)
+const SECONDARY_SECTIONS = NAV_SECTIONS.filter((section) => section.deEmphasized)
+
 export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebarProps) {
   const pathname = usePathname()
+  const [showMore, setShowMore] = useState(false)
+
+  const isItemActive = (route: string) =>
+    pathname === route || pathname.startsWith(`${route}/`)
+
+  // Keep secondary sections visible whenever the current page lives in one of them.
+  const activeInSecondary = SECONDARY_SECTIONS.some((section) =>
+    section.items.some((item) => isItemActive(item.route))
+  )
+  const secondaryExpanded = showMore || activeInSecondary
+
+  const renderSection = (section: NavSection) => (
+    <SidebarGroup key={section.title}>
+      <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {section.items.map((item) => {
+            const isActive = isItemActive(item.route)
+            const isLocked = item.requiresInstitutionAccess && !canAccessInstitution
+
+            return (
+              <SidebarMenuItem key={item.route}>
+                {isLocked ? (
+                  <SidebarMenuButton
+                    aria-disabled="true"
+                    aria-label={`${item.label}: ${INSTITUTION_LOCKED_LABEL}`}
+                    className="pointer-events-auto cursor-not-allowed text-sidebar-foreground/55 hover:bg-transparent hover:text-sidebar-foreground/55"
+                    title={INSTITUTION_LOCKED_LABEL}
+                    type="button"
+                    tooltip={`${item.label} gesperrt`}
+                  >
+                    <item.icon />
+                    <span>{item.label}</span>
+                    <Lock className="ml-auto opacity-70 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                    <Link href={item.route} prefetch={false}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
+            )
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  )
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -146,46 +206,41 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
       </SidebarHeader>
 
       <SidebarContent>
-        {NAV_SECTIONS.map((section) => (
-          <SidebarGroup key={section.title}>
-            <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {section.items.map((item) => {
-                  const isActive =
-                    pathname === item.route || pathname.startsWith(`${item.route}/`)
-                  const isLocked = item.requiresInstitutionAccess && !canAccessInstitution
+        {PRIMARY_SECTIONS.map(renderSection)}
 
-                  return (
-                    <SidebarMenuItem key={item.route}>
-                      {isLocked ? (
-                        <SidebarMenuButton
-                          aria-disabled="true"
-                          aria-label={`${item.label}: ${INSTITUTION_LOCKED_LABEL}`}
-                          className="pointer-events-auto cursor-not-allowed text-sidebar-foreground/55 hover:bg-transparent hover:text-sidebar-foreground/55"
-                          title={INSTITUTION_LOCKED_LABEL}
-                          type="button"
-                          tooltip={`${item.label} gesperrt`}
-                        >
-                          <item.icon />
-                          <span>{item.label}</span>
-                          <Lock className="ml-auto opacity-70 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
-                        </SidebarMenuButton>
-                      ) : (
-                        <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                          <Link href={item.route} prefetch={false}>
-                            <item.icon />
-                            <span>{item.label}</span>
-                          </Link>
-                        </SidebarMenuButton>
+        {SECONDARY_SECTIONS.length > 0 && (
+          <>
+            <SidebarGroup className="py-0">
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      type="button"
+                      onClick={() => setShowMore((prev) => !prev)}
+                      aria-expanded={secondaryExpanded}
+                      className="text-sidebar-foreground/60"
+                      tooltip={secondaryExpanded ? "Weniger anzeigen" : "Mehr anzeigen"}
+                    >
+                      <ChevronDown
+                        className={`transition-transform ${secondaryExpanded ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      />
+                      <span>{secondaryExpanded ? "Weniger anzeigen" : "Mehr anzeigen"}</span>
+                      {!secondaryExpanded && (
+                        <span className="ml-auto flex items-center gap-1 text-xs text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
+                          Demnächst
+                          <Lock className="size-3" aria-hidden="true" />
+                        </span>
                       )}
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            {secondaryExpanded && SECONDARY_SECTIONS.map(renderSection)}
+          </>
+        )}
       </SidebarContent>
 
       <SidebarFooter>
