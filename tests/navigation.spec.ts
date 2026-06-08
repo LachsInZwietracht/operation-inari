@@ -24,13 +24,13 @@ test.describe("Navigation", () => {
       heading: string;
       exact?: boolean;
     }[] = [
-      { label: "Lebensmittel", path: "/lebensmittel", url: /\/lebensmittel/, heading: "Lebensmittel" },
+      { label: "Lebensmittel", path: "/lebensmittel/uebersicht", url: /\/lebensmittel\/uebersicht/, heading: "Lebensmittel" },
       { label: "Rezepte", path: "/rezepte", url: /\/rezepte/, heading: "Rezepte" },
       {
-        label: "Ernährungsplan",
-        path: "/ernaehrungsplan",
-        url: /\/ernaehrungsplan/,
-        heading: "Ernährungsplan",
+        label: "Ernährungspläne",
+        path: "/ernaehrungsplaene",
+        url: /\/ernaehrungsplaene/,
+        heading: "Ernährungspläne",
       },
       {
         label: "Austauschtabellen",
@@ -74,11 +74,6 @@ test.describe("Navigation", () => {
     ];
 
     for (const step of steps) {
-      const link = sidebar.getByRole("link", { name: step.label, exact: step.exact ?? false });
-      await expect(link).toBeVisible({ timeout: 30_000 });
-      const href = await link.getAttribute("href");
-      expect(href).toBe(step.path);
-
       await page.goto(step.path, { waitUntil: "domcontentloaded", timeout: navTimeout });
       const headingLocator = page
         .locator("main")
@@ -86,6 +81,13 @@ test.describe("Navigation", () => {
       await expect(headingLocator).toBeVisible({ timeout: navTimeout });
       await expect(page).toHaveURL(step.url, { timeout: navTimeout });
       await expect(sidebar).toBeVisible({ timeout: navTimeout });
+
+      // The sidebar link for the current route is present (secondary sections
+      // auto-reveal when their route is active).
+      const link = sidebar.getByRole("link", { name: step.label, exact: step.exact ?? false });
+      await expect(link).toBeVisible({ timeout: 30_000 });
+      const href = await link.getAttribute("href");
+      expect(href).toBe(step.path);
     }
 
     const dashboardLink = sidebar.getByRole("link", { name: "Dashboard" });
