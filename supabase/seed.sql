@@ -6,7 +6,7 @@
 -- Data sources
 -- ============================================================================
 INSERT INTO data_sources (id, name, version, record_count, nutrient_count, license, url) VALUES
-  ('bls', 'BLS (Bundeslebensmittelschlüssel)', '4.0', 7140, 138, 'Free (MRI)', 'https://www.blsdb.de/'),
+  ('bls', 'BLS (Bundeslebensmittelschlüssel)', '4.0', 7140, 138, 'CC BY 4.0 (Max Rubner-Institut)', 'https://www.blsdb.de/'),
   ('sfk', 'Souci-Fachmann-Kraut', '2024', 800, 300, 'Commercial license required', 'https://www.wissenschaftliche-verlagsgesellschaft.de/'),
   ('usda', 'USDA FoodData Central', '2026-01', 370000, 360, 'CC0 Public Domain', 'https://fdc.nal.usda.gov/'),
   ('afcd', 'Australian Food Composition Database', '1.0', 1534, 256, 'CC BY 2.5 AU', 'https://data.gov.au/'),

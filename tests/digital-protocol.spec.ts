@@ -63,7 +63,6 @@ test.describe("Digital Protocol Public Entry", () => {
     const response = await request.post("/api/protokoll/submit", {
       data: {
         linkId: "00000000-0000-0000-0000-000000000000",
-        patientId: "00000000-0000-0000-0000-000000000001",
         days: [
           {
             date: "2026-04-19",

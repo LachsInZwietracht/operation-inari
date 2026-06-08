@@ -174,7 +174,7 @@ async function main() {
       imported_at: new Date().toISOString(),
       record_count: rows.length,
       nutrient_count: 138,
-      license: "Free (MRI)",
+      license: "CC BY 4.0 (Max Rubner-Institut)",
       url: "https://www.blsdb.de/",
     });
 

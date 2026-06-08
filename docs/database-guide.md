@@ -171,7 +171,7 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 
 #### BLS 4.0 (Bundeslebensmittelschlüssel)
 - **Coverage:** 7,140 German foods, 138 nutrients per food
-- **License:** Free (newly opened by Max Rubner Institut, 2025)[^5]
+- **License:** CC BY 4.0; attribution to the Max Rubner Institute is required[^5]
 - **Format:** Excel workbook (.xlsx) download from blsdb.de (API planned)
 - **Why essential:** It's the German standard for nutrition counselling and labelling (LMIV). Our mock data already uses BLS codes. Going from 48 mock foods to 7,140 real foods is the single biggest improvement.
 - **Integration effort:** Medium — parse the official Excel workbook, map 138 BLS nutrient columns to our nutrient IDs, bulk-insert into Postgres
@@ -491,6 +491,11 @@ BLS 4.0 provides ~138 nutrients total. The ETL currently maps 34 (28 original + 
 - `scripts/etl/verify-bls-import.ts` — post-import verifier (compares Supabase row counts with Excel source)
 
 **Input:** `data/BLS_4_0_2025_DE/BLS_4_0_Daten_2025_DE.xlsx` — a single Excel workbook (.xlsx), UTF-8 encoded, comma as decimal separator. The first sheet contains all 7,140 foods across 418 columns.
+
+**Parser security:** `xlsx` is pinned to the current SheetJS Community Edition
+release from the vendor's authoritative CDN and is development-only. Process
+only official or contractually supplied trusted workbooks. Do not expose this
+parser through a public upload endpoint.
 
 **Local run checklist:**
 - Start Supabase locally with Docker (`supabase start` once; rerun if Docker restarts).
@@ -880,7 +885,7 @@ What's lost at each tier:
 - The official ETL reads the `.xlsx` file via SheetJS (numbers already parsed). If you ever re-export to CSV, remember German decimals use comma (`12,5` = 12.5) and normalize before parsing.
 
 ### Licensing & Attribution
-- BLS 4.0: free, likely attribution required (check terms on blsdb.de)
+- BLS 4.0: CC BY 4.0; attribute the Max Rubner Institute and identify BLS 4.0
 - Open Food Facts: ODbL — must display attribution ("Data from Open Food Facts") and share-alike for derivatives
 - Swiss DB: attribution required
 - USDA: CC0, no restrictions

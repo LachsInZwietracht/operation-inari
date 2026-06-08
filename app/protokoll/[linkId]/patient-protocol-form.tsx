@@ -59,13 +59,11 @@ function buildDefaultDay(date?: string) {
 
 interface PatientProtocolFormProps {
   linkId: string;
-  patientId: string;
   method: string;
 }
 
 export function PatientProtocolForm({
   linkId,
-  patientId,
   method,
 }: PatientProtocolFormProps) {
   const [submitted, setSubmitted] = useState(false);
@@ -116,7 +114,6 @@ export function PatientProtocolForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           linkId,
-          patientId,
           days: filteredDays,
           notes: values.notes?.trim() || undefined,
         }),

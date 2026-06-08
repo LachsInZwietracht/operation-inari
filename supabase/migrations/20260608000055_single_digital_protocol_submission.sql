@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX digital_protocol_submissions_link_id_unique_idx
+  ON digital_protocol_submissions(link_id);

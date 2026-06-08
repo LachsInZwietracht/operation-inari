@@ -18,8 +18,8 @@ import type {
 export const ADMIN_USERS: AdminUser[] = [
   {
     id: "user_admin",
-    name: "Fabian Radlow",
-    email: "fabian@inari.app",
+    name: "Demo Admin",
+    email: "admin@example.invalid",
     role: "Administrator",
     status: "aktiv",
     lastLogin: "2026-03-12T07:45:00Z",
@@ -27,7 +27,7 @@ export const ADMIN_USERS: AdminUser[] = [
   {
     id: "user_nutri",
     name: "Sarah Dietrich",
-    email: "sarah@inari.app",
+    email: "sarah@example.invalid",
     role: "Ernährungsfachkraft",
     status: "aktiv",
     lastLogin: "2026-03-11T15:20:00Z",
@@ -35,7 +35,7 @@ export const ADMIN_USERS: AdminUser[] = [
   {
     id: "user_guest",
     name: "Max Mustermann",
-    email: "max@inari.app",
+    email: "max@example.invalid",
     role: "Gast",
     status: "eingeladen",
     lastLogin: "–",
@@ -115,7 +115,7 @@ export const AUDIT_LOG: AuditLogEntry[] = [
   {
     id: "log_3",
     timestamp: "2026-03-11T08:05:00Z",
-    actor: "Fabian Radlow",
+    actor: "Demo Admin",
     action: "Zugriff auf Patientenakte",
     target: "Patient #5",
   },
@@ -457,7 +457,7 @@ export const EXPORT_HISTORY: ExportJob[] = [
     status: "abgeschlossen",
     createdAt: "2026-04-10T08:15:00Z",
     fileSize: "4,2 MB",
-    createdBy: "Fabian Radlow",
+    createdBy: "Demo Admin",
   },
   {
     id: "job_2",
@@ -477,7 +477,7 @@ export const EXPORT_HISTORY: ExportJob[] = [
     status: "abgeschlossen",
     createdAt: "2026-04-08T10:00:00Z",
     fileSize: "856 KB",
-    createdBy: "Fabian Radlow",
+    createdBy: "Demo Admin",
   },
   {
     id: "job_4",
@@ -496,7 +496,7 @@ export const EXPORT_HISTORY: ExportJob[] = [
     status: "fehlgeschlagen",
     createdAt: "2026-04-07T13:20:00Z",
     fileSize: "12,1 MB",
-    createdBy: "Fabian Radlow",
+    createdBy: "Demo Admin",
   },
   {
     id: "job_6",
@@ -516,6 +516,6 @@ export const EXPORT_HISTORY: ExportJob[] = [
     status: "abgeschlossen",
     createdAt: "2026-04-05T14:30:00Z",
     fileSize: "3,7 MB",
-    createdBy: "Fabian Radlow",
+    createdBy: "Demo Admin",
   },
 ];

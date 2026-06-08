@@ -29,6 +29,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Strategy input only. |
 | Clinic IT integrations: LDAP/AD, HL7, FHIR | `docs/clinic-it-integration-plan.md` | P1 integration contracts and implementation boundaries. |
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
+| Public repository release | `docs/public-release.md` | Clean-snapshot release process, security settings, and history warning. |
 | Billing/subscription work | `.agent/docs/billing.md` | Billing is preview-only unless code proves otherwise. |
 | Claude phase commands | `.claude/commands/*` | Workflow prompts for Claude Code sessions. |
 

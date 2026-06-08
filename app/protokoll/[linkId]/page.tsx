@@ -84,7 +84,6 @@ export default async function ProtokollPage({ params }: ProtokollPageProps) {
   return (
     <PatientProtocolForm
       linkId={linkId}
-      patientId={link.patient_id}
       method={link.method}
     />
   );

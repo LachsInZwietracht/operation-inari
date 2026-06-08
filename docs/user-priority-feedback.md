@@ -6,30 +6,9 @@
 > prioritization. When in doubt about what to build or polish next, align with the
 > requirements below before anything else.
 
-Source: email from a PRODI user (received and recorded 2026-05-30).
-
-## Original Email (verbatim, German)
-
-> Ich habe mir nun aber ein paar Gedanken gemacht, was mir zu Prodi und zu einer möglichen neuen App eingefallen ist.
->
-> **Was ich wichtig finde:**
->
-> - Insgesamt möglichst intuitives Design mit wenig Einarbeitungszeit für die Motivation
-> - Referenzwerte sollten nach DGE/ÖGE eingebaut sein, aber auch individuell anpassbar sein. Dabei sollten auch verschiedene PAL-Werte einbezogen werden können
-> - Datenbank sollte ausgewählt werden können, die genutzt werden soll (wie auch schon bei Prodi) oder alternativ irgendwo gut sichtbar sein bei den Lebensmitteln. Denn je nach Datenbank werden auch ganz unterschiedliche Nährstoffe berücksichtigt oder eben nicht.
-> - Eine Funktion, die es in Prodi gibt und die ich sehr wichtig finde: Sortierung von Lebensmitteln nach einzelnen Inhaltsstoffen, z. B. nach Protein sortiert oder Anzeige von Lebensmitteln, die > 10g Protein/100 g enthalten oder ähnlich (letzteres dann eher Filter als Sortierung)
-> - Eigene Lebensmittel einfügen können, falls noch nicht in einer Datenbank vorhanden
-> - Eigene Rezepte erstellen und speichern können. Vielleicht auch eine Rezeptdatenbank verlinken, die es schon gibt und die importiert werden kann.
-> - Ihr solltet gewährleisten können, dass Updates, wie z. B. der neu erschiene BLS oder auch geänderte Referenzwerte der DGE/ÖGE möglichst zeitnah in eurer App landen
-> - Neben Grammangaben sollten sinnvolle Portionsgrößen zur Wahl stehen. Ich weiß hier allerdings gerade keine gute Quelle für. Unterscheidet sich auch je nach Lebensmittel/-gruppe.
-> - Export von Plänen, Ergebnissen etc. in Word, Excel und ggf. weitere Programme. Falls ihr mit Kliniken zusammenarbeiten wollt, könnt ihr ggf. auch mal fragen/recherchieren, was die für eine interne Cloud oder Software-Umgebung nutzen. Vielleicht kann man das mittels API (ich weiß nicht, ob ich den Begriff richtig nutze 😊) sogar dort einbinden. Hier wäre dann der Punkt DSGVO auch noch entscheidender als sowieso schon
->
-> **Was ich noch spannend fände, aber die Umsetzbarkeit nicht einschätzen kann:**
->
-> - bei der Suche nach Lebensmitteln jeweils pro Lebensmittel ein Untermenü anbieten, ob roh, gekocht, gedünstet o.ä.. Findet sich in der BLS-Liste jeweils als eigene Lebensmittel, aber ich fände es übersichtlicher, das eher als Drop-Down-Menü oder so zu haben
-> - Lebensmitteln Kategorien zuweisen, z. B. enthält Laktose, Fruktose etc. → oder Listen mit empfehlenswerten oder weniger empfehlenswerten Inhaltsstoffen für Unverträglichkeiten → sicher nicht einfach, aber wäre starkes Feature
-> - Falls eure Zielgruppe Erkrankte oder Kliniken umfassen: Infoseiten zu kurzen Facts, z. B. wenn du eine chronisch entzündliche Darmerkrankung hast, solltest du mehr auf dies und jenes achten. Ggf. nur Lebensmittel oder Inhaltsstoffe benennen oder sogar mit Mengen. Allerdings muss man hier auch rechtlich prüfen, inwieweit ihr solche Empfehlungen dann für Kranke machen dürft. Oder bei Auswahl eines entsprechenden Profils (wie bestimmte Krankheit oder Ziel wie Sportler) die interessanten Nährwerte farblich und mit Infos o.ä. hinterlegen, was hier besonders ist
-> - Kompatibilität mit Windows, Linux und Mac als Webversion oder eben Android und Apple.
+Source: anonymized and normalized summary of practitioner feedback received
+2026-05-30. The original correspondence is intentionally not stored in the
+public repository.
 
 ## Requirement Checklist (must-have)
 

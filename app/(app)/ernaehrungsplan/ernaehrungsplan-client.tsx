@@ -1081,6 +1081,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   )}`
   const assignedPatient = currentPlan.patientId ? getPatient(currentPlan.patientId) : undefined
   const visiblePatient = patient ?? assignedPatient
+  const hasSelectedPatient = Boolean(patientId ?? currentPlan.patientId)
   const pendingAssignmentPatient = pendingPatientAssignmentId
     ? getPatient(pendingPatientAssignmentId)
     : undefined
@@ -1857,6 +1858,44 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen und vergleichen Sie die Nährstoffzufuhr mit Zielprofilen und DGE-Referenzwerten."
       />
 
+      {!hasSelectedPatient && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+              <Users className="text-muted-foreground h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-medium">Patient wählen</p>
+              <p className="text-muted-foreground mx-auto max-w-md text-sm">
+                Wählen Sie einen Patienten, um einen Ernährungsplan zu erstellen.
+                Mahlzeiten, Nährstoffanalyse und Freigabe erscheinen, sobald ein Patient
+                zugeordnet ist.
+              </p>
+            </div>
+            <div className="w-full max-w-xs space-y-1.5 text-left">
+              <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                Patient
+              </Label>
+              <Select value={UNASSIGNED_PATIENT_VALUE} onValueChange={handlePlanPatientChange}>
+                <SelectTrigger aria-label="Patient">
+                  <SelectValue placeholder="Patient wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.lastName}, {item.firstName}
+                      {getPatientIndications(item).length ? ` · ${getPatientIndications(item).join(" · ")}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasSelectedPatient && (
+        <>
       <Card>
         <CardHeader className="space-y-3 pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2948,6 +2987,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </Card>
         </TabsContent>
       </Tabs>
+        </>
+      )}
 
       <Dialog open={dietLineDialogOpen} onOpenChange={setDietLineDialogOpen}>
         <DialogContent className="sm:max-w-4xl">

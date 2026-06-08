@@ -6,23 +6,27 @@ import { queueWebhookDeliveryAttempts } from "@/lib/data/webhooks";
 
 const submissionSchema = z.object({
   linkId: z.string().uuid(),
-  patientId: z.string().uuid(),
   days: z.array(
     z.object({
       date: z.string(),
       entries: z.array(
         z.object({
-          mealSlot: z.string(),
-          freeText: z.string().min(1),
-          time: z.string().optional(),
+          mealSlot: z.string().min(1).max(64),
+          freeText: z.string().min(1).max(2_000),
+          time: z.string().max(16).optional(),
         })
-      ),
+      ).max(20),
     })
-  ),
-  notes: z.string().optional(),
+  ).min(1).max(31),
+  notes: z.string().max(5_000).optional(),
 });
 
 export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 100_000) {
+    return NextResponse.json({ error: "Request zu groß" }, { status: 413 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -38,7 +42,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { linkId, patientId, days, notes } = parsed.data;
+  const { linkId, days, notes } = parsed.data;
 
   const supabase = await createServiceClient();
 
@@ -76,19 +80,12 @@ export async function POST(request: Request) {
     );
   }
 
-  if (link.patient_id !== patientId) {
-    return NextResponse.json(
-      { error: "Patienten-ID stimmt nicht überein" },
-      { status: 400 }
-    );
-  }
-
   // Insert submission
   const { data: submission, error: insertError } = await supabase
     .from("digital_protocol_submissions")
     .insert({
       link_id: linkId,
-      patient_id: patientId,
+      patient_id: link.patient_id,
       days,
       notes: notes ?? null,
     })
@@ -96,6 +93,13 @@ export async function POST(request: Request) {
     .single();
 
   if (insertError || !submission) {
+    if (insertError?.code === "23505") {
+      return NextResponse.json(
+        { error: "Dieses Protokoll wurde bereits eingereicht" },
+        { status: 409 }
+      );
+    }
+
     console.error("Failed to insert protocol submission:", insertError);
     return NextResponse.json(
       { error: "Fehler beim Speichern der Einreichung" },
@@ -120,7 +124,7 @@ export async function POST(request: Request) {
       targetType: "digital_protocol_submission",
       targetId: submission.id,
       metadata: {
-        patientId,
+        patientId: link.patient_id,
         linkId,
         dayCount: days.length,
         entryCount: days.reduce((total, day) => total + day.entries.length, 0),
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
       targetType: "digital_protocol_submission",
       targetId: submission.id,
       payload: {
-        patientId,
+        patientId: link.patient_id,
         linkId,
         dayCount: days.length,
         entryCount: days.reduce((total, day) => total + day.entries.length, 0),
