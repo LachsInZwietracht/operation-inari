@@ -43,6 +43,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { BrandMark } from "@/components/brand-mark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { UserNav } from "@/components/user-nav"
 
@@ -189,9 +190,9 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard" prefetch={false}>
-                <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-sm font-bold">
-                  I
-                </div>
+                <span className="flex aspect-square size-8 items-center justify-center rounded-lg border bg-white p-1">
+                  <BrandMark className="size-full" priority />
+                </span>
                 <span className="truncate text-lg font-semibold">Inari</span>
               </Link>
             </SidebarMenuButton>
