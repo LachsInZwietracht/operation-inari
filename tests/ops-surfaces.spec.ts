@@ -149,11 +149,16 @@ test.describe("Ops Surfaces", () => {
     await page.goto("/datenbank");
 
     await expect(page.getByRole("heading", { name: "Datenbankstatus" })).toBeVisible();
-    await expect(page.getByText("Katalogstatus")).toBeVisible();
-    await expect(page.getByText("Datenbankhistorie")).toBeVisible();
-    await expect(page.getByText("Lebensmittelreferenzen ersetzen")).toBeVisible();
-    await expect(page.getByText("Ersetzungsprotokoll")).toBeVisible();
+    await expect(page.getByText("Verbundene Datenbanken")).toBeVisible();
+    await expect(page.getByText("Naehrstoffvergleich")).toBeVisible();
     await expect(page.getByText("BLS (Bundeslebensmittelschlüssel)")).toBeVisible();
+
+    // Source cards open a detail dialog with catalog metadata and an
+    // activate/deactivate control for the organization.
+    await page.getByRole("button", { name: /BLS \(Bundeslebensmittelschlüssel\)/ }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("Lizenz")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("In der Lebensmittelsuche verwenden")).toBeVisible();
   });
 
   test("distinguishes bundled knowledge cards from live analytics", async ({ page }) => {

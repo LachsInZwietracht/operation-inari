@@ -442,19 +442,6 @@ async function main() {
   );
   console.log(`  Skipped:   ${skippedFoods}`);
 
-  // 11. Log lifecycle event
-  const { writeDataSourceEvent } = await import("./etl-event");
-  await writeDataSourceEvent({
-    dataSourceId: "bls",
-    eventType: "import",
-    version: "4.0",
-    title: "BLS 4.0 Import",
-    summary: `${totalFoods} Lebensmittel, ${totalNutrients} Naehrstoffwerte importiert (${skippedFoods} uebersprungen).`,
-    recordCount: totalFoods,
-    nutrientCount: totalNutrients,
-    metadata: { skipped: skippedFoods },
-  });
-
   console.log("\nPurging server cache...");
   try {
     await revalidateAllFoods();

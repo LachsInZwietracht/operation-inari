@@ -403,20 +403,7 @@ async function main() {
   console.log(`  Skipped:   ${skippedFoods}`);
   console.log(`  Synonyms:  ${synonyms.length}`);
 
-  // 10. Log lifecycle event
-  const { writeDataSourceEvent } = await import("./etl-event");
-  await writeDataSourceEvent({
-    dataSourceId: "sfk",
-    eventType: "import",
-    version,
-    title: `SFK v${version} Import`,
-    summary: `${totalFoods} Lebensmittel, ${totalNutrients} Naehrstoffwerte importiert (${skippedFoods} uebersprungen, ${synonyms.length} Synonyme).`,
-    recordCount: totalFoods,
-    nutrientCount: totalNutrients,
-    metadata: { skipped: skippedFoods, synonyms: synonyms.length },
-  });
-
-  // 11. Purge cache
+  // 10. Purge cache
   console.log("\nPurging server cache...");
   try {
     await revalidateAllFoods();

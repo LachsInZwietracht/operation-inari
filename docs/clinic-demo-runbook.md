@@ -30,7 +30,7 @@ This is intentionally not a generic tour. It should prove the buyer-facing promi
 ### 1. Buyer Setup And System Trust
 
 Start with:
-- `/datenbank` for live data-source catalog, import/lifecycle history, nutrient diffing, and audited food replacement.
+- `/datenbank` for the live data-source catalog (with per-organization activate/deactivate) and nutrient diffing.
 - `/admin/users` for RBAC roles, invitations, SSO configuration, and report-retention policy.
 - `/api-export` for API keys, export journal, webhook endpoints, and queued delivery attempts.
 

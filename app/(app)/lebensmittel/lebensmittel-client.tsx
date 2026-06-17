@@ -335,8 +335,10 @@ function filterLocalCustomFoods(params: {
 
 export function LebensmittelPageClient({
   initialResult,
+  disabledSourceIds = [],
 }: {
   initialResult: FoodBrowserResult;
+  disabledSourceIds?: FoodSourceId[];
 }) {
   const router = useRouter();
   const { activeSource, setActiveSource } = useFoodSourcePreference();
@@ -394,6 +396,14 @@ export function LebensmittelPageClient({
     nutrientMinValue,
     nutrientMaxValue,
   ]);
+
+  // If a previously saved source was deactivated for the org, fall back to "all"
+  // so the selector never shows a value the org can no longer use.
+  useEffect(() => {
+    if (activeSource !== "all" && disabledSourceIds.includes(activeSource)) {
+      setActiveSource("all");
+    }
+  }, [activeSource, disabledSourceIds, setActiveSource]);
 
   useEffect(() => {
     if (!skippedInitialFetch.current) {
@@ -566,10 +576,15 @@ export function LebensmittelPageClient({
     activeSource === "all"
       ? null
       : FOOD_SOURCES.find((source) => source.id === activeSource);
-  const selectableFoodSources = useMemo(
-    () => FOOD_SOURCES.filter((source) => ACTIVE_FOOD_BROWSER_SOURCE_IDS.has(source.id) && canAccessDataSource(source.id)),
-    [],
-  );
+  const selectableFoodSources = useMemo(() => {
+    const disabled = new Set(disabledSourceIds);
+    return FOOD_SOURCES.filter(
+      (source) =>
+        ACTIVE_FOOD_BROWSER_SOURCE_IDS.has(source.id) &&
+        canAccessDataSource(source.id) &&
+        !disabled.has(source.id),
+    );
+  }, [disabledSourceIds]);
   const pageCount = result.hasMore
     ? Math.max(page + 1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize))
     : Math.max(1, Math.ceil(Math.max(result.totalCount, 1) / result.pageSize));

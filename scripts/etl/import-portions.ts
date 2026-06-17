@@ -159,16 +159,6 @@ async function main() {
 
   console.log(`\nInserted ${inserted} portion sizes`);
 
-  const { writeDataSourceEvent } = await import("./etl-event");
-  await writeDataSourceEvent({
-    dataSourceId: "bls",
-    eventType: "change_note",
-    title: "Portionsgroessen importiert",
-    summary: `${inserted} Portionsgroessen fuer ${foodIds.length} Lebensmittel importiert.`,
-    recordCount: inserted,
-    metadata: { foodCount: foodIds.length, totalGenerated: portionRows.length },
-  });
-
   console.log("=== Portion import complete ===");
 }
 

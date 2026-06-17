@@ -84,8 +84,6 @@ High-interest gaps (feasibility TBD):
 - [x] Continue replacing all-catalog hook patterns with paginated or server-backed reads where route behavior allows it.
 - [x] Fetch full nutrient and portion payloads lazily only when the selected workflow needs full detail.
 - [x] Add nutrient/source diff UI for database updates.
-- [x] Expand database lifecycle events so ETL jobs write real release/import history to `data_source_events`.
-- [x] Add broader database version migration tooling beyond the current v1 user-workspace food replacement flow.
 - [x] Remove `lib/legacy-food-map.ts` after old `food_*` references have been fully migrated.
 - [x] Prepare the SFK rollout path: license check, import verification, source/version display, and deterministic test fixtures.
 
