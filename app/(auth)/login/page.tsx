@@ -8,13 +8,14 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { AuthForm } from "@/components/auth-form"
+import { BrandMark } from "@/components/brand-mark"
 
 export default function LoginPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground text-lg font-bold">
-          I
+        <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-xl border bg-white p-2 shadow-sm">
+          <BrandMark className="size-full" priority />
         </div>
         <CardTitle className="text-2xl">Anmelden</CardTitle>
         <CardDescription>
