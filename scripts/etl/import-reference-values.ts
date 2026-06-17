@@ -174,16 +174,6 @@ async function main() {
   await deleteExistingSources(sourcesToClear);
   await insertReferenceValues(inserts);
 
-  const { writeDataSourceEvent } = await import("./etl-event");
-  await writeDataSourceEvent({
-    dataSourceId: "bls",
-    eventType: "nutrient_mapping",
-    title: "Referenzwerte synchronisiert",
-    summary: `${inserts.length} Referenzwerte aus ${sourcesToClear.size} Quellenstandards importiert.`,
-    recordCount: inserts.length,
-    metadata: { sources: Array.from(sourcesToClear) },
-  });
-
   console.log("Reference values successfully synced.");
 }
 

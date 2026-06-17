@@ -5,105 +5,80 @@ import { z } from "zod";
 
 import { requireRole } from "@/lib/auth/access";
 import { ADMIN_ROLES } from "@/lib/auth/rbac";
-import { replaceFoodReferences } from "@/lib/data/database-lifecycle";
+import { canAccessDataSource } from "@/lib/data/entitlements";
 import { createClient } from "@/lib/supabase/server";
+import type { FoodSourceId } from "@/lib/types";
 
-export interface FoodReplacementActionState {
-  status: "idle" | "success" | "error";
+export interface DataSourceActivationResult {
+  status: "success" | "error";
   message: string | null;
+  isActive?: boolean;
 }
 
-const replacementSchema = z.object({
-  sourceFoodId: z.string().uuid("Ausgangs-Lebensmittel fehlt."),
-  targetFoodId: z.string().uuid("Ziel-Lebensmittel fehlt."),
-  reason: z.string().trim().max(500, "Die Begruendung darf hoechstens 500 Zeichen enthalten.").optional(),
-  scope: z.enum(["user_workspace", "organization"]).default("user_workspace"),
-}).refine((value) => value.sourceFoodId !== value.targetFoodId, {
-  path: ["targetFoodId"],
-  message: "Ausgangs- und Ziel-Lebensmittel muessen unterschiedlich sein.",
+const activationSchema = z.object({
+  sourceId: z.string().trim().min(1, "Quelle fehlt."),
+  isActive: z.boolean(),
 });
 
-function formatReplacementMessage(result: Awaited<ReturnType<typeof replaceFoodReferences>>) {
-  const total =
-    result.recipeIngredientsUpdated +
-    result.mealEntriesUpdated +
-    result.protocolEntriesUpdated;
-
-  return [
-    `${total} Referenzen ersetzt.`,
-    `Rezepte: ${result.recipeIngredientsUpdated}`,
-    `Plaene: ${result.mealEntriesUpdated}`,
-    `Protokolle: ${result.protocolEntriesUpdated}`,
-  ].join(" ");
-}
-
-export async function replaceFoodReferencesAction(
-  _previousState: FoodReplacementActionState,
-  formData: FormData,
-): Promise<FoodReplacementActionState> {
-  const parsed = replacementSchema.safeParse({
-    sourceFoodId: formData.get("sourceFoodId"),
-    targetFoodId: formData.get("targetFoodId"),
-    reason: formData.get("reason") || undefined,
-    scope: formData.get("scope") || "user_workspace",
-  });
-
+/**
+ * Switches a connected food database on or off for the current user's
+ * organization. Owner/admin only. The setting is persisted in
+ * `organization_data_source_settings` and gates the database in food search.
+ */
+export async function setDataSourceActiveAction(
+  input: { sourceId: string; isActive: boolean },
+): Promise<DataSourceActivationResult> {
+  const parsed = activationSchema.safeParse(input);
   if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Ungueltige Eingabe." };
+  }
+
+  const { sourceId, isActive } = parsed.data;
+
+  // A tariff-locked source cannot be activated; it must be unlocked first.
+  if (isActive && !canAccessDataSource(sourceId as FoodSourceId)) {
     return {
       status: "error",
-      message: parsed.error.issues[0]?.message ?? "Die Eingaben sind unvollstaendig.",
+      message: "Diese Quelle ist nicht im Tarif freigeschaltet und kann nicht aktiviert werden.",
     };
   }
 
   try {
     const supabase = await createClient();
-    await requireRole(ADMIN_ROLES, supabase);
+    const membership = await requireRole(ADMIN_ROLES, supabase);
 
-    const result = await replaceFoodReferences({
-      ...parsed.data,
-      supabase,
-    });
+    const { error } = await supabase
+      .from("organization_data_source_settings")
+      .upsert(
+        {
+          organization_id: membership.organizationId,
+          source_id: sourceId,
+          is_active: isActive,
+          updated_by: membership.userId,
+        },
+        { onConflict: "organization_id,source_id" },
+      );
+
+    if (error) throw new Error(error.message);
 
     revalidatePath("/datenbank");
+    revalidatePath("/lebensmittel");
 
     return {
       status: "success",
-      message: formatReplacementMessage(result),
+      message: isActive ? "Datenbank aktiviert." : "Datenbank deaktiviert.",
+      isActive,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Die Ersetzung ist fehlgeschlagen.";
+    const message = error instanceof Error ? error.message : "Die Aenderung ist fehlgeschlagen.";
 
     if (message === "AUTH_REQUIRED") {
-      return {
-        status: "error",
-        message: "Bitte melden Sie sich an, um Lebensmittelreferenzen zu ersetzen.",
-      };
+      return { status: "error", message: "Bitte melden Sie sich an." };
     }
-
     if (message === "FORBIDDEN") {
-      return {
-        status: "error",
-        message: "Nur Owner und Administratoren koennen globale Lebensmittelreferenzen ersetzen.",
-      };
+      return { status: "error", message: "Nur Owner und Administratoren koennen Datenbanken aktivieren oder deaktivieren." };
     }
 
-    if (message === "NO_ORGANIZATION") {
-      return {
-        status: "error",
-        message: "Sie gehoeren keiner Organisation an. Der Scope 'Organisation' ist nicht verfuegbar.",
-      };
-    }
-
-    if (message === "ORG_ADMIN_REQUIRED") {
-      return {
-        status: "error",
-        message: "Nur Administratoren und Owner koennen organisationsweite Ersetzungen durchfuehren.",
-      };
-    }
-
-    return {
-      status: "error",
-      message,
-    };
+    return { status: "error", message };
   }
 }

@@ -398,17 +398,6 @@ async function main() {
 
   await updateSourceMetadata(promoted);
 
-  const { writeDataSourceEvent } = await import("./etl-event");
-  await writeDataSourceEvent({
-    dataSourceId: "off",
-    eventType: "import",
-    version: "LIVE",
-    title: "Open Food Facts Sync",
-    summary: `${products.length} Produkte geladen, ${staged} staged, ${promoted} validiert und uebernommen.`,
-    recordCount: promoted,
-    metadata: { loaded: products.length, staged, promoted },
-  });
-
   console.log("Open Food Facts import complete.");
 }
 

@@ -395,20 +395,6 @@ async function main() {
   await upsertMealPlans(codeToFoodId, recipeIdMap);
   await upsertMealPlanTemplates(codeToFoodId, recipeIdMap);
 
-  const { writeDataSourceEvent } = await import("./etl-event");
-  await writeDataSourceEvent({
-    dataSourceId: "bls",
-    eventType: "import",
-    title: "Rezepte & Tagesplaene Seed",
-    summary: `${RECIPES.length} Rezepte, ${MEAL_PLANS.length} Tagesplaene und ${MEAL_PLAN_TEMPLATES.length} Vorlagen importiert.`,
-    recordCount: RECIPES.length + MEAL_PLANS.length + MEAL_PLAN_TEMPLATES.length,
-    metadata: {
-      recipes: RECIPES.length,
-      mealPlans: MEAL_PLANS.length,
-      mealPlanTemplates: MEAL_PLAN_TEMPLATES.length,
-    },
-  });
-
   console.log("Recipe + meal plan import completed.");
 }
 

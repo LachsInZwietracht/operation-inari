@@ -3,6 +3,7 @@ import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
+import { fetchOrganizationDisabledSourceIds } from "@/lib/data/data-source-activations";
 import { getBlockedSourceIds } from "@/lib/data/entitlements";
 import { getFoodGroupDescendants } from "@/lib/data/food-groups";
 import { BRANDED_FOODS } from "@/lib/mock-data/branded-foods";
@@ -951,8 +952,12 @@ export async function fetchFoodsBrowserPage(
     result = await fetchFoodsBrowserPageByQuery(normalized, client);
   }
 
-  // Filter out blocked data sources (e.g., SFK without license)
-  const blocked = new Set(getBlockedSourceIds());
+  // Filter out blocked data sources: tariff-gated (e.g., SFK without license)
+  // plus any source the organization has switched off in /datenbank.
+  const blocked = new Set<FoodSourceId>(getBlockedSourceIds());
+  for (const id of await fetchOrganizationDisabledSourceIds()) {
+    blocked.add(id);
+  }
   if (blocked.size > 0) {
     result = {
       ...result,

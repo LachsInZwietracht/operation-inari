@@ -237,11 +237,11 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260429000016_appointments.sql` | `appointments` table with RLS, indexes on `user_id`/`date`/`type`/`patient_id`, and auto-update trigger |
 | `20260506000022_reference_profiles_and_lab_metadata.sql` | Runtime reference-value lookup columns, custom profile tables, user/patient preference tables, and `patient_lab_values.metadata` |
 | `20260511000028_team_rbac.sql` | RBAC foundation: `organizations`, `organization_memberships`, `access_audit_logs`, RLS helper functions, and membership/admin policies |
-| `20260512000029_database_lifecycle.sql` | Database lifecycle events, audited food-reference replacement logs, and the `replace_food_references()` RPC for user-workspace recipes, meal plans, and protocols |
+| `20260512000029_database_lifecycle.sql` | Database lifecycle events, audited food-reference replacement logs, and the `replace_food_references()` RPC for user-workspace recipes, meal plans, and protocols (objects later dropped in `20260610000057`) |
 | `20260513000030_sfk_nutrient_definitions.sql` | 46 SFK-specific nutrient definitions (amino acids, detailed fatty acids, extended vitamins/minerals) and `sfk_column_name` mapping column on `nutrient_definitions` |
 | `20260516000033_cologne_phonetics.sql` | `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, GIN trigram indexes, and phonetic match branch in both `search_foods` and `search_foods_with_total` RPCs |
 | `20260527000045_meal_plan_metadata.sql` | Adds clinical metadata to `daily_meal_plans`: patient assignment, title, lifecycle status, notes, target profile, approval timestamp/user, and supporting indexes |
-| `20260516000034_food_replacement_org_scope.sql` | Extends `food_reference_replacements` to allow `organization` scope, updates `replace_food_references()` with `p_scope` parameter and `is_organization_admin()` check for org-wide replacements |
+| `20260516000034_food_replacement_org_scope.sql` | Extends `food_reference_replacements` to allow `organization` scope, updates `replace_food_references()` with `p_scope` parameter and `is_organization_admin()` check for org-wide replacements (objects later dropped in `20260610000057`) |
 | `20260518000036_team_invitations.sql` | Adds invitation timestamps/expiry/revoke metadata to `organization_memberships` and permits admin-created invited memberships |
 | `20260519000037_api_keys.sql` | Organization-scoped hashed API keys for the first external dataset export boundary |
 | `20260520000038_webhooks.sql` | Organization-scoped webhook endpoints plus persisted delivery attempts for export/report/protocol events |
@@ -253,6 +253,8 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260528000046_meal_plan_diet_line.sql` | Persists selected diet-line/target-preset identifiers on `daily_meal_plans` |
 | `20260530000048_meal_plan_versions.sql` | Append-only immutable meal-plan version snapshots for approved/reopened/manual plan revisions |
 | `20260531000049_patient_scoped_meal_plan_uniqueness.sql` | Replaces user/date meal-plan uniqueness with patient-scoped uniqueness: one unassigned plan per user/date and one patient-bound plan per user/patient/date |
+| `20260609000056_organization_data_source_settings.sql` | Org-level activate/deactivate state for connected food databases (`organization_data_source_settings`), with member-read / owner-admin-write RLS |
+| `20260610000057_drop_lifecycle_and_replacement.sql` | Retires the removed database-lifecycle/food-replacement features: drops the `replace_food_references()` RPC and the `food_reference_replacements` and `data_source_events` tables |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -267,7 +269,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `food_portions` | Portion size definitions | `food_id`, `label` ("Stück"), `amount_grams` |
 | `food_synonyms` | Multilingual search aliases | `food_id`, `name`, `locale`, `source` (system/user) |
 | `food_source_mappings` | Cross-source crosswalk | `food_id`, `external_source`, `external_id`, `confidence` |
-| `data_source_events` | Real database changelog / lifecycle events | `data_source_id`, `event_type`, `version`, `record_count`, `nutrient_count`, `metadata` |
+| `organization_data_source_settings` | Org-level on/off state for connected food databases (set in `/datenbank`; absence = active; owner/admin write, members read; gates food search) | `organization_id`, `source_id`, `is_active`, `updated_by` |
 | `reference_values` | Official daily intake targets across DGE/ÖGE/SGE/RDA | `standard_id`, `age_group_id`, `nutrient_id`, `amount`, `gender`, `age_min`, `age_max`, `life_stage` |
 | `reference_profiles` | User-defined nutrient reference templates | `user_id`, `name`, `based_on_standard_id`, `age_group_id`, `gender`, `life_stage` |
 | `reference_profile_values` | Nutrient overrides per custom profile | `profile_id`, `nutrient_id`, `amount` |
@@ -283,7 +285,6 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 | `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
-| `food_reference_replacements` | Audit log for food ID replacement workflows. Supports `user_workspace` and `organization` scopes (org scope requires admin role) | `actor_user_id`, `organization_id`, `source_food_id`, `target_food_id`, `scope`, updated-row counts |
 | `report_retention_policies` | Admin-controlled default retention policy for patient-bound reports | `user_id`, `organization_id`, `retention_years`, `auto_delete_enabled`, `require_admin_approval`, `legal_hold_enabled` |
 | `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary, retention metadata |
 | `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at`, retention metadata |
@@ -357,19 +358,10 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/admin/integrationen` reads those HL7 tables for the first admin operations surface: filtered jobs, job details, open review results, and lab mapping maintenance. Lab mappings can be created, edited, and disabled from the page with `hl7_lab_mapping_*` audit events. Open review results can be marked checked through `POST /api/admin/integrations/hl7/review-result`, which updates result metadata, recomputes parent job counts/status, and writes `hl7_review_result_reviewed` audit events.
 - HL7/FHIR implementations must not write raw messages/resources to logs or API error bodies.
 
-### Database Lifecycle Notes
+### Database Status Notes
 
-- `/datenbank` now combines three live surfaces:
-  - `data_sources` for source/version/license/current import metadata,
-  - `data_source_events` for ETL/import/version/change events,
-  - `food_reference_replacements` for audited food replacement actions.
-- `data_source_events` is readable from the app and has no browser write policy. ETL/import jobs should write events with the service role after successful imports, nutrient mapping changes, or license-relevant source updates.
-- `replace_food_references(source, target, reason)` is an authenticated RPC. It validates both foods are visible to the caller, then atomically updates:
-  - `recipe_ingredients.food_id` for recipes owned by `auth.uid()`,
-  - `meal_entries.reference_id` where `entry_type = 'food'` for daily meal plans owned by `auth.uid()`,
-  - `nutrition_protocol_entries.food_id` for protocols owned by `auth.uid()`.
-- The RPC updates parent `updated_at` timestamps, writes a row to `food_reference_replacements`, and mirrors a summary into `access_audit_logs` when the actor belongs to an organization.
-- V1 intentionally does not mutate system/shared recipes, institution-wide records owned by other users, or other users' private workspaces. Broader clinic-wide migration approval flows should build on the same audit table rather than bypassing it.
+- `/datenbank` reads the live `data_sources` catalog for source/version/license/current import metadata. Owners/admins can activate or deactivate each connected source for their organization via `organization_data_source_settings` (see the activate/deactivate flow in `documentation.md` §4.12).
+- The earlier database-lifecycle history (`data_source_events`) and food-reference replacement workflow (`replace_food_references()` RPC, `food_reference_replacements`, `/api/foods/replace`) were removed; the supporting objects are dropped in `20260610000057_drop_lifecycle_and_replacement.sql`.
 
 ### Why Normalized `food_nutrients` Instead of a JSON Array?
 
@@ -718,7 +710,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Institution diet-form catalog / weekday labels | Bundled static institution reference data | `lib/reference-data/institution.ts`, `app/(app)/institution/**`, `lib/institution-analytics.ts`, `lib/hospital-workflow.ts` |
 | Pediatric percentiles / lab parameter catalog | Bundled static clinical reference data | `lib/reference-data/growth-percentiles.ts`, `lib/reference-data/lab-parameters.ts`, `components/patient-tabs.tsx` |
 | Knowledge library | Bundled product content + live analytics | `app/(app)/wissen/wissen-client.tsx`, `lib/content/knowledge-library.ts` |
-| Database status/lifecycle | Live `data_sources` catalog, `data_source_events` lifecycle history, and audited food-reference replacement v1 | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/database-lifecycle.ts` |
+| Database status | Live `data_sources` catalog with per-organization activate/deactivate | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/data-source-activations.ts` |
 | Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, report-retention controls, and organization SSO configuration | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts`, `lib/data/sso.ts` |
 | Kitchen production | Persisted production batch current state and event ledger for menu-derived kitchen execution | `app/(app)/institution/produktion/page.tsx`, `lib/data/production-batches.ts`, `lib/data/production-batches-client.ts` |
 | Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
@@ -740,7 +732,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [x] Move institution `DIET_FORMS` and weekday labels into `lib/reference-data/institution.ts`.
 - [x] Move pediatric percentiles and lab parameter definitions into explicit `lib/reference-data` modules so they are no longer treated as “mock”.
 - [x] Reclassify `/wissen` knowledge cards as bundled product content and keep analytics live/runtime-backed.
-- [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog, `data_source_events`, and an audited food-reference replacement workflow.
+- [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog plus per-organization source activation.
 - [x] Replace Admin preview with persisted RBAC membership data and real invitation actions; role-edit workflows remain deferred.
 - [x] Rework Leistung into a truthful preview/reference surface instead of a fake live operational backend.
 - [x] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
@@ -864,7 +856,7 @@ What's lost at each tier:
 
 **Cologne phonetics** (migration `20260516000033`) adds a `cologne_phonetics()` PL/pgSQL function, generated `phonetic_code` columns on `foods` and `food_synonyms`, and a phonetic match branch in both RPCs. If only the older search migrations are applied, phonetic matching is unavailable server-side but the client fallback in `lib/search/fuzzy-search.ts` still provides it for the Cmd+K palette.
 
-**Checking migration status:** Query `SELECT proname FROM pg_proc WHERE proname = 'search_foods_with_total'` or inspect `data_source_events` for recent import events (present only after migration `20260512000029`).
+**Checking migration status:** Query `SELECT proname FROM pg_proc WHERE proname = 'search_foods_with_total'` to confirm the paginated search RPC is present.
 
 ---
 
