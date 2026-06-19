@@ -29,6 +29,7 @@ import {
   Ruler,
   Lock,
   ChevronDown,
+  Flame,
 } from "lucide-react"
 import {
   Sidebar,
@@ -72,6 +73,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: "Ernährung",
     items: [
       { label: "Lebensmittel", icon: Apple, route: "/lebensmittel/uebersicht" },
+      { label: "Kalorienrechner", icon: Flame, route: "/kalorienrechner" },
       { label: "Rezepte", icon: ChefHat, route: "/rezepte" },
       { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplaene" },
       { label: "Einkaufsliste", icon: ShoppingBasket, route: "/ernaehrungsplan/einkaufsliste" },

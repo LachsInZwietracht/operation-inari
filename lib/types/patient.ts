@@ -22,6 +22,12 @@ export interface Patient extends Timestamped {
   indications?: string[];
   notes?: string;
   amputations?: string[];
+  /** Chosen daily calorie target (kcal), e.g. from the Kalorienrechner. */
+  dailyCalorieGoal?: number;
+  /** Goal/target body weight in kg. */
+  goalWeight?: number;
+  /** Selected macro distribution preset id (e.g. "balanced", "lowcarb"). */
+  macroPreset?: string;
   status?: PatientStatus;
   careSetting?: PatientCareSetting;
   externalPatientNumber?: string;
