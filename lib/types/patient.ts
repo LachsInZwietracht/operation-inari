@@ -4,6 +4,7 @@ export type Gender = "m" | "w" | "d";
 export type PatientStatus = "active" | "inactive" | "archived" | "deceased";
 export type PatientCareSetting = "ambulatory" | "inpatient" | "discharged";
 export type PreferredContactChannel = "phone" | "email" | "mail" | "none";
+export type NutritionPreference = "vegetarian" | "vegan" | "keto" | "low_carb";
 
 export interface Patient extends Timestamped {
   id: ID;
@@ -28,6 +29,8 @@ export interface Patient extends Timestamped {
   goalWeight?: number;
   /** Selected macro distribution preset id (e.g. "balanced", "lowcarb"). */
   macroPreset?: string;
+  nutritionPreferences?: NutritionPreference[];
+  nutritionPreferenceNotes?: string;
   status?: PatientStatus;
   careSetting?: PatientCareSetting;
   externalPatientNumber?: string;

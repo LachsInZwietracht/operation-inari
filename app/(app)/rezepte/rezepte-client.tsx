@@ -6,7 +6,9 @@ import { Plus, Search, Import, Download, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { RecipeCard } from "@/components/recipe-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useRecipes } from "@/hooks/use-recipes";
+import { ALLERGEN_DEFINITIONS } from "@/lib/allergen-constants";
 import { parseMealMaster, type ParsedMealMasterRecipe } from "@/lib/meal-master-parser";
 import { RecipeImportReviewDialog } from "@/components/recipe-import-review-dialog";
 
@@ -39,6 +42,64 @@ const RECIPE_CATEGORIES = [
   "Salate",
   "Desserts",
   "Eintöpfe",
+];
+
+const DIET_FILTERS = [
+  { id: "all", label: "Alle Ernährungsformen" },
+  { id: "vegetarian", label: "Vegetarisch" },
+  { id: "vegan", label: "Vegan" },
+  { id: "keto", label: "Keto / Low Carb" },
+] as const;
+
+type DietFilter = (typeof DIET_FILTERS)[number]["id"];
+
+const ALLERGEN_FILTERS = ALLERGEN_DEFINITIONS.map((definition) => definition.label);
+
+const MEAT_OR_FISH_INGREDIENT_TOKENS = [
+  "haehnchen",
+  "hähnchen",
+  "huhn",
+  "pute",
+  "rind",
+  "schwein",
+  "fleisch",
+  "lachs",
+  "thunfisch",
+  "kabeljau",
+  "garnelen",
+  "fisch",
+];
+
+const ANIMAL_INGREDIENT_TOKENS = [
+  ...MEAT_OR_FISH_INGREDIENT_TOKENS,
+  "milch",
+  "joghurt",
+  "quark",
+  "gouda",
+  "kaese",
+  "käse",
+  "butter",
+  "food_ei",
+  "huehnerei",
+  "hühnerei",
+  " eier ",
+  "honig",
+];
+
+const KETO_EXCLUSION_INGREDIENT_TOKENS = [
+  "brot",
+  "hafer",
+  "kartoffel",
+  "reis",
+  "nudeln",
+  "pasta",
+  "mehl",
+  "banane",
+  "honig",
+  "zucker",
+  "linsen",
+  "bohnen",
+  "kichererbsen",
 ];
 
 const SAMPLE_IMPORT_PAYLOAD = `[
@@ -56,11 +117,79 @@ interface RezeptePageClientProps {
   recipes: Recipe[];
 }
 
+function normalize(value: string): string {
+  return value.toLowerCase();
+}
+
+function recipeText(recipe: Recipe): string {
+  return [
+    recipe.name,
+    recipe.description,
+    recipe.category,
+    ...(recipe.tags ?? []),
+    ...(recipe.allergens ?? []),
+    ...recipe.ingredients.map((ingredient) => ingredient.foodId),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function recipeHasAnyToken(recipe: Recipe, tokens: string[]): boolean {
+  const text = recipeText(recipe);
+  return tokens.some((token) => text.includes(normalize(token)));
+}
+
+function recipeMatchesAllergenFreeFilter(recipe: Recipe, excludedAllergens: string[]): boolean {
+  if (excludedAllergens.length === 0) return true;
+
+  const recipeAllergens = (recipe.allergens ?? []).map(normalize);
+  const text = recipeText(recipe);
+  return excludedAllergens.every((excludedAllergen) => {
+    const definition = ALLERGEN_DEFINITIONS.find((item) => item.label === excludedAllergen);
+    const matchTokens = [excludedAllergen, ...(definition?.foodMatchTokens ?? [])].map(normalize);
+
+    const hasAllergen = recipeAllergens.some((allergen) =>
+      matchTokens.some((token) => allergen.includes(token) || token.includes(allergen)),
+    );
+    const ingredientTokens =
+      excludedAllergen === "Ei"
+        ? ["food_ei", "huehnerei", "hühnerei", " eier "]
+        : matchTokens.filter((token) => token.length > 2);
+    const hasIngredientToken = ingredientTokens.some((token) => text.includes(token));
+
+    return !hasAllergen && !hasIngredientToken;
+  });
+}
+
+function recipeMatchesDietFilter(recipe: Recipe, dietFilter: DietFilter): boolean {
+  if (dietFilter === "all") return true;
+
+  const tags = (recipe.tags ?? []).map(normalize);
+  const hasDietTag = (tokens: string[]) => tags.some((tag) => tokens.some((token) => tag.includes(token)));
+
+  if (dietFilter === "vegetarian") {
+    return !recipeHasAnyToken(recipe, MEAT_OR_FISH_INGREDIENT_TOKENS);
+  }
+
+  if (dietFilter === "vegan") {
+    return !recipeHasAnyToken(recipe, ANIMAL_INGREDIENT_TOKENS);
+  }
+
+  const carbs = recipe.cachedCarbsPerPortion;
+  if (typeof carbs === "number") {
+    return carbs <= 20;
+  }
+
+  return hasDietTag(["keto", "ketogen", "low carb", "low-carb"]) || !recipeHasAnyToken(recipe, KETO_EXCLUSION_INGREDIENT_TOKENS);
+}
+
 export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClientProps) {
   const { allRecipes, addRecipe } = useRecipes(initialRecipes, []);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Alle");
   const [libraryFilter, setLibraryFilter] = useState<"all" | "personal" | "community">("all");
+  const [dietFilter, setDietFilter] = useState<DietFilter>("all");
+  const [excludedAllergens, setExcludedAllergens] = useState<string[]>([]);
   
   // Import states
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -89,9 +218,19 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
           : libraryFilter === "personal"
           ? recipe.sourceType === "personal"
           : recipe.sourceType !== "personal";
-      return matchesSearch && matchesCategory && matchesLibrary;
+      const matchesDiet = recipeMatchesDietFilter(recipe, dietFilter);
+      const matchesAllergens = recipeMatchesAllergenFreeFilter(recipe, excludedAllergens);
+      return matchesSearch && matchesCategory && matchesLibrary && matchesDiet && matchesAllergens;
     });
-  }, [allRecipes, search, category, libraryFilter]);
+  }, [allRecipes, search, category, libraryFilter, dietFilter, excludedAllergens]);
+
+  const hasClinicalFilters = dietFilter !== "all" || excludedAllergens.length > 0;
+
+  function toggleExcludedAllergen(allergen: string, checked: boolean) {
+    setExcludedAllergens((current) =>
+      checked ? [...current, allergen] : current.filter((item) => item !== allergen),
+    );
+  }
 
   async function handleImportRecipe(recipe: Recipe) {
     const now = new Date().toISOString();
@@ -287,11 +426,68 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
             <SelectItem value="community">Community</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={dietFilter} onValueChange={(value) => setDietFilter(value as DietFilter)}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Ernährungsform" />
+          </SelectTrigger>
+          <SelectContent>
+            {DIET_FILTERS.map((filter) => (
+              <SelectItem key={filter.id} value={filter.id}>
+                {filter.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="rounded-lg border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Frei von Allergenen / Intoleranzen</p>
+            <p className="text-muted-foreground text-xs">
+              Rezepte mit passenden Allergen-Hinweisen werden ausgeblendet.
+            </p>
+          </div>
+          {hasClinicalFilters && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDietFilter("all");
+                setExcludedAllergens([]);
+              }}
+            >
+              Filter zurücksetzen
+            </Button>
+          )}
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {ALLERGEN_FILTERS.map((allergen) => (
+            <label key={allergen} className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={excludedAllergens.includes(allergen)}
+                onCheckedChange={(checked) => toggleExcludedAllergen(allergen, checked === true)}
+              />
+              <span>{allergen}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <p className="text-muted-foreground text-sm flex items-center gap-2">
         <Filter className="h-4 w-4" />
         {filtered.length} {filtered.length === 1 ? "Rezept" : "Rezepte"} – {libraryFilter === "all" ? "Alle Sammlungen" : libraryFilter === "personal" ? "Eigene" : "Community"}
+        {dietFilter !== "all" && (
+          <Badge variant="outline">
+            {DIET_FILTERS.find((filter) => filter.id === dietFilter)?.label}
+          </Badge>
+        )}
+        {excludedAllergens.map((allergen) => (
+          <Badge key={allergen} variant="outline">
+            frei von {allergen}
+          </Badge>
+        ))}
       </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

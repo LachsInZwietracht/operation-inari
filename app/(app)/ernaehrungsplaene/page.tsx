@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, BookMarked, Sigma, ArrowRight } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, BookMarked, CalendarDays, Sigma } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +37,12 @@ const PLAN_TILES: PlanTile[] = [
     icon: Sigma,
     route: "/ernaehrungsplan/vergleich",
   },
+  {
+    label: "Austauschtabellen",
+    description: "Geeignete Lebensmittel-Alternativen mit Austauschmengen finden.",
+    icon: ArrowLeftRight,
+    route: "/austauschtabellen",
+  },
 ];
 
 export default function ErnaehrungsplaenePage() {
@@ -44,7 +50,7 @@ export default function ErnaehrungsplaenePage() {
     <div className="space-y-6">
       <PageHeader {...PLAN_HEADER} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {PLAN_TILES.map((tile) => (
           <Link
             key={tile.route}

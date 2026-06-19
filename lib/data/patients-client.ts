@@ -32,6 +32,8 @@ interface PatientRow {
   daily_calorie_goal: number | null;
   goal_weight: number | null;
   macro_preset: string | null;
+  nutrition_preferences: Patient["nutritionPreferences"] | null;
+  nutrition_preference_notes: string | null;
   status: Patient["status"] | null;
   care_setting: Patient["careSetting"] | null;
   external_patient_number: string | null;
@@ -74,6 +76,8 @@ const PATIENT_COLUMNS = [
   "daily_calorie_goal",
   "goal_weight",
   "macro_preset",
+  "nutrition_preferences",
+  "nutrition_preference_notes",
   "status",
   "care_setting",
   "external_patient_number",
@@ -130,6 +134,8 @@ function mapPatientRow(row: PatientRow): Patient {
     dailyCalorieGoal: row.daily_calorie_goal ?? undefined,
     goalWeight: row.goal_weight ?? undefined,
     macroPreset: row.macro_preset ?? undefined,
+    nutritionPreferences: row.nutrition_preferences ?? undefined,
+    nutritionPreferenceNotes: row.nutrition_preference_notes ?? undefined,
     status: row.status ?? undefined,
     careSetting: row.care_setting ?? undefined,
     externalPatientNumber: row.external_patient_number ?? undefined,
@@ -207,6 +213,8 @@ export async function persistPatient(
         daily_calorie_goal: patient.dailyCalorieGoal ?? null,
         goal_weight: patient.goalWeight ?? null,
         macro_preset: patient.macroPreset ?? null,
+        nutrition_preferences: patient.nutritionPreferences ?? [],
+        nutrition_preference_notes: patient.nutritionPreferenceNotes ?? null,
         status: patient.status ?? "active",
         care_setting: patient.careSetting ?? "ambulatory",
         external_patient_number: patient.externalPatientNumber ?? null,

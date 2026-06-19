@@ -632,6 +632,19 @@ function SliderField({
   onChange: (value: number) => void;
 }) {
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
+  const [draftValue, setDraftValue] = useState(String(value));
+
+  useEffect(() => {
+    setDraftValue(String(value));
+  }, [value]);
+
+  const commitDraftValue = () => {
+    const parsed = Number(draftValue);
+    const nextValue = draftValue.trim() === "" || Number.isNaN(parsed) ? value : clamp(Math.round(parsed));
+    onChange(nextValue);
+    setDraftValue(String(nextValue));
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -639,10 +652,25 @@ function SliderField({
         <div className="flex items-center gap-1">
           <Input
             type="number"
-            value={value}
+            value={draftValue}
             min={min}
             max={max}
-            onChange={(e) => onChange(clamp(Number(e.target.value) || 0))}
+            onChange={(e) => {
+              const nextDraftValue = e.target.value;
+              setDraftValue(nextDraftValue);
+
+              if (nextDraftValue.trim() === "") return;
+              const parsed = Number(nextDraftValue);
+              if (Number.isNaN(parsed) || parsed < min || parsed > max) return;
+
+              onChange(Math.round(parsed));
+            }}
+            onBlur={commitDraftValue}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
             className="h-8 w-20 text-right tabular-nums"
           />
           <span className="w-10 text-xs text-muted-foreground">{unit}</span>

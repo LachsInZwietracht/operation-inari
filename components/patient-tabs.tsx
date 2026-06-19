@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -76,6 +77,7 @@ import type {
   AnthropometricEntry,
   DigitalProtocolLink,
   Food,
+  NutritionPreference,
   Patient,
   PatientCareSetting,
   PatientStatus,
@@ -83,6 +85,7 @@ import type {
 } from "@/lib/types"
 import { toast } from "sonner"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
+import { usePatients } from "@/hooks/use-patients"
 import { usePracticeAppointments } from "@/hooks/use-practice"
 import {
   ALLERGEN_DEFINITIONS,
@@ -114,6 +117,13 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
   mail: "Post",
   none: "Keine Angabe",
 }
+
+const NUTRITION_PREFERENCE_OPTIONS: { id: NutritionPreference; label: string; description: string }[] = [
+  { id: "vegetarian", label: "Vegetarisch", description: "ohne Fleisch und Fisch" },
+  { id: "vegan", label: "Vegan", description: "ohne tierische Zutaten" },
+  { id: "keto", label: "Keto", description: "ketogene Auswahl bevorzugen" },
+  { id: "low_carb", label: "Low Carb", description: "kohlenhydratarm bevorzugen" },
+]
 
 const EMPTY_PROTOCOL_FOODS: Food[] = []
 
@@ -294,6 +304,8 @@ interface PatientTabsProps {
 }
 
 export function PatientTabs({ patient, initialData }: PatientTabsProps) {
+  const { getPatient, updatePatient } = usePatients({ initialPatients: [patient] })
+  const currentPatient = getPatient(patient.id) ?? patient
   const {
     getForPatient: getAnthroForPatient,
     addEntry: addAnthroEntry,
@@ -426,6 +438,9 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
     diagnosedDate: "",
     notes: "",
   })
+  const [nutritionPreferenceNotes, setNutritionPreferenceNotes] = useState(
+    currentPatient.nutritionPreferenceNotes ?? "",
+  )
 
   const anthroEntries = getAnthroForPatient(patient.id)
   const sessions = counselingSessions.filter(
@@ -456,6 +471,14 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
+  const nutritionPreferences = currentPatient.nutritionPreferences ?? []
+  const nutritionPreferenceAllergens = patientAllergens.filter(
+    (entry) => entry.type === "allergy" || entry.type === "intolerance",
+  )
+
+  useEffect(() => {
+    setNutritionPreferenceNotes(currentPatient.nutritionPreferenceNotes ?? "")
+  }, [currentPatient.id, currentPatient.nutritionPreferenceNotes])
 
   const latestAnthro = anthroEntries.length > 0 ? anthroEntries[anthroEntries.length - 1] : null
   const creatinineClearanceParam = LAB_PARAMETERS.find((param) => param.id === "lab_creatinine_clearance")
@@ -613,6 +636,26 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
     setShowAllergenForm(false)
     toast.success("Allergen gespeichert")
   }, [addAllergen, allergenForm, patient.id])
+
+  const handleNutritionPreferenceChange = useCallback(
+    (preference: NutritionPreference, checked: boolean) => {
+      const current = currentPatient.nutritionPreferences ?? []
+      const next = checked
+        ? Array.from(new Set([...current, preference]))
+        : current.filter((item) => item !== preference)
+
+      updatePatient(patient.id, { nutritionPreferences: next })
+      toast.success("Ernährungsvorlieben gespeichert")
+    },
+    [currentPatient.nutritionPreferences, patient.id, updatePatient],
+  )
+
+  const handleNutritionPreferenceNotesBlur = useCallback(() => {
+    const nextNotes = nutritionPreferenceNotes.trim()
+    if ((currentPatient.nutritionPreferenceNotes ?? "") === nextNotes) return
+    updatePatient(patient.id, { nutritionPreferenceNotes: nextNotes || undefined })
+    toast.success("Notizen zu Ernährungsvorlieben gespeichert")
+  }, [currentPatient.nutritionPreferenceNotes, nutritionPreferenceNotes, patient.id, updatePatient])
 
   const latestCreatinineLab = useMemo(() => {
     const kreatinines = labEntries
@@ -2102,6 +2145,82 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Ernährungsvorlieben</CardTitle>
+              <CardDescription>
+                Strukturierte Vorlieben für Rezeptfilter, Planung und Beratung.
+              </CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("diagnosen")}>
+              Allergien verwalten
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div>
+              <p className="text-sm font-medium">Ernährungsform</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {NUTRITION_PREFERENCE_OPTIONS.map((option) => (
+                  <label key={option.id} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+                    <Checkbox
+                      checked={nutritionPreferences.includes(option.id)}
+                      onCheckedChange={(checked) =>
+                        handleNutritionPreferenceChange(option.id, checked === true)
+                      }
+                    />
+                    <span>
+                      <span className="block font-medium">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.5fr)]">
+              <div>
+                <Label htmlFor="nutrition-preference-notes">Weitere Vorlieben / Abneigungen</Label>
+                <Textarea
+                  id="nutrition-preference-notes"
+                  rows={3}
+                  value={nutritionPreferenceNotes}
+                  onChange={(event) => setNutritionPreferenceNotes(event.target.value)}
+                  onBlur={handleNutritionPreferenceNotesBlur}
+                  placeholder="z. B. mag keine Pilze, bevorzugt warme Frühstücke, isst keinen Fisch"
+                />
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Medizinische Ausschlüsse</p>
+                  <Badge variant="outline" className="text-xs">
+                    Allergieprofil
+                  </Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {nutritionPreferenceAllergens.length > 0 ? (
+                    nutritionPreferenceAllergens.map((entry) => {
+                      const def = ALLERGEN_MAP.get(entry.allergenId)
+                      return (
+                        <Badge key={entry.id} variant={entry.type === "allergy" ? "destructive" : "secondary"}>
+                          {def?.label ?? entry.allergenId}
+                        </Badge>
+                      )
+                    })
+                  ) : allergensPending ? (
+                    <p className="text-sm text-muted-foreground">Ausschlüsse werden synchronisiert.</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Keine Allergien oder Intoleranzen hinterlegt.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </TabsContent>
 
       <TabsContent value="therapien" className="space-y-4">
