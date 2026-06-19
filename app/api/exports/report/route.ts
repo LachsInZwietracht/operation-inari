@@ -5,16 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/exports/csv";
 import { renderReportPdfBuffer } from "@/lib/exports/pdf";
 import { buildFileResponse, createExportJob } from "@/lib/exports/server";
-import {
-  calculateReportRetentionUntil,
-  getOrCreateReportRetentionPolicy,
-  getReportRetentionLabel,
-} from "@/lib/data/report-retention";
-import {
-  PATIENT_REPORT_FILES_BUCKET,
-  persistPatientReportRecord,
-  persistPatientReportVersion,
-} from "@/lib/data/patient-reports-client";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 import { queueWebhookDeliveryAttempts } from "@/lib/data/webhooks";
 
@@ -91,106 +81,10 @@ export async function POST(request: Request) {
   }
 
   const createdBy = authData.user?.email ?? "Unbekannt";
-  const shouldPersistPatientReport =
-    body.disposition !== "inline" &&
-    Boolean(body.patientId && body.planId && body.patientName);
-  let patientReportId: string | undefined;
-  let patientReportVersionId: string | undefined;
-  const retentionPolicy = shouldPersistPatientReport
-    ? await getOrCreateReportRetentionPolicy(supabase)
-    : null;
-  const retentionUntil = retentionPolicy
-    ? calculateReportRetentionUntil(new Date(), retentionPolicy.retentionYears)
-    : undefined;
-  const retentionPolicyLabel = retentionPolicy
-    ? getReportRetentionLabel(retentionPolicy)
-    : body.retentionPolicyLabel;
-
-  async function persistPatientReport(
-    format: "PDF" | "CSV",
-    fileName: string,
-    payload: Buffer | string,
-    contentType: string,
-  ) {
-    if (!shouldPersistPatientReport || !body.patientId || !body.planId || !body.patientName || !userId) {
-      return;
-    }
-
-    const report = await persistPatientReportRecord(
-      {
-        patientRef: body.patientId,
-        patientName: body.patientName,
-        patientIndication: body.patientIndication,
-        planId: body.planId,
-        protocolId: body.protocolId,
-        planDateLabel: body.planDateLabel,
-        notes: body.notes,
-        lastFormat: format,
-        lastFileName: fileName,
-        retentionPolicyId: retentionPolicy?.id,
-        retentionUntil,
-        retentionStatus: retentionPolicy?.legalHoldEnabled ? "legal_hold" : "active",
-        retentionNotes: retentionPolicyLabel,
-      },
-      supabase,
-    );
-    patientReportId = report.id;
-
-    const storagePath = [
-      userId,
-      body.patientId,
-      report.id,
-      `${new Date().toISOString().replace(/[:.]/g, "-")}-${format.toLowerCase()}-${crypto.randomUUID()}.${format === "PDF" ? "pdf" : "csv"}`,
-    ].join("/");
-
-    const { error: uploadError } = await supabase.storage
-      .from(PATIENT_REPORT_FILES_BUCKET)
-      .upload(storagePath, payload, {
-        contentType,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message);
-    }
-
-    try {
-      const version = await persistPatientReportVersion(
-        {
-          patientReportId: report.id,
-          patientRef: body.patientId,
-          patientName: body.patientName,
-          patientIndication: body.patientIndication,
-          planId: body.planId,
-          protocolId: body.protocolId,
-          format,
-          fileName,
-          fileSize: typeof payload === "string" ? Buffer.byteLength(payload, "utf8") : payload.length,
-          contentType,
-          storagePath,
-          snapshot: {
-            ...body,
-            format,
-            retentionPolicyLabel,
-          },
-          retentionPolicyId: retentionPolicy?.id,
-          retentionUntil,
-          retentionStatus: retentionPolicy?.legalHoldEnabled ? "legal_hold" : "active",
-          retentionNotes: retentionPolicyLabel,
-        },
-        supabase,
-      );
-      patientReportVersionId = version.id;
-    } catch (error) {
-      await supabase.storage.from(PATIENT_REPORT_FILES_BUCKET).remove([storagePath]);
-      throw error;
-    }
-  }
 
   if (body.format === "PDF") {
     const pdfBuffer = await renderReportPdfBuffer(body);
     const fileName = `${body.fileBaseName}.pdf`;
-    await persistPatientReport("PDF", fileName, pdfBuffer, "application/pdf");
     await createExportJob(supabase, {
       format: "PDF",
       scope: "Berichte",
@@ -205,16 +99,14 @@ export async function POST(request: Request) {
     });
     await writeAccessAuditLog(supabase, {
       action: "report_export_created",
-      targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
-      targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+      targetType: "report_export",
+      targetId: body.planId,
       metadata: {
         format: "PDF",
         disposition: body.disposition ?? "attachment",
         patientId: body.patientId,
         planId: body.planId,
         protocolId: body.protocolId,
-        reportId: patientReportId,
-        reportVersionId: patientReportVersionId,
         reportLength: body.reportLength,
         sectionCount: body.activeSectionLabels.length,
         fileName,
@@ -224,15 +116,13 @@ export async function POST(request: Request) {
     await queueWebhookDeliveryAttempts(
       {
         event: "report_export_created",
-        targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
-        targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+        targetType: "report_export",
+        targetId: body.planId,
         payload: {
           format: "PDF",
           patientId: body.patientId,
           planId: body.planId,
           protocolId: body.protocolId,
-          reportId: patientReportId,
-          reportVersionId: patientReportVersionId,
           fileName,
           sizeBytes: pdfBuffer.length,
         },
@@ -243,26 +133,11 @@ export async function POST(request: Request) {
       contentType: "application/pdf",
       fileName,
       disposition: body.disposition,
-      headers: {
-        ...(patientReportId
-          ? {
-              "x-inari-patient-report-id": patientReportId,
-              "x-prodi-patient-report-id": patientReportId,
-            }
-          : {}),
-        ...(patientReportVersionId
-          ? {
-              "x-inari-patient-report-version-id": patientReportVersionId,
-              "x-prodi-patient-report-version-id": patientReportVersionId,
-            }
-          : {}),
-      },
     });
   }
 
   const csv = buildReportCsv(body);
   const fileName = `${body.fileBaseName}.csv`;
-  await persistPatientReport("CSV", fileName, csv, "text/csv;charset=utf-8");
   await createExportJob(supabase, {
     format: "CSV",
     scope: "Berichte",
@@ -277,16 +152,14 @@ export async function POST(request: Request) {
   });
   await writeAccessAuditLog(supabase, {
     action: "report_export_created",
-    targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
-    targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+    targetType: "report_export",
+    targetId: body.planId,
     metadata: {
       format: "CSV",
       disposition: body.disposition ?? "attachment",
       patientId: body.patientId,
       planId: body.planId,
       protocolId: body.protocolId,
-      reportId: patientReportId,
-      reportVersionId: patientReportVersionId,
       reportLength: body.reportLength,
       sectionCount: body.activeSectionLabels.length,
       fileName,
@@ -296,15 +169,13 @@ export async function POST(request: Request) {
   await queueWebhookDeliveryAttempts(
     {
       event: "report_export_created",
-      targetType: shouldPersistPatientReport ? "patient_report_version" : "report_export",
-      targetId: patientReportVersionId ?? patientReportId ?? body.planId,
+      targetType: "report_export",
+      targetId: body.planId,
       payload: {
         format: "CSV",
         patientId: body.patientId,
         planId: body.planId,
         protocolId: body.protocolId,
-        reportId: patientReportId,
-        reportVersionId: patientReportVersionId,
         fileName,
         sizeBytes: Buffer.byteLength(csv, "utf8"),
       },
@@ -314,19 +185,5 @@ export async function POST(request: Request) {
   return buildFileResponse(csv, {
     contentType: "text/csv;charset=utf-8",
     fileName,
-    headers: {
-      ...(patientReportId
-        ? {
-            "x-inari-patient-report-id": patientReportId,
-            "x-prodi-patient-report-id": patientReportId,
-          }
-        : {}),
-      ...(patientReportVersionId
-        ? {
-            "x-inari-patient-report-version-id": patientReportVersionId,
-            "x-prodi-patient-report-version-id": patientReportVersionId,
-          }
-        : {}),
-    },
   });
 }

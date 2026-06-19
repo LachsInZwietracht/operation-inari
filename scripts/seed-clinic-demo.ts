@@ -36,7 +36,6 @@ const APP_URL =
   "http://localhost:3000";
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const REPORT_BUCKET = "patient-report-files";
 const DEMO_TAG = "clinic-demo";
 const TODAY = "2026-05-04";
 const TOMORROW = "2026-05-05";
@@ -78,8 +77,6 @@ interface SeedContext {
   recipeIds: Map<string, string>;
   patientIds: Map<string, string>;
   protocolId?: string;
-  reportId?: string;
-  reportVersionId?: string;
   menuId?: string;
   planDate?: string;
 }
@@ -233,46 +230,6 @@ async function ensureOrganization(ctx: SeedContext): Promise<string> {
   return organizationId;
 }
 
-async function deletePatientReports(ctx: SeedContext, patientRefs: string[]) {
-  if (patientRefs.length === 0) return;
-
-  const { data: reports, error: reportLookupError } = await ctx.supabase
-    .from("patient_reports")
-    .select("id")
-    .eq("user_id", ctx.user.id)
-    .in("patient_ref", patientRefs);
-  assertNoError(reportLookupError, "Failed to look up previous demo reports");
-
-  const reportIds = (reports ?? []).map((report) => report.id as string);
-  if (reportIds.length === 0) return;
-
-  const { data: versions, error: versionLookupError } = await ctx.supabase
-    .from("patient_report_versions")
-    .select("storage_path")
-    .in("patient_report_id", reportIds);
-  assertNoError(versionLookupError, "Failed to look up previous demo report files");
-
-  const storagePaths = (versions ?? [])
-    .map((version) => version.storage_path as string | null)
-    .filter((path): path is string => Boolean(path));
-  if (storagePaths.length > 0) {
-    const { error: removeError } = await ctx.supabase.storage.from(REPORT_BUCKET).remove(storagePaths);
-    assertNoError(removeError, "Failed to remove previous demo report files");
-  }
-
-  const { error: clearLatestError } = await ctx.supabase
-    .from("patient_reports")
-    .update({ latest_version_id: null, latest_version_number: 0 })
-    .in("id", reportIds);
-  assertNoError(clearLatestError, "Failed to clear previous demo report latest-version pointers");
-
-  const { error: deleteReportsError } = await ctx.supabase
-    .from("patient_reports")
-    .delete()
-    .in("id", reportIds);
-  assertNoError(deleteReportsError, "Failed to delete previous demo report rows");
-}
-
 async function cleanupDemoWorkspace(ctx: SeedContext) {
   const { supabase, user } = ctx;
 
@@ -284,7 +241,6 @@ async function cleanupDemoWorkspace(ctx: SeedContext) {
   assertNoError(patientLookupError, "Failed to look up previous demo patients");
 
   const oldPatientIds = (oldPatients ?? []).map((patient) => patient.id as string);
-  await deletePatientReports(ctx, oldPatientIds);
 
   const { error: exportDeleteError } = await supabase
     .from("export_jobs")
@@ -684,12 +640,12 @@ async function seedDigitalProtocol(ctx: SeedContext) {
   });
 }
 
-async function seedCounselingAndReport(ctx: SeedContext) {
+async function seedCounseling(ctx: SeedContext) {
   const mariaId = ctx.patientIds.get("clinic-demo-maria");
   const haferbreiId = ctx.recipeIds.get("clinic-demo-haferbrei");
   const linsenId = ctx.recipeIds.get("clinic-demo-linseneintopf");
   if (!mariaId || !haferbreiId || !linsenId || !ctx.protocolId) {
-    throw new Error("Counseling/report demo prerequisites missing.");
+    throw new Error("Counseling demo prerequisites missing.");
   }
 
   const { error: sessionError } = await ctx.supabase.from("counseling_sessions").insert({
@@ -759,182 +715,6 @@ async function seedCounselingAndReport(ctx: SeedContext) {
     },
   ]);
   assertNoError(entriesError, "Failed to insert demo meal plan entries");
-
-  await seedArchivedReport(ctx, mariaId, planId);
-}
-
-function buildReportSnapshot(
-  mariaId: string,
-  planId: string,
-  protocolId: string,
-  planDate: string,
-): JsonRecord {
-  const planDateLabel = new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(`${planDate}T00:00:00Z`));
-
-  return {
-    format: "PDF",
-    title: "Klinik-Demo Ernaehrungsbericht Maria Schneider",
-    fileBaseName: "klinik-demo-ernaehrungsbericht-maria-schneider",
-    patientId: mariaId,
-    patientName: "Maria Schneider",
-    patientIndication: "Diabetes mellitus Typ 2, Adipositas, stationaere Ernaehrungstherapie",
-    planId,
-    protocolId,
-    planDateLabel,
-    reportLength: "full",
-    selectedSections: {
-      summary: true,
-      table: true,
-      charts: true,
-      meals: true,
-      notes: true,
-      lmiv: true,
-    },
-    activeSectionLabels: ["Zusammenfassung", "Naehrstofftabelle", "Mahlzeiten", "LMIV", "Hinweise"],
-    summaryMetrics: [
-      { label: "Energie", value: "1.720 kcal", reference: "1.650-1.850 kcal", coverage: "im Ziel" },
-      { label: "Eiweiss", value: "82 g", reference: ">= 75 g", coverage: "109%" },
-      { label: "Kohlenhydrate", value: "188 g", reference: "gleichmaessig verteilt", coverage: "geeignet" },
-    ],
-    nutrientRows: [
-      { label: "Energie", value: "1.720 kcal", reference: "1.650-1.850 kcal", coverage: "im Ziel" },
-      { label: "Eiweiss", value: "82 g", reference: ">= 75 g", coverage: "109%" },
-      { label: "Fett", value: "58 g", reference: "50-70 g", coverage: "im Ziel" },
-    ],
-    vitaminRows: [{ label: "Vitamin D", value: "8 ug", reference: "20 ug", coverage: "niedrig" }],
-    mineralRows: [{ label: "Calcium", value: "940 mg", reference: "1.000 mg", coverage: "94%" }],
-    mealRows: [
-      { slot: "Fruehstueck", summary: "Haferbrei mit Beeren, stabile KH-Portion." },
-      { slot: "Mittagessen", summary: "Linseneintopf als eiweissreicher Stationsbaustein." },
-    ],
-    notes:
-      "Demo-Bericht aus digitalem Protokoll und Beratungsziel. Archiviert mit privater Storage-Datei und Exportjournal.",
-    narrative:
-      "Die Patientin profitiert von regelmaessiger KH-Verteilung, eiweissreicher Mittagskomponente und dokumentierter Kuechenuebergabe.",
-    badges: ["Patientengebunden", "Archiviert", "Station"],
-    specialNotes: ["Follow-up am 11.05.2026", "Kuechenuebergabe fuer Station A3 vorbereitet"],
-    lmivRows: [
-      { label: "Energie", value: "620 kcal", reference: "pro Mittagessen" },
-      { label: "Eiweiss", value: "31 g", reference: "pro Mittagessen" },
-    ],
-    allergenDeclaration: ["gluten"],
-    additiveDeclaration: [],
-    retentionPolicyLabel: "Klinik-Demo Archivierung: 10 Jahre",
-    documentPackLabel: "Ernaehrungsbericht Klinik",
-  };
-}
-
-async function seedArchivedReport(ctx: SeedContext, mariaId: string, planId: string) {
-  if (!ctx.protocolId) throw new Error("Report protocol ID missing.");
-
-  const snapshot = buildReportSnapshot(mariaId, planId, ctx.protocolId, ctx.planDate ?? TODAY);
-  const fileName = "klinik-demo-ernaehrungsbericht-maria-schneider.pdf";
-  const pdfBuffer = Buffer.from(
-    "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 86 >>\nstream\nBT /F1 12 Tf 72 720 Td (Klinik-Demo Ernaehrungsbericht Maria Schneider) Tj ET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000203 00000 n \ntrailer\n<< /Root 1 0 R /Size 5 >>\nstartxref\n339\n%%EOF\n",
-    "utf8",
-  );
-  const storagePath = `${ctx.user.id}/${mariaId}/clinic-demo-report/${fileName}`;
-
-  await ctx.supabase.storage.createBucket(REPORT_BUCKET, {
-    public: false,
-    fileSizeLimit: 52428800,
-    allowedMimeTypes: ["application/pdf", "text/csv", "text/csv;charset=utf-8"],
-  });
-  await ctx.supabase.storage.from(REPORT_BUCKET).remove([storagePath]);
-  const { error: uploadError } = await ctx.supabase.storage
-    .from(REPORT_BUCKET)
-    .upload(storagePath, pdfBuffer, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-  assertNoError(uploadError, "Failed to upload demo report file");
-
-  const { data: report, error: reportError } = await ctx.supabase
-    .from("patient_reports")
-    .insert({
-      user_id: ctx.user.id,
-      patient_ref: mariaId,
-      patient_name: "Maria Schneider",
-      patient_indication: "Diabetes mellitus Typ 2, Adipositas, stationaere Ernaehrungstherapie",
-      plan_id: planId,
-      protocol_id: ctx.protocolId,
-      plan_date_label: snapshot.planDateLabel,
-      notes: snapshot.notes,
-      last_format: "PDF",
-      last_file_name: fileName,
-      latest_version_number: 0,
-      retention_until: "2036-05-04",
-      retention_status: "active",
-      retention_notes: snapshot.retentionPolicyLabel,
-    })
-    .select("id")
-    .single();
-  assertNoError(reportError, "Failed to insert demo patient report");
-  ctx.reportId = assertRow(report, "Failed to insert demo patient report").id as string;
-
-  const { data: version, error: versionError } = await ctx.supabase
-    .from("patient_report_versions")
-    .insert({
-      patient_report_id: ctx.reportId,
-      user_id: ctx.user.id,
-      patient_ref: mariaId,
-      patient_name: "Maria Schneider",
-      patient_indication: "Diabetes mellitus Typ 2, Adipositas, stationaere Ernaehrungstherapie",
-      plan_id: planId,
-      protocol_id: ctx.protocolId,
-      version_number: 1,
-      format: "PDF",
-      file_name: fileName,
-      file_size: pdfBuffer.length,
-      content_type: "application/pdf",
-      storage_bucket: REPORT_BUCKET,
-      storage_path: storagePath,
-      snapshot,
-      retention_until: "2036-05-04",
-      retention_status: "active",
-      retention_notes: snapshot.retentionPolicyLabel,
-    })
-    .select("id")
-    .single();
-  assertNoError(versionError, "Failed to insert demo patient report version");
-  ctx.reportVersionId = assertRow(version, "Failed to insert demo patient report version").id as string;
-
-  const { error: reportUpdateError } = await ctx.supabase
-    .from("patient_reports")
-    .update({
-      latest_version_id: ctx.reportVersionId,
-      latest_version_number: 1,
-    })
-    .eq("id", ctx.reportId);
-  assertNoError(reportUpdateError, "Failed to update demo report latest version");
-
-  const { error: exportError } = await ctx.supabase.from("export_jobs").insert({
-    user_id: ctx.user.id,
-    type: "export",
-    format: "PDF",
-    scope: "Berichte",
-    status: "abgeschlossen",
-    file_size: `${Math.ceil(pdfBuffer.length / 1024)} KB`,
-    created_by: ctx.user.email,
-    file_name: fileName,
-    parameters: {
-      demoWorkspace: DEMO_TAG,
-      patientId: mariaId,
-      reportId: ctx.reportId,
-      reportVersionId: ctx.reportVersionId,
-    },
-  });
-  assertNoError(exportError, "Failed to insert demo report export job");
-
-  await insertAudit(ctx, "report_export_created", "patient_report_version", ctx.reportVersionId, {
-    patientId: mariaId,
-    reportId: ctx.reportId,
-    format: "PDF",
-  });
 }
 
 async function seedInstitutionWorkflow(ctx: SeedContext) {
@@ -1122,13 +902,9 @@ function printSeedSummary(ctx: SeedContext) {
   console.log(`Patients: ${Array.from(ctx.patientIds.values()).length}`);
   console.log(`Recipes: ${Array.from(ctx.recipeIds.values()).length}`);
   console.log(`Menu: ${ctx.menuId}`);
-  console.log(`Report version: ${ctx.reportVersionId}`);
   console.log("Demo routes:");
   console.log(`- ${APP_URL.replace(/\/$/, "")}/patienten`);
   if (mariaId) console.log(`- ${APP_URL.replace(/\/$/, "")}/patienten/${mariaId}`);
-  if (ctx.reportVersionId) {
-    console.log(`- ${APP_URL.replace(/\/$/, "")}/berichte?reportVersionId=${ctx.reportVersionId}`);
-  }
   console.log(`- ${APP_URL.replace(/\/$/, "")}/institution/krankenhaus`);
   console.log(
     `- ${APP_URL.replace(/\/$/, "")}/institution/krankenhaus/tablettenkarten?date=${TOMORROW}&mealSlot=mittagessen&station=A3`,
@@ -1160,7 +936,7 @@ async function main() {
   await upsertRecipes(ctx);
   await seedPatients(ctx);
   await seedDigitalProtocol(ctx);
-  await seedCounselingAndReport(ctx);
+  await seedCounseling(ctx);
   await seedInstitutionWorkflow(ctx);
 
   printSeedSummary(ctx);

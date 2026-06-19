@@ -84,7 +84,6 @@ import type {
 import { toast } from "sonner"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import { usePracticeAppointments } from "@/hooks/use-practice"
-import { usePatientReports } from "@/hooks/use-patient-reports"
 import {
   ALLERGEN_DEFINITIONS,
   ALLERGEN_MAP,
@@ -118,17 +117,16 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
 
 const EMPTY_PROTOCOL_FOODS: Food[] = []
 
-const ASSESSMENT_TAB_VALUES = ["anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
+const PROFILE_TAB_VALUES = ["stammdaten", "anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
 const NUTRITION_TAB_VALUES = ["ernaehrungsplaene", "protokolle"] as const
-const BERATUNG_TAB_VALUES = ["beratungen", "patientenberichte"] as const
 
 const KNOWN_TAB_VALUES = new Set<string>([
   "workflow",
-  "stammdaten",
   "therapien",
-  ...ASSESSMENT_TAB_VALUES,
+  "beratungen",
+  "statistiken",
+  ...PROFILE_TAB_VALUES,
   ...NUTRITION_TAB_VALUES,
-  ...BERATUNG_TAB_VALUES,
 ])
 
 const AnthropometricChart = dynamic(
@@ -171,9 +169,9 @@ const PatientMealPlansTab = dynamic(
   () => import("@/components/patient-meal-plans-tab").then((mod) => mod.PatientMealPlansTab),
   { ssr: false },
 )
-const PatientBerichteTab = dynamic(
-  () => import("@/components/patient-berichte-tab").then((mod) => mod.PatientBerichteTab),
-  { ssr: false },
+const PatientStatsTab = dynamic(
+  () => import("@/components/patient-stats-tab").then((mod) => mod.PatientStatsTab),
+  { ssr: false, loading: () => <div className="h-[320px] rounded-md bg-muted/40" /> },
 )
 const ReferenceProfileSelector = dynamic(
   () => import("@/components/reference-profile-selector").then((mod) => mod.ReferenceProfileSelector),
@@ -371,9 +369,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   } = useCounseling({ initialSessions: initialData?.counselingSessions })
   const { appointments } = usePracticeAppointments({
     initialAppointments: initialData?.appointments,
-  })
-  const { reports: patientReports } = usePatientReports(patient.id, {
-    initialReports: initialData?.patientReports,
   })
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
@@ -928,25 +923,32 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const initialTabParam = searchParams.get("tab")
   const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "workflow"
   const [activeTab, setActiveTab] = useState(initialTab)
-  const assessmentTriggerValue = ASSESSMENT_TAB_VALUES.includes(activeTab as (typeof ASSESSMENT_TAB_VALUES)[number])
+  const profileTriggerValue = PROFILE_TAB_VALUES.includes(activeTab as (typeof PROFILE_TAB_VALUES)[number])
     ? activeTab
-    : "anthropometrie"
+    : "stammdaten"
   const nutritionTriggerValue = NUTRITION_TAB_VALUES.includes(activeTab as (typeof NUTRITION_TAB_VALUES)[number])
     ? activeTab
     : "ernaehrungsplaene"
-  const beratungTriggerValue = BERATUNG_TAB_VALUES.includes(activeTab as (typeof BERATUNG_TAB_VALUES)[number])
-    ? activeTab
-    : "beratungen"
+
+  const profileSubNav = (
+    <TabsList>
+      <TabsTrigger value="stammdaten">Profil</TabsTrigger>
+      <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
+      <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
+      <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
+      <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+    </TabsList>
+  )
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
         <TabsTrigger value="workflow">Workflow</TabsTrigger>
-        <TabsTrigger value="stammdaten">Profil</TabsTrigger>
-        <TabsTrigger value={assessmentTriggerValue}>Assessment</TabsTrigger>
+        <TabsTrigger value={profileTriggerValue}>Profil</TabsTrigger>
         <TabsTrigger value="therapien">Therapien</TabsTrigger>
         <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
-        <TabsTrigger value={beratungTriggerValue}>Beratung</TabsTrigger>
+        <TabsTrigger value="beratungen">Beratung</TabsTrigger>
+        <TabsTrigger value="statistiken">Statistiken</TabsTrigger>
       </TabsList>
 
       <TabsContent value="workflow" className="space-y-4">
@@ -959,7 +961,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
           anthroEntries={anthroEntries}
           screenings={screenings}
           appointments={patientAppointments}
-          patientReports={patientReports}
           mealPlans={initialData?.mealPlans ?? []}
           setQrDialogLink={setQrDialogLink}
           onGenerateLink={() =>
@@ -991,6 +992,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="stammdaten" className="space-y-4">
+        {profileSubNav}
         <Card>
           <CardHeader>
             <CardTitle>Persönliche Daten</CardTitle>
@@ -1218,12 +1220,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="anthropometrie" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         {chartEntries.length > 1 && (
           <AnthropometricChart entries={chartEntries} />
         )}
@@ -1423,12 +1420,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="diagnosen" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -1767,12 +1759,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="laborwerte" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -1970,12 +1957,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="aktivitaet" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -2916,10 +2898,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="beratungen" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="beratungen">Sitzungen</TabsTrigger>
-          <TabsTrigger value="patientenberichte">Berichte</TabsTrigger>
-        </TabsList>
         <div className="flex justify-end">
           <Button asChild>
             <Link href={`/patienten/${patient.id}/beratungen/neu`}>
@@ -2972,16 +2950,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
         )}
       </TabsContent>
 
-      <TabsContent value="patientenberichte" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="beratungen">Sitzungen</TabsTrigger>
-          <TabsTrigger value="patientenberichte">Berichte</TabsTrigger>
-        </TabsList>
-        <PatientBerichteTab
+      <TabsContent value="statistiken" className="space-y-4">
+        <PatientStatsTab
           patient={patient}
-          reports={patientReports}
-          mealPlans={initialData?.mealPlans ?? []}
-          protocols={protocols}
+          entries={anthroEntries}
+          activities={activities}
+          sessions={sessions}
         />
       </TabsContent>
     </Tabs>

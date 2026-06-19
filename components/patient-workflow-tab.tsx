@@ -24,7 +24,6 @@ import type {
   DigitalProtocolSubmission,
   NutritionProtocol,
   Patient,
-  PatientReportRecord,
   PracticeAppointment,
   ScreeningResult,
   DailyMealPlan,
@@ -32,7 +31,7 @@ import type {
 import { usePatientMealPlans } from "@/hooks/use-patient-meal-plans"
 
 type PatientWorkflowStatus = "not_started" | "in_progress" | "done" | "attention"
-type PatientWorkflowStageKey = "intake" | "assessment" | "plan" | "report" | "follow_up"
+type PatientWorkflowStageKey = "intake" | "assessment" | "plan" | "follow_up"
 
 type PatientWorkflowEventTone = "default" | "success" | "warning"
 
@@ -72,7 +71,6 @@ interface PatientWorkflowTabProps {
   anthroEntries: AnthropometricEntry[]
   screenings: ScreeningResult[]
   appointments: PracticeAppointment[]
-  patientReports: PatientReportRecord[]
   mealPlans?: DailyMealPlan[]
   setQrDialogLink: Dispatch<SetStateAction<DigitalProtocolLink | null>>
   onGenerateLink: () => void
@@ -174,7 +172,6 @@ export function PatientWorkflowTab({
   anthroEntries,
   screenings,
   appointments,
-  patientReports,
   mealPlans: initialMealPlans,
   setQrDialogLink,
   onGenerateLink,
@@ -203,21 +200,6 @@ export function PatientWorkflowTab({
     () => getLatestByDate(sessions, (session) => session.updatedAt ?? session.date),
     [sessions],
   )
-  const latestPatientReport = useMemo(
-    () => getLatestByDate(patientReports, (report) => report.updatedAt ?? report.createdAt),
-    [patientReports],
-  )
-  const patientReportVersions = useMemo(
-    () =>
-      patientReports
-        .flatMap((report) => report.versions ?? [])
-        .sort((a, b) => new Date(b.exportedAt).getTime() - new Date(a.exportedAt).getTime()),
-    [patientReports],
-  )
-  const latestPatientReportVersion = useMemo(
-    () => patientReportVersions[0] ?? null,
-    [patientReportVersions],
-  )
   const latestFollowUpAppointment = useMemo(
     () =>
       getLatestByDate(
@@ -226,8 +208,6 @@ export function PatientWorkflowTab({
       ),
     [appointments],
   )
-  const reportHref = `/berichte?patientId=${patient.id}${latestPlan ? `&planId=${latestPlan.id}` : ""}${latestProtocol ? `&protocolId=${latestProtocol.id}` : ""}`
-
   const hasClinicalInputs = anthroEntries.length > 0 || screenings.length > 0
 
   const intakeStage: PatientWorkflowStage = useMemo(() => {
@@ -411,64 +391,6 @@ export function PatientWorkflowTab({
     }
   }, [latestPlan, latestProtocol, latestSession, patient.id])
 
-  const reportStage: PatientWorkflowStage = useMemo(() => {
-    const berichteTabHref = `/patienten/${patient.id}?tab=patientenberichte`
-
-    if (latestPatientReportVersion) {
-      const planChanged = Boolean(
-        latestPlan && latestPatientReport?.planId && latestPlan.id !== latestPatientReport.planId,
-      )
-      return {
-        key: "report",
-        label: "Report",
-        status: planChanged ? "attention" : "done",
-        summary: planChanged
-          ? "Es liegt ein archivierter Bericht vor, der aktuelle Ernährungsplan wurde aber seitdem geändert. Eine Aktualisierung wird empfohlen."
-          : `Aktueller Bericht v${latestPatientReportVersion.versionNumber} liegt archiviert vor.`,
-        dateLabel: formatDate(latestPatientReportVersion.exportedAt),
-        primaryAction: buildAction(
-          planChanged ? "Bericht aktualisieren" : "Bericht öffnen",
-          planChanged ? reportHref : berichteTabHref,
-        ),
-        secondaryAction: buildAction("Versionshistorie", berichteTabHref, undefined, "outline"),
-      }
-    }
-
-    if (latestPatientReport) {
-      return {
-        key: "report",
-        label: "Report",
-        status: "in_progress",
-        summary: "Ein Berichtseintrag liegt vor, aber noch keine archivierte Exportversion.",
-        dateLabel: formatDate(latestPatientReport.updatedAt ?? latestPatientReport.createdAt),
-        primaryAction: buildAction("Bericht exportieren", reportHref),
-        secondaryAction: buildAction("Bericht öffnen", berichteTabHref, undefined, "outline"),
-      }
-    }
-
-    if (latestSession || latestProtocol) {
-      return {
-        key: "report",
-        label: "Report",
-        status: "in_progress",
-        summary: "Die Patientendaten sind weit genug fortgeschritten, um einen Bericht zu erstellen.",
-        dateLabel: formatDate((latestSession?.date ?? latestProtocol?.startDate) ?? new Date().toISOString()),
-        primaryAction: buildAction("Bericht erstellen", reportHref),
-        secondaryAction: latestProtocol
-          ? buildAction("Protokoll öffnen", `/patienten/${patient.id}/protokolle/${latestProtocol.id}`, undefined, "outline")
-          : undefined,
-      }
-    }
-
-    return {
-      key: "report",
-      label: "Report",
-      status: "not_started",
-      summary: "Ein Bericht wird sinnvoll, sobald Assessment und Beratung dokumentiert sind.",
-      primaryAction: buildAction("Bericht erstellen", reportHref),
-    }
-  }, [latestPatientReport, latestPatientReportVersion, latestPlan, latestProtocol, latestSession, patient.id, reportHref])
-
   const followUpStage: PatientWorkflowStage = useMemo(() => {
     const completedTimelineEntry = latestSession?.timeline?.find((entry) => entry.status === "done")
 
@@ -520,7 +442,7 @@ export function PatientWorkflowTab({
     }
   }, [latestFollowUpAppointment, latestSession, patient.id])
 
-  const stages = [intakeStage, assessmentStage, planStage, reportStage, followUpStage]
+  const stages = [intakeStage, assessmentStage, planStage, followUpStage]
   const nextStage = stages.find((stage) => stage.status !== "done") ?? stages[stages.length - 1]
 
   const timelineEvents = useMemo(() => {
@@ -603,25 +525,14 @@ export function PatientWorkflowTab({
         })
       })
 
-    patientReportVersions.forEach((version) => {
-      events.push({
-        id: `patient_report_version_${version.id}`,
-        date: version.exportedAt,
-        title: `Bericht v${version.versionNumber}`,
-        description: `Archivierter Bericht ${version.format} · ${version.snapshot.planDateLabel}`,
-        href: `/berichte?reportVersionId=${version.id}`,
-        tone: "success",
-      })
-    })
-
     return events
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 6)
-  }, [appointments, digitalSubmissions, patient.id, patientMealPlans, patientReportVersions, protocols, sessions])
+  }, [appointments, digitalSubmissions, patient.id, patientMealPlans, protocols, sessions])
 
   const latestActivity = timelineEvents[0] ?? null
   const completedCount = stages.filter((stage) => stage.status === "done").length
-  const readinessSummary = `${completedCount}/5 Schritte abgeschlossen`
+  const readinessSummary = `${completedCount}/${stages.length} Schritte abgeschlossen`
   const openItems = stages.filter((stage) => stage.status !== "done").map((stage) => stage.label)
 
   return (
@@ -710,7 +621,7 @@ export function PatientWorkflowTab({
       <Card>
         <CardHeader>
           <CardTitle>Aktivität</CardTitle>
-          <CardDescription>Eine gemeinsame Timeline für Intake, Protokolle, Beratung, Pläne, Berichte und Termine.</CardDescription>
+          <CardDescription>Eine gemeinsame Timeline für Intake, Protokolle, Beratung, Pläne und Termine.</CardDescription>
         </CardHeader>
         <CardContent>
           {timelineEvents.length > 0 ? (

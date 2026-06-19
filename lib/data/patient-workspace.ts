@@ -11,7 +11,6 @@ import type {
   NutritionProtocol,
   Patient,
   PatientAllergenEntry,
-  PatientReportRecord,
   PracticeAppointment,
   ProcamResult,
   Recipe,
@@ -31,7 +30,6 @@ import { fetchInvoicesClient } from "@/lib/data/invoices-client"
 import { fetchLabValuesClient } from "@/lib/data/patient-lab-values-client"
 import { fetchMedicationsClient } from "@/lib/data/patient-medications-client"
 import { fetchPatientAllergensClient } from "@/lib/data/patient-allergens-client"
-import { fetchPatientReportsClient } from "@/lib/data/patient-reports-client"
 import { fetchPatientByRef, fetchPatientByRefForUser } from "@/lib/data/patients"
 import { fetchMealPlans } from "@/lib/data/meal-plans"
 import { fetchFoodsByIds } from "@/lib/data/foods"
@@ -59,7 +57,6 @@ export interface PatientWorkspaceData {
   labValues: LabValueEntry[]
   medications: MedicationEntry[]
   patientAllergens: PatientAllergenEntry[]
-  patientReports: PatientReportRecord[]
   mealPlans: DailyMealPlan[]
   mealPlanFoods: Food[]
   recipes: Recipe[]
@@ -143,7 +140,6 @@ export async function fetchPatientWorkspaceData(
       labValues: [],
       medications: [],
       patientAllergens: [],
-      patientReports: [],
       mealPlans: [],
       mealPlanFoods: [],
       recipes: [],
@@ -191,7 +187,6 @@ export async function fetchPatientWorkspaceData(
     labValues,
     medications,
     patientAllergens,
-    patientReports,
     mealPlans,
     recipes,
     procamResults,
@@ -211,7 +206,6 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchLabValuesClient(supabase), "lab values"),
     orEmpty(fetchMedicationsClient(supabase), "medications"),
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
-    orEmpty(fetchPatientReportsClient(patient.id, supabase), "patient reports"),
     orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
     orEmpty(fetchRecipes({ supabase }), "recipes"),
     orEmpty(fetchProcamResultsClient(supabase), "PROCAM results"),
@@ -268,7 +262,6 @@ export async function fetchPatientWorkspaceData(
     labValues: filterForPatient(labValues, patient),
     medications: filterForPatient(medications, patient),
     patientAllergens: filterForPatient(patientAllergens, patient),
-    patientReports,
     mealPlans: patientMealPlans,
     mealPlanFoods,
     recipes: mealPlanRecipes,

@@ -9,7 +9,6 @@ import {
   ChefHat,
   CalendarDays,
   ShoppingBasket,
-  BarChart3,
   Users,
   ArrowLeftRight,
   Database,
@@ -85,7 +84,6 @@ const NAV_SECTIONS: NavSection[] = [
     title: "Patienten",
     items: [
       { label: "Patienten", icon: Users, route: "/patienten" },
-      { label: "Berichte", icon: BarChart3, route: "/berichte" },
     ],
   },
   {

@@ -150,21 +150,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Im Patienten speichern:** writes `dailyCalorieGoal`, `goalWeight`, and `macroPreset` back to the patient (`usePatients().updatePatient`), persists the activity level as PAL via `useReferenceProfiles().setPal` (shared with the patient energy panel in `patient-tabs.tsx`, no parallel store), and records a new dated weigh-in via `useAnthropometric().addEntry` only when weight/height changed. Maintenance calories are derived live (BMR × PAL), not stored.
   - **Schema:** `patients.daily_calorie_goal`, `patients.goal_weight`, `patients.macro_preset` (migration `20260619000058_patient_calorie_targets.sql`).
 
-### 4.7 Berichte (`/berichte`)
-- **Component:** `app/(app)/berichte/berichte-client.tsx`
-  - Builds a typed `ReportExportRequest` from the currently selected plan, visible nutrient rows, active sections, and resolved placeholder notes.
-  - Generic report comparisons now use the persisted user default reference preference instead of a hardcoded DGE adult baseline.
-  - **Patient-aware handoff:** accepts optional `patientId`, `planId`, and `protocolId` query params. `patientId` adds a context banner, `planId` preselects a valid plan once on load, and `protocolId` is informational only in v1.
-  - **Patient-bound reopen:** accepts `reportId` to reload a saved patient report record, restore the saved report length/sections/notes, and reopen the linked plan context.
-  - **Archived reopen:** accepts `reportVersionId` to open a frozen patient report version from stored snapshot data instead of recalculating from the current meal plan.
-  - **Real exports:** `PDF erstellen` and `CSV/Nährstoffdaten` POST to `/api/exports/report`.
-  - **Patient report persistence:** non-inline exports with valid patient + plan context now create or update a `patient_reports` parent record, append an immutable `patient_report_versions` row, and upload the generated file to private Supabase Storage.
-  - **Archived mode:** historical report versions render as read-only snapshot views, expose direct file download, and remain readable even if the source meal plan changes later.
-  - **Clinical document packs:** bundled clinic document packs and patient handout templates live in `lib/content/clinical-documentation.ts`; selecting one inserts resolved structured text into report notes.
-  - **LMIV output:** report PDF/CSV payloads include LMIV nutrient rows, allergen declarations, additive declarations, and the current retention-policy label. Archived report versions render the stored LMIV snapshot when present.
-  - **Retention metadata:** patient-bound exports use the admin retention policy from `report_retention_policies`; parent reports and immutable versions store `retention_policy_id`, `retention_until`, `retention_status`, and retention notes.
-  - **Preview:** `Druckvorschau anzeigen` requests the same PDF payload with inline disposition and opens it in a new tab.
-  - **Contract boundary:** the page owns selection and payload assembly; rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
+### 4.7 Berichte (removed)
+- The standalone `/berichte` route and the per-patient report history (`PatientBerichteTab`, `patient_reports`/`patient_report_versions`, the `patient-report-files` storage bucket, report text templates, and the `/api/patient-report-versions/[versionId]/download` route) were removed. Per-patient analytics now live in the **Statistiken** patient tab (`components/patient-stats-tab.tsx`); migration `20260619000059_drop_patient_reports.sql` drops the tables.
+- The shared `/api/exports/report` endpoint is retained: it still generates plan PDF/CSV files for the Ernährungsplan editor and dataset exports, but no longer persists patient-bound report records. Rendering lives in `lib/exports/pdf.tsx` and CSV formatting in `lib/exports/csv.ts`.
 
 ### 4.8 Patienten Mail Merge (`/patienten`)
 - **Component:** `app/(app)/patienten/page.tsx`
@@ -179,13 +167,11 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - The authoring UI for templates/placeholders is still client-side, reads bundled product defaults from `lib/patient-mailings.ts`, and now lives in the `Workflows` tab's secondary `Serienbriefe & Mailings` panel instead of competing with the primary patient list.
   - **Real exports:** `Dokumente erzeugen` now renders a merged PDF via `/api/exports/mail-merge` instead of creating a local text bundle.
   - **Batch tracking:** the existing client batch history is still used for UI state, but the actual export is also logged to `export_jobs`.
-  - **Patient workflow report archive:** `components/patient-workflow-tab.tsx` exposes archived report search and format filtering across stored patient report versions.
 
 ### 4.9 API & Export (`/api-export`)
 - **Component:** `app/(app)/api-export/page.tsx`
   - Export cards now call `/api/exports/datasets` with typed `format` + `scope` combinations.
   - The default report export builder resolves references via the same user preference pipeline used in the interactive UI.
-  - Report text templates in `/berichte` are bundled product defaults from `lib/report-templates.ts`, then extended with user-created local templates via `useReportTemplates()`.
   - **Supported v1 scopes:** CSV for Lebensmittel/Rezepte/Patienten/Ernährungspläne/Berichte, JSON for Lebensmittel/Rezepte/Patienten/Ernährungspläne, PDF for Patienten/Berichte.
   - **History:** the `Verlauf` tab loads real persisted rows from `/api/export-jobs`; the former mock `EXPORT_HISTORY` list is no longer the source of truth for exports.
   - Failed history loads are shown inline so the export page does not silently degrade when the journal endpoint or schema is unavailable.
@@ -241,8 +227,8 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - It requires an `owner` or `admin` membership and lists active organization members, roles, and status values from `organization_memberships`.
 - It implements Supabase Admin API invitations for `admin`, `dietitian`, `assistant`, and `institution_admin` roles. Invite, resend, and revoke actions persist `invited`/`disabled` membership state, invitation timestamps, expiry metadata, and `access_audit_logs` entries.
 - It supports role/status changes for existing memberships with server-side RBAC checks: only Owners can modify Owner memberships, the last active Owner cannot be demoted or disabled, and users cannot deactivate or remove their own admin access. Each successful change writes a `team_membership_updated` audit event.
-- Sensitive access events now write `access_audit_logs` entries through `lib/audit/access-audit.ts`: patient workspace opens, patient create/update/delete, patient report exports/downloads, export history/dataset exports, digital protocol receipt/conversion, inpatient stays, and meal orders.
-- It includes admin controls for the default patient-report retention policy. The form writes `report_retention_policies`, and new patient-bound report exports copy that policy onto `patient_reports` and `patient_report_versions`.
+- Sensitive access events now write `access_audit_logs` entries through `lib/audit/access-audit.ts`: patient workspace opens, patient create/update/delete, report/dataset exports, export history, digital protocol receipt/conversion, inpatient stays, and meal orders.
+- It includes admin controls for the default report retention policy. The form writes `report_retention_policies`; patient-bound report persistence has been removed, so the policy is retained for admin/configuration purposes only.
 - MFA reset and team-wide patient sharing workflows remain deferred; RBAC v1 establishes route protection, persisted roles, invitations, audited role/access events, and report retention controls.
 
 ### 4.13.1 Admin Tarife (`/admin/tarife`)
@@ -280,7 +266,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Per-slot compliance:** Slot badges only evaluate macronutrient targets (energie/eiweiss/fett/kohlenhydrate/ballaststoffe/zucker) and scale daily min/max by `MEAL_SLOT_TARGET_FRACTIONS` (Frühstück 25%, Snack vormittag 10%, Mittag 30%, Snack nachmittag 10%, Abend 25%). Empty slots render no badges. Vitamin/mineral targets stay on the daily compliance card where they belong.
 - **Broteinheiten (BE):** Virtual nutrient derived from carbohydrates via `getBroteinheiten()` in `lib/nutrients.ts` (`BE_GRAMS_PER_UNIT = 12` in `lib/constants.ts` — DDG/DGE convention; centralised so a per-clinic override is a one-line change). Surfaced as a column in daily totals, slot chips, the Einzelanalyse table, the Planvorlagen macro cards, and Plan-Vergleich rows. Available as a target nutrient in the bundled Diabetes diet-line preset with an upper bound (no min — the optimization assistant must not push diabetic patients toward more carbs).
 - **Einzelanalyse-Modus:** Separate tab in the day view (`<TabsTrigger value="einzelanalyse">`) backed by `buildEinzelanalyseTable()` in `lib/einzelanalyse.ts` and rendered by `components/einzelanalyse-table.tsx`. Shows one row per meal entry grouped by slot, with one column per selected nutrient and a `%-of-total` micro-bar per cell. Column set is user-configurable via a multi-select dropdown (default: Energie/EW/F/KH/BE/Bst). A "pro kg KG"-Toggle normalises every column by the patient's latest anthropometric weight — disabled when no patient is assigned or no weight measurement exists.
-- **Direct exports:** The day toolbar can export the current plan as a clinical PDF, approval-gated patient handout, or 7-day Lehrküchenplan. Exports reuse `/api/exports/report`, persist patient-bound report history when patient context is present, and use `lib/exports/report-builder.ts` variant payloads.
+- **Direct exports:** The day toolbar can export the current plan as a clinical PDF, approval-gated patient handout, or 7-day Lehrküchenplan. Exports reuse `/api/exports/report` (file generation only; patient-bound report persistence was removed) and use `lib/exports/report-builder.ts` variant payloads.
 - **Plan templates:** `meal_plan_templates` (migration `20260529000047_meal_plan_templates.sql`) stores reusable day plans tagged by indication and diet line; system rows (`user_id IS NULL`) ship via the `etl:recipes` ETL from `lib/mock-data/meal-plan-templates.ts`. The day toolbar exposes "Als Vorlage speichern" next to the main save action, and the save toast repeats that shortcut after "Ernährungsplan speichern". The "Vorlagen" dropdown opens `useMealPlanTemplates` for "Plan aus Vorlage erzeugen" (filtered by any of the patient's indications / diet line) and still offers "Aktuellen Plan als Vorlage speichern". Applying a template uses `useMealPlan.applyTemplateToDate`, replacing the day's slots and resetting status to `draft`.
 - **Exchange workflow:** Entry rows expose an exchange action. Selecting a food from the exchange dialog can replace the current entry while preserving the amount; slot-level exchange still inserts a new food. When an entry is selected for exchange, the dialog renders an "Original" reference card with macro pills (Energie/EW/Fett/KH/Bst at the entry's amount), and each candidate row shows nutrient values scaled to the same amount with Δ vs. original on the pivot column and on per-macro chips (blue = more, orange = less). Recipe-to-food swaps still show absolute per-100 g values without Δ since the units don't match.
 - **Week workflow:** Week cards can open a day, copy today to a selected day, copy a selected day to the following day, or clear a day.
@@ -404,15 +390,13 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Inputs come from digital protocol links/submissions, internal protocols, counseling sessions, patient screenings/anthropometrics, and patient-linked appointments.
 - **Behavior:**
   - Shows one command panel with the next recommended action, readiness, latest activity, and open workflow steps.
-  - Renders `Intake → Assessment → Plan → Report → Follow-up` as a compact treatment-path strip instead of large repeated cards.
-  - Aggregates a single activity timeline from digital submissions, protocols, counseling milestones, patient plans, reports, and follow-up appointments.
+  - Renders `Intake → Assessment → Plan → Follow-up` as a compact treatment-path strip instead of large repeated cards.
+  - Aggregates a single activity timeline from digital submissions, protocols, counseling milestones, patient plans, and follow-up appointments.
   - Keeps plan creation as a contextual action on the `Plan` step; the full plan archive lives only in the dedicated patient `Ernährungspläne` tab.
-- **Patient tab grouping:** `Profil` contains former Stammdaten; `Assessment` groups Anthropometrie, Diagnosen & Medikamente, Laborwerte, and Aktivität & Energie as second-level tabs; `Ernährung` groups Ernährungspläne and Protokolle as second-level tabs; `Therapien` and `Beratung` remain direct top-level work areas.
+- **Patient tab grouping:** `Profil` groups Stammdaten plus Anthropometrie, Diagnosen & Medikamente, Laborwerte, and Aktivität & Energie as second-level tabs; `Ernährung` groups Ernährungspläne and Protokolle as second-level tabs; `Therapien` and `Beratung` (Sitzungen only) remain direct top-level work areas; `Statistiken` (`components/patient-stats-tab.tsx`) shows weight/BMI/activity analytics.
 - **Patient Ernährungspläne tab:** `components/patient-meal-plans-tab.tsx` lists all `daily_meal_plans` assigned to the patient, with status, date, diet line, entry count, kcal/EW/F/KH/BE summaries, notes, and direct actions to open in `/ernaehrungsplan`, duplicate to the next free date for the same patient, copy as a new draft for another patient, archive, delete non-approved plans, create a new plan, or jump to plan comparison. The cross-patient copy dialog requires target patient and date, blocks patient/date collisions, clears approval metadata, and optionally carries over notes and diet line. Patient workspace loading hydrates only foods referenced by the patient plans and their recipes, using the macro nutrient subset required for those summaries. `usePatientMealPlans()` treats server-provided plans as initial render data and still refreshes from Supabase on mount, so plans saved from `/ernaehrungsplan?patientId=...` appear after navigation without a hard reload.
-- **Report history:** The workflow now lists patient-bound report records from `patient_reports`. The `Report` stage becomes `done` once a report record exists and deep-links back into `/berichte?reportId=...`.
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
 - **Plan handoff:** `/ernaehrungsplan` accepts `patientId` and `date` query params so patient workflow links can open or create the exact patient plan date.
-- **Implementation note:** Patient-bound report exports now retain both an immutable snapshot in `patient_report_versions` and the generated PDF/CSV file in private Supabase Storage. Reopening `reportVersionId` renders the archived snapshot, while `reportId` reopens the latest report context for continued work.
 
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
@@ -450,7 +434,7 @@ Use the relevant subset for the area you changed instead of treating this as a m
 - Patient workspace: if you touched patient detail flows, create and reload the affected records to confirm persistence.
 - Hospital workflow: assign a patient to a bed, save a safe meal order, verify a blocked allergen conflict, and confirm tray-card rendering.
 - Digital protocol conversion: if you touched submission or conversion code, verify draft creation and converted-state tracking.
-- Report export: if you touched `/berichte` or export rendering, verify PDF, CSV, and preview behavior.
+- Report export: if you touched `/api/exports/report` or export rendering, verify plan PDF, CSV, and preview behavior in `/ernaehrungsplan`.
 - Export history: if you touched export jobs, verify `/api-export` reflects persisted `export_jobs` rows.
 - Mail merge: if you touched `/patienten` exports, verify the generated download is a PDF.
 - OFF catalog: if you touched OFF ingestion or food browsing, verify promoted entries appear with attribution and quality metadata.

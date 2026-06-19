@@ -4,7 +4,6 @@ const RESPONSIVE_ROUTES = [
   "/dashboard",
   "/lebensmittel",
   "/patienten",
-  "/berichte",
   "/institution/menueplaene",
   "/institution/krankenhaus",
   "/institution/produktion",

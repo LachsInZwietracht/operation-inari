@@ -37,7 +37,7 @@ Start with:
 What to say:
 - BLS/SFK/OFF/source visibility is separate from user-authored records.
 - Sensitive exports and access events are written to `access_audit_logs` on a best-effort basis.
-- `export_jobs` is an operational journal; patient-bound report binaries and immutable snapshots live in the patient report tables and private Supabase Storage.
+- `export_jobs` is an operational journal of export metadata. (Patient-bound report binaries/snapshots were removed with the Berichte feature.)
 
 Important boundary:
 - SSO configuration, claim-to-role mappings, Supabase Auth SSO callback membership application, API keys, webhooks, audit records, and the HL7 import/admin foundation are implemented.
@@ -96,35 +96,23 @@ Implementation references:
 Demo risk:
 - The full digital-submission conversion path should get a persisted Playwright fixture before this is used as the main sales demo.
 
-### 4. Clinical Report And Archive
+### 4. Patient Analytics (Statistiken)
+
+The standalone Berichte route and per-patient report archive were removed. Per-patient
+analytics now live in the **Statistiken** patient tab.
 
 Use:
-- `/berichte?patientId=<id>&protocolId=<protocolId>`
-- `/berichte?reportId=<reportId>`
-- `/berichte?reportVersionId=<versionId>`
-- `/api/patient-report-versions/[versionId]/download`
+- Open a patient, switch to the `Statistiken` tab.
 
 Demo actions:
-- Create a patient-aware report from the handoff URL.
-- Select a clinical document pack or patient handout text where relevant.
-- Export PDF and CSV.
-- Reopen the patient workflow and show report history/version filtering.
-- Reopen an archived version and download the stored file.
+- Show the weight/BMI development charts, KPI cards, and activity-energy chart.
+- For plan PDF/CSV exports, use the `/ernaehrungsplan` day toolbar (still backed by `/api/exports/report`).
 
 Implementation references:
-- `app/(app)/berichte/berichte-client.tsx`
-- `app/api/exports/report/route.ts`
-- `app/api/patient-report-versions/[versionId]/download/route.ts`
-- `lib/data/patient-reports-client.ts`
+- `components/patient-stats-tab.tsx`
+- `app/api/exports/report/route.ts` (plan PDF/CSV generation only; no patient-report persistence)
 - `lib/exports/pdf.tsx`
 - `lib/exports/csv.ts`
-- `lib/content/clinical-documentation.ts`
-
-Truth model:
-- Patient-bound report exports persist a stable `patient_reports` parent record.
-- Each non-inline export appends an immutable `patient_report_versions` row with a snapshot.
-- Generated PDF/CSV files are uploaded to private Supabase Storage bucket `patient-report-files`.
-- Downloads write `patient_report_version_downloaded` audit events.
 
 ### 5. Inpatient Assignment And Safe Meal Selection
 
@@ -151,8 +139,7 @@ Implementation references:
 
 Validation reference:
 - `tests/institution.spec.ts` covers explicit institution fixtures, safe order save, blocked allergen override logging, production status, analytics, and tray-card rendering.
-- `tests/reports.spec.ts` covers patient-bound report export/archive behavior, including `patient_reports`, `patient_report_versions`, storage-backed archive downloads, missing-file warnings, and report/download audit rows.
-- Both specs now use `tests/fixtures/clinic-demo.ts` for shared patient, menu, report, storage cleanup, and audit helpers.
+- It uses `tests/fixtures/clinic-demo.ts` for shared patient, menu, storage cleanup, and audit helpers.
 
 ### 6. Kitchen Production And Institution Analytics
 
@@ -186,8 +173,7 @@ Environment:
 - Seed the full buyer-story workspace with `DEMO_USER_EMAIL=<account-email> SUPABASE_SERVICE_ROLE_KEY=<service-role-key> npm run seed:clinic-demo`.
 - Add `DEMO_USER_PASSWORD=<password>` only when the demo auth user does not exist yet and the script should create a confirmed user.
 - Use `npm run seed:clinic-demo -- --dry-run` to verify credentials, user lookup, and food availability without writing rows.
-- The seed command creates or refreshes only `clinic-demo-*` records for the target user: patients, protocol intake, counseling, report archive, menu cycle, inpatient stays, meal orders, and audit/export rows.
-- Ensure `patient-report-files` storage exists and is private; the seed command also attempts to create/update the bucket before uploading the archived demo report.
+- The seed command creates or refreshes only `clinic-demo-*` records for the target user: patients, protocol intake, counseling, menu cycle, inpatient stays, meal orders, and audit/export rows.
 - Use `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` only for local testing, never as a production or sales-deployment claim.
 
 Recommended checks before a demo:
@@ -196,7 +182,7 @@ Recommended checks before a demo:
 - `npm run validate:nutrients`
 - `npm run test -- tests/institution.spec.ts`
 - `npm run test -- tests/digital-protocol.spec.ts`
-- Manually export one patient-bound report PDF and verify `/api/patient-report-versions/[versionId]/download`.
+- Manually export one plan PDF from `/ernaehrungsplan` and verify the download works.
 
 ## Open Demo Hardening Work
 

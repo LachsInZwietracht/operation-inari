@@ -1,0 +1,339 @@
+"use client"
+
+import { useMemo } from "react"
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
+import {
+  Activity as ActivityIcon,
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarRange,
+  Flame,
+  Minus,
+  Scale,
+  Target,
+} from "lucide-react"
+import { differenceInCalendarDays, parseISO } from "date-fns"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { formatDate, formatNumber } from "@/lib/format"
+import type { ActivityEntry, AnthropometricEntry, CounselingSession, Patient } from "@/lib/types"
+
+interface PatientStatsTabProps {
+  patient: Patient
+  entries: AnthropometricEntry[]
+  activities: ActivityEntry[]
+  sessions: CounselingSession[]
+}
+
+interface ChartTooltipProps {
+  active?: boolean
+  payload?: Array<{ name?: string; value?: number; color?: string; dataKey?: string; unit?: string }>
+  label?: string
+}
+
+function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-lg border bg-background px-3 py-2 shadow-md">
+      <p className="mb-1 text-sm font-medium">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.dataKey} className="text-sm text-muted-foreground">
+          <span
+            className="mr-2 inline-block h-2.5 w-2.5 rounded-sm align-middle"
+            style={{ backgroundColor: entry.color }}
+          />
+          {entry.name}: {formatNumber(entry.value ?? 0, 1)}
+          {entry.unit ? ` ${entry.unit}` : ""}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+function bmiCategory(bmi: number): string {
+  if (bmi < 18.5) return "Untergewicht"
+  if (bmi < 25) return "Normalgewicht"
+  if (bmi < 30) return "Übergewicht"
+  return "Adipositas"
+}
+
+function DeltaBadge({ delta, unit }: { delta: number; unit: string }) {
+  const rounded = Math.round(delta * 10) / 10
+  const Icon = rounded > 0 ? ArrowUpRight : rounded < 0 ? ArrowDownRight : Minus
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+      <Icon className="h-3.5 w-3.5" />
+      {rounded > 0 ? "+" : ""}
+      {formatNumber(rounded, 1)} {unit}
+    </span>
+  )
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  children,
+}: {
+  icon: typeof Scale
+  label: string
+  value: string
+  children?: React.ReactNode
+}) {
+  return (
+    <Card className="relative overflow-hidden">
+      <div
+        className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-10 blur-2xl"
+        style={{ backgroundColor: "var(--color-chart-1)" }}
+      />
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Icon className="h-4 w-4" />
+          </span>
+        </div>
+        <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
+        <div className="mt-1 min-h-[20px]">{children}</div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function PatientStatsTab({ patient, entries, activities, sessions }: PatientStatsTabProps) {
+  const sorted = useMemo(
+    () => [...entries].sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()),
+    [entries],
+  )
+
+  const first = sorted[0] ?? null
+  const latest = sorted[sorted.length - 1] ?? null
+
+  const weightData = useMemo(
+    () => sorted.map((e) => ({ date: formatDate(e.date), weight: e.weight, bmi: e.bmi })),
+    [sorted],
+  )
+
+  const activityData = useMemo(
+    () =>
+      [...activities]
+        .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
+        .slice(-8)
+        .map((a) => ({
+          date: formatDate(a.date),
+          energie: Math.round(a.energyKcal ?? a.durationMinutes * 4.5),
+        })),
+    [activities],
+  )
+
+  const weightDelta = first && latest ? latest.weight - first.weight : 0
+  const bmiDelta = first && latest ? latest.bmi - first.bmi : 0
+  const spanDays = first && latest ? Math.abs(differenceInCalendarDays(parseISO(latest.date), parseISO(first.date))) : 0
+  const spanWeeks = spanDays > 0 ? spanDays / 7 : 0
+  const perWeek = spanWeeks > 0 ? weightDelta / spanWeeks : 0
+
+  if (!latest) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <Scale className="h-6 w-6" />
+          </span>
+          <p className="text-sm font-medium">Noch keine Statistiken verfügbar</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Sobald Messwerte für {patient.firstName} erfasst sind, erscheinen hier Gewichts- und Verlaufsanalysen.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const goalWeight = patient.goalWeight
+  const goalRemaining = goalWeight != null ? latest.weight - goalWeight : null
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon={Scale} label="Aktuelles Gewicht" value={`${formatNumber(latest.weight, 1)} kg`}>
+          {sorted.length > 1 ? (
+            <DeltaBadge delta={weightDelta} unit="kg" />
+          ) : (
+            <span className="text-xs text-muted-foreground">Stand {formatDate(latest.date)}</span>
+          )}
+        </StatCard>
+        <StatCard icon={Target} label="BMI" value={formatNumber(latest.bmi, 1)}>
+          <span className="text-xs text-muted-foreground">
+            {bmiCategory(latest.bmi)}
+            {sorted.length > 1 ? (
+              <>
+                {" · "}
+                {bmiDelta > 0 ? "+" : ""}
+                {formatNumber(bmiDelta, 1)}
+              </>
+            ) : null}
+          </span>
+        </StatCard>
+        <StatCard
+          icon={ActivityIcon}
+          label="Ø Trend / Woche"
+          value={`${perWeek > 0 ? "+" : ""}${formatNumber(perWeek, 1)} kg`}
+        >
+          <span className="text-xs text-muted-foreground">
+            {goalRemaining != null
+              ? `Noch ${formatNumber(Math.abs(goalRemaining), 1)} kg bis Ziel`
+              : spanWeeks >= 1
+                ? `über ${formatNumber(spanWeeks, 0)} Wochen`
+                : "über < 1 Woche"}
+          </span>
+        </StatCard>
+        <StatCard icon={CalendarRange} label="Zeitraum" value={`${sorted.length} Messungen`}>
+          <span className="text-xs text-muted-foreground">
+            {sessions.length} Beratungen · {spanDays > 0 ? `${spanDays} Tage` : "1 Tag"}
+          </span>
+        </StatCard>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Gewichtsverlauf</CardTitle>
+          <CardDescription>
+            {sorted.length > 1
+              ? `${formatDate(first!.date)} – ${formatDate(latest.date)}`
+              : "Sobald weitere Messungen vorliegen, entsteht ein Trend."}
+            {goalWeight != null && (
+              <Badge variant="outline" className="ml-2 align-middle">
+                Ziel {formatNumber(goalWeight, 1)} kg
+              </Badge>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={weightData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="statsWeightFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
+              <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+              <YAxis
+                tick={{ fontSize: 12 }}
+                tickLine={false}
+                axisLine={false}
+                width={44}
+                domain={["dataMin - 2", "dataMax + 2"]}
+                unit=" kg"
+              />
+              <Tooltip content={<ChartTooltip />} />
+              {goalWeight != null && (
+                <ReferenceLine
+                  y={goalWeight}
+                  stroke="var(--color-chart-4)"
+                  strokeDasharray="4 4"
+                  label={{ value: "Ziel", position: "right", fontSize: 11, fill: "var(--color-chart-4)" }}
+                />
+              )}
+              <Area
+                type="monotone"
+                dataKey="weight"
+                name="Gewicht"
+                unit="kg"
+                stroke="var(--color-chart-1)"
+                strokeWidth={2.5}
+                fill="url(#statsWeightFill)"
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>BMI-Verlauf</CardTitle>
+            <CardDescription>Body-Mass-Index über die erfassten Messungen.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={weightData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="statsBmiFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                  domain={["dataMin - 1", "dataMax + 1"]}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="bmi"
+                  name="BMI"
+                  stroke="var(--color-chart-2)"
+                  strokeWidth={2.5}
+                  fill="url(#statsBmiFill)"
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Aktivitätsenergie</CardTitle>
+            <CardDescription>Geschätzter Energieverbrauch der letzten Einheiten.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {activityData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={activityData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={44} unit=" kcal" />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--muted)", opacity: 0.4 }} />
+                  <Bar dataKey="energie" name="Energie" unit="kcal" radius={[6, 6, 0, 0]}>
+                    {activityData.map((entry) => (
+                      <Cell key={entry.date} fill="var(--color-chart-5)" />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[240px] flex-col items-center justify-center gap-2 text-center">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <Flame className="h-5 w-5" />
+                </span>
+                <p className="text-sm text-muted-foreground">Noch keine Aktivitäten erfasst.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}

@@ -39,7 +39,6 @@ test.describe("Navigation", () => {
         heading: "Austauschtabellen",
       },
       { label: "Patienten", path: "/patienten", url: /\/patienten/, heading: "Patienten" },
-      { label: "Berichte", path: "/berichte", url: /\/berichte/, heading: "Berichte" },
       {
         label: "Menüpläne",
         path: "/institution/menueplaene",
