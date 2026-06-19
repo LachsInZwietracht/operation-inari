@@ -72,7 +72,7 @@ const ACTIVITY_LEVELS: ActivityLevel[] = [
   { id: "athlete", pal: 2.0, label: "Leistungssport", hint: "Tägliches hartes Training / körperliche Arbeit" },
 ];
 
-const DEFAULT_ACTIVITY_ID = "active";
+const DEFAULT_ACTIVITY_ID = "light";
 
 function activityIdForPal(pal: number): string {
   let best = ACTIVITY_LEVELS[0];
@@ -131,7 +131,11 @@ export default function KalorienrechnerPage() {
   const searchParams = useSearchParams();
   const { patients, getPatient, updatePatient } = usePatients();
   const { getForPatient, addEntry, isLoadingRemote: anthroLoading } = useAnthropometric();
-  const { getPatientAssignment, setPal } = useReferenceProfiles();
+  const {
+    getPatientAssignment,
+    isLoadingRemote: isLoadingReferenceProfiles,
+    setPal,
+  } = useReferenceProfiles();
 
   const [selectedPatientId, setSelectedPatientId] = useState<string>(GENERAL_OPTION);
   const [sex, setSex] = useState<Sex>("male");
@@ -165,7 +169,7 @@ export default function KalorienrechnerPage() {
         : age;
       const assignment = getPatientAssignment(patient.id);
       const nextActivityId =
-        assignment?.palValue != null ? activityIdForPal(assignment.palValue) : activityId;
+        assignment?.palValue != null ? activityIdForPal(assignment.palValue) : DEFAULT_ACTIVITY_ID;
       const nextActivity =
         ACTIVITY_LEVELS.find((a) => a.id === nextActivityId) ?? activity;
       const nextPresetId = patient.macroPreset ?? presetId;
@@ -209,12 +213,12 @@ export default function KalorienrechnerPage() {
     if (appliedPatientRef.current === selectedPatientId) return;
     // Wait for weigh-ins to finish syncing so we apply real measurements
     // rather than the calculator defaults.
-    if (anthroLoading) return;
+    if (anthroLoading || isLoadingReferenceProfiles) return;
     const patient = getPatient(selectedPatientId);
     if (!patient) return;
     appliedPatientRef.current = selectedPatientId;
     applyPatient(patient);
-  }, [selectedPatientId, patients, getPatient, applyPatient, anthroLoading]);
+  }, [selectedPatientId, patients, getPatient, applyPatient, anthroLoading, isLoadingReferenceProfiles]);
 
   const result = useMemo(() => {
     const bmr = Math.max(0, bmrFor(sex, formula, weight, height, age));

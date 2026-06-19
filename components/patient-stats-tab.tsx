@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -27,6 +27,7 @@ import {
 import { differenceInCalendarDays, parseISO } from "date-fns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatDate, formatNumber } from "@/lib/format"
 import type { ActivityEntry, AnthropometricEntry, CounselingSession, Patient } from "@/lib/types"
 
@@ -40,14 +41,15 @@ interface PatientStatsTabProps {
 interface ChartTooltipProps {
   active?: boolean
   payload?: Array<{ name?: string; value?: number; color?: string; dataKey?: string; unit?: string }>
-  label?: string
+  label?: string | number
 }
 
 function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
+  const title = typeof label === "number" ? formatDate(new Date(label)) : label
   return (
     <div className="rounded-lg border bg-background px-3 py-2 shadow-md">
-      <p className="mb-1 text-sm font-medium">{label}</p>
+      <p className="mb-1 text-sm font-medium">{title}</p>
       {payload.map((entry) => (
         <p key={entry.dataKey} className="text-sm text-muted-foreground">
           <span
@@ -60,6 +62,29 @@ function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
       ))}
     </div>
   )
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+const TIME_RANGES = [
+  { value: "all", label: "Gesamtverlauf", days: null },
+  { value: "5y", label: "5 Jahre", days: 365 * 5 },
+  { value: "1y", label: "1 Jahr", days: 365 },
+  { value: "6m", label: "6 Monate", days: 183 },
+  { value: "3m", label: "3 Monate", days: 92 },
+  { value: "30d", label: "30 Tage", days: 30 },
+] as const
+
+type TimeRangeValue = (typeof TIME_RANGES)[number]["value"]
+
+function getTimestamp(date: string): number {
+  return parseISO(date).getTime()
+}
+
+function formatAxisDate(value: number | string): string {
+  const timestamp = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(timestamp)) return ""
+  return formatDate(new Date(timestamp))
 }
 
 function bmiCategory(bmi: number): string {
@@ -113,29 +138,62 @@ function StatCard({
 }
 
 export function PatientStatsTab({ patient, entries, activities, sessions }: PatientStatsTabProps) {
+  const [timeRange, setTimeRange] = useState<TimeRangeValue>("all")
+
   const sorted = useMemo(
-    () => [...entries].sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()),
+    () => [...entries].sort((a, b) => getTimestamp(a.date) - getTimestamp(b.date)),
     [entries],
   )
 
-  const first = sorted[0] ?? null
-  const latest = sorted[sorted.length - 1] ?? null
+  const allLatest = sorted[sorted.length - 1] ?? null
+  const selectedRange = TIME_RANGES.find((range) => range.value === timeRange) ?? TIME_RANGES[0]
+
+  const filtered = useMemo(() => {
+    if (!allLatest || selectedRange.days == null) return sorted
+    const cutoff = getTimestamp(allLatest.date) - selectedRange.days * DAY_MS
+    return sorted.filter((entry) => getTimestamp(entry.date) >= cutoff)
+  }, [allLatest, selectedRange.days, sorted])
+
+  const first = filtered[0] ?? null
+  const latest = filtered[filtered.length - 1] ?? null
 
   const weightData = useMemo(
-    () => sorted.map((e) => ({ date: formatDate(e.date), weight: e.weight, bmi: e.bmi })),
-    [sorted],
+    () =>
+      filtered.map((e) => ({
+        timestamp: getTimestamp(e.date),
+        date: formatDate(e.date),
+        weight: e.weight,
+        bmi: e.bmi,
+      })),
+    [filtered],
   )
+
+  const timeDomain = useMemo<[number, number]>(() => {
+    if (weightData.length === 0) {
+      const now = Date.now()
+      return [now - DAY_MS, now + DAY_MS]
+    }
+    const min = weightData[0].timestamp
+    const max = weightData[weightData.length - 1].timestamp
+    if (min === max) return [min - DAY_MS, max + DAY_MS]
+    return [min, max]
+  }, [weightData])
 
   const activityData = useMemo(
     () =>
       [...activities]
-        .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
+        .filter((activity) => {
+          if (!allLatest || selectedRange.days == null) return true
+          const cutoff = getTimestamp(allLatest.date) - selectedRange.days * DAY_MS
+          return getTimestamp(activity.date) >= cutoff
+        })
+        .sort((a, b) => getTimestamp(a.date) - getTimestamp(b.date))
         .slice(-8)
         .map((a) => ({
           date: formatDate(a.date),
           energie: Math.round(a.energyKcal ?? a.durationMinutes * 4.5),
         })),
-    [activities],
+    [activities, allLatest, selectedRange.days],
   )
 
   const weightDelta = first && latest ? latest.weight - first.weight : 0
@@ -143,8 +201,13 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
   const spanDays = first && latest ? Math.abs(differenceInCalendarDays(parseISO(latest.date), parseISO(first.date))) : 0
   const spanWeeks = spanDays > 0 ? spanDays / 7 : 0
   const perWeek = spanWeeks > 0 ? weightDelta / spanWeeks : 0
+  const sessionsInRange = useMemo(() => {
+    if (!allLatest || selectedRange.days == null) return sessions
+    const cutoff = getTimestamp(allLatest.date) - selectedRange.days * DAY_MS
+    return sessions.filter((session) => getTimestamp(session.date) >= cutoff)
+  }, [allLatest, selectedRange.days, sessions])
 
-  if (!latest) {
+  if (!allLatest) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
@@ -161,55 +224,90 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
   }
 
   const goalWeight = patient.goalWeight
-  const goalRemaining = goalWeight != null ? latest.weight - goalWeight : null
+  const goalRemaining = goalWeight != null && latest ? latest.weight - goalWeight : null
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Scale} label="Aktuelles Gewicht" value={`${formatNumber(latest.weight, 1)} kg`}>
-          {sorted.length > 1 ? (
-            <DeltaBadge delta={weightDelta} unit="kg" />
-          ) : (
-            <span className="text-xs text-muted-foreground">Stand {formatDate(latest.date)}</span>
-          )}
-        </StatCard>
-        <StatCard icon={Target} label="BMI" value={formatNumber(latest.bmi, 1)}>
-          <span className="text-xs text-muted-foreground">
-            {bmiCategory(latest.bmi)}
-            {sorted.length > 1 ? (
-              <>
-                {" · "}
-                {bmiDelta > 0 ? "+" : ""}
-                {formatNumber(bmiDelta, 1)}
-              </>
-            ) : null}
-          </span>
-        </StatCard>
-        <StatCard
-          icon={ActivityIcon}
-          label="Ø Trend / Woche"
-          value={`${perWeek > 0 ? "+" : ""}${formatNumber(perWeek, 1)} kg`}
-        >
-          <span className="text-xs text-muted-foreground">
-            {goalRemaining != null
-              ? `Noch ${formatNumber(Math.abs(goalRemaining), 1)} kg bis Ziel`
-              : spanWeeks >= 1
-                ? `über ${formatNumber(spanWeeks, 0)} Wochen`
-                : "über < 1 Woche"}
-          </span>
-        </StatCard>
-        <StatCard icon={CalendarRange} label="Zeitraum" value={`${sorted.length} Messungen`}>
-          <span className="text-xs text-muted-foreground">
-            {sessions.length} Beratungen · {spanDays > 0 ? `${spanDays} Tage` : "1 Tag"}
-          </span>
-        </StatCard>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium">Zeitraum</p>
+          <p className="text-sm text-muted-foreground">
+            Punkte werden nach echtem Messdatum auf der Zeitachse positioniert.
+          </p>
+        </div>
+        <Select value={timeRange} onValueChange={(value) => setTimeRange(value as TimeRangeValue)}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIME_RANGES.map((range) => (
+              <SelectItem key={range.value} value={range.value}>
+                {range.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {!latest ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <CalendarRange className="h-5 w-5" />
+            </span>
+            <p className="text-sm font-medium">Keine Messungen im gewählten Zeitraum</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Wählen Sie einen längeren Zeitraum, um den Verlauf von {patient.firstName} zu sehen.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard icon={Scale} label="Aktuelles Gewicht" value={`${formatNumber(latest.weight, 1)} kg`}>
+              {filtered.length > 1 ? (
+                <DeltaBadge delta={weightDelta} unit="kg" />
+              ) : (
+                <span className="text-xs text-muted-foreground">Stand {formatDate(latest.date)}</span>
+              )}
+            </StatCard>
+            <StatCard icon={Target} label="BMI" value={formatNumber(latest.bmi, 1)}>
+              <span className="text-xs text-muted-foreground">
+                {bmiCategory(latest.bmi)}
+                {filtered.length > 1 ? (
+                  <>
+                    {" · "}
+                    {bmiDelta > 0 ? "+" : ""}
+                    {formatNumber(bmiDelta, 1)}
+                  </>
+                ) : null}
+              </span>
+            </StatCard>
+            <StatCard
+              icon={ActivityIcon}
+              label="Ø Trend / Woche"
+              value={`${perWeek > 0 ? "+" : ""}${formatNumber(perWeek, 1)} kg`}
+            >
+              <span className="text-xs text-muted-foreground">
+                {goalRemaining != null
+                  ? `Noch ${formatNumber(Math.abs(goalRemaining), 1)} kg bis Ziel`
+                  : spanWeeks >= 1
+                    ? `über ${formatNumber(spanWeeks, 0)} Wochen`
+                    : "über < 1 Woche"}
+              </span>
+            </StatCard>
+            <StatCard icon={CalendarRange} label="Zeitraum" value={`${filtered.length} Messungen`}>
+              <span className="text-xs text-muted-foreground">
+                {sessionsInRange.length} Beratungen · {spanDays > 0 ? `${spanDays} Tage` : "1 Tag"}
+              </span>
+            </StatCard>
+          </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Gewichtsverlauf</CardTitle>
           <CardDescription>
-            {sorted.length > 1
+            {filtered.length > 1
               ? `${formatDate(first!.date)} – ${formatDate(latest.date)}`
               : "Sobald weitere Messungen vorliegen, entsteht ein Trend."}
             {goalWeight != null && (
@@ -229,7 +327,17 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+              <XAxis
+                dataKey="timestamp"
+                type="number"
+                scale="time"
+                domain={timeDomain}
+                tick={{ fontSize: 12 }}
+                tickFormatter={formatAxisDate}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+              />
               <YAxis
                 tick={{ fontSize: 12 }}
                 tickLine={false}
@@ -249,6 +357,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
               )}
               <Area
                 type="monotone"
+                connectNulls
                 dataKey="weight"
                 name="Gewicht"
                 unit="kg"
@@ -279,7 +388,17 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                <XAxis
+                  dataKey="timestamp"
+                  type="number"
+                  scale="time"
+                  domain={timeDomain}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={formatAxisDate}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={28}
+                />
                 <YAxis
                   tick={{ fontSize: 12 }}
                   tickLine={false}
@@ -290,6 +409,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
                 <Tooltip content={<ChartTooltip />} />
                 <Area
                   type="monotone"
+                  connectNulls
                   dataKey="bmi"
                   name="BMI"
                   stroke="var(--color-chart-2)"
@@ -332,8 +452,10 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
               </div>
             )}
           </CardContent>
-        </Card>
-      </div>
+          </Card>
+        </div>
+        </>
+      )}
     </div>
   )
 }
