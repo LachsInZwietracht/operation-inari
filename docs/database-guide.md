@@ -38,7 +38,7 @@ Current operational notes:
 - Runtime compatibility for old mock food IDs is handled at load/persist boundaries, not by ad hoc mapping inside calculation code.
 - Food delivery is intentionally split by use case: lightweight search index for navigation, targeted loaders for list views, and heavier loaders only where full nutrient math is required.
 - Reference values now use Supabase tables for official rows plus persisted custom profile and preference tables.
-- Export jobs persist metadata only. Patient-bound report binaries now live in Supabase Storage and immutable report snapshots live in `patient_report_versions`; `export_jobs` remains an audit journal.
+- Export jobs persist metadata only; `export_jobs` is an audit journal. (Patient-bound report binaries/snapshots were removed with the Berichte feature.)
 
 ### Data Model (TypeScript Types)
 
@@ -285,9 +285,8 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `diet_line_presets` | Nutritional target presets | `name`, `user_id` (NULL = system preset) |
 | `invoices` | Practice billing / invoices | `user_id`, `patient_id`, `service`, `amount`, `status` (offen/bezahlt/mahnung), `due_date`, `insurance`, `notes` |
 | `export_jobs` | Real export/import audit metadata | `user_id`, `type`, `format`, `scope`, `status`, `file_size`, `created_by`, `file_name`, `parameters` |
-| `report_retention_policies` | Admin-controlled default retention policy for patient-bound reports | `user_id`, `organization_id`, `retention_years`, `auto_delete_enabled`, `require_admin_approval`, `legal_hold_enabled` |
-| `patient_reports` | Stable parent record for patient-bound report history | `patient_ref`, `plan_id`, `latest_version_id`, `latest_version_number`, report config summary, retention metadata |
-| `patient_report_versions` | Immutable archived report exports | `patient_report_id`, `version_number`, `format`, `file_name`, `storage_bucket`, `storage_path`, `snapshot`, `exported_at`, retention metadata |
+| `report_retention_policies` | Admin-controlled default report retention policy (retained for admin config; patient-bound report persistence removed) | `user_id`, `organization_id`, `retention_years`, `auto_delete_enabled`, `require_admin_approval`, `legal_hold_enabled` |
+| ~~`patient_reports`~~ / ~~`patient_report_versions`~~ | **Dropped** in `20260619000059_drop_patient_reports.sql` — the Berichte feature was removed in favour of the Statistiken patient tab. The `patient-report-files` storage bucket was also dropped. | — |
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
 | `organizations` | Team/organization boundary for RBAC | `name`, `created_by` |
 | `organization_memberships` | Persisted user roles and invitations | `organization_id`, `user_id`, `email`, `role`, `status`, `invitation_sent_at`, `invitation_expires_at`, `revoked_at` |
@@ -306,7 +305,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/api/sso/resolve` is the public login-routing resolver. It accepts an email address, matches active SSO configs by domain through a service-role lookup, and returns only minimal routing metadata. `components/auth-form.tsx` uses that domain match to start Supabase Auth SSO.
 - `/auth/sso/callback` exchanges the Supabase Auth code, verifies the user through `getUser()`, extracts server-verified app metadata and identity data, and calls `completeVerifiedSsoLogin()`. Same-priority matches return ambiguity, no-match creates no membership, existing active owners are preserved, and matched roles create/update active `organization_memberships` rows with `sso_callback_*` audit events.
 - Direct LDAP bind/sync is intentionally out of scope for v1; LDAP/AD groups should arrive through verified OIDC/SAML claims.
-- Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, patient report exports/downloads, export history and dataset exports, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
+- Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, report and dataset exports, export history, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
 - New authenticated users can be bootstrapped into a default organization/membership by the server access helper; Playwright setup creates an `owner` membership for the test user.
 
@@ -327,11 +326,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
   - owner/admin users manage endpoints through `/api/webhooks`
   - delivery attempts are queued for `dataset_export_created`, `report_export_created`, and `digital_protocol_submission_received`
   - outbound HTTP delivery and retry workers are intentionally deferred; the current contract persists queue/failure state for the operations UI
-- Patient-bound report exports additionally:
-  - persist a stable parent record in `patient_reports`
-  - append immutable export versions to `patient_report_versions`
-  - store the original PDF/CSV file in the private Supabase bucket `patient-report-files`
-  - copy the current `report_retention_policies` values into report/version retention fields for traceable retention decisions
+- Patient-bound report persistence (`patient_reports`, `patient_report_versions`, the `patient-report-files` bucket) was removed; `/api/exports/report` now only generates and returns the PDF/CSV file and logs the export job.
 - RLS is user-scoped:
   - users can read their own export rows
   - users can insert their own export rows
@@ -704,7 +699,6 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Patient mail-merge templates / placeholders | Moved to bundled product defaults outside `lib/mock-data` | `lib/patient-mailings.ts`, `app/(app)/patienten/page.tsx` |
 | Patient counseling session summary on `/patienten` | Migrated to real `useCounseling()` session data | `app/(app)/patienten/page.tsx` |
 | eGK scanner / inbox / companion API | Explicit demo mode powered by mock cards/events | `hooks/use-egk-scanner.ts`, `hooks/use-egk-inbox.ts`, `app/api/egk/route.ts` |
-| Report templates | Moved to bundled product defaults outside `lib/mock-data` | `lib/report-templates.ts`, `hooks/use-report-templates.ts` |
 | Food synonyms | System synonyms now load from Supabase `food_synonyms`; user-created aliases still persist locally as an offline overlay | `hooks/use-food-synonyms.ts`, `lib/data/food-synonyms-client.ts` |
 | Nutrition plan presets | Bundled static product defaults in reference data | `lib/reference-data/diet-lines.ts`, `app/(app)/ernaehrungsplan/ernaehrungsplan-client.tsx` |
 | Institution diet-form catalog / weekday labels | Bundled static institution reference data | `lib/reference-data/institution.ts`, `app/(app)/institution/**`, `lib/institution-analytics.ts`, `lib/hospital-workflow.ts` |

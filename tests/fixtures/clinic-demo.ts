@@ -27,11 +27,6 @@ export type ClinicDemoFood = {
   name: string;
 };
 
-export type ClinicDemoReportPlan = {
-  planId: string;
-  planDate: string;
-};
-
 export type ClinicDemoInstitutionRecipeMap = {
   breakfastId: string;
   breakfastName: string;
@@ -49,8 +44,6 @@ export type ClinicDemoInstitutionFixture = {
   annaName: string;
   station: string;
 };
-
-const PATIENT_REPORT_FILES_BUCKET = "patient-report-files";
 
 export async function getTestUserId() {
   const { data, error } = await admin.auth.admin.listUsers();
@@ -183,122 +176,7 @@ export async function fetchClinicDemoProtocol(protocolId: string) {
 }
 
 export async function deleteClinicDemoPatient(patientId: string) {
-  const { data: reportVersions, error: reportVersionError } = await admin
-    .from("patient_report_versions")
-    .select("storage_bucket, storage_path")
-    .eq("patient_ref", patientId);
-  if (reportVersionError) throw new Error(reportVersionError.message);
-
-  const pathsByBucket = new Map<string, string[]>();
-  for (const version of reportVersions ?? []) {
-    const bucket = version.storage_bucket as string;
-    const path = version.storage_path as string;
-    pathsByBucket.set(bucket, [...(pathsByBucket.get(bucket) ?? []), path]);
-  }
-
-  for (const [bucket, paths] of pathsByBucket) {
-    if (paths.length === 0) continue;
-    const { error } = await admin.storage.from(bucket).remove(Array.from(new Set(paths)));
-    if (error) throw new Error(error.message);
-  }
-
-  await admin.from("patient_reports").delete().eq("patient_ref", patientId);
   await admin.from("patients").delete().eq("id", patientId);
-}
-
-export async function removeStoredReportFiles(paths: string[]) {
-  if (paths.length === 0) return;
-  const uniquePaths = Array.from(new Set(paths));
-  const { error } = await admin.storage.from(PATIENT_REPORT_FILES_BUCKET).remove(uniquePaths);
-  if (error) throw new Error(error.message);
-}
-
-export async function createClinicDemoReportPlanFixture(): Promise<ClinicDemoReportPlan> {
-  const userId = await getTestUserId();
-  const planId = crypto.randomUUID();
-  const { data: food, error: foodError } = await admin.from("foods").select("id").limit(1).single();
-  if (foodError) throw new Error(foodError.message);
-
-  let planDate = "";
-  let inserted = false;
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const startOfYear = Date.UTC(2026, 0, 1);
-    const randomOffsetDays = Math.floor(Math.random() * 365);
-    planDate = new Date(startOfYear + randomOffsetDays * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
-
-    const { error: planError } = await admin.from("daily_meal_plans").insert({
-      id: planId,
-      user_id: userId,
-      date: planDate,
-      legacy_id: `fixture_${planId}`,
-    });
-
-    if (!planError) {
-      inserted = true;
-      break;
-    }
-
-    if (
-      !planError.message.includes("daily_meal_plans_user_id_date_key") &&
-      !planError.message.includes("daily_meal_plans_user_unassigned_date_unique_idx")
-    ) {
-      throw new Error(planError.message);
-    }
-  }
-
-  if (!inserted) {
-    throw new Error("Unable to create unique meal plan fixture");
-  }
-
-  const { error: entryError } = await admin.from("meal_entries").insert([
-    {
-      meal_plan_id: planId,
-      slot_type: "fruehstueck",
-      entry_type: "food",
-      reference_id: food.id,
-      amount: 180,
-      sort_order: 0,
-    },
-  ]);
-  if (entryError) throw new Error(entryError.message);
-
-  return { planId, planDate };
-}
-
-export async function deleteClinicDemoReportPlanFixture(planId: string) {
-  const { data: versions } = await admin
-    .from("patient_report_versions")
-    .select("storage_path")
-    .eq("plan_id", planId);
-  await removeStoredReportFiles((versions ?? []).map((version) => version.storage_path as string));
-  await admin.from("patient_reports").delete().eq("plan_id", planId);
-  await admin.from("meal_entries").delete().eq("meal_plan_id", planId);
-  await admin.from("daily_meal_plans").delete().eq("id", planId);
-}
-
-export async function fetchPatientReportsForPatient(patientId: string) {
-  const { data, error } = await admin
-    .from("patient_reports")
-    .select("*")
-    .eq("patient_ref", patientId)
-    .order("updated_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
-}
-
-export async function fetchPatientReportVersionsForPatient(patientId: string) {
-  const { data, error } = await admin
-    .from("patient_report_versions")
-    .select("*")
-    .eq("patient_ref", patientId)
-    .order("exported_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
 }
 
 export async function fetchDigitalProtocolSubmissionByLink(linkId: string) {

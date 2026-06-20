@@ -29,6 +29,11 @@ interface PatientRow {
   indications: string[] | null;
   notes: string | null;
   amputations: string[] | null;
+  daily_calorie_goal: number | null;
+  goal_weight: number | null;
+  macro_preset: string | null;
+  nutrition_preferences: Patient["nutritionPreferences"] | null;
+  nutrition_preference_notes: string | null;
   status: Patient["status"] | null;
   care_setting: Patient["careSetting"] | null;
   external_patient_number: string | null;
@@ -50,7 +55,7 @@ interface PatientRow {
   updated_at: string;
 }
 
-const PATIENT_COLUMNS = [
+const PATIENT_BASE_COLUMNS = [
   "id",
   "legacy_id",
   "user_id",
@@ -68,6 +73,9 @@ const PATIENT_COLUMNS = [
   "indications",
   "notes",
   "amputations",
+  "daily_calorie_goal",
+  "goal_weight",
+  "macro_preset",
   "status",
   "care_setting",
   "external_patient_number",
@@ -87,7 +95,24 @@ const PATIENT_COLUMNS = [
   "emergency_contact_relationship",
   "created_at",
   "updated_at",
+];
+
+const PATIENT_NUTRITION_PREFERENCE_COLUMNS = [
+  "nutrition_preferences",
+  "nutrition_preference_notes",
+];
+
+const PATIENT_COLUMNS = [
+  ...PATIENT_BASE_COLUMNS,
+  ...PATIENT_NUTRITION_PREFERENCE_COLUMNS,
 ].join(",");
+
+const PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES = PATIENT_BASE_COLUMNS.join(",");
+
+function isMissingNutritionPreferenceColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return PATIENT_NUTRITION_PREFERENCE_COLUMNS.some((column) => message.includes(column));
+}
 
 function resolveBrowserClient(supabase?: SupabaseClient) {
   if (supabase) return supabase;
@@ -121,6 +146,11 @@ function mapPatientRow(row: PatientRow): Patient {
     indications: row.indications ?? undefined,
     notes: row.notes ?? undefined,
     amputations: row.amputations ?? undefined,
+    dailyCalorieGoal: row.daily_calorie_goal ?? undefined,
+    goalWeight: row.goal_weight ?? undefined,
+    macroPreset: row.macro_preset ?? undefined,
+    nutritionPreferences: row.nutrition_preferences ?? undefined,
+    nutritionPreferenceNotes: row.nutrition_preference_notes ?? undefined,
     status: row.status ?? undefined,
     careSetting: row.care_setting ?? undefined,
     externalPatientNumber: row.external_patient_number ?? undefined,
@@ -147,17 +177,81 @@ export async function fetchPatientsClient(
   supabase?: SupabaseClient,
 ): Promise<Patient[]> {
   const client = resolveBrowserClient(supabase);
-  const { data, error } = await withTimeout(
-    client.from("patients").select(PATIENT_COLUMNS).order("last_name", { ascending: true }),
-    5000,
-    "Supabase patient request timed out",
-  );
+  async function runQuery(columns: string) {
+    const { data, error } = await withTimeout(
+      client.from("patients").select(columns).order("last_name", { ascending: true }),
+      5000,
+      "Supabase patient request timed out",
+    );
 
-  if (error) {
-    throw new Error(error.message);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return ((data ?? []) as unknown as PatientRow[]).map((row) => mapPatientRow(row));
   }
 
-  return ((data ?? []) as unknown as PatientRow[]).map((row) => mapPatientRow(row));
+  try {
+    return await runQuery(PATIENT_COLUMNS);
+  } catch (error) {
+    if (!isMissingNutritionPreferenceColumnError(error)) throw error;
+    return runQuery(PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
+  }
+}
+
+function toPatientUpsertPayload(
+  patient: Partial<Patient> & { firstName: string; lastName: string; dateOfBirth: string; gender: Patient["gender"] },
+  userId: string,
+  canonicalId: string | null,
+  legacyId: string | null,
+  includeNutritionPreferenceColumns: boolean,
+) {
+  return {
+    ...(canonicalId ? { id: canonicalId } : {}),
+    legacy_id: legacyId,
+    user_id: userId,
+    first_name: patient.firstName,
+    last_name: patient.lastName,
+    date_of_birth: patient.dateOfBirth,
+    gender: patient.gender,
+    email: patient.email ?? null,
+    phone: patient.phone ?? null,
+    street: patient.street ?? null,
+    zip: patient.zip ?? null,
+    city: patient.city ?? null,
+    insurance_provider: patient.insuranceProvider ?? null,
+    insurance_number: patient.insuranceNumber ?? null,
+    indications: patient.indications ?? [],
+    notes: patient.notes ?? null,
+    amputations: patient.amputations ?? null,
+    daily_calorie_goal: patient.dailyCalorieGoal ?? null,
+    goal_weight: patient.goalWeight ?? null,
+    macro_preset: patient.macroPreset ?? null,
+    ...(includeNutritionPreferenceColumns
+      ? {
+          nutrition_preferences: patient.nutritionPreferences ?? [],
+          nutrition_preference_notes: patient.nutritionPreferenceNotes ?? null,
+        }
+      : {}),
+    status: patient.status ?? "active",
+    care_setting: patient.careSetting ?? "ambulatory",
+    external_patient_number: patient.externalPatientNumber ?? null,
+    case_number: patient.caseNumber ?? null,
+    preferred_contact_channel: patient.preferredContactChannel ?? null,
+    preferred_language: patient.preferredLanguage ?? null,
+    communication_consent: patient.communicationConsent ?? null,
+    digital_protocol_consent: patient.digitalProtocolConsent ?? null,
+    referrer_name: patient.referrerName ?? null,
+    department: patient.department ?? null,
+    intake_reason: patient.intakeReason ?? null,
+    patient_goals: patient.patientGoals ?? null,
+    clinical_notes: patient.clinicalNotes ?? null,
+    admin_notes: patient.adminNotes ?? null,
+    emergency_contact_name: patient.emergencyContactName ?? null,
+    emergency_contact_phone: patient.emergencyContactPhone ?? null,
+    emergency_contact_relationship: patient.emergencyContactRelationship ?? null,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 export async function persistPatient(
@@ -174,56 +268,41 @@ export async function persistPatient(
   const canonicalId = patient.id && isUuid(patient.id) ? patient.id : null;
   const legacyId = canonicalId ? patient.legacyId ?? null : patient.id ?? null;
 
-  const { data: persistedPatient, error } = await client
-    .from("patients")
-    .upsert(
-      {
-        ...(canonicalId ? { id: canonicalId } : {}),
-        legacy_id: legacyId,
-        user_id: userId,
-        first_name: patient.firstName,
-        last_name: patient.lastName,
-        date_of_birth: patient.dateOfBirth,
-        gender: patient.gender,
-        email: patient.email ?? null,
-        phone: patient.phone ?? null,
-        street: patient.street ?? null,
-        zip: patient.zip ?? null,
-        city: patient.city ?? null,
-        insurance_provider: patient.insuranceProvider ?? null,
-        insurance_number: patient.insuranceNumber ?? null,
-        indications: patient.indications ?? [],
-        notes: patient.notes ?? null,
-        amputations: patient.amputations ?? null,
-        status: patient.status ?? "active",
-        care_setting: patient.careSetting ?? "ambulatory",
-        external_patient_number: patient.externalPatientNumber ?? null,
-        case_number: patient.caseNumber ?? null,
-        preferred_contact_channel: patient.preferredContactChannel ?? null,
-        preferred_language: patient.preferredLanguage ?? null,
-        communication_consent: patient.communicationConsent ?? null,
-        digital_protocol_consent: patient.digitalProtocolConsent ?? null,
-        referrer_name: patient.referrerName ?? null,
-        department: patient.department ?? null,
-        intake_reason: patient.intakeReason ?? null,
-        patient_goals: patient.patientGoals ?? null,
-        clinical_notes: patient.clinicalNotes ?? null,
-        admin_notes: patient.adminNotes ?? null,
-        emergency_contact_name: patient.emergencyContactName ?? null,
-        emergency_contact_phone: patient.emergencyContactPhone ?? null,
-        emergency_contact_relationship: patient.emergencyContactRelationship ?? null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: canonicalId ? "id" : "legacy_id" },
-    )
-    .select(PATIENT_COLUMNS)
-    .single();
+  async function runUpsert(includeNutritionPreferenceColumns: boolean) {
+    const { data: persistedPatient, error } = await client
+      .from("patients")
+      .upsert(
+        toPatientUpsertPayload(
+          patient,
+          userId,
+          canonicalId,
+          legacyId,
+          includeNutritionPreferenceColumns,
+        ),
+        { onConflict: canonicalId ? "id" : "legacy_id" },
+      )
+      .select(
+        includeNutritionPreferenceColumns
+          ? PATIENT_COLUMNS
+          : PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES,
+      )
+      .single();
 
-  if (error) {
-    throw new Error(error.message);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return mapPatientRow(persistedPatient as unknown as PatientRow);
   }
 
-  const result = mapPatientRow(persistedPatient as unknown as PatientRow);
+  let result: Patient;
+  try {
+    result = await runUpsert(true);
+  } catch (error) {
+    if (!isMissingNutritionPreferenceColumnError(error)) throw error;
+    result = await runUpsert(false);
+  }
+
   await writeAccessAuditLog(client, {
     action: canonicalId ? "patient_record_updated" : "patient_record_created",
     targetType: "patient",

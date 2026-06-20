@@ -148,7 +148,8 @@ Product direction:
 - **Remaining deferred scope:** scheduled exports, advanced backend print pipelines, and document-retention policies beyond patient report exports.
 
 ### 5.4 Anthropometric Data & Weight Analysis
-**Status:** Implemented (Supabase-backed anthropometric history; adjacent patient analytics still mixed persistence).
+**Status:** Implemented (Supabase-backed anthropometric history and body-composition metrics; adjacent patient analytics still mixed persistence).
+- **Body-composition history** — anthropometric entries now store structured BIA/smart-scale metrics alongside weight/BMI: body fat, fat-free mass, subcutaneous and visceral fat, body water, muscle mass, skeletal muscle, bone mass, protein percentage, BMR, and metabolic age. The patient `Anthropometrie` tab can capture and review them; `Statistiken` shows current body-composition KPIs and selectable trend charts.
 - **BMI amputation correction** — adjust BMI formula using clinical correction factors (e.g., lower leg = 6.0%).
 - **Target weight projection** — "what-if" calculator using current weight trends.
 - **Percentile curves** — Overlay WHO/RKI P3-P97 curves for children (Requires age-in-months calculation).

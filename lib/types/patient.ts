@@ -4,6 +4,7 @@ export type Gender = "m" | "w" | "d";
 export type PatientStatus = "active" | "inactive" | "archived" | "deceased";
 export type PatientCareSetting = "ambulatory" | "inpatient" | "discharged";
 export type PreferredContactChannel = "phone" | "email" | "mail" | "none";
+export type NutritionPreference = "vegetarian" | "vegan" | "keto" | "low_carb";
 
 export interface Patient extends Timestamped {
   id: ID;
@@ -22,6 +23,14 @@ export interface Patient extends Timestamped {
   indications?: string[];
   notes?: string;
   amputations?: string[];
+  /** Chosen daily calorie target (kcal), e.g. from the Kalorienrechner. */
+  dailyCalorieGoal?: number;
+  /** Goal/target body weight in kg. */
+  goalWeight?: number;
+  /** Selected macro distribution preset id (e.g. "balanced", "lowcarb"). */
+  macroPreset?: string;
+  nutritionPreferences?: NutritionPreference[];
+  nutritionPreferenceNotes?: string;
   status?: PatientStatus;
   careSetting?: PatientCareSetting;
   externalPatientNumber?: string;
@@ -104,6 +113,16 @@ export interface AnthropometricEntry extends Timestamped {
   waistCircumference?: number; // cm
   hipCircumference?: number; // cm
   bodyFatPercentage?: number;
+  fatFreeMassKg?: number;
+  subcutaneousFatPercentage?: number;
+  visceralFatRating?: number;
+  bodyWaterPercentage?: number;
+  muscleMassKg?: number;
+  skeletalMusclePercentage?: number;
+  boneMassKg?: number;
+  proteinPercentage?: number;
+  bmrKcal?: number;
+  metabolicAgeYears?: number;
   notes?: string;
 }
 

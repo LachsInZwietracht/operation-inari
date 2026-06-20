@@ -9,9 +9,7 @@ import {
   ChefHat,
   CalendarDays,
   ShoppingBasket,
-  BarChart3,
   Users,
-  ArrowLeftRight,
   Database,
   Factory,
   Boxes,
@@ -29,6 +27,7 @@ import {
   Ruler,
   Lock,
   ChevronDown,
+  Flame,
 } from "lucide-react"
 import {
   Sidebar,
@@ -77,14 +76,13 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplaene" },
       { label: "Einkaufsliste", icon: ShoppingBasket, route: "/ernaehrungsplan/einkaufsliste" },
       { label: "Referenzwerte", icon: Ruler, route: "/referenzwerte" },
-      { label: "Austauschtabellen", icon: ArrowLeftRight, route: "/austauschtabellen" },
+      { label: "Kalorienrechner", icon: Flame, route: "/kalorienrechner" },
     ],
   },
   {
     title: "Patienten",
     items: [
       { label: "Patienten", icon: Users, route: "/patienten" },
-      { label: "Berichte", icon: BarChart3, route: "/berichte" },
     ],
   },
   {

@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -76,6 +77,7 @@ import type {
   AnthropometricEntry,
   DigitalProtocolLink,
   Food,
+  NutritionPreference,
   Patient,
   PatientCareSetting,
   PatientStatus,
@@ -83,8 +85,8 @@ import type {
 } from "@/lib/types"
 import { toast } from "sonner"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
+import { usePatients } from "@/hooks/use-patients"
 import { usePracticeAppointments } from "@/hooks/use-practice"
-import { usePatientReports } from "@/hooks/use-patient-reports"
 import {
   ALLERGEN_DEFINITIONS,
   ALLERGEN_MAP,
@@ -116,19 +118,25 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
   none: "Keine Angabe",
 }
 
+const NUTRITION_PREFERENCE_OPTIONS: { id: NutritionPreference; label: string; description: string }[] = [
+  { id: "vegetarian", label: "Vegetarisch", description: "ohne Fleisch und Fisch" },
+  { id: "vegan", label: "Vegan", description: "ohne tierische Zutaten" },
+  { id: "keto", label: "Keto", description: "ketogene Auswahl bevorzugen" },
+  { id: "low_carb", label: "Low Carb", description: "kohlenhydratarm bevorzugen" },
+]
+
 const EMPTY_PROTOCOL_FOODS: Food[] = []
 
-const ASSESSMENT_TAB_VALUES = ["anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
+const PROFILE_TAB_VALUES = ["stammdaten", "anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
 const NUTRITION_TAB_VALUES = ["ernaehrungsplaene", "protokolle"] as const
-const BERATUNG_TAB_VALUES = ["beratungen", "patientenberichte"] as const
 
 const KNOWN_TAB_VALUES = new Set<string>([
   "workflow",
-  "stammdaten",
   "therapien",
-  ...ASSESSMENT_TAB_VALUES,
+  "beratungen",
+  "statistiken",
+  ...PROFILE_TAB_VALUES,
   ...NUTRITION_TAB_VALUES,
-  ...BERATUNG_TAB_VALUES,
 ])
 
 const AnthropometricChart = dynamic(
@@ -171,9 +179,9 @@ const PatientMealPlansTab = dynamic(
   () => import("@/components/patient-meal-plans-tab").then((mod) => mod.PatientMealPlansTab),
   { ssr: false },
 )
-const PatientBerichteTab = dynamic(
-  () => import("@/components/patient-berichte-tab").then((mod) => mod.PatientBerichteTab),
-  { ssr: false },
+const PatientStatsTab = dynamic(
+  () => import("@/components/patient-stats-tab").then((mod) => mod.PatientStatsTab),
+  { ssr: false, loading: () => <div className="h-[320px] rounded-md bg-muted/40" /> },
 )
 const ReferenceProfileSelector = dynamic(
   () => import("@/components/reference-profile-selector").then((mod) => mod.ReferenceProfileSelector),
@@ -296,6 +304,8 @@ interface PatientTabsProps {
 }
 
 export function PatientTabs({ patient, initialData }: PatientTabsProps) {
+  const { getPatient, updatePatient } = usePatients({ initialPatients: [patient] })
+  const currentPatient = getPatient(patient.id) ?? patient
   const {
     getForPatient: getAnthroForPatient,
     addEntry: addAnthroEntry,
@@ -372,9 +382,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const { appointments } = usePracticeAppointments({
     initialAppointments: initialData?.appointments,
   })
-  const { reports: patientReports } = usePatientReports(patient.id, {
-    initialReports: initialData?.patientReports,
-  })
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)
@@ -431,6 +438,9 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
     diagnosedDate: "",
     notes: "",
   })
+  const [nutritionPreferenceNotes, setNutritionPreferenceNotes] = useState(
+    currentPatient.nutritionPreferenceNotes ?? "",
+  )
 
   const anthroEntries = getAnthroForPatient(patient.id)
   const sessions = counselingSessions.filter(
@@ -461,6 +471,14 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
+  const nutritionPreferences = currentPatient.nutritionPreferences ?? []
+  const nutritionPreferenceAllergens = patientAllergens.filter(
+    (entry) => entry.type === "allergy" || entry.type === "intolerance",
+  )
+
+  useEffect(() => {
+    setNutritionPreferenceNotes(currentPatient.nutritionPreferenceNotes ?? "")
+  }, [currentPatient.id, currentPatient.nutritionPreferenceNotes])
 
   const latestAnthro = anthroEntries.length > 0 ? anthroEntries[anthroEntries.length - 1] : null
   const creatinineClearanceParam = LAB_PARAMETERS.find((param) => param.id === "lab_creatinine_clearance")
@@ -618,6 +636,26 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
     setShowAllergenForm(false)
     toast.success("Allergen gespeichert")
   }, [addAllergen, allergenForm, patient.id])
+
+  const handleNutritionPreferenceChange = useCallback(
+    (preference: NutritionPreference, checked: boolean) => {
+      const current = currentPatient.nutritionPreferences ?? []
+      const next = checked
+        ? Array.from(new Set([...current, preference]))
+        : current.filter((item) => item !== preference)
+
+      updatePatient(patient.id, { nutritionPreferences: next })
+      toast.success("Ernährungsvorlieben gespeichert")
+    },
+    [currentPatient.nutritionPreferences, patient.id, updatePatient],
+  )
+
+  const handleNutritionPreferenceNotesBlur = useCallback(() => {
+    const nextNotes = nutritionPreferenceNotes.trim()
+    if ((currentPatient.nutritionPreferenceNotes ?? "") === nextNotes) return
+    updatePatient(patient.id, { nutritionPreferenceNotes: nextNotes || undefined })
+    toast.success("Notizen zu Ernährungsvorlieben gespeichert")
+  }, [currentPatient.nutritionPreferenceNotes, nutritionPreferenceNotes, patient.id, updatePatient])
 
   const latestCreatinineLab = useMemo(() => {
     const kreatinines = labEntries
@@ -928,25 +966,32 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const initialTabParam = searchParams.get("tab")
   const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "workflow"
   const [activeTab, setActiveTab] = useState(initialTab)
-  const assessmentTriggerValue = ASSESSMENT_TAB_VALUES.includes(activeTab as (typeof ASSESSMENT_TAB_VALUES)[number])
+  const profileTriggerValue = PROFILE_TAB_VALUES.includes(activeTab as (typeof PROFILE_TAB_VALUES)[number])
     ? activeTab
-    : "anthropometrie"
+    : "stammdaten"
   const nutritionTriggerValue = NUTRITION_TAB_VALUES.includes(activeTab as (typeof NUTRITION_TAB_VALUES)[number])
     ? activeTab
     : "ernaehrungsplaene"
-  const beratungTriggerValue = BERATUNG_TAB_VALUES.includes(activeTab as (typeof BERATUNG_TAB_VALUES)[number])
-    ? activeTab
-    : "beratungen"
+
+  const profileSubNav = (
+    <TabsList>
+      <TabsTrigger value="stammdaten">Profil</TabsTrigger>
+      <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
+      <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
+      <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
+      <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
+    </TabsList>
+  )
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
         <TabsTrigger value="workflow">Workflow</TabsTrigger>
-        <TabsTrigger value="stammdaten">Profil</TabsTrigger>
-        <TabsTrigger value={assessmentTriggerValue}>Assessment</TabsTrigger>
+        <TabsTrigger value={profileTriggerValue}>Profil</TabsTrigger>
         <TabsTrigger value="therapien">Therapien</TabsTrigger>
         <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
-        <TabsTrigger value={beratungTriggerValue}>Beratung</TabsTrigger>
+        <TabsTrigger value="beratungen">Beratung</TabsTrigger>
+        <TabsTrigger value="statistiken">Statistiken</TabsTrigger>
       </TabsList>
 
       <TabsContent value="workflow" className="space-y-4">
@@ -959,7 +1004,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
           anthroEntries={anthroEntries}
           screenings={screenings}
           appointments={patientAppointments}
-          patientReports={patientReports}
           mealPlans={initialData?.mealPlans ?? []}
           setQrDialogLink={setQrDialogLink}
           onGenerateLink={() =>
@@ -991,6 +1035,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="stammdaten" className="space-y-4">
+        {profileSubNav}
         <Card>
           <CardHeader>
             <CardTitle>Persönliche Daten</CardTitle>
@@ -1218,12 +1263,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="anthropometrie" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         {chartEntries.length > 1 && (
           <AnthropometricChart entries={chartEntries} />
         )}
@@ -1374,6 +1414,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
             )}
 
             {anthroEntries.length > 0 ? (
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1382,7 +1423,18 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                     <TableHead className="text-right">Größe (cm)</TableHead>
                     <TableHead className="text-right">BMI</TableHead>
                     <TableHead className="text-right">Bauchumfang (cm)</TableHead>
+                    <TableHead className="text-right">Hüftumfang (cm)</TableHead>
                     <TableHead className="text-right">Körperfett (%)</TableHead>
+                    <TableHead className="text-right">Fettfreie Masse (kg)</TableHead>
+                    <TableHead className="text-right">Unterhautfett (%)</TableHead>
+                    <TableHead className="text-right">Viszerales Fett</TableHead>
+                    <TableHead className="text-right">Körperwasser (%)</TableHead>
+                    <TableHead className="text-right">Muskelmasse (kg)</TableHead>
+                    <TableHead className="text-right">Skelettmuskeln (%)</TableHead>
+                    <TableHead className="text-right">Knochenmasse (kg)</TableHead>
+                    <TableHead className="text-right">Protein (%)</TableHead>
+                    <TableHead className="text-right">BMR (kcal)</TableHead>
+                    <TableHead className="text-right">Metab. Alter</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1403,12 +1455,46 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                         {entry.waistCircumference ? formatNumber(entry.waistCircumference, 0) : "–"}
                       </TableCell>
                       <TableCell className="text-right">
+                        {entry.hipCircumference ? formatNumber(entry.hipCircumference, 0) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
                         {entry.bodyFatPercentage ? formatNumber(entry.bodyFatPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.fatFreeMassKg ? formatNumber(entry.fatFreeMassKg, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.subcutaneousFatPercentage ? formatNumber(entry.subcutaneousFatPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.visceralFatRating ? formatNumber(entry.visceralFatRating, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.bodyWaterPercentage ? formatNumber(entry.bodyWaterPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.muscleMassKg ? formatNumber(entry.muscleMassKg, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.skeletalMusclePercentage ? formatNumber(entry.skeletalMusclePercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.boneMassKg ? formatNumber(entry.boneMassKg, 2) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.proteinPercentage ? formatNumber(entry.proteinPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.bmrKcal ? formatNumber(entry.bmrKcal, 0) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.metabolicAgeYears ? formatNumber(entry.metabolicAgeYears, 0) : "–"}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </div>
             ) : anthropometricPending ? (
               <p className="text-sm text-muted-foreground text-center py-4">
                 Messwerte werden synchronisiert.
@@ -1423,12 +1509,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="diagnosen" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -1767,12 +1848,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="laborwerte" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -1970,12 +2046,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="aktivitaet" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="anthropometrie">Anthropometrie</TabsTrigger>
-          <TabsTrigger value="diagnosen">Diagnosen & Medikamente</TabsTrigger>
-          <TabsTrigger value="laborwerte">Laborwerte</TabsTrigger>
-          <TabsTrigger value="aktivitaet">Aktivität & Energie</TabsTrigger>
-        </TabsList>
+        {profileSubNav}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -2120,6 +2191,82 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Ernährungsvorlieben</CardTitle>
+              <CardDescription>
+                Strukturierte Vorlieben für Rezeptfilter, Planung und Beratung.
+              </CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("diagnosen")}>
+              Allergien verwalten
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div>
+              <p className="text-sm font-medium">Ernährungsform</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {NUTRITION_PREFERENCE_OPTIONS.map((option) => (
+                  <label key={option.id} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+                    <Checkbox
+                      checked={nutritionPreferences.includes(option.id)}
+                      onCheckedChange={(checked) =>
+                        handleNutritionPreferenceChange(option.id, checked === true)
+                      }
+                    />
+                    <span>
+                      <span className="block font-medium">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.5fr)]">
+              <div>
+                <Label htmlFor="nutrition-preference-notes">Weitere Vorlieben / Abneigungen</Label>
+                <Textarea
+                  id="nutrition-preference-notes"
+                  rows={3}
+                  value={nutritionPreferenceNotes}
+                  onChange={(event) => setNutritionPreferenceNotes(event.target.value)}
+                  onBlur={handleNutritionPreferenceNotesBlur}
+                  placeholder="z. B. mag keine Pilze, bevorzugt warme Frühstücke, isst keinen Fisch"
+                />
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Medizinische Ausschlüsse</p>
+                  <Badge variant="outline" className="text-xs">
+                    Allergieprofil
+                  </Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {nutritionPreferenceAllergens.length > 0 ? (
+                    nutritionPreferenceAllergens.map((entry) => {
+                      const def = ALLERGEN_MAP.get(entry.allergenId)
+                      return (
+                        <Badge key={entry.id} variant={entry.type === "allergy" ? "destructive" : "secondary"}>
+                          {def?.label ?? entry.allergenId}
+                        </Badge>
+                      )
+                    })
+                  ) : allergensPending ? (
+                    <p className="text-sm text-muted-foreground">Ausschlüsse werden synchronisiert.</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Keine Allergien oder Intoleranzen hinterlegt.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </TabsContent>
 
       <TabsContent value="therapien" className="space-y-4">
@@ -2916,10 +3063,6 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
       </TabsContent>
 
       <TabsContent value="beratungen" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="beratungen">Sitzungen</TabsTrigger>
-          <TabsTrigger value="patientenberichte">Berichte</TabsTrigger>
-        </TabsList>
         <div className="flex justify-end">
           <Button asChild>
             <Link href={`/patienten/${patient.id}/beratungen/neu`}>
@@ -2972,16 +3115,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
         )}
       </TabsContent>
 
-      <TabsContent value="patientenberichte" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="beratungen">Sitzungen</TabsTrigger>
-          <TabsTrigger value="patientenberichte">Berichte</TabsTrigger>
-        </TabsList>
-        <PatientBerichteTab
+      <TabsContent value="statistiken" className="space-y-4">
+        <PatientStatsTab
           patient={patient}
-          reports={patientReports}
-          mealPlans={initialData?.mealPlans ?? []}
-          protocols={protocols}
+          entries={anthroEntries}
+          activities={activities}
+          sessions={sessions}
         />
       </TabsContent>
     </Tabs>

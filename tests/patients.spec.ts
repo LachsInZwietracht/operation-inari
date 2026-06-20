@@ -41,11 +41,6 @@ type WorkflowFixture = {
   appointmentId: string;
 };
 
-type PatientReportFixture = {
-  id: string;
-  versionId: string;
-};
-
 async function getTestUserId() {
   const { data, error } = await admin.auth.admin.listUsers();
   if (error) throw new Error(error.message);
@@ -88,8 +83,6 @@ async function createPatientFixture(input: TestPatientInput): Promise<CreatedPat
 }
 
 async function deletePatientFixture(patientId: string) {
-  await admin.from("patient_report_versions").delete().eq("patient_ref", patientId);
-  await admin.from("patient_reports").delete().eq("patient_ref", patientId);
   const { error } = await admin.from("patients").delete().eq("id", patientId);
   if (error) {
     throw new Error(error.message);
@@ -208,100 +201,6 @@ async function deleteWorkflowFixture(patientId: string, fixture: WorkflowFixture
   await admin.from("digital_protocol_submissions").delete().eq("id", fixture.submissionId);
   await admin.from("patient_digital_protocol_links").delete().eq("id", fixture.linkId);
   await deleteClinicalRows("appointments", patientId);
-}
-
-async function createPatientReportFixture(patient: CreatedPatient): Promise<PatientReportFixture> {
-  const userId = await getTestUserId();
-  const reportId = crypto.randomUUID();
-  const versionId = crypto.randomUUID();
-
-  const { error } = await admin.from("patient_reports").insert({
-    id: reportId,
-    user_id: userId,
-    patient_ref: patient.id,
-    patient_name: `${patient.firstName} ${patient.lastName}`,
-    patient_indication: patient.indications?.length ? patient.indications.join(", ") : null,
-    plan_id: "fixture_plan_ref",
-    protocol_id: null,
-    plan_date_label: "15.06.2026",
-    notes: "Verlauf stabil, Fokus auf Ballaststoffe.",
-    last_format: "PDF",
-    last_file_name: "prodi-bericht-2026-06-15.pdf",
-    latest_version_number: 0,
-  });
-
-  if (error) throw new Error(error.message);
-
-  const { error: versionError } = await admin.from("patient_report_versions").insert({
-    id: versionId,
-    patient_report_id: reportId,
-    user_id: userId,
-    patient_ref: patient.id,
-    patient_name: `${patient.firstName} ${patient.lastName}`,
-    patient_indication: patient.indications?.length ? patient.indications.join(", ") : null,
-    plan_id: "fixture_plan_ref",
-    protocol_id: null,
-    version_number: 1,
-    format: "PDF",
-    file_name: "prodi-bericht-2026-06-15.pdf",
-    file_size: 1024,
-    content_type: "application/pdf",
-    storage_bucket: "patient-report-files",
-    storage_path: `${userId}/${patient.id}/${reportId}/${versionId}.pdf`,
-    snapshot: {
-      format: "PDF",
-      title: "Operation Prodi Bericht",
-      fileBaseName: "prodi-bericht-2026-06-15",
-      reportId,
-      patientId: patient.id,
-      patientName: `${patient.firstName} ${patient.lastName}`,
-      patientIndication: patient.indications?.length ? patient.indications.join(", ") : undefined,
-      planId: "fixture_plan_ref",
-      planDateLabel: "15.06.2026",
-      reportLength: "full",
-      selectedSections: {
-        summary: true,
-        table: true,
-        charts: true,
-        meals: true,
-        notes: true,
-      },
-      activeSectionLabels: ["Kurzfazit & Indikatoren", "Nährstofftabellen", "Diagramme", "Speiseplanübersicht", "Individuelle Hinweise"],
-      summaryMetrics: [
-        { label: "Energieabdeckung", value: "1800 kcal", reference: "2000 kcal", coverage: "90%" },
-      ],
-      nutrientRows: [
-        { label: "Eiweiß", value: "80 g", reference: "60 g", coverage: "133%" },
-      ],
-      vitaminRows: [
-        { label: "Vitamin C", value: "110 mg", reference: "95 mg", coverage: "116%" },
-      ],
-      mineralRows: [
-        { label: "Calcium", value: "950 mg", reference: "1000 mg", coverage: "95%" },
-      ],
-      mealRows: [
-        { slot: "Frühstück", summary: "Porridge mit Obst" },
-      ],
-      notes: "Verlauf stabil, Fokus auf Ballaststoffe.",
-      narrative: "Archivierte Patientenfassung.",
-      badges: ["Plan 15.06.2026", "Vollversion"],
-      specialNotes: ["Verlauf stabil"],
-    },
-  });
-
-  if (versionError) throw new Error(versionError.message);
-
-  const { error: updateError } = await admin
-    .from("patient_reports")
-    .update({
-      latest_version_id: versionId,
-      latest_version_number: 1,
-    })
-    .eq("id", reportId);
-
-  if (updateError) throw new Error(updateError.message);
-
-  return { id: reportId, versionId };
 }
 
 async function fetchClinicalRows<T extends Record<string, unknown>>(
@@ -541,32 +440,6 @@ test.describe("Patient Management", () => {
       await expect(page.getByText("Quick Links")).toHaveCount(0);
     } finally {
       await deleteWorkflowFixture(patient.id, fixture);
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("shows patient report history in the Berichte sub-tab", async ({ page }) => {
-    const patient = await createPatientFixture({
-      firstName: "Report",
-      lastName: "Workflow",
-      indications: ["Adipositas"],
-    });
-    const report = await createPatientReportFixture(patient);
-
-    try {
-      await openPatientDetail(page, patient);
-
-      await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText(/Aktueller Bericht v1 liegt archiviert vor\./)).toBeVisible();
-
-      await page.goto(`/patienten/${patient.id}?tab=patientenberichte`);
-      await expect(page.getByRole("heading", { name: "Versionshistorie" })).toBeVisible();
-      await expect(page.getByText(`Standard-Nährwertauswertung für ${patient.firstName} ${patient.lastName}`)).toBeVisible();
-      await expect(page.getByRole("cell", { name: "v1" })).toBeVisible();
-      await expect(
-        page.getByRole("link", { name: `Version 1 (PDF) herunterladen` }),
-      ).toHaveAttribute("href", `/api/patient-report-versions/${report.versionId}/download`);
-    } finally {
       await deletePatientFixture(patient.id);
     }
   });

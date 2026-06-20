@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { usePatients } from "@/hooks/use-patients"
 import { useCounseling } from "@/hooks/use-counseling"
@@ -366,437 +367,498 @@ export default function PatientenPage() {
         </Button>
       </PageHeader>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Patient suchen..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <div className="sm:w-[220px]">
-          <Label htmlFor="indication-filter" className="sr-only">
-            Indikationen
-          </Label>
-          <Select value={indicationFilter} onValueChange={setIndicationFilter}>
-            <SelectTrigger id="indication-filter" className="w-full">
-              <SelectValue placeholder="Alle Indikationen" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="alle">Alle Indikationen</SelectItem>
-              {INDICATION_OPTIONS.map((ind) => (
-                <SelectItem key={ind} value={ind}>
-                  {ind}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <Tabs defaultValue="patienten" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2 sm:w-[420px]">
+          <TabsTrigger value="patienten">Patienten</TabsTrigger>
+          <TabsTrigger value="workflows">Workflows</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
-          {patientWorklist.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-              <span className="text-muted-foreground">{item.label}</span>
-              <span className={`text-lg font-semibold ${item.tone}`}>{item.value}</span>
+        <TabsContent value="patienten" className="space-y-6">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Patient suchen..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
             </div>
-          ))}
-        </CardContent>
-      </Card>
+            <div className="sm:w-[220px]">
+              <Label htmlFor="indication-filter" className="sr-only">
+                Indikationen
+              </Label>
+              <Select value={indicationFilter} onValueChange={setIndicationFilter}>
+                <SelectTrigger id="indication-filter" className="w-full">
+                  <SelectValue placeholder="Alle Indikationen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="alle">Alle Indikationen</SelectItem>
+                  {INDICATION_OPTIONS.map((ind) => (
+                    <SelectItem key={ind} value={ind}>
+                      {ind}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      {filtered.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((patient) => (
-            <PatientCard
-              key={patient.id}
-              patient={patient}
-              lastSessionDate={lastSessionMap.get(patient.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-lg border bg-muted/20 py-10 text-center text-sm text-muted-foreground">
-          Keine Patienten gefunden.
-        </div>
-      )}
+          <Card>
+            <CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
+              {patientWorklist.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                >
+                  <span className="text-muted-foreground">{item.label}</span>
+                  <span className={`text-lg font-semibold ${item.tone}`}>{item.value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
 
-      <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Sekundäre Workflows</p>
+          {filtered.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((patient) => (
+                <PatientCard
+                  key={patient.id}
+                  patient={patient}
+                  lastSessionDate={lastSessionMap.get(patient.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border bg-muted/20 py-10 text-center text-sm text-muted-foreground">
+              Keine Patienten gefunden.
+            </div>
+          )}
+        </TabsContent>
 
-        <Card className="border-dashed">
-          <Collapsible>
-            <CardHeader className="gap-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <CreditCard className="h-5 w-5" /> Patientenaufnahme: eGK-Demo
-                  </CardTitle>
-                  <CardDescription>Simulierte eGK-Daten für Tests und Produktdemos.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
-                  <CollapsibleTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
-                      Öffnen
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-              </div>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={egkStatus === "ready" || isEgkConnecting}
-                    onClick={() => void connectEgk()}
-                  >
-                    {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={egkStatus !== "ready" || isEgkReading}
-                    onClick={() => void handleEgkIntake("serial")}
-                  >
-                    <Cable className="mr-2 h-4 w-4" />
-                    {isEgkReading ? "Lese Demo..." : "Demo-Karte einlesen"}
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => void handleEgkIntake("companion")}>
-                    <Inbox className="mr-2 h-4 w-4" /> Demo-Companion
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => void handleEgkIntake("demo")}>
-                    Demo-Karte
-                  </Button>
-                </div>
-                {!egkSupported && (
-                  <p className="text-sm text-muted-foreground">
-                    Browser unterstützt keine Demo-Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche.
-                  </p>
-                )}
-                {egkError && <p className="text-sm text-destructive">{egkError}</p>}
-                {lastEgkCard && (
-                  <div className="rounded-md border bg-background p-3 text-sm">
-                    <p className="font-medium">
-                      Zuletzt simuliert: {lastEgkCard.firstName} {lastEgkCard.lastName}
-                    </p>
-                    <p className="text-muted-foreground">
-                      {lastEgkCard.street}, {lastEgkCard.zip} {lastEgkCard.city} · {lastEgkCard.insuranceProvider}
-                    </p>
-                  </div>
-                )}
-                <div className="space-y-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Simulierte Kartenereignisse</p>
-                  {hasMounted && egkEvents.length > 0 ? (
-                    <div className="divide-y rounded-md border">
-                      {egkEvents.slice(0, 4).map((event) => {
-                        const matchedPatient = event.patientId ? patientMap.get(event.patientId) : null
-                        return (
-                          <div key={event.id} className="space-y-2 p-3 text-sm">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="font-semibold">
-                                  {event.card.lastName}, {event.card.firstName}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {event.card.insuranceProvider} · {event.card.insuranceNumber}
-                                </p>
-                              </div>
-                              <Badge variant={event.status === "matched" ? "secondary" : "outline"}>
-                                {event.status === "matched" ? "Zugeordnet" : "Offen"}
-                              </Badge>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Select
-                                value={matchedPatient?.id ?? UNASSIGNED_EGK_VALUE}
-                                onValueChange={(value) => {
-                                  if (value === UNASSIGNED_EGK_VALUE) return
-                                  handleAssignEgkEvent(event.id, value)
-                                }}
-                              >
-                                <SelectTrigger className="w-[220px]">
-                                  <SelectValue placeholder="Patient verknüpfen" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value={UNASSIGNED_EGK_VALUE}>Unzugeordnet</SelectItem>
-                                  {patients.map((patient) => (
-                                    <SelectItem key={`egk_select_${patient.id}`} value={patient.id}>
-                                      {patient.lastName}, {patient.firstName}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => archiveEgkEvent(event.id)}
-                              >
-                                Archivieren
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Noch keine eingelesenen Karten.</p>
-                  )}
-                </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </Card>
-
-        <Card className="border-dashed">
-          <Collapsible>
-            <CardHeader className="gap-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <FileText className="h-5 w-5" /> Serienbriefe & Mailings
-                  </CardTitle>
-                  <CardDescription>Personalisierte Schreiben mit Platzhaltern und PDF-Generator vorbereiten.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  {lastBatch && (
-                    <Badge variant="secondary">
-                      Zuletzt erstellt: {format(parseISO(lastBatch.timestamp), "dd.MM.yyyy HH:mm")}
-                    </Badge>
-                  )}
-                  <CollapsibleTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
-                      Öffnen
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-              </div>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="space-y-3">
-                <div className="grid gap-2">
-                  <Label>Vorlage</Label>
-                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Vorlage auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MAIL_MERGE_TEMPLATES.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Betreff</Label>
-                  <Input value={mailSubject} onChange={(event) => setMailSubject(event.target.value)} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Textbaustein</Label>
-                  <Textarea
-                    ref={bodyTextAreaRef}
-                    rows={8}
-                    value={mailBody}
-                    onChange={(event) => setMailBody(event.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">Platzhalter</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {MAIL_MERGE_PLACEHOLDERS.map((placeholder) => (
-                      <Button
-                        key={placeholder.token}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleInsertPlaceholder(placeholder.token)}
-                      >
-                        {placeholder.token}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
+        <TabsContent value="workflows" className="space-y-4">
+          <Card className="border-dashed">
+            <Collapsible>
+              <CardHeader className="gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <Label>Empfängerauswahl</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedRecipients.length} von {filtered.length} Patienten selektiert
-                    </p>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <CreditCard className="h-5 w-5" /> Patientenaufnahme: eGK-Demo
+                    </CardTitle>
+                    <CardDescription>
+                      Simulierte eGK-Daten für Tests und Produktdemos.
+                    </CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={selectAllRecipients}>
-                      Alle
-                    </Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={clearRecipients}>
-                      Leeren
-                    </Button>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>
+                      {egkStatusLabel[egkStatus]}
+                    </Badge>
+                    <CollapsibleTrigger asChild>
+                      <Button type="button" variant="outline" size="sm">
+                        Öffnen
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
                   </div>
                 </div>
-                <ScrollArea className="h-48 rounded-md border">
-                  <div className="divide-y">
-                    {filtered.length > 0 ? (
-                      filtered.map((patient) => (
-                        <label
-                          key={`recipient_${patient.id}`}
-                          className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={selectedRecipients.includes(patient.id)}
-                            onCheckedChange={(checked) =>
-                              toggleRecipient(patient.id, checked === true)
-                            }
-                          />
-                          <div className="flex flex-col">
-                            <span className="font-medium">
-                              {patient.lastName}, {patient.firstName}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {patient.indications?.length ? patient.indications.join(" · ") : "Ohne Indikation"}
-                            </span>
-                          </div>
-                        </label>
-                      ))
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={egkStatus === "ready" || isEgkConnecting}
+                      onClick={() => void connectEgk()}
+                    >
+                      {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={egkStatus !== "ready" || isEgkReading}
+                      onClick={() => void handleEgkIntake("serial")}
+                    >
+                      <Cable className="mr-2 h-4 w-4" />
+                      {isEgkReading ? "Lese Demo..." : "Demo-Karte einlesen"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleEgkIntake("companion")}
+                    >
+                      <Inbox className="mr-2 h-4 w-4" /> Demo-Companion
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void handleEgkIntake("demo")}
+                    >
+                      Demo-Karte
+                    </Button>
+                  </div>
+                  {!egkSupported && (
+                    <p className="text-sm text-muted-foreground">
+                      Browser unterstützt keine Demo-Web-Serial-Verbindung. Nutzen Sie die
+                      Demo-Schaltfläche.
+                    </p>
+                  )}
+                  {egkError && <p className="text-sm text-destructive">{egkError}</p>}
+                  {lastEgkCard && (
+                    <div className="rounded-md border bg-background p-3 text-sm">
+                      <p className="font-medium">
+                        Zuletzt simuliert: {lastEgkCard.firstName} {lastEgkCard.lastName}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {lastEgkCard.street}, {lastEgkCard.zip} {lastEgkCard.city} ·{" "}
+                        {lastEgkCard.insuranceProvider}
+                      </p>
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Simulierte Kartenereignisse
+                    </p>
+                    {hasMounted && egkEvents.length > 0 ? (
+                      <div className="divide-y rounded-md border">
+                        {egkEvents.slice(0, 4).map((event) => {
+                          const matchedPatient = event.patientId
+                            ? patientMap.get(event.patientId)
+                            : null
+                          return (
+                            <div key={event.id} className="space-y-2 p-3 text-sm">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="font-semibold">
+                                    {event.card.lastName}, {event.card.firstName}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {event.card.insuranceProvider} · {event.card.insuranceNumber}
+                                  </p>
+                                </div>
+                                <Badge
+                                  variant={event.status === "matched" ? "secondary" : "outline"}
+                                >
+                                  {event.status === "matched" ? "Zugeordnet" : "Offen"}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Select
+                                  value={matchedPatient?.id ?? UNASSIGNED_EGK_VALUE}
+                                  onValueChange={(value) => {
+                                    if (value === UNASSIGNED_EGK_VALUE) return
+                                    handleAssignEgkEvent(event.id, value)
+                                  }}
+                                >
+                                  <SelectTrigger className="w-[220px]">
+                                    <SelectValue placeholder="Patient verknüpfen" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={UNASSIGNED_EGK_VALUE}>
+                                      Unzugeordnet
+                                    </SelectItem>
+                                    {patients.map((patient) => (
+                                      <SelectItem
+                                        key={`egk_select_${patient.id}`}
+                                        value={patient.id}
+                                      >
+                                        {patient.lastName}, {patient.firstName}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => archiveEgkEvent(event.id)}
+                                >
+                                  Archivieren
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     ) : (
-                      <p className="px-3 py-2 text-sm text-muted-foreground">
-                        Kein Patient entspricht dem Filter.
+                      <p className="text-sm text-muted-foreground">
+                        Noch keine eingelesenen Karten.
                       </p>
                     )}
                   </div>
-                </ScrollArea>
-                <Button type="button" onClick={handleGenerateMerge} className="w-full">
-                  <Sparkles className="mr-2 h-4 w-4" /> Dokumente erzeugen
-                </Button>
-              </div>
-            </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </Card>
 
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Vorschau</p>
-              {previewSubject ? (
-                <div>
-                  <p className="font-semibold">{previewSubject}</p>
-                  <pre className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
-                    {previewBody}
-                  </pre>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Bitte Empfänger auswählen.</p>
-              )}
-            </div>
-
-            {batches.length > 0 && (
-              <div className="rounded-lg border p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Serienbrief-Historie</p>
-                <div className="mt-2 space-y-2 text-sm">
-                  {batches.slice(0, 3).map((batch) => (
-                    <div key={batch.id} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-medium">{batch.templateName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(parseISO(batch.createdAt), "dd.MM.yyyy HH:mm")} · {batch.recipientCount} Empfänger
-                        </p>
-                      </div>
-                      <Badge variant={batch.status === "exported" ? "secondary" : "outline"}>
-                        {batch.status === "exported" ? "Exportiert" : "Offen"}
+          <Card className="border-dashed">
+            <Collapsible>
+              <CardHeader className="gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <FileText className="h-5 w-5" /> Serienbriefe & Mailings
+                    </CardTitle>
+                    <CardDescription>
+                      Personalisierte Schreiben mit Platzhaltern und PDF-Generator vorbereiten.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {lastBatch && (
+                      <Badge variant="secondary">
+                        Zuletzt erstellt:{" "}
+                        {format(parseISO(lastBatch.timestamp), "dd.MM.yyyy HH:mm")}
                       </Badge>
-                    </div>
-                  ))}
+                    )}
+                    <CollapsibleTrigger asChild>
+                      <Button type="button" variant="outline" size="sm">
+                        Öffnen
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
                 </div>
-              </div>
-            )}
-              </CardContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </Card>
-      </div>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="space-y-3">
+                      <div className="grid gap-2">
+                        <Label>Vorlage</Label>
+                        <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Vorlage auswählen" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MAIL_MERGE_TEMPLATES.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Betreff</Label>
+                        <Input
+                          value={mailSubject}
+                          onChange={(event) => setMailSubject(event.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Textbaustein</Label>
+                        <Textarea
+                          ref={bodyTextAreaRef}
+                          rows={8}
+                          value={mailBody}
+                          onChange={(event) => setMailBody(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">Platzhalter</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {MAIL_MERGE_PLACEHOLDERS.map((placeholder) => (
+                            <Button
+                              key={placeholder.token}
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleInsertPlaceholder(placeholder.token)}
+                            >
+                              {placeholder.token}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <div>
-              <CardTitle>Geburtstagsliste</CardTitle>
-              <CardDescription>
-                Automatisch sortierte Geburtstage der nächsten Tage.
-              </CardDescription>
-            </div>
-            <Select value={birthdayWindow} onValueChange={setBirthdayWindow}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="14">14 Tage</SelectItem>
-                <SelectItem value="30">30 Tage</SelectItem>
-                <SelectItem value="60">60 Tage</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardHeader>
-          <CardContent>
-            {upcomingBirthdays.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Datum</TableHead>
-                    <TableHead className="text-right">Alter</TableHead>
-                    <TableHead className="text-right">Aktion</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {upcomingBirthdays.slice(0, 6).map(({ patient, nextBirthday, reminderStatus, isoDate }) => (
-                    <TableRow key={`birthday_${patient.id}`}>
-                      <TableCell className="font-medium">
-                        {patient.lastName}, {patient.firstName}
-                      </TableCell>
-                      <TableCell>{format(nextBirthday, "dd.MM.")}</TableCell>
-                      <TableCell className="text-right">
-                        {differenceInYears(nextBirthday, parseISO(patient.dateOfBirth))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            onClick={() => handleBirthdayPrepare(patient.id)}
-                            aria-label="Geburtstagsgruß vorbereiten"
-                          >
-                            <Gift className="h-3.5 w-3.5" />
-                          </Button>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Empfängerauswahl</Label>
+                          <p className="text-xs text-muted-foreground">
+                            {selectedRecipients.length} von {filtered.length} Patienten selektiert
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            variant={reminderStatus === "sent" ? "secondary" : "ghost"}
-                            disabled={reminderStatus === "sent"}
-                            onClick={() => handleBirthdayComplete(patient.id, isoDate)}
+                            variant="outline"
+                            onClick={selectAllRecipients}
                           >
-                            {reminderStatus === "sent" ? "Erledigt" : "Abhaken"}
+                            Alle
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" onClick={clearRecipients}>
+                            Leeren
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-sm text-muted-foreground">Keine Geburtstage im gewählten Zeitraum.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                      </div>
+                      <ScrollArea className="h-48 rounded-md border">
+                        <div className="divide-y">
+                          {filtered.length > 0 ? (
+                            filtered.map((patient) => (
+                              <label
+                                key={`recipient_${patient.id}`}
+                                className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm"
+                              >
+                                <Checkbox
+                                  checked={selectedRecipients.includes(patient.id)}
+                                  onCheckedChange={(checked) =>
+                                    toggleRecipient(patient.id, checked === true)
+                                  }
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">
+                                    {patient.lastName}, {patient.firstName}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {patient.indications?.length
+                                      ? patient.indications.join(" · ")
+                                      : "Ohne Indikation"}
+                                  </span>
+                                </div>
+                              </label>
+                            ))
+                          ) : (
+                            <p className="px-3 py-2 text-sm text-muted-foreground">
+                              Kein Patient entspricht dem Filter.
+                            </p>
+                          )}
+                        </div>
+                      </ScrollArea>
+                      <Button type="button" onClick={handleGenerateMerge} className="w-full">
+                        <Sparkles className="mr-2 h-4 w-4" /> Dokumente erzeugen
+                      </Button>
+                    </div>
+                  </div>
 
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Vorschau
+                    </p>
+                    {previewSubject ? (
+                      <div>
+                        <p className="font-semibold">{previewSubject}</p>
+                        <pre className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                          {previewBody}
+                        </pre>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Bitte Empfänger auswählen.</p>
+                    )}
+                  </div>
+
+                  {batches.length > 0 && (
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Serienbrief-Historie
+                      </p>
+                      <div className="mt-2 space-y-2 text-sm">
+                        {batches.slice(0, 3).map((batch) => (
+                          <div
+                            key={batch.id}
+                            className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <p className="font-medium">{batch.templateName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(parseISO(batch.createdAt), "dd.MM.yyyy HH:mm")} ·{" "}
+                                {batch.recipientCount} Empfänger
+                              </p>
+                            </div>
+                            <Badge variant={batch.status === "exported" ? "secondary" : "outline"}>
+                              {batch.status === "exported" ? "Exportiert" : "Offen"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </Card>
+
+          <Card className="lg:max-w-2xl">
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>Geburtstagsliste</CardTitle>
+                <CardDescription>
+                  Automatisch sortierte Geburtstage der nächsten Tage.
+                </CardDescription>
+              </div>
+              <Select value={birthdayWindow} onValueChange={setBirthdayWindow}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="14">14 Tage</SelectItem>
+                  <SelectItem value="30">30 Tage</SelectItem>
+                  <SelectItem value="60">60 Tage</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              {upcomingBirthdays.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Datum</TableHead>
+                      <TableHead className="text-right">Alter</TableHead>
+                      <TableHead className="text-right">Aktion</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {upcomingBirthdays
+                      .slice(0, 6)
+                      .map(({ patient, nextBirthday, reminderStatus, isoDate }) => (
+                        <TableRow key={`birthday_${patient.id}`}>
+                          <TableCell className="font-medium">
+                            {patient.lastName}, {patient.firstName}
+                          </TableCell>
+                          <TableCell>{format(nextBirthday, "dd.MM.")}</TableCell>
+                          <TableCell className="text-right">
+                            {differenceInYears(nextBirthday, parseISO(patient.dateOfBirth))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                onClick={() => handleBirthdayPrepare(patient.id)}
+                                aria-label="Geburtstagsgruß vorbereiten"
+                              >
+                                <Gift className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={reminderStatus === "sent" ? "secondary" : "ghost"}
+                                disabled={reminderStatus === "sent"}
+                                onClick={() => handleBirthdayComplete(patient.id, isoDate)}
+                              >
+                                {reminderStatus === "sent" ? "Erledigt" : "Abhaken"}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Keine Geburtstage im gewählten Zeitraum.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

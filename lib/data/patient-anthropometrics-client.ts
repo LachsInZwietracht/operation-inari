@@ -21,9 +21,37 @@ interface AnthropometricRow {
   waist_circumference: string | null;
   hip_circumference: string | null;
   body_fat_percentage: string | null;
+  fat_free_mass_kg?: string | null;
+  subcutaneous_fat_percentage?: string | null;
+  visceral_fat_rating?: string | null;
+  body_water_percentage?: string | null;
+  muscle_mass_kg?: string | null;
+  skeletal_muscle_percentage?: string | null;
+  bone_mass_kg?: string | null;
+  protein_percentage?: string | null;
+  bmr_kcal?: string | null;
+  metabolic_age_years?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+const BODY_COMPOSITION_COLUMNS = [
+  "fat_free_mass_kg",
+  "subcutaneous_fat_percentage",
+  "visceral_fat_rating",
+  "body_water_percentage",
+  "muscle_mass_kg",
+  "skeletal_muscle_percentage",
+  "bone_mass_kg",
+  "protein_percentage",
+  "bmr_kcal",
+  "metabolic_age_years",
+] as const;
+
+function isMissingBodyCompositionColumnError(error: { message?: string } | null): boolean {
+  if (!error?.message) return false;
+  return BODY_COMPOSITION_COLUMNS.some((column) => error.message?.includes(column));
 }
 
 function resolveBrowserClient(supabase?: SupabaseClient) {
@@ -51,6 +79,20 @@ function mapAnthropometricRow(row: AnthropometricRow): AnthropometricEntry {
     waistCircumference: row.waist_circumference ? Number(row.waist_circumference) : undefined,
     hipCircumference: row.hip_circumference ? Number(row.hip_circumference) : undefined,
     bodyFatPercentage: row.body_fat_percentage ? Number(row.body_fat_percentage) : undefined,
+    fatFreeMassKg: row.fat_free_mass_kg ? Number(row.fat_free_mass_kg) : undefined,
+    subcutaneousFatPercentage: row.subcutaneous_fat_percentage
+      ? Number(row.subcutaneous_fat_percentage)
+      : undefined,
+    visceralFatRating: row.visceral_fat_rating ? Number(row.visceral_fat_rating) : undefined,
+    bodyWaterPercentage: row.body_water_percentage ? Number(row.body_water_percentage) : undefined,
+    muscleMassKg: row.muscle_mass_kg ? Number(row.muscle_mass_kg) : undefined,
+    skeletalMusclePercentage: row.skeletal_muscle_percentage
+      ? Number(row.skeletal_muscle_percentage)
+      : undefined,
+    boneMassKg: row.bone_mass_kg ? Number(row.bone_mass_kg) : undefined,
+    proteinPercentage: row.protein_percentage ? Number(row.protein_percentage) : undefined,
+    bmrKcal: row.bmr_kcal ? Number(row.bmr_kcal) : undefined,
+    metabolicAgeYears: row.metabolic_age_years ? Number(row.metabolic_age_years) : undefined,
     notes: row.notes ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -95,33 +137,55 @@ export async function persistAnthropometricEntry(
 
   const canonicalId = entry.id && isUuid(entry.id) ? entry.id : null;
 
-  const { data: persistedEntry, error } = await client
+  const payload = {
+    ...(canonicalId ? { id: canonicalId } : {}),
+    user_id: userId,
+    patient_id: entry.patientId,
+    date: entry.date,
+    weight: entry.weight,
+    height: entry.height,
+    bmi: entry.bmi,
+    waist_circumference: entry.waistCircumference ?? null,
+    hip_circumference: entry.hipCircumference ?? null,
+    body_fat_percentage: entry.bodyFatPercentage ?? null,
+    fat_free_mass_kg: entry.fatFreeMassKg ?? null,
+    subcutaneous_fat_percentage: entry.subcutaneousFatPercentage ?? null,
+    visceral_fat_rating: entry.visceralFatRating ?? null,
+    body_water_percentage: entry.bodyWaterPercentage ?? null,
+    muscle_mass_kg: entry.muscleMassKg ?? null,
+    skeletal_muscle_percentage: entry.skeletalMusclePercentage ?? null,
+    bone_mass_kg: entry.boneMassKg ?? null,
+    protein_percentage: entry.proteinPercentage ?? null,
+    bmr_kcal: entry.bmrKcal ?? null,
+    metabolic_age_years: entry.metabolicAgeYears ?? null,
+    notes: entry.notes ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  let result = await client
     .from("patient_anthropometrics")
-    .upsert(
-      {
-        ...(canonicalId ? { id: canonicalId } : {}),
-        user_id: userId,
-        patient_id: entry.patientId,
-        date: entry.date,
-        weight: entry.weight,
-        height: entry.height,
-        bmi: entry.bmi,
-        waist_circumference: entry.waistCircumference ?? null,
-        hip_circumference: entry.hipCircumference ?? null,
-        body_fat_percentage: entry.bodyFatPercentage ?? null,
-        notes: entry.notes ?? null,
-        updated_at: new Date().toISOString(),
-      },
-      canonicalId ? { onConflict: "id" } : undefined,
-    )
+    .upsert(payload, canonicalId ? { onConflict: "id" } : undefined)
     .select("*")
     .single();
 
-  if (error) {
-    throw new Error(error.message);
+  if (isMissingBodyCompositionColumnError(result.error)) {
+    const fallbackPayload = { ...payload };
+    for (const column of BODY_COMPOSITION_COLUMNS) {
+      delete fallbackPayload[column];
+    }
+
+    result = await client
+      .from("patient_anthropometrics")
+      .upsert(fallbackPayload, canonicalId ? { onConflict: "id" } : undefined)
+      .select("*")
+      .single();
   }
 
-  return mapAnthropometricRow(persistedEntry as unknown as AnthropometricRow);
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  return mapAnthropometricRow(result.data as unknown as AnthropometricRow);
 }
 
 export async function deleteAnthropometricEntryClient(

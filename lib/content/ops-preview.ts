@@ -28,17 +28,6 @@ export const API_ENDPOINT_PREVIEWS: ApiEndpointDescription[] = [
       total: 128,
     },
   },
-  {
-    id: "patient-reports",
-    route: "/api/v1/patient-reports",
-    method: "POST",
-    description: "Geplanter Endpunkt fuer patientengebundene Berichtsexporte.",
-    sampleResponse: {
-      id: "report_456",
-      status: "queued",
-      downloadUrl: null,
-    },
-  },
 ];
 
 export const INTEGRATION_PREVIEWS = [
