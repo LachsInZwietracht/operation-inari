@@ -19,8 +19,10 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarRange,
+  Droplets,
   Flame,
   Minus,
+  PersonStanding,
   Scale,
   Target,
 } from "lucide-react"
@@ -76,6 +78,28 @@ const TIME_RANGES = [
 ] as const
 
 type TimeRangeValue = (typeof TIME_RANGES)[number]["value"]
+
+const BODY_COMPOSITION_METRICS = [
+  { key: "bodyFatPercentage", label: "Körperfett", unit: "%", decimals: 1, color: "var(--color-chart-3)" },
+  { key: "subcutaneousFatPercentage", label: "Unterhautfett", unit: "%", decimals: 1, color: "var(--color-chart-4)" },
+  { key: "visceralFatRating", label: "Viszerales Fett", unit: "", decimals: 1, color: "var(--color-chart-5)" },
+  { key: "bodyWaterPercentage", label: "Körperwasser", unit: "%", decimals: 1, color: "var(--color-chart-1)" },
+  { key: "muscleMassKg", label: "Muskelmasse", unit: "kg", decimals: 1, color: "var(--color-chart-2)" },
+  { key: "skeletalMusclePercentage", label: "Skelettmuskeln", unit: "%", decimals: 1, color: "var(--color-chart-3)" },
+  { key: "fatFreeMassKg", label: "Fettfreie Masse", unit: "kg", decimals: 1, color: "var(--color-chart-4)" },
+  { key: "boneMassKg", label: "Knochenmasse", unit: "kg", decimals: 2, color: "var(--color-chart-5)" },
+  { key: "proteinPercentage", label: "Protein", unit: "%", decimals: 1, color: "var(--color-chart-1)" },
+  { key: "bmrKcal", label: "BMR", unit: "kcal", decimals: 0, color: "var(--color-chart-2)" },
+  { key: "metabolicAgeYears", label: "Metabolisches Alter", unit: "Jahre", decimals: 0, color: "var(--color-chart-3)" },
+] as const satisfies ReadonlyArray<{
+  key: keyof AnthropometricEntry
+  label: string
+  unit: string
+  decimals: number
+  color: string
+}>
+
+type BodyCompositionMetricKey = (typeof BODY_COMPOSITION_METRICS)[number]["key"]
 
 function getTimestamp(date: string): number {
   return parseISO(date).getTime()
@@ -139,6 +163,7 @@ function StatCard({
 
 export function PatientStatsTab({ patient, entries, activities, sessions }: PatientStatsTabProps) {
   const [timeRange, setTimeRange] = useState<TimeRangeValue>("all")
+  const [bodyMetricKey, setBodyMetricKey] = useState<BodyCompositionMetricKey>("bodyFatPercentage")
 
   const sorted = useMemo(
     () => [...entries].sort((a, b) => getTimestamp(a.date) - getTimestamp(b.date)),
@@ -166,6 +191,31 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
         bmi: e.bmi,
       })),
     [filtered],
+  )
+
+  const availableBodyMetrics = useMemo(
+    () =>
+      BODY_COMPOSITION_METRICS.filter((metric) =>
+        filtered.some((entry) => typeof entry[metric.key] === "number"),
+      ),
+    [filtered],
+  )
+
+  const selectedBodyMetric =
+    availableBodyMetrics.find((metric) => metric.key === bodyMetricKey) ??
+    availableBodyMetrics[0] ??
+    BODY_COMPOSITION_METRICS[0]
+
+  const bodyCompositionData = useMemo(
+    () =>
+      filtered
+        .filter((entry) => typeof entry[selectedBodyMetric.key] === "number")
+        .map((entry) => ({
+          timestamp: getTimestamp(entry.date),
+          date: formatDate(entry.date),
+          value: entry[selectedBodyMetric.key] as number,
+        })),
+    [filtered, selectedBodyMetric],
   )
 
   const timeDomain = useMemo<[number, number]>(() => {
@@ -206,6 +256,39 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
     const cutoff = getTimestamp(allLatest.date) - selectedRange.days * DAY_MS
     return sessions.filter((session) => getTimestamp(session.date) >= cutoff)
   }, [allLatest, selectedRange.days, sessions])
+
+  const bodyCompositionLatest = useMemo(() => {
+    if (!latest) return []
+
+    return [
+      {
+        icon: Target,
+        label: "Körperfett",
+        value:
+          latest.bodyFatPercentage != null
+            ? `${formatNumber(latest.bodyFatPercentage, 1)} %`
+            : null,
+      },
+      {
+        icon: PersonStanding,
+        label: "Muskelmasse",
+        value: latest.muscleMassKg != null ? `${formatNumber(latest.muscleMassKg, 1)} kg` : null,
+      },
+      {
+        icon: Droplets,
+        label: "Körperwasser",
+        value:
+          latest.bodyWaterPercentage != null
+            ? `${formatNumber(latest.bodyWaterPercentage, 1)} %`
+            : null,
+      },
+      {
+        icon: Flame,
+        label: "BMR",
+        value: latest.bmrKcal != null ? `${formatNumber(latest.bmrKcal, 0)} kcal` : null,
+      },
+    ].filter((item): item is { icon: typeof Scale; label: string; value: string } => item.value != null)
+  }, [latest])
 
   if (!allLatest) {
     return (
@@ -302,6 +385,16 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
               </span>
             </StatCard>
           </div>
+
+          {bodyCompositionLatest.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {bodyCompositionLatest.map((metric) => (
+                <StatCard key={metric.label} icon={metric.icon} label={metric.label} value={metric.value}>
+                  <span className="text-xs text-muted-foreground">Stand {formatDate(latest.date)}</span>
+                </StatCard>
+              ))}
+            </div>
+          )}
 
       <Card>
         <CardHeader>
@@ -422,6 +515,77 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
             </ResponsiveContainer>
           </CardContent>
         </Card>
+
+        {availableBodyMetrics.length > 0 && (
+          <Card>
+            <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Körperzusammensetzung</CardTitle>
+                <CardDescription>BIA-/Smart-Scale-Messwerte über den gewählten Zeitraum.</CardDescription>
+              </div>
+              <Select
+                value={selectedBodyMetric.key}
+                onValueChange={(value) => setBodyMetricKey(value as BodyCompositionMetricKey)}
+              >
+                <SelectTrigger className="w-full sm:w-[210px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBodyMetrics.map((metric) => (
+                    <SelectItem key={metric.key} value={metric.key}>
+                      {metric.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={bodyCompositionData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="statsBodyCompositionFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={selectedBodyMetric.color} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={selectedBodyMetric.color} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
+                  <XAxis
+                    dataKey="timestamp"
+                    type="number"
+                    scale="time"
+                    domain={timeDomain}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={formatAxisDate}
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={28}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={44}
+                    domain={["dataMin - 1", "dataMax + 1"]}
+                    unit={selectedBodyMetric.unit ? ` ${selectedBodyMetric.unit}` : undefined}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Area
+                    type="monotone"
+                    connectNulls
+                    dataKey="value"
+                    name={selectedBodyMetric.label}
+                    unit={selectedBodyMetric.unit}
+                    stroke={selectedBodyMetric.color}
+                    strokeWidth={2.5}
+                    fill="url(#statsBodyCompositionFill)"
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

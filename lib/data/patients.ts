@@ -55,7 +55,7 @@ interface PatientRow {
   updated_at: string;
 }
 
-const PATIENT_COLUMNS = [
+const PATIENT_BASE_COLUMNS = [
   "id",
   "legacy_id",
   "user_id",
@@ -76,8 +76,6 @@ const PATIENT_COLUMNS = [
   "daily_calorie_goal",
   "goal_weight",
   "macro_preset",
-  "nutrition_preferences",
-  "nutrition_preference_notes",
   "status",
   "care_setting",
   "external_patient_number",
@@ -97,7 +95,24 @@ const PATIENT_COLUMNS = [
   "emergency_contact_relationship",
   "created_at",
   "updated_at",
+];
+
+const PATIENT_NUTRITION_PREFERENCE_COLUMNS = [
+  "nutrition_preferences",
+  "nutrition_preference_notes",
+];
+
+const PATIENT_COLUMNS = [
+  ...PATIENT_BASE_COLUMNS,
+  ...PATIENT_NUTRITION_PREFERENCE_COLUMNS,
 ].join(",");
+
+const PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES = PATIENT_BASE_COLUMNS.join(",");
+
+function isMissingNutritionPreferenceColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return PATIENT_NUTRITION_PREFERENCE_COLUMNS.some((column) => message.includes(column));
+}
 
 function mapPatientRow(row: PatientRow): Patient {
   return {
@@ -149,20 +164,57 @@ async function resolveClient(supabase?: SupabaseClient) {
   return createServerSupabaseClient();
 }
 
+async function fetchPatientRows(
+  client: SupabaseClient,
+  columns: string,
+): Promise<PatientRow[]> {
+  const { data, error } = await withTimeout(
+    client.from("patients").select(columns).order("last_name", { ascending: true }),
+    5000,
+    "Supabase patient request timed out",
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as unknown as PatientRow[];
+}
+
+async function fetchPatientRowByRef(
+  client: SupabaseClient,
+  columns: string,
+  patientRef: string,
+): Promise<PatientRow | null> {
+  const column = isUuid(patientRef) ? "id" : "legacy_id";
+  const { data, error } = await withTimeout(
+    client
+      .from("patients")
+      .select(columns)
+      .eq(column, patientRef)
+      .maybeSingle(),
+    5000,
+    "Supabase patient detail request timed out",
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as unknown as PatientRow | null;
+}
+
 export const fetchPatients = cache(async (supabase?: SupabaseClient): Promise<Patient[]> => {
   try {
     const client = await resolveClient(supabase);
-    const { data, error } = await withTimeout(
-      client.from("patients").select(PATIENT_COLUMNS).order("last_name", { ascending: true }),
-      5000,
-      "Supabase patient request timed out",
-    );
-
-    if (error) {
-      throw new Error(error.message);
+    try {
+      const rows = await fetchPatientRows(client, PATIENT_COLUMNS);
+      return rows.map(mapPatientRow);
+    } catch (error) {
+      if (!isMissingNutritionPreferenceColumnError(error)) throw error;
+      const rows = await fetchPatientRows(client, PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
+      return rows.map(mapPatientRow);
     }
-
-    return ((data ?? []) as unknown as PatientRow[]).map(mapPatientRow);
   } catch (error) {
     console.warn("Falling back to empty patient list:", error);
     return [];
@@ -175,22 +227,18 @@ export async function fetchPatientByRef(
 ): Promise<Patient | null> {
   try {
     const client = await resolveClient(supabase);
-    const column = isUuid(patientRef) ? "id" : "legacy_id";
-    const { data, error } = await withTimeout(
-      client
-        .from("patients")
-        .select(PATIENT_COLUMNS)
-        .eq(column, patientRef)
-        .maybeSingle(),
-      5000,
-      "Supabase patient detail request timed out",
-    );
-
-    if (error) {
-      throw new Error(error.message);
+    try {
+      const row = await fetchPatientRowByRef(client, PATIENT_COLUMNS, patientRef);
+      return row ? mapPatientRow(row) : null;
+    } catch (error) {
+      if (!isMissingNutritionPreferenceColumnError(error)) throw error;
+      const row = await fetchPatientRowByRef(
+        client,
+        PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES,
+        patientRef,
+      );
+      return row ? mapPatientRow(row) : null;
     }
-
-    return data ? mapPatientRow(data as unknown as PatientRow) : null;
   } catch (error) {
     console.warn("Falling back from patient detail lookup:", error);
     return null;
@@ -203,20 +251,29 @@ export async function fetchPatientByRefForUser(
   supabase: SupabaseClient,
 ): Promise<Patient | null> {
   const column = isUuid(patientRef) ? "id" : "legacy_id";
-  const { data, error } = await withTimeout(
-    supabase
-      .from("patients")
-      .select(PATIENT_COLUMNS)
-      .eq(column, patientRef)
-      .eq("user_id", userId)
-      .maybeSingle(),
-    5000,
-    "Supabase patient detail service lookup timed out",
-  );
+  async function runQuery(columns: string) {
+    const { data, error } = await withTimeout(
+      supabase
+        .from("patients")
+        .select(columns)
+        .eq(column, patientRef)
+        .eq("user_id", userId)
+        .maybeSingle(),
+      5000,
+      "Supabase patient detail service lookup timed out",
+    );
 
-  if (error) {
-    throw new Error(error.message);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data ? mapPatientRow(data as unknown as PatientRow) : null;
   }
 
-  return data ? mapPatientRow(data as unknown as PatientRow) : null;
+  try {
+    return await runQuery(PATIENT_COLUMNS);
+  } catch (error) {
+    if (!isMissingNutritionPreferenceColumnError(error)) throw error;
+    return runQuery(PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
+  }
 }

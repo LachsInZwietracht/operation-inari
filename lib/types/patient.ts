@@ -113,6 +113,16 @@ export interface AnthropometricEntry extends Timestamped {
   waistCircumference?: number; // cm
   hipCircumference?: number; // cm
   bodyFatPercentage?: number;
+  fatFreeMassKg?: number;
+  subcutaneousFatPercentage?: number;
+  visceralFatRating?: number;
+  bodyWaterPercentage?: number;
+  muscleMassKg?: number;
+  skeletalMusclePercentage?: number;
+  boneMassKg?: number;
+  proteinPercentage?: number;
+  bmrKcal?: number;
+  metabolicAgeYears?: number;
   notes?: string;
 }
 

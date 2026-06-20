@@ -24,6 +24,16 @@ const anthroSchema = z.object({
   waistCircumference: z.coerce.number().min(0).optional().or(z.literal("")),
   hipCircumference: z.coerce.number().min(0).optional().or(z.literal("")),
   bodyFatPercentage: z.coerce.number().min(0).max(80).optional().or(z.literal("")),
+  fatFreeMassKg: z.coerce.number().min(0).optional().or(z.literal("")),
+  subcutaneousFatPercentage: z.coerce.number().min(0).max(80).optional().or(z.literal("")),
+  visceralFatRating: z.coerce.number().min(0).optional().or(z.literal("")),
+  bodyWaterPercentage: z.coerce.number().min(0).max(100).optional().or(z.literal("")),
+  muscleMassKg: z.coerce.number().min(0).optional().or(z.literal("")),
+  skeletalMusclePercentage: z.coerce.number().min(0).max(100).optional().or(z.literal("")),
+  boneMassKg: z.coerce.number().min(0).optional().or(z.literal("")),
+  proteinPercentage: z.coerce.number().min(0).max(100).optional().or(z.literal("")),
+  bmrKcal: z.coerce.number().min(0).optional().or(z.literal("")),
+  metabolicAgeYears: z.coerce.number().min(0).optional().or(z.literal("")),
 })
 
 type AnthroFormValues = z.infer<typeof anthroSchema>
@@ -50,6 +60,16 @@ export function AnthropometricForm({
       waistCircumference: "",
       hipCircumference: "",
       bodyFatPercentage: "",
+      fatFreeMassKg: "",
+      subcutaneousFatPercentage: "",
+      visceralFatRating: "",
+      bodyWaterPercentage: "",
+      muscleMassKg: "",
+      skeletalMusclePercentage: "",
+      boneMassKg: "",
+      proteinPercentage: "",
+      bmrKcal: "",
+      metabolicAgeYears: "",
     },
   })
 
@@ -66,6 +86,18 @@ export function AnthropometricForm({
       waistCircumference: typeof values.waistCircumference === "number" ? values.waistCircumference : undefined,
       hipCircumference: typeof values.hipCircumference === "number" ? values.hipCircumference : undefined,
       bodyFatPercentage: typeof values.bodyFatPercentage === "number" ? values.bodyFatPercentage : undefined,
+      fatFreeMassKg: typeof values.fatFreeMassKg === "number" ? values.fatFreeMassKg : undefined,
+      subcutaneousFatPercentage:
+        typeof values.subcutaneousFatPercentage === "number" ? values.subcutaneousFatPercentage : undefined,
+      visceralFatRating: typeof values.visceralFatRating === "number" ? values.visceralFatRating : undefined,
+      bodyWaterPercentage: typeof values.bodyWaterPercentage === "number" ? values.bodyWaterPercentage : undefined,
+      muscleMassKg: typeof values.muscleMassKg === "number" ? values.muscleMassKg : undefined,
+      skeletalMusclePercentage:
+        typeof values.skeletalMusclePercentage === "number" ? values.skeletalMusclePercentage : undefined,
+      boneMassKg: typeof values.boneMassKg === "number" ? values.boneMassKg : undefined,
+      proteinPercentage: typeof values.proteinPercentage === "number" ? values.proteinPercentage : undefined,
+      bmrKcal: typeof values.bmrKcal === "number" ? values.bmrKcal : undefined,
+      metabolicAgeYears: typeof values.metabolicAgeYears === "number" ? values.metabolicAgeYears : undefined,
     })
   }
 
@@ -148,6 +180,142 @@ export function AnthropometricForm({
                 <FormLabel>Körperfett (%)</FormLabel>
                 <FormControl>
                   <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FormField
+            control={form.control}
+            name="fatFreeMassKg"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Fettfreie Masse (kg)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="subcutaneousFatPercentage"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Unterhautfettgewebe (%)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="visceralFatRating"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Viszerales Fett</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FormField
+            control={form.control}
+            name="bodyWaterPercentage"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Körperwasser (%)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="muscleMassKg"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Muskelmasse (kg)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="skeletalMusclePercentage"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Skelettmuskeln (%)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <FormField
+            control={form.control}
+            name="boneMassKg"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Knochenmasse (kg)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.01" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="proteinPercentage"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Protein (%)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="bmrKcal"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>BMR (kcal)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="1" placeholder="optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="metabolicAgeYears"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Metabolisches Alter</FormLabel>
+                <FormControl>
+                  <Input type="number" step="1" placeholder="optional" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

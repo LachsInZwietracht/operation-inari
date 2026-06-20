@@ -1414,6 +1414,7 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
             )}
 
             {anthroEntries.length > 0 ? (
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1422,7 +1423,18 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                     <TableHead className="text-right">Größe (cm)</TableHead>
                     <TableHead className="text-right">BMI</TableHead>
                     <TableHead className="text-right">Bauchumfang (cm)</TableHead>
+                    <TableHead className="text-right">Hüftumfang (cm)</TableHead>
                     <TableHead className="text-right">Körperfett (%)</TableHead>
+                    <TableHead className="text-right">Fettfreie Masse (kg)</TableHead>
+                    <TableHead className="text-right">Unterhautfett (%)</TableHead>
+                    <TableHead className="text-right">Viszerales Fett</TableHead>
+                    <TableHead className="text-right">Körperwasser (%)</TableHead>
+                    <TableHead className="text-right">Muskelmasse (kg)</TableHead>
+                    <TableHead className="text-right">Skelettmuskeln (%)</TableHead>
+                    <TableHead className="text-right">Knochenmasse (kg)</TableHead>
+                    <TableHead className="text-right">Protein (%)</TableHead>
+                    <TableHead className="text-right">BMR (kcal)</TableHead>
+                    <TableHead className="text-right">Metab. Alter</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1443,12 +1455,46 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
                         {entry.waistCircumference ? formatNumber(entry.waistCircumference, 0) : "–"}
                       </TableCell>
                       <TableCell className="text-right">
+                        {entry.hipCircumference ? formatNumber(entry.hipCircumference, 0) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
                         {entry.bodyFatPercentage ? formatNumber(entry.bodyFatPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.fatFreeMassKg ? formatNumber(entry.fatFreeMassKg, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.subcutaneousFatPercentage ? formatNumber(entry.subcutaneousFatPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.visceralFatRating ? formatNumber(entry.visceralFatRating, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.bodyWaterPercentage ? formatNumber(entry.bodyWaterPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.muscleMassKg ? formatNumber(entry.muscleMassKg, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.skeletalMusclePercentage ? formatNumber(entry.skeletalMusclePercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.boneMassKg ? formatNumber(entry.boneMassKg, 2) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.proteinPercentage ? formatNumber(entry.proteinPercentage, 1) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.bmrKcal ? formatNumber(entry.bmrKcal, 0) : "–"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {entry.metabolicAgeYears ? formatNumber(entry.metabolicAgeYears, 0) : "–"}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </div>
             ) : anthropometricPending ? (
               <p className="text-sm text-muted-foreground text-center py-4">
                 Messwerte werden synchronisiert.
