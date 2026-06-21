@@ -301,9 +301,10 @@ const SGA_QUESTIONS = [
 interface PatientTabsProps {
   patient: Patient
   initialData?: PatientWorkspaceData | null
+  newMeasurementRequest?: number
 }
 
-export function PatientTabs({ patient, initialData }: PatientTabsProps) {
+export function PatientTabs({ patient, initialData, newMeasurementRequest }: PatientTabsProps) {
   const { getPatient, updatePatient } = usePatients({ initialPatients: [patient] })
   const currentPatient = getPatient(patient.id) ?? patient
   const {
@@ -966,6 +967,12 @@ export function PatientTabs({ patient, initialData }: PatientTabsProps) {
   const initialTabParam = searchParams.get("tab")
   const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "workflow"
   const [activeTab, setActiveTab] = useState(initialTab)
+  useEffect(() => {
+    if (newMeasurementRequest == null) return
+    setActiveTab("anthropometrie")
+    setShowAnthroForm(true)
+  }, [newMeasurementRequest])
+
   const profileTriggerValue = PROFILE_TAB_VALUES.includes(activeTab as (typeof PROFILE_TAB_VALUES)[number])
     ? activeTab
     : "stammdaten"

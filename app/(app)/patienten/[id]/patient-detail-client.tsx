@@ -4,7 +4,7 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { Loader2, Pencil, Trash2 } from "lucide-react"
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -53,6 +53,7 @@ export function PatientDetailClient({
   })
   const { loading: authLoading, isAuthenticated } = useAuth()
   const [isDeleting, setIsDeleting] = useState(false)
+  const [newMeasurementRequest, setNewMeasurementRequest] = useState<number>()
   const patient = initialData?.patient ?? getPatient(patientId)
   const resolvedInitialData = initialData?.patient ? initialData : undefined
 
@@ -99,6 +100,10 @@ export function PatientDetailClient({
         description={getPatientDescription(patient)}
       >
         <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setNewMeasurementRequest(Date.now())}>
+            <Plus className="mr-2 h-4 w-4" />
+            Messwerte hinzufügen
+          </Button>
           <Button variant="outline" asChild>
             <Link href={`/patienten/${patient.id}/bearbeiten`}>
               <Pencil className="mr-2 h-4 w-4" />
@@ -137,7 +142,11 @@ export function PatientDetailClient({
           </AlertDialog>
         </div>
       </PageHeader>
-      <PatientTabs patient={patient} initialData={resolvedInitialData} />
+      <PatientTabs
+        patient={patient}
+        initialData={resolvedInitialData}
+        newMeasurementRequest={newMeasurementRequest}
+      />
     </div>
   )
 }
