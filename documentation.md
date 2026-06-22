@@ -49,7 +49,7 @@ Agent quick index:
 - **Supabase-First Persistence:** 
   - **Patients, Recipes, Meal Plans, Institution Menu Plans, Protocols, Invoices, Appointments:** All have full backend persistence.
   - **Counseling workflow:** Counseling sessions and counseling templates now persist in Supabase with local fallback and login-time migration from older local-only browser data.
-  - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
+  - **Patient clinical workspace:** Anthropometrics, diagnoses, medications, screenings, lab values, activities, and digital protocol links are all persisted in Supabase with automatic local fallback and login-time migration.
   - **Digital protocol submissions:** Public patient diary submissions are persisted in `digital_protocol_submissions` and can be marked `new`, `reviewed`, or `converted` with an attached `converted_protocol_id`.
   - **Still local-only in the patient workspace:** Demo analytics panels and assistant cards remain client-side only unless otherwise noted.
   - **Auto-Migration:** Hooks migrate dirty local data to Supabase on login where that behavior is implemented.
@@ -117,10 +117,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.6 Patient Detail (`/patienten/[id]` + nested tabs)
 - **Clinical record core:**
-  - Anthropometrie, Diagnosen, Medikamente, Screening history, Laborwerte, Aktivität, Therapiemodule/-integrationen, PROCAM, and digitale Protokoll-Links now use Supabase-first persistence with offline `localStorage` fallback.
+  - Anthropometrie, Diagnosen, Medikamente, Screening history, Laborwerte, Aktivität, and digitale Protokoll-Links now use Supabase-first persistence with offline `localStorage` fallback.
   - The patient-detail tabs show sync-aware empty states while remote data is loading after authentication.
   - The patient detail header exposes a confirmed `Löschen` action. `usePatients.deletePatient()` removes the local row optimistically, deletes the Supabase patient record when authenticated, and restores the local row if the remote delete fails.
-  - Medical calculators (Creatinine Clearance, MNA, SGA) are fully integrated. Cockcroft-Gault now supports `mg/dL` and `µmol/L`, stores structured calculation metadata in the lab record, and shows the applied weight basis. MNA covers the full 18-item form, and SGA stores the expanded history/physical assessment answers in `patient_screenings`.
   - The patient workspace now exposes a patient-bound `ReferenceProfileSelector`, so protocol analysis and related comparisons use the same persisted reference assignment for that patient.
   - Reference standard/life-stage and energy needs are consolidated into one **Referenzwerte & Energiebedarf** card in the `Aktivität & Energie` tab: the `ReferenceProfileSelector` sits above a Grundumsatz × PAL = Tagesbedarf breakdown (Mifflin-St Jeor BMR). The PAL factor persists per patient on `patient_reference_assignments.pal_value` (added in `20260604000053_patient_reference_pal.sql`) via `useReferenceProfiles().setPal`, defaulting to `1.4` when unset; a "Gespeichert"/"Standardwert" badge reflects persistence state.
 - **Digital Protocols:**
@@ -328,7 +327,6 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **DB:** `patient_allergens` table (migration `20260507000023`)
 - **Constants:** `ALLERGEN_DEFINITIONS` — EU 14 mandatory allergens + histamine, fructose, sorbit intolerances. Each entry has `foodMatchTokens` for matching against free-text allergen strings on foods/recipes.
 - **Patient UI:** In the patient `Assessment` tab under `Diagnosen & Medikamente` (`components/patient-tabs.tsx`), a dedicated "Allergien & Intoleranzen" card lets counselors add/remove allergen entries with type (allergy/intolerance/preference) and severity (mild/moderate/severe). Entries display as color-coded badges.
-- **Therapy tab:** `AllergenAutomationCard` (`components/therapy-panels.tsx`) shows a read-only view of the patient's allergen profile.
 - **Meal plan warnings:** When a `patientId` query param is provided on `/ernaehrungsplan`, the day view aggregates conflicts in a severity-coded banner (`PlanAllergenBanner`), shows per-entry warning icons, and blocks adding entries that match a `severe`-severity allergen behind a confirmation dialog. Moderate/mild matches surface as severity-aware toasts.
 - **Food/Recipe detail:** `FoodDetailContent` and `RecipeDetailContent` accept optional `patientAllergens` prop. When conflicts are detected, a destructive Alert is shown above allergen badges.
 - **Recipe form:** `RECIPE_ALLERGENS` sourced from `ALLERGEN_DEFINITIONS` (EU 14 only).
@@ -382,7 +380,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Fallback behavior:** The pages no longer own local mock analytics datasets or server-side canned institution records. They render from shared derived data and show an empty state when no active cycle is available.
 
 ### 4.22 Patient Workflow Hub (`/patienten/[id]`)
-- **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab. The patient record uses six top-level tabs: `Workflow`, `Profil`, `Assessment`, `Therapien`, `Ernährung`, and `Beratung`.
+- **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab. The patient record uses five top-level tabs: `Workflow`, `Profil`, `Ernährung`, `Beratung`, and `Statistiken`.
 - **Purpose:** Present the investor/demo-ready ambulatory patient journey in one place without introducing a new backend workflow entity.
 - **Core component:** `components/patient-workflow-tab.tsx`.
 - **Derived stages:** `Intake`, `Assessment`, `Plan`, `Report`, `Follow-up`.
@@ -393,7 +391,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Renders `Intake → Assessment → Plan → Follow-up` as a compact treatment-path strip instead of large repeated cards.
   - Aggregates a single activity timeline from digital submissions, protocols, counseling milestones, patient plans, and follow-up appointments.
   - Keeps plan creation as a contextual action on the `Plan` step; the full plan archive lives only in the dedicated patient `Ernährungspläne` tab.
-- **Patient tab grouping:** `Profil` groups Stammdaten plus Anthropometrie, Diagnosen & Medikamente, Laborwerte, and Aktivität & Energie as second-level tabs; `Ernährung` groups Ernährungspläne and Protokolle as second-level tabs; `Therapien` and `Beratung` (Sitzungen only) remain direct top-level work areas; `Statistiken` (`components/patient-stats-tab.tsx`) shows weight/BMI/activity analytics.
+- **Patient tab grouping:** `Profil` groups Stammdaten plus Anthropometrie, Diagnosen & Medikamente, Laborwerte, and Aktivität & Energie as second-level tabs; `Ernährung` groups Ernährungspläne and Protokolle as second-level tabs; `Beratung` (Sitzungen only) remains a direct top-level work area; `Statistiken` (`components/patient-stats-tab.tsx`) shows weight/BMI/activity analytics.
 - **Patient Ernährungspläne tab:** `components/patient-meal-plans-tab.tsx` lists all `daily_meal_plans` assigned to the patient, with status, date, diet line, entry count, kcal/EW/F/KH/BE summaries, notes, and direct actions to open in `/ernaehrungsplan`, duplicate to the next free date for the same patient, copy as a new draft for another patient, archive, delete non-approved plans, create a new plan, or jump to plan comparison. The cross-patient copy dialog requires target patient and date, blocks patient/date collisions, clears approval metadata, and optionally carries over notes and diet line. Patient workspace loading hydrates only foods referenced by the patient plans and their recipes, using the macro nutrient subset required for those summaries. `usePatientMealPlans()` treats server-provided plans as initial render data and still refreshes from Supabase on mount, so plans saved from `/ernaehrungsplan?patientId=...` appear after navigation without a hard reload.
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
 - **Plan handoff:** `/ernaehrungsplan` accepts `patientId` and `date` query params so patient workflow links can open or create the exact patient plan date.

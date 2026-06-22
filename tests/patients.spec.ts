@@ -406,7 +406,6 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("tab", { name: "Workflow" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Assessment" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Therapien" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Ernährung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Beratung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
@@ -543,32 +542,6 @@ test.describe("Patient Management", () => {
     }
   });
 
-  test("persists screenings across reload", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Screening", lastName: "Persist" });
-
-    try {
-      await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Therapien" }).click();
-
-      const mustCard = page.locator("div.rounded-lg.border.p-3").filter({ hasText: "MUST" }).first();
-      await mustCard.getByRole("button", { name: "Ergebnis speichern" }).click();
-
-      await expect(page.getByText(/MUST · Score/i)).toBeVisible();
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ tool: string }>("patient_screenings", patient.id);
-          return rows.some((row) => row.tool === "MUST");
-        })
-        .toBe(true);
-
-      await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Therapien" }).click();
-      await expect(page.getByText(/MUST · Score/i)).toBeVisible();
-    } finally {
-      await deletePatientFixture(patient.id);
-    }
-  });
-
   test("creates lab values via UI and persists to Supabase", async ({ page }) => {
     const patient = await createPatientFixture({ firstName: "Lab", lastName: "Persist" });
 
@@ -664,118 +637,6 @@ test.describe("Patient Management", () => {
       await expect(page.getByText(/Nordic Walking/i)).toBeVisible();
     } finally {
       await deleteClinicalRows("patient_activities", patient.id).catch(() => {});
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("persists therapy modules and status changes across reload", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Therapy", lastName: "Persist" });
-
-    try {
-      await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Therapien" }).click();
-
-      await page.getByRole("button", { name: "Modul hinzufügen" }).click();
-      await expect(page.getByText("Diabetes-Modul")).toBeVisible();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ module: string; status: string }>(
-            "patient_therapy_settings",
-            patient.id,
-          );
-          return rows.some((row) => row.module === "diabetes" && row.status === "active");
-        })
-        .toBe(true);
-
-      await page.getByRole("switch").first().click();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ module: string; status: string }>(
-            "patient_therapy_settings",
-            patient.id,
-          );
-          return rows.some((row) => row.module === "diabetes" && row.status === "paused");
-        })
-        .toBe(true);
-
-      await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Therapien" }).click();
-      await expect(page.getByText("Diabetes-Modul")).toBeVisible();
-      await expect(page.getByText("Pausiert")).toBeVisible();
-    } finally {
-      await deleteClinicalRows("patient_therapy_settings", patient.id).catch(() => {});
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("persists therapy integrations and sync updates across reload", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Integration", lastName: "Persist" });
-
-    try {
-      await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Therapien" }).click();
-
-      await page.getByRole("button", { name: "CGM koppeln" }).click();
-      await expect(page.getByText(/^LibreLink$/).first()).toBeVisible();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ vendor: string; status: string }>(
-            "patient_therapy_integrations",
-            patient.id,
-          );
-          return rows.some((row) => row.vendor === "LibreLink" && row.status === "pending");
-        })
-        .toBe(true);
-
-      await page.getByRole("button", { name: "Sync anstoßen" }).click();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ vendor: string; status: string; last_sync: string | null }>(
-            "patient_therapy_integrations",
-            patient.id,
-          );
-          return rows.some(
-            (row) => row.vendor === "LibreLink" && row.status === "connected" && Boolean(row.last_sync),
-          );
-        })
-        .toBe(true);
-
-      await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Therapien" }).click();
-      await expect(page.getByText("LibreLink")).toBeVisible();
-      await expect(page.getByText("Verbunden")).toBeVisible();
-    } finally {
-      await deleteClinicalRows("patient_therapy_integrations", patient.id).catch(() => {});
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("persists PROCAM results across reload", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Procam", lastName: "Persist" });
-
-    try {
-      await openPatientDetail(page, patient);
-      await page.getByRole("tab", { name: "Therapien" }).click();
-
-      await page.getByRole("button", { name: "PROCAM speichern" }).click();
-      await expect(page.getByRole("table")).toBeVisible();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ score: string }>("patient_procam_results", patient.id);
-          return rows.length > 0 && Number(rows[0].score) > 0;
-        })
-        .toBe(true);
-
-      await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("tab", { name: "Therapien" }).click();
-      await expect(page.getByRole("table")).toContainText(/low|moderate|high/i);
-    } finally {
-      await deleteClinicalRows("patient_procam_results", patient.id).catch(() => {});
       await deletePatientFixture(patient.id);
     }
   });

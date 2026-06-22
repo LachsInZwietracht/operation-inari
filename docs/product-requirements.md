@@ -168,8 +168,6 @@ Product direction:
 - **Screenings** — MUST, NRS-2002, MNA, and SGA results now persist in Supabase with offline fallback and login-time migration.
 - **Lab values** — patient laboratory measurements now persist in Supabase with offline fallback and login-time migration.
 - **Activities** — activity and energy entries now persist in Supabase with offline fallback and login-time migration.
-- **Therapy settings/integrations** — module states, target payloads, and device sync metadata now persist in Supabase with offline fallback and login-time migration.
-- **PROCAM** — cardiovascular risk assessments now persist in Supabase with offline fallback and login-time migration.
 - **Digital protocol links** — generated protocol links and status updates now persist in Supabase with offline fallback and login-time migration.
 
 ---

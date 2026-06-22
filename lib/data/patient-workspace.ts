@@ -12,11 +12,8 @@ import type {
   Patient,
   PatientAllergenEntry,
   PracticeAppointment,
-  ProcamResult,
   Recipe,
   ScreeningResult,
-  TherapyDeviceIntegration,
-  TherapySetting,
   DailyMealPlan,
   Food,
 } from "@/lib/types"
@@ -35,12 +32,9 @@ import { fetchMealPlans } from "@/lib/data/meal-plans"
 import { fetchFoodsByIds } from "@/lib/data/foods"
 import { fetchRecipes } from "@/lib/data/recipes"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
-import { fetchProcamResultsClient } from "@/lib/data/patient-procam-client"
 import { fetchProtocolsClient } from "@/lib/data/protocols-client"
 import { fetchScreeningsClient } from "@/lib/data/patient-screenings-client"
 import { fetchSubmissionsForPatientClient } from "@/lib/data/digital-protocol-submissions-client"
-import { fetchTherapyIntegrationsClient } from "@/lib/data/patient-therapy-integrations-client"
-import { fetchTherapySettingsClient } from "@/lib/data/patient-therapy-settings-client"
 import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 
 export interface PatientWorkspaceData {
@@ -60,11 +54,8 @@ export interface PatientWorkspaceData {
   mealPlans: DailyMealPlan[]
   mealPlanFoods: Food[]
   recipes: Recipe[]
-  procamResults: ProcamResult[]
   protocols: NutritionProtocol[]
   screenings: ScreeningResult[]
-  therapyIntegrations: TherapyDeviceIntegration[]
-  therapySettings: TherapySetting[]
 }
 
 async function orEmpty<T>(promise: Promise<T[]>, label: string): Promise<T[]> {
@@ -143,11 +134,8 @@ export async function fetchPatientWorkspaceData(
       mealPlans: [],
       mealPlanFoods: [],
       recipes: [],
-      procamResults: [],
       protocols: [],
       screenings: [],
-      therapyIntegrations: [],
-      therapySettings: [],
     }
   }
 
@@ -189,11 +177,8 @@ export async function fetchPatientWorkspaceData(
     patientAllergens,
     mealPlans,
     recipes,
-    procamResults,
     protocols,
     screenings,
-    therapyIntegrations,
-    therapySettings,
   ] = await Promise.all([
     orEmpty(fetchActivitiesClient(supabase), "activities"),
     orEmpty(fetchAnthropometricEntriesClient(supabase), "anthropometrics"),
@@ -208,11 +193,8 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
     orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
     orEmpty(fetchRecipes({ supabase }), "recipes"),
-    orEmpty(fetchProcamResultsClient(supabase), "PROCAM results"),
     orEmpty(fetchProtocolsClient(supabase, { patientRefs }), "protocols"),
     orEmpty(fetchScreeningsClient(supabase), "screenings"),
-    orEmpty(fetchTherapyIntegrationsClient(supabase), "therapy integrations"),
-    orEmpty(fetchTherapySettingsClient(supabase), "therapy settings"),
   ])
 
   const patientMealPlans = filterForPatient(mealPlans, patient)
@@ -265,10 +247,7 @@ export async function fetchPatientWorkspaceData(
     mealPlans: patientMealPlans,
     mealPlanFoods,
     recipes: mealPlanRecipes,
-    procamResults: filterForPatient(procamResults, patient),
     protocols: filterForPatient(protocols, patient),
     screenings: filterForPatient(screenings, patient),
-    therapyIntegrations: filterForPatient(therapyIntegrations, patient),
-    therapySettings: filterForPatient(therapySettings, patient),
   }
 }
