@@ -1034,9 +1034,9 @@ async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> 
  * Call this after ETL imports or custom food changes.
  */
 export async function revalidateAllFoods() {
-  revalidateTag(CACHE_TAGS.FOODS);
-  revalidateTag(CACHE_TAGS.BLS);
-  revalidateTag(CACHE_TAGS.SEARCH);
+  revalidateTag(CACHE_TAGS.FOODS, "max");
+  revalidateTag(CACHE_TAGS.BLS, "max");
+  revalidateTag(CACHE_TAGS.SEARCH, "max");
 }
 
 /**

@@ -1,12 +1,12 @@
 "use client"
 
 import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { typedZodResolver } from "@/lib/forms"
 import {
   Form,
   FormControl,
@@ -52,7 +52,7 @@ export function AnthropometricForm({
   onCancel,
 }: AnthropometricFormProps) {
   const form = useForm<AnthroFormValues>({
-    resolver: zodResolver(anthroSchema),
+    resolver: typedZodResolver(anthroSchema),
     defaultValues: {
       date: format(new Date(), "yyyy-MM-dd"),
       weight: 0,

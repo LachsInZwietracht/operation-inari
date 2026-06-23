@@ -107,11 +107,13 @@ export function PediatricPercentileChart({ entries, gender, birthDate }: Pediatr
               label={{ value: metricLabel, angle: -90, position: "insideLeft", offset: -5 }}
             />
             <Tooltip
-              formatter={(value: number, name: string) => {
-                if (name === "Patient") return [`${value.toFixed(1)} ${valueUnit}`, "Patient"]
-                return [`${Number(value).toFixed(1)} ${valueUnit}`, name]
+              formatter={(value: unknown, name: unknown) => {
+                const numericValue = Number(value ?? 0)
+                const label = String(name ?? "")
+                if (label === "Patient") return [`${numericValue.toFixed(1)} ${valueUnit}`, "Patient"]
+                return [`${numericValue.toFixed(1)} ${valueUnit}`, label]
               }}
-              labelFormatter={(value: number) => `${value.toFixed(1)} Jahre`}
+              labelFormatter={(value: unknown) => `${Number(value ?? 0).toFixed(1)} Jahre`}
             />
             <Legend />
             {PERCENTILE_KEYS.map((key) => (
