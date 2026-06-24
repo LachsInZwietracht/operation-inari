@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
 import { FileText } from "lucide-react"
@@ -31,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CounselingTemplatePicker } from "@/components/counseling-template-picker"
 
 import { INDICATION_OPTIONS, COUNSELING_DURATION_OPTIONS } from "@/lib/constants"
+import { typedZodResolver } from "@/lib/forms"
 import type { CounselingSession } from "@/lib/types"
 
 const sessionSchema = z.object({
@@ -65,7 +65,7 @@ export function CounselingSessionForm({
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
 
   const form = useForm<SessionFormValues>({
-    resolver: zodResolver(sessionSchema),
+    resolver: typedZodResolver(sessionSchema),
     defaultValues: {
       date: format(new Date(), "yyyy-MM-dd"),
       duration: 45,

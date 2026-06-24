@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Trash2, Flame, Drumstick, Droplet, Wheat, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -45,6 +44,7 @@ import { fetchFoodsByIds } from "@/lib/data/foods-client";
 import { deriveRecipeAllergens, computeIngredientCo2 } from "@/lib/allergen-derivation";
 import { normalizeAdditiveCode } from "@/lib/additives";
 import { AdditivePicker } from "@/components/additive-picker";
+import { typedZodResolver } from "@/lib/forms";
 
 const UNIQUE_CATEGORIES = [
   "Suppe",
@@ -130,7 +130,7 @@ export function RecipeForm({ recipe, isEditing }: RecipeFormProps) {
     recipe?.instructions.map((s) => ({ value: s })) ?? [{ value: "" }], [recipe]);
 
   const form = useForm<RecipeFormValues>({
-    resolver: zodResolver(recipeSchema),
+    resolver: typedZodResolver(recipeSchema),
     defaultValues: {
       name: recipe?.name ?? "",
       description: recipe?.description ?? "",

@@ -490,19 +490,21 @@ export function PlanVergleichClient({
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip
                       cursor={{ fill: "var(--color-muted)", opacity: 0.3 }}
-                      formatter={(value: number) =>
-                        chartNutrient
+                      formatter={(value: unknown) => {
+                        const numericValue = Number(value ?? 0);
+
+                        return chartNutrient
                           ? [
-                              `${formatNumber(value, nutrientDecimals(value, chartNutrient.unit))} ${chartNutrient.unit}`,
+                              `${formatNumber(numericValue, nutrientDecimals(numericValue, chartNutrient.unit))} ${chartNutrient.unit}`,
                               chartNutrient.name,
                             ]
-                          : [value, ""]
-                      }
-                      labelFormatter={(label: string, payload) => {
+                          : [numericValue, ""];
+                      }}
+                      labelFormatter={(label: unknown, payload) => {
                         const point = payload?.[0]?.payload as
                           | { title?: string }
                           | undefined;
-                        return point?.title ?? label;
+                        return point?.title ?? String(label ?? "");
                       }}
                       contentStyle={{
                         background: "var(--color-background)",

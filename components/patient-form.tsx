@@ -55,7 +55,7 @@ const patientSchema = z.object({
   firstName: z.string().min(1, "Vorname ist erforderlich"),
   lastName: z.string().min(1, "Nachname ist erforderlich"),
   dateOfBirth: z.string().min(1, "Geburtsdatum ist erforderlich"),
-  gender: z.enum(["m", "w", "d"] as const, { required_error: "Geschlecht ist erforderlich" }),
+  gender: z.enum(["m", "w", "d"] as const),
   email: z.string().email("Ungültige E-Mail-Adresse").or(z.literal("")),
   phone: z.string(),
   street: z.string(),

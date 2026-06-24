@@ -161,7 +161,7 @@ export function InstitutionStatistikenClient({ analytics }: InstitutionStatistik
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" />
                   <YAxis type="category" dataKey="dietFormName" width={110} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value: number) => [`${value} Zuordnungen`, "Anzahl"]} />
+                  <Tooltip formatter={(value: unknown) => [`${Number(value ?? 0)} Zuordnungen`, "Anzahl"]} />
                   <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -206,7 +206,7 @@ export function InstitutionStatistikenClient({ analytics }: InstitutionStatistik
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" />
                   <YAxis type="category" dataKey="recipeName" width={130} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value: number) => [`${value} Bestellungen`, "Anzahl"]} />
+                  <Tooltip formatter={(value: unknown) => [`${Number(value ?? 0)} Bestellungen`, "Anzahl"]} />
                   <Bar dataKey="count" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -289,7 +289,7 @@ export function InstitutionStatistikenClient({ analytics }: InstitutionStatistik
                   <XAxis dataKey="day" />
                   <YAxis yAxisId="left" />
                   <YAxis yAxisId="right" orientation="right" />
-                  <Tooltip formatter={(value: number, name: string) => [`${formatNumber(value, 2)} €`, name]} />
+                  <Tooltip formatter={(value: unknown, name: unknown) => [`${formatNumber(Number(value ?? 0), 2)} €`, String(name ?? "")]} />
                   <Legend />
                   <Line yAxisId="left" type="monotone" dataKey="Tageskosten" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={{ r: 4 }} />
                   <Line yAxisId="right" type="monotone" dataKey="Kosten/Portion" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={{ r: 4 }} />

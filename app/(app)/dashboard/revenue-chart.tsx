@@ -27,7 +27,7 @@ export function RevenueChart({ data }: { data: RevenueChartDataPoint[] }) {
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
         <YAxis />
-        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+        <Tooltip formatter={(value: unknown) => formatCurrency(Number(value ?? 0))} />
         <Legend />
         <Bar
           dataKey="bezahlt"

@@ -1,7 +1,6 @@
 "use client";
 
 import { useFieldArray, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { Layers3, Plus } from "lucide-react";
@@ -31,6 +30,7 @@ import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { FOOD_SOURCES } from "@/lib/data/food-sources";
 import { normalizeAdditiveCode } from "@/lib/additives";
 import { AdditivePicker } from "@/components/additive-picker";
+import { typedZodResolver } from "@/lib/forms";
 import type { Food, FoodSourceId } from "@/lib/types";
 
 const ALLERGENS = [
@@ -76,7 +76,7 @@ export function NeuesLebensmittelPageClient() {
   const { addFood } = useCustomFoods(EMPTY_BASE_FOODS);
 
   const form = useForm<z.infer<typeof nutrientSchema>>({
-    resolver: zodResolver(nutrientSchema),
+    resolver: typedZodResolver(nutrientSchema),
     defaultValues: {
       name: "",
       categoryId: FOOD_CATEGORIES[0]?.id ?? "",

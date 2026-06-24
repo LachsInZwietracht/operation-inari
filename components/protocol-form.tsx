@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, useFieldArray } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { differenceInYears } from "date-fns"
 import { Check, Info, ListChecks, Loader2, Plus, Search, Sparkles, Trash2, Zap } from "lucide-react"
@@ -72,6 +71,7 @@ import {
 import { PROTOCOL_TEMPLATES } from "@/lib/protocol-templates"
 import { usePatients } from "@/hooks/use-patients"
 import { useFoods } from "@/components/foods-provider"
+import { typedZodResolver } from "@/lib/forms"
 import { matchSmartInputMulti, type SmartMatchResultSet } from "@/lib/nlp-matching"
 
 const entrySchema = z.object({
@@ -115,7 +115,7 @@ const protocolSchema = z
     }
   })
 
-type ProtocolFormValues = z.input<typeof protocolSchema>
+type ProtocolFormValues = z.infer<typeof protocolSchema>
 
 interface ProtocolFormProps {
   patientId: string
@@ -216,7 +216,7 @@ export function ProtocolForm({
   }, [initialValues, patient?.gender, patientAge, selectedTemplate])
 
   const form = useForm<ProtocolFormValues>({
-    resolver: zodResolver(protocolSchema),
+    resolver: typedZodResolver(protocolSchema),
     defaultValues,
   })
 

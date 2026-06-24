@@ -76,7 +76,9 @@ export function buildFileResponse(payload: Buffer | string, options: {
   disposition?: "attachment" | "inline";
   headers?: Record<string, string>;
 }) {
-  return new Response(payload, {
+  const body = payload as unknown as BodyInit;
+
+  return new Response(body, {
     headers: {
       "content-type": options.contentType,
       "content-disposition": `${options.disposition ?? "attachment"}; filename="${options.fileName}"`,

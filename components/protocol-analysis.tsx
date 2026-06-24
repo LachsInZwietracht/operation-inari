@@ -419,7 +419,7 @@ export function ProtocolAnalysis({ protocol, gender = "w", dateOfBirth }: Protoc
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value: number) => `${Math.round(value)} kcal`} />
+                  <Tooltip formatter={(value: unknown) => `${Math.round(Number(value ?? 0))} kcal`} />
                   <Line type="monotone" dataKey="value" stroke="var(--color-chart-1)" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
