@@ -27,7 +27,6 @@ For detailed technical implementation guides, architectural overview, and featur
 - [Documentation Index](./docs/README.md)
 - [Feature Implementation Guide](./documentation.md)
 - [Database & ETL Guide](./docs/database-guide.md)
-- [Product Requirements](./docs/product-requirements.md)
 - [Competitive Audit](./docs/competitive-audit.md)
 
 Recent platform changes:

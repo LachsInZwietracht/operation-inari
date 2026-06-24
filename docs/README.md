@@ -11,8 +11,7 @@ Use this file to decide which documentation to read before editing. Do not load 
 1. Code, migrations, tests, and package files are authoritative.
 2. `documentation.md` maps implemented routes, components, hooks, and workflows.
 3. `docs/database-guide.md` explains Supabase, ETL, food data, search, and schema architecture.
-4. `docs/product-requirements.md` captures product direction and roadmap intent.
-5. `docs/competitive-audit.md` captures market and competitor strategy.
+4. `docs/competitive-audit.md` captures market and competitor strategy.
 
 When docs conflict with code, inspect the implementation and update the stale doc if the task changes documented behavior.
 
@@ -23,9 +22,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Current #1 product priority and acceptance lens | `docs/user-priority-feedback.md` | Direct PRODI-user requirements; align all prioritization here first. |
 | App routes, workflows, components, hooks | `documentation.md` | Use as a map, then verify code. |
 | Clinic demo path and hardening priorities | `docs/clinic-demo-runbook.md` | Repeatable buyer-demo path from intake to kitchen; includes open demo risks. |
-| Open development tasks and next sprint | `docs/development-backlog.md` | Execution backlog; verify code before starting. |
 | Supabase schema, RLS, migrations, ETL, food data | `docs/database-guide.md` | Migrations remain the schema source of truth. |
-| Product scope, roadmap, prioritization | `docs/product-requirements.md` | Product intent, not implementation proof. |
 | Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Strategy input only. |
 | Clinic IT integrations: LDAP/AD, HL7, FHIR | `docs/clinic-it-integration-plan.md` | P1 integration contracts and implementation boundaries. |
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
@@ -43,9 +40,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 - `docs/user-priority-feedback.md` - current #1 product guideline from a PRODI user; primary prioritization lens.
 - `documentation.md` - feature implementation guide.
 - `docs/clinic-demo-runbook.md` - repeatable clinic-first demo path and demo-hardening checklist.
-- `docs/development-backlog.md` - current open development backlog and recommended next sprint.
 - `docs/database-guide.md` - database, ETL, nutrition data, search, and performance guide.
-- `docs/product-requirements.md` - roadmap and requirements direction.
 - `docs/competitive-audit.md` - April 2026 competitor and gap audit.
 - `docs/clinic-it-integration-plan.md` - LDAP/AD mapping, HL7 MVP, and first FHIR sync boundary.
 

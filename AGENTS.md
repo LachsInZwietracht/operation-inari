@@ -26,9 +26,8 @@ Use this order when facts conflict:
 1. Current code, migrations, tests, and package files.
 2. `documentation.md` for implemented feature map and workflows.
 3. `docs/database-guide.md` for Supabase, ETL, food data, search, and schema context.
-4. `docs/product-requirements.md` for roadmap and product intent.
-5. `docs/competitive-audit.md` for market/strategy context.
-6. `.agent/docs/*` for agent playbooks and vendor-specific working notes.
+4. `docs/competitive-audit.md` for market/strategy context.
+5. `.agent/docs/*` for agent playbooks and vendor-specific working notes.
 
 Start with `docs/README.md` when you need to decide which documentation to read.
 
@@ -133,7 +132,6 @@ If a check is too expensive or blocked by environment, report it explicitly.
 - Current #1 product priority and acceptance lens: `docs/user-priority-feedback.md`.
 - Feature routes, components, hooks, and workflows: `documentation.md`.
 - Database schema, migrations, ETL, food data, search, performance constraints: `docs/database-guide.md`.
-- Product goals, roadmap, scope, and prioritization: `docs/product-requirements.md`.
 - Competitors, clinic-first strategy, and market gaps: `docs/competitive-audit.md`.
 - Supabase workflow notes: `.agent/docs/supabase.md`.
 - Billing/subscription status: `.agent/docs/billing.md`.

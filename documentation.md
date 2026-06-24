@@ -11,7 +11,6 @@ Precedence:
 - Code and migrations are the source of truth.
 - Use this guide as a map, not as permission to assume behavior without checking the implementation.
 - `docs/database-guide.md` is authoritative for nutrition-data and Supabase schema details.
-- `docs/product-requirements.md` is a roadmap and product-intent document, not an implementation spec.
 
 Working assumptions:
 - Production UI lives under `app/(app)`.
