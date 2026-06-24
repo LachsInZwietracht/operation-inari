@@ -3,11 +3,8 @@
 import Link from "next/link"
 import { useMemo } from "react"
 import {
-  Activity,
   ArrowRight,
-  CheckCircle2,
   ClipboardCheck,
-  Clock3,
   Plus,
 } from "lucide-react"
 
@@ -172,9 +169,6 @@ export function PatientWorkflowTab({
   mealPlans: initialMealPlans,
   onGenerateLink,
   onMarkSubmissionReviewed,
-  isLoadingSubmissions,
-  digitalLinksPending,
-  counselingPending,
 }: PatientWorkflowTabProps) {
   const {
     plans: patientMealPlans,
@@ -588,50 +582,6 @@ export function PatientWorkflowTab({
               )
             })}
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Aktivität</CardTitle>
-          <CardDescription>Eine gemeinsame Timeline für Intake, Protokolle, Beratung, Pläne und Termine.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {timelineEvents.length > 0 ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {timelineEvents.map((event) => (
-                <div key={event.id} className="flex min-w-0 gap-3 rounded-md border p-3">
-                  <div className="mt-0.5 shrink-0">
-                    {event.tone === "success" ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    ) : event.tone === "warning" ? (
-                      <Clock3 className="h-4 w-4 text-amber-600" />
-                    ) : (
-                      <Activity className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{event.title}</p>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{formatDate(event.date)}</span>
-                      {event.href ? (
-                        <Link href={event.href} prefetch={false} className="font-medium text-foreground hover:underline">
-                          Öffnen
-                        </Link>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : isLoadingSubmissions || digitalLinksPending || counselingPending ? (
-            <p className="text-sm text-muted-foreground">Workflow-Daten werden synchronisiert.</p>
-          ) : (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Noch keine Workflow-Aktivität vorhanden. Der erste Eintrag entsteht durch Intake-Link, Protokoll, Beratung oder Plan.
-            </p>
-          )}
         </CardContent>
       </Card>
 
