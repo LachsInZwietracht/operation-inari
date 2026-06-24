@@ -18,8 +18,8 @@ Show Operation Prodi as a cloud-native German clinical nutrition workflow:
 
 1. A patient enters nutrition data remotely.
 2. The dietitian reviews and converts it into an internal protocol.
-3. The clinical workspace turns assessment data into counseling and reports.
-4. The report is exported, archived, and audit-visible.
+3. The clinical workspace turns assessment data into counseling and meal-plan outputs.
+4. A plan export is generated and audit-visible through export metadata.
 5. The same patient can be assigned to an inpatient meal workflow.
 6. Kitchen orders, allergen conflicts, overrides, production status, and tray cards are traceable.
 
@@ -193,8 +193,8 @@ P0 demo hardening:
 
 P1 clinic readiness:
 - Add outbound webhook retry workers and operational retry visibility for failed integration deliveries.
-- Extend the HL7 review/admin surface with richer mapping suggestions, patient-match decisions, and FHIR dry-run reuse.
 - Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
+- Reuse the HL7 job/review surfaces for FHIR Patient/Observation dry runs.
 
 P2 product depth:
 - Extend patient portal/PWA beyond diary entry to report delivery, reminders, meal-plan feedback, and secure messages.

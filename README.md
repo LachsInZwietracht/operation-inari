@@ -9,7 +9,7 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 - **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, protocols, meal plans, and the core patient clinical record with automatic cloud sync and local fallback.
 - **Smart Food Search:** Hybrid search engine combining local fuzzy matching with server-side trigram search across 7,000+ items.
 - **AI-Assisted Entry:** NLP-assisted food entry ("Smart-Eingabe") for rapid dietary assessment and protocol management.
-- **Professional Tools:** Pediatric percentile charts, PROCAM screening, real PDF/CSV exports for reports and patient documents, and an eGK demo workflow for patient intake simulations.
+- **Professional Tools:** Pediatric percentile charts, PROCAM screening, plan PDF/CSV exports, patient document mail-merge PDFs, and an eGK demo workflow for patient intake simulations.
 
 ## 🛠 Tech Stack
 
@@ -29,22 +29,13 @@ For detailed technical implementation guides, architectural overview, and featur
 - [Database & ETL Guide](./docs/database-guide.md)
 - [Competitive Audit](./docs/competitive-audit.md)
 
-Recent platform changes:
-- `/patienten/[id]` now opens on a new Workflow hub that orchestrates intake, assessment, planning, reporting, and follow-up from existing patient data with guided deep links.
-- Reports (`/berichte`) now generate real server-side PDF and CSV exports.
-- `/berichte` now accepts patient-aware workflow handoff via query params, shows the patient context in the UI, and safely preselects a passed meal plan when available.
-- Patient-bound reports now keep immutable export history: each patient export creates a versioned snapshot plus a stored PDF/CSV file in private Supabase Storage, and archived history reopens via `/berichte?reportVersionId=...`.
-- Patient mail merge on `/patienten` now produces branded PDF bundles instead of placeholder text downloads.
-- `API & Export` now creates real export jobs and reads persisted history from Supabase.
-- `/referenzwerte` now resolves DGE/ÖGE/SGE/RDA values from Supabase, supports persisted custom profiles, and stores user defaults plus patient-specific assignments.
-- The full patient workspace on `/patienten/[id]` now persists to Supabase, including anthropometrics, diagnoses, medications, screenings, lab values, activities, therapy settings/integrations, PROCAM results, and digital protocol links.
-- Counseling sessions and counseling templates now persist to Supabase with local fallback and login-time migration from prior local-only data.
-- Patient medical calculators now include unit-aware Cockcroft-Gault clearance plus full MNA and expanded SGA documentation, with structured persistence in screenings/lab values.
-- Digital protocol submissions now support the full practitioner workflow: public patient entry, dashboard review, conversion into a prefilled internal protocol draft, and server-tracked converted state.
-- `/institution/krankenhaus` now runs a real inpatient meal workflow with persisted bed assignments, safe staff-side meal selection, kitchen aggregation, and printable tray cards.
-- `/institution/compliance` and `/institution/statistiken` now derive live institutional analytics from the active menu cycle, meal orders, inpatient stays, and patient allergen constraints instead of page-local mock KPI datasets.
-- `/lebensmittel` now uses a paginated server-backed browser API instead of hydrating the full catalog into the client.
-- Open Food Facts is now a first-class food source with validated product promotion, attribution, and detail-page quality indicators.
+Current product surfaces include:
+- Patient workflow hub for intake, assessment, meal planning, counseling, statistics, and follow-up.
+- BLS-backed food browsing with source visibility, nutrient sort/filter, custom foods, Open Food Facts promotion, and SFK import support.
+- Recipes, meal plans, templates, shopping lists, nutrient analysis, and approval/version workflows.
+- Digital protocol intake with practitioner review and conversion into internal nutrition protocols.
+- Institution menu planning, inpatient meal orders, kitchen production, compliance analytics, and tray cards.
+- Admin/RBAC, SSO foundations, API keys, HL7 import, webhooks, export jobs, and billing-preview surfaces.
 
 ## 🛠 Development
 
@@ -95,7 +86,7 @@ npm run validate:nutrients
 ### Export System
 - Apply the latest migrations before testing exports: `npx supabase db push`
 - `export_jobs` remains the generic export audit log.
-- Patient-bound report exports now also persist immutable snapshots in `patient_report_versions` and store the exported PDF/CSV files in the private Supabase bucket `patient-report-files`.
+- `/api/exports/report` generates plan PDF/CSV files and logs export metadata; patient-bound report persistence was removed with the standalone Berichte feature.
 
 ### Hospital Meal Workflow
 - Apply the latest migrations before using the inpatient stay and meal-order workflow: `npx supabase db push`

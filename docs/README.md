@@ -46,6 +46,10 @@ When docs conflict with code, inspect the implementation and update the stale do
 
 ## Maintenance Rules
 
+- Keep `README.md` stable and short: setup, capability summary, and links only. Do not use it as a running changelog.
+- Keep route/component behavior in `documentation.md`; keep schema, migrations, ETL, food data, search RPCs, and performance details in `docs/database-guide.md`.
+- Keep product-priority status in `docs/user-priority-feedback.md`, but link implementation details to `documentation.md` or `docs/database-guide.md`.
+- Keep clinic integration contracts in `docs/clinic-it-integration-plan.md`; other docs should summarize status and link there.
 - Keep agent memory files short and operational; move deep details into scoped docs.
 - Add or update docs in the same change when behavior, schema, commands, environment variables, or product truth changes.
 - Mark planned or preview features clearly. Do not describe mock/demo behavior as production.

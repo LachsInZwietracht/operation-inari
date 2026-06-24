@@ -25,11 +25,11 @@ Validation note:
 - For workflow changes, run the most relevant Playwright coverage instead of defaulting to the full suite.
 
 Agent quick index:
-- Food/search/reference data: sections 4.2, 4.10, 6 and `docs/database-guide.md`.
-- Recipes/plans/reports: sections 4.3-4.5 and 4.7.
-- Patient workspace/protocols/counseling: sections 4.6, 4.8, 4.14, 4.21.
-- Institution/hospital workflows: sections 4.16-4.20.
-- Auth/RBAC/admin/export surfaces: sections 4.9 and 4.13 plus `AGENTS.md`.
+- Food/search/reference data: sections 4.2, 4.6.1, 4.12, 6 and `docs/database-guide.md`.
+- Recipes/plans/exports: sections 4.3-4.5, 4.7, 4.9, and 4.17.
+- Patient workspace/protocols/counseling: sections 4.6, 4.8, 4.16, 4.24.
+- Institution/hospital workflows: sections 4.19-4.23.
+- Auth/RBAC/admin/export surfaces: sections 4.9-4.11 and 4.15 plus `AGENTS.md`.
 
 ## 2. Global Architecture Overview
 - **Rendering:** Next.js 15 with server rendering and `<Suspense>` boundaries for heavier routes.
@@ -192,12 +192,16 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.11 Admin & Sicherheit (`/admin/users`)
 - **Component:** `app/(app)/admin/users/page.tsx`
+  - The route is backed by persisted Supabase RBAC membership records and requires an `owner` or `admin` membership.
   - Team membership, invitations, role/status changes, report retention, and SSO configuration are backed by Supabase.
+  - Invitations use the Supabase Admin API for `admin`, `dietitian`, `assistant`, and `institution_admin` roles. Invite, resend, and revoke actions persist membership state and write `access_audit_logs` entries.
+  - Role/status changes enforce Owner-only Owner changes, last-active-Owner protection, and self-lockout protection; successful changes write `team_membership_updated` audit events.
+  - Sensitive access events are written through `lib/audit/access-audit.ts` for patient workspace opens and mutations, report/dataset exports, export history, digital protocol receipt/conversion, inpatient stays, and meal orders.
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
-  - **SSO role mappings:** The same panel now manages `sso_group_role_mappings` for verified IdP claims. Claim mappings support deterministic priority, active/disabled status, audit events, and roles `admin`, `dietitian`, `assistant`, and `institution_admin`; `owner` remains manual.
-  - **Audit:** SSO create/update/disable flows write `sso_config_created`, `sso_config_updated`, and `sso_config_disabled` rows to `access_audit_logs`.
-  - **Login routing and callback:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. The login UI now starts Supabase Auth SSO with the matched domain and returns through `/auth/sso/callback`, which exchanges the auth code, verifies the user through `getUser()`, extracts Supabase Auth identity claims, applies `resolveSsoRoleFromClaims()`, and creates/updates `organization_memberships` only after a deterministic mapping match. Existing owners are preserved, ambiguous/no-match callbacks are signed out, and callback membership changes write `sso_callback_*` audit events.
+  - **SSO role mappings:** The same panel manages `sso_group_role_mappings` for verified IdP claims. Claim mappings support deterministic priority, active/disabled status, audit events, and roles `admin`, `dietitian`, `assistant`, and `institution_admin`; `owner` remains manual.
+  - **Login routing and callback:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. `/auth/sso/callback` exchanges the auth code, verifies the user, applies `resolveSsoRoleFromClaims()`, and creates/updates `organization_memberships` only after a deterministic mapping match.
   - **Integration contracts:** SSO provider callback handoff, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
+  - MFA reset and team-wide patient sharing workflows remain deferred.
 
 ### 4.12 Datenbankstatus (`/datenbank`)
 - **Component:** `app/(app)/datenbank/page.tsx`
@@ -206,37 +210,27 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Activate/deactivate a database:** owners/admins can switch an entitled source on or off for their organization via a `Switch` in the detail dialog (`setDataSourceActiveAction`). The state persists in `organization_data_source_settings` (one row per org+source; absence = active by default; RLS: members read, owner/admin write). Deactivating a source removes it from food search: `fetchFoodsBrowserPage()` unions `fetchOrganizationDisabledSourceIds()` into the blocked-source filter, and the foods browser source selector (`/lebensmittel`) hides disabled sources (falling back to "all" if a saved source was deactivated). A tariff-locked source cannot be activated until unlocked. Non-admins see the toggle read-only.
   - `NutrientDiffCard` provides a side-by-side nutrient comparison between any two foods (including cross-source). Both pickers use `/api/foods/browser` for search. Differences over 10% are highlighted in color.
 
-### 4.12 Wissensbibliothek (`/wissen`)
+### 4.13 Wissensbibliothek (`/wissen`)
 - **Component:** `app/(app)/wissen/wissen-client.tsx`
   - Knowledge cards now come from bundled product content in `lib/content/knowledge-library.ts`, not `lib/mock-data`.
   - The page copy explicitly distinguishes bundled reference content from live runtime analytics.
   - Sustainability sections remain live calculations based on loaded foods, recipes, and meal plans.
   - The server page extracts referenced food IDs from recipes and meal plans, then fetches only those foods via `fetchFoodsViaRpc()` with a limited nutrient set (`LIST_NUTRIENT_IDS`) instead of loading the full catalog.
 
-### 4.12 Leistung & Validierung (`/leistung`)
+### 4.14 Leistung & Validierung (`/leistung`)
 - **Component:** `app/(app)/leistung/page.tsx`
   - The route is now an honest validation/reference surface instead of a fake live telemetry dashboard.
   - It documents actual repo checks (`typecheck`, targeted Playwright, nutrient validation), benchmark targets, hotspot areas, and manual verification routes.
   - Stress-test simulation, fake response curves, fake system metrics, and mock DB telemetry are no longer presented as live operational data.
 
-### 4.13 Admin & Sicherheit (`/admin/users`)
-- **Component:** `app/(app)/admin/users/page.tsx`
-- The route is now backed by persisted Supabase RBAC membership records.
-- It requires an `owner` or `admin` membership and lists active organization members, roles, and status values from `organization_memberships`.
-- It implements Supabase Admin API invitations for `admin`, `dietitian`, `assistant`, and `institution_admin` roles. Invite, resend, and revoke actions persist `invited`/`disabled` membership state, invitation timestamps, expiry metadata, and `access_audit_logs` entries.
-- It supports role/status changes for existing memberships with server-side RBAC checks: only Owners can modify Owner memberships, the last active Owner cannot be demoted or disabled, and users cannot deactivate or remove their own admin access. Each successful change writes a `team_membership_updated` audit event.
-- Sensitive access events now write `access_audit_logs` entries through `lib/audit/access-audit.ts`: patient workspace opens, patient create/update/delete, report/dataset exports, export history, digital protocol receipt/conversion, inpatient stays, and meal orders.
-- It includes admin controls for the default report retention policy. The form writes `report_retention_policies`; patient-bound report persistence has been removed, so the policy is retained for admin/configuration purposes only.
-- MFA reset and team-wide patient sharing workflows remain deferred; RBAC v1 establishes route protection, persisted roles, invitations, audited role/access events, and report retention controls.
-
-### 4.13.1 Admin Tarife (`/admin/tarife`)
+### 4.15 Admin Tarife (`/admin/tarife`)
 - **Component:** `app/(app)/admin/tarife/page.tsx`
 - The route is a preview-only product and contract-planning surface. It has no checkout, subscription mutation, billing provider, invoice download, or live usage backend.
 - Static preview catalog data lives in `lib/content/billing-preview.ts`, not `lib/mock-data`.
 - The page now includes read-only procurement/security notes, PRODI/EBIS migration onboarding steps, guided clinic demo workspace setup, and a buyer readiness checklist covering data sources, audit logs, SSO, exports, retention, support, and deployment assumptions.
 - User actions only mark tariff or add-on interest in the local UI/toast copy; they do not persist subscription state.
 
-### 4.14 Beratungen (Patient Counseling)
+### 4.16 Beratungen (Patient Counseling)
 - **New counseling session:** `app/(app)/patienten/[id]/beratungen/neu/page.tsx` uses `components/counseling-session-form.tsx`.
 - **Counseling detail:** `app/(app)/patienten/[id]/beratungen/[beratungId]/page.tsx` renders the session workspace for timeline entries, materials, and progress metrics.
 - **Persistence:** `hooks/use-counseling.ts` is Supabase-first with localStorage fallback, remote sync, and migration of legacy local-only sessions after login.
@@ -245,7 +239,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Data layer:** `lib/data/counseling-client.ts` handles `counseling_sessions` and `counseling_templates`, including legacy-id migration support and patient ID resolution against the `patients` table.
 - **Schema:** migration `20260508000024_counseling.sql` adds the counseling tables, patient foreign key, JSONB payloads for timeline/material/progress sections, and per-user RLS policies.
 
-### 4.15 Ernährungsplan (`/ernaehrungsplan`)
+### 4.17 Ernährungsplan (`/ernaehrungsplan`)
 - **Route:** `app/(app)/ernaehrungsplan/page.tsx` (server) → `ernaehrungsplan-client.tsx` (client).
 - **Persistence:** `daily_meal_plans` and `meal_entries`. Clinical metadata added in migration `20260527000045_meal_plan_metadata.sql`; per-plan Diät-Line preset (`diet_line_id`) added in `20260528000046_meal_plan_diet_line.sql`; immutable approval snapshots are stored in `meal_plan_versions` via `20260530000048_meal_plan_versions.sql`; patient-scoped uniqueness is enforced in `20260531000049_patient_scoped_meal_plan_uniqueness.sql`.
 - **Hook:** `useMealPlan(initialPlans, foods, defaultMetadata)` handles Supabase-first daily-plan persistence, local fallback, local-to-remote migration, day copy, day clearing, entry replacement, and metadata updates. Plans are keyed by patient context plus date, so multiple patients can have separate plans on the same day.
@@ -272,7 +266,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Planvorlagen (`/ernaehrungsplan/bibliothek` + `/ernaehrungsplan/bibliothek/[id]`):** Browse view (`bibliothek-client.tsx`) and detail view (`[id]/template-detail-client.tsx`) over the existing `meal_plan_templates` infrastructure. The server route includes system templates plus the authenticated user's personal templates and saved meal plans, hydrates only the foods + recipes actually referenced by the visible templates / source plans plus recipe ingredients, then computes a per-template macro summary (kcal/EW/F/KH/Bst) via `calculateMealEntryNutrients` + `sumNutrients` for the card grid. Filters: scope chips (`Alle`, `System`, `Eigene`), search-by-name (name/description/indication), indication chip group, diet line chip group, sort by name or kcal. The overview CTA **Vorlage erstellen** creates a personal template from an existing saved Ernährungsplan with editable name, description, indication, and diet-line metadata. The detail page shows day-summary macro cards (with reference comparison via `useReferenceProfiles` and optional `?patientId=…` scope), a slot-by-slot breakdown with per-slot kcal/EW/F/KH chips, and a full nutrient table with Δ-to-reference colored amber/emerald. Two CTAs: **Anwenden** opens a `Calendar`-based date picker and routes to `/ernaehrungsplan?date=YYYY-MM-DD&template=ID&patientId=…` — the planner picks up the `template` param via `initialApplyTemplateId`, applies the slots once via `applyTemplateToDate`, then `router.replace`s the URL to drop the param. **Als eigene Vorlage speichern** clones the slots into a personal-scope template via `saveMealPlanTemplate()`. System templates ship from `lib/mock-data/meal-plan-templates.ts` (12 entries covering 6 indications with kcal/macro/style variants) and are imported by `npm run etl:recipes`.
 - **Einkaufsliste (`/ernaehrungsplan/einkaufsliste`):** `app/(app)/ernaehrungsplan/einkaufsliste/page.tsx` (server) → `einkaufsliste-client.tsx` (client). Server hydrates plans + recipes + the union of all foods referenced by either. The client lets a user pick up to fourteen stored plans (about two weeks of shopping) and runs `buildShoppingList()` in `lib/shopping-list.ts` to aggregate ingredients: direct food entries contribute their gram amount, recipe entries multiply each `ingredient.amount` by `entry.amount / recipe.servings`. Aggregation is keyed by `foodId`, which collapses synonyms automatically (since synonyms hang off a single Food row). Results are grouped by `categoryId` using the canonical `FOOD_CATEGORIES` order, items inside a group are sorted by descending grams. Each row has a checkbox for kitchen-floor checkoff and a collapsible "Herkunft" detail listing the contributing plans/recipes with per-source grams. Unresolved references (deleted foods/recipes) surface in an inline warning. A "Drucken" action triggers `window.print()`; `print:hidden` and `print:break-inside-avoid` classes produce a clean printable list. Plans can be pre-selected via `?plans=id1,id2,…`.
 
-### 4.16 Praxis-Statistiken (`/praxis-statistiken`)
+### 4.18 Praxis-Statistiken (`/praxis-statistiken`)
 - **Component:** `app/(app)/praxis-statistiken/page.tsx` (client component)
 - **Data sources:** All KPIs and charts are dynamically computed from real data via `usePatients`, `usePracticeAppointments`, and `usePracticeInvoices`. There are no hardcoded mock KPIs.
 - **Dynamic KPIs (top row, 4 cards):**
@@ -300,7 +294,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Utilities:** `calculateDurationMinutes()` derives session length from start/end times; `computeStats()` calculates descriptive statistics; `getTrend()` classifies month-over-month change.
 - **Extension notes:** To add new KPIs, append to the `dynamicKpis` array in the main `useMemo`. New chart sections can be added to the grid layout. The time-range filter automatically propagates via `rangeStart` to any `useMemo` that depends on `filteredAppointments` or `filteredInvoices`.
 
-### 4.17 Einrichtung – Menüplanung (`/institution/menueplaene`)
+### 4.19 Einrichtung – Menüplanung (`/institution/menueplaene`)
 - **Route:** `app/(app)/institution/menueplaene/page.tsx` (server) → `menueplaene-client.tsx` (client).
 - **Server data:** `fetchMenuPlans()` from `lib/data/menu-plans.ts` reads the authenticated user's Supabase menus (plus any shared `user_id IS NULL` rows) and otherwise returns an empty list.
 - **Hook:** `useInstitutionMenu(initialMenus, recipes)` in `hooks/use-institution-menu.ts`. Follows the Supabase-first + localStorage fallback pattern.
@@ -320,7 +314,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **Shopping tab:** Category-grouped shopping list with portion scaling and CSV export.
 - **Extension notes:** To add new meal slots, extend `VISIBLE_MEAL_SLOTS` and ensure `MEAL_SLOT_LABELS` has a matching entry. To add new diet form categories, extend `DIET_FORMS` in `lib/reference-data/institution.ts`. Shopping cost estimates use `CATEGORY_COST_PER_KG` in the hook — update when adding new food categories.
 
-### 4.18 Allergen & Intolerance Management
+### 4.20 Allergen & Intolerance Management
 
 - **Files:** `lib/allergen-constants.ts`, `lib/allergen-warnings.ts`, `lib/data/patient-allergens-client.ts`, `hooks/use-patient-allergens.ts`
 - **DB:** `patient_allergens` table (migration `20260507000023`)
@@ -331,7 +325,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Recipe form:** `RECIPE_ALLERGENS` sourced from `ALLERGEN_DEFINITIONS` (EU 14 only).
 - **Warning engine:** `checkAllergenConflicts()` in `lib/allergen-warnings.ts` — pure function matching item allergen strings against patient allergen entries via `foodMatchTokens`. The same module exports `summarizePlanAllergenConflicts()` (per-plan rollups grouped by allergen + entry, with `highestSeverity` for banner styling) and `compareSeverity` / `maxSeverity` helpers.
 
-### 4.19 Krankenhaus – Inpatient Meal Workflow (`/institution/krankenhaus`)
+### 4.21 Krankenhaus – Inpatient Meal Workflow (`/institution/krankenhaus`)
 - **Route:** `app/(app)/institution/krankenhaus/page.tsx` (server) → `krankenhaus-client.tsx` (client).
 - **Persistence:** `inpatient_stays` and `meal_orders` (migration `20260509000025_hospital_meal_workflow.sql`).
 - **Hooks / client data:** `hooks/use-inpatient-stays.ts`, `hooks/use-meal-orders.ts`, `lib/data/inpatient-stays-client.ts`, `lib/data/meal-orders-client.ts`.
@@ -351,13 +345,13 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Kitchen output:** The `Küche` tab aggregates saved service orders by recipe, patient list, and special instructions instead of relying on planned menu portions alone.
 - **Tray cards:** `/institution/krankenhaus/tablettenkarten` renders a print view from saved `meal_orders` using `date`, `mealSlot`, and `station` query params. Cards include patient, station, room/bed, meal slot, kitchen status, diet-form labels, allergen labels, special instructions, and restriction summaries.
 
-### 4.19.1 Einrichtung – Produktion (`/institution/produktion`)
+### 4.21.1 Einrichtung – Produktion (`/institution/produktion`)
 - **Route:** `app/(app)/institution/produktion/page.tsx` (server) → `produktion-client.tsx` (client).
 - **Data:** Uses the active institution menu, recipes, food context from `useInstitutionMenu(initialMenus, recipes)`, and persisted `kitchen_production_batches`.
 - **Workflow UI:** Production items are grouped by meal slot and diet form. Each batch has an operational state: `planned`, `in_preparation`, `ready`, `served`, or `held`. Status actions persist the current batch state, append `kitchen_production_events`, write `kitchen_production_batch_status_changed` audit rows, and survive reloads.
 - **Shopping UI:** The shopping tab remains category-grouped with portion scaling and CSV export.
 
-### 4.20 Einrichtung – Nährstoff-Compliance (`/institution/compliance`)
+### 4.22 Einrichtung – Nährstoff-Compliance (`/institution/compliance`)
 - **Route:** `app/(app)/institution/compliance/page.tsx` (server) → `compliance-client.tsx` (client).
 - **Data sources:** `fetchMenuPlans()`, `fetchRecipes()`, `fetchFoodsForInstitution()`, `fetchInpatientStays()`, `fetchMealOrders()`, `fetchPatientAllergens()`.
 - **Shared analytics engine:** `lib/institution-analytics.ts`.
@@ -366,7 +360,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Compares actual intake against `DIET_FORMS[].nutrientTargets` and produces `DayCompliance` rows plus daily and cycle averages.
 - **UI behavior:** The page filters by diet form, shows trend bars over the active cycle, and renders nutrient-level result tables for each cycle date. When no active calculable menu exists, it shows an explicit empty state.
 
-### 4.21 Einrichtung – Statistiken (`/institution/statistiken`)
+### 4.23 Einrichtung – Statistiken (`/institution/statistiken`)
 - **Route:** `app/(app)/institution/statistiken/page.tsx` (server) → `statistiken-client.tsx` (client).
 - **Data sources:** Same shared institutional analytics payload as `/institution/compliance`.
 - **KPIs:** Occupancy, average daily and per-portion cost, active diet forms, and compliance rate now come from real inpatient stays, meal orders, and menu-derived cost/compliance calculations.
@@ -378,7 +372,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - `Übersicht` summarizes restriction-heavy cases, allergen profiles, pending orders, and cycle status from the same shared dataset.
 - **Fallback behavior:** The pages no longer own local mock analytics datasets or server-side canned institution records. They render from shared derived data and show an empty state when no active cycle is available.
 
-### 4.22 Patient Workflow Hub (`/patienten/[id]`)
+### 4.24 Patient Workflow Hub (`/patienten/[id]`)
 - **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab. The patient record uses five top-level tabs: `Workflow`, `Profil`, `Ernährung`, `Beratung`, and `Statistiken`.
 - **Purpose:** Present the investor/demo-ready ambulatory patient journey in one place without introducing a new backend workflow entity.
 - **Core component:** `components/patient-workflow-tab.tsx`.
