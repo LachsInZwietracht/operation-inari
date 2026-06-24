@@ -10,7 +10,6 @@ import {
 } from "@/lib/data/patient-digital-protocol-links-client";
 import { isLocalMigrationCandidate, isUuid, matchesRecordIdentity } from "@/lib/data/local-records";
 import { useAuth } from "@/hooks/use-auth";
-import { generateQrDataUrl } from "@/lib/qr";
 
 const STORAGE_KEY = "prodi_digital_protocols";
 
@@ -143,22 +142,15 @@ export function useDigitalProtocols(options: UseDigitalProtocolsOptions = {}) {
   );
 
   const generateLink = useCallback(
-    async (payload: Omit<DigitalProtocolLink, "id" | "createdAt" | "updatedAt" | "qrCode" | "url">) => {
+    async (payload: Omit<DigitalProtocolLink, "id" | "createdAt" | "updatedAt" | "url">) => {
       const now = new Date().toISOString();
       const tempId = `dpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const tempUrl = `${origin}/protokoll/${tempId}`;
-      let qrCode: string;
-      try {
-        qrCode = await generateQrDataUrl(tempUrl);
-      } catch {
-        qrCode = "";
-      }
       const newLink: DigitalProtocolLink = {
         ...payload,
         id: tempId,
         url: tempUrl,
-        qrCode,
         createdAt: now,
         updatedAt: now,
       };
@@ -174,21 +166,13 @@ export function useDigitalProtocols(options: UseDigitalProtocolsOptions = {}) {
                 ),
               ),
             );
-            // Re-generate QR with the real UUID-based URL
             const realUrl = `${origin}/protokoll/${persisted.id}`;
-            let realQr: string;
-            try {
-              realQr = await generateQrDataUrl(realUrl);
-            } catch {
-              realQr = persisted.qrCode;
-            }
             const latestKnown =
               entriesRef.current.find((item) => item.id === persisted.id || item.id === tempId) ?? persisted;
             const updated = {
               ...persisted,
               status: latestKnown.status,
               url: realUrl,
-              qrCode: realQr,
             };
             setLinks((prev) =>
               sortEntries(prev.map((item) => (item.id === tempId || item.id === persisted.id ? updated : item))),

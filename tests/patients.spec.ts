@@ -147,7 +147,6 @@ async function createWorkflowFixture(patientId: string): Promise<WorkflowFixture
     method: "Digitales 24h Recall",
     status: "received",
     url: `https://demo.prodi.local/protokoll/${linkId}`,
-    qr_code: "data:image/png;base64,demo",
     expires_at: "2026-12-31",
   });
   if (linkError) throw new Error(linkError.message);

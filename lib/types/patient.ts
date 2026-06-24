@@ -214,6 +214,5 @@ export interface DigitalProtocolLink extends Timestamped {
   method: string;
   status: "pending" | "received" | "expired";
   url: string;
-  qrCode: string;
   expiresAt?: string;
 }

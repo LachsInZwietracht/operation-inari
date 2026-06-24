@@ -214,7 +214,6 @@ export const DIGITAL_PROTOCOL_LINKS: DigitalProtocolLink[] = [
     method: "Digitales 24h Recall",
     status: "pending",
     url: "https://app.example.invalid/protokoll/patient_1",
-    qrCode: "QR1",
     expiresAt: "2026-03-20",
     ...baseTs("2026-03-12"),
   },
@@ -224,7 +223,6 @@ export const DIGITAL_PROTOCOL_LINKS: DigitalProtocolLink[] = [
     method: "FFQ",
     status: "received",
     url: "https://app.example.invalid/protokoll/patient_2",
-    qrCode: "QR2",
     ...baseTs("2026-03-10"),
   },
 ];

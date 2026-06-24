@@ -53,7 +53,7 @@ Use:
 Demo actions:
 - Open the patient overview and show the dense worklist before secondary demo/mail-merge tools.
 - Open a patient and use the `Workflow` tab.
-- Generate a digital protocol link or QR code from the patient workspace.
+- Generate a digital protocol link from the patient workspace.
 - Open the public protocol URL in a separate browser context or mobile viewport.
 - Submit a simple food diary entry.
 - Return to the patient workspace and show the incoming submission state.

@@ -17,7 +17,6 @@ interface DigitalProtocolLinkRow {
   method: string;
   status: DigitalProtocolLink["status"];
   url: string;
-  qr_code: string;
   expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -45,7 +44,6 @@ function mapDigitalProtocolLinkRow(row: DigitalProtocolLinkRow): DigitalProtocol
     method: row.method,
     status: row.status,
     url: origin ? `${origin}/protokoll/${row.id}` : row.url,
-    qrCode: row.qr_code,
     expiresAt: row.expires_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -80,7 +78,6 @@ export async function persistDigitalProtocolLink(
     method: string;
     status: DigitalProtocolLink["status"];
     url: string;
-    qrCode: string;
   },
   supabase?: SupabaseClient,
 ): Promise<DigitalProtocolLink> {
@@ -103,7 +100,6 @@ export async function persistDigitalProtocolLink(
         method: entry.method,
         status: entry.status,
         url: entry.url,
-        qr_code: entry.qrCode,
         expires_at: entry.expiresAt ?? null,
         updated_at: new Date().toISOString(),
       },

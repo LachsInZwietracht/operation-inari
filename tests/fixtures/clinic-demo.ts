@@ -106,7 +106,6 @@ export async function createClinicDemoDigitalProtocolLink(
     method: "Digitales 24h Recall",
     status: "pending",
     url,
-    qr_code: "data:image/png;base64,demo",
     expires_at: "2026-12-31",
   });
 

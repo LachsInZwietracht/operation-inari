@@ -8,11 +8,9 @@ import {
   Activity as ActivityIcon,
   CheckCircle2,
   ChevronDown,
-  Copy,
   FlaskConical,
   Pill,
   Plus,
-  QrCode,
   Stethoscope,
 } from "lucide-react"
 import { addDays, differenceInCalendarDays, differenceInMonths, differenceInYears, parseISO } from "date-fns"
@@ -31,12 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Collapsible,
   CollapsibleContent,
@@ -69,7 +61,6 @@ import { useProtocols } from "@/hooks/use-protocols"
 import { useCounseling } from "@/hooks/use-counseling"
 import type {
   AnthropometricEntry,
-  DigitalProtocolLink,
   Food,
   NutritionPreference,
   Patient,
@@ -240,7 +231,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   })
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
-  const [qrDialogLink, setQrDialogLink] = useState<DigitalProtocolLink | null>(null)
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false)
   const [showMedicationForm, setShowMedicationForm] = useState(false)
   const [diagnosisForm, setDiagnosisForm] = useState({ diagnosis: "", icdCode: "", startDate: "", notes: "" })
@@ -625,7 +615,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           screenings={screenings}
           appointments={patientAppointments}
           mealPlans={initialData?.mealPlans ?? []}
-          setQrDialogLink={setQrDialogLink}
           onGenerateLink={() =>
             void generateLink({
               patientId: patient.id,
@@ -1943,7 +1932,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
               <CardTitle>Digitale Protokolle</CardTitle>
-              <CardDescription>Links & QR-Codes für Patientenselbst-Erfassung.</CardDescription>
+              <CardDescription>Links für Patientenselbst-Erfassung.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Select value={digitalMethod} onValueChange={setDigitalMethod}>
@@ -2000,21 +1989,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
                           ? "ausstehend"
                           : "abgelaufen"}
                     </Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(link.url)
-                        toast.success("Link kopiert")
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                      <span className="sr-only">Link kopieren</span>
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={() => setQrDialogLink(link)}>
-                      <QrCode className="h-4 w-4" />
-                      <span className="sr-only">QR anzeigen</span>
-                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -2127,45 +2101,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
             )}
           </CardContent>
         </Card>
-
-        {/* QR Code Dialog */}
-        <Dialog open={!!qrDialogLink} onOpenChange={(open) => !open && setQrDialogLink(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>QR-Code — {qrDialogLink?.method}</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col items-center gap-4">
-              {qrDialogLink?.qrCode && qrDialogLink.qrCode.startsWith("data:") ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={qrDialogLink.qrCode}
-                  alt="QR-Code"
-                  className="h-64 w-64"
-                />
-              ) : (
-                <div className="flex h-64 w-64 items-center justify-center rounded border text-sm text-muted-foreground">
-                  QR-Code wird generiert…
-                </div>
-              )}
-              <p className="text-center text-xs text-muted-foreground break-all">
-                {qrDialogLink?.url}
-              </p>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  if (qrDialogLink) {
-                    void navigator.clipboard.writeText(qrDialogLink.url)
-                    toast.success("Link kopiert")
-                  }
-                }}
-              >
-                <Copy className="mr-2 h-4 w-4" />
-                Link kopieren
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         <Card>
           <CardHeader>

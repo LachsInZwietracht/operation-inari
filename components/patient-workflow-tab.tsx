@@ -1,17 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, type Dispatch, type SetStateAction } from "react"
+import { useMemo } from "react"
 import {
   Activity,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
-  Copy,
-  QrCode,
+  Plus,
 } from "lucide-react"
-import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -72,7 +70,6 @@ interface PatientWorkflowTabProps {
   screenings: ScreeningResult[]
   appointments: PracticeAppointment[]
   mealPlans?: DailyMealPlan[]
-  setQrDialogLink: Dispatch<SetStateAction<DigitalProtocolLink | null>>
   onGenerateLink: () => void
   onMarkSubmissionReviewed: (submissionId: string) => void
   isLoadingSubmissions: boolean
@@ -173,7 +170,6 @@ export function PatientWorkflowTab({
   screenings,
   appointments,
   mealPlans: initialMealPlans,
-  setQrDialogLink,
   onGenerateLink,
   onMarkSubmissionReviewed,
   isLoadingSubmissions,
@@ -219,14 +215,6 @@ export function PatientWorkflowTab({
         summary: "Digitale Einreichung wurde in ein internes Protokoll übernommen.",
         dateLabel: formatDate(latestSubmission.submittedAt),
         primaryAction: buildAction("Protokoll öffnen", `/patienten/${patient.id}/protokolle/${latestSubmission.convertedProtocolId}`),
-        secondaryAction: latestLink
-          ? {
-              label: "QR-Code anzeigen",
-              onClick: () => setQrDialogLink(latestLink),
-              variant: "outline",
-              icon: QrCode,
-            }
-          : undefined,
       }
     }
 
@@ -263,21 +251,6 @@ export function PatientWorkflowTab({
         status: "in_progress",
         summary: `Digitaler Erfassungslink (${latestLink.method}) wurde bereitgestellt, aber noch nicht eingereicht.`,
         dateLabel: formatDate(latestLink.updatedAt ?? latestLink.createdAt),
-        primaryAction: {
-          label: "QR-Code anzeigen",
-          onClick: () => setQrDialogLink(latestLink),
-          variant: "default",
-          icon: QrCode,
-        },
-        secondaryAction: {
-          label: "Link kopieren",
-          onClick: () => {
-            void navigator.clipboard.writeText(latestLink.url)
-            toast.success("Link kopiert")
-          },
-          variant: "outline",
-          icon: Copy,
-        },
       }
     }
 
@@ -290,11 +263,11 @@ export function PatientWorkflowTab({
         label: "Link erstellen",
         onClick: onGenerateLink,
         variant: "default",
-        icon: QrCode,
+        icon: Plus,
       },
       secondaryAction: buildAction("Patientendaten prüfen", `/patienten/${patient.id}`, undefined, "outline"),
     }
-  }, [latestLink, latestSubmission, onGenerateLink, onMarkSubmissionReviewed, patient.id, setQrDialogLink])
+  }, [latestLink, latestSubmission, onGenerateLink, onMarkSubmissionReviewed, patient.id])
 
   const assessmentStage: PatientWorkflowStage = useMemo(() => {
     if (latestProtocol) {

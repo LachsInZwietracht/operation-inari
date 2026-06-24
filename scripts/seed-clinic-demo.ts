@@ -560,7 +560,6 @@ async function seedDigitalProtocol(ctx: SeedContext) {
       method: "email",
       status: "received",
       url: `${APP_URL.replace(/\/$/, "")}/protokoll/clinic-demo-maria`,
-      qr_code: "clinic-demo-qr",
       expires_at: "2026-06-04",
     })
     .select("id")
