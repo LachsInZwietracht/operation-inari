@@ -49,7 +49,7 @@ Enterprise healthcare and foodservice systems:
 The most important missing or incomplete capabilities for German clinic sales are:
 - **Scientific data moat:** SFK, broader official data coverage, full BLS expansion, OeNWT/Swiss/USDA/AFCD options, multilingual food names, and direct clinical manufacturer feeds.
 - **Database lifecycle management:** Global food replacement, database version migrations, nutrient-source diffing, release notes, and audit-friendly source/version traceability.
-- **Clinic IT readiness:** HL7 v2 import, FHIR sync, SSO via SAML/OIDC, LDAP/Active Directory mapping, API keys, webhooks, integration persistence, and production-grade eGK/device connectors.
+- **Clinic IT readiness:** HL7 v2 import, FHIR sync, SSO via SAML/OIDC, LDAP/Active Directory mapping, API keys, webhooks, integration persistence, and production-grade device connectors.
 - **Audit and compliance:** Record access logs, export logs beyond generic jobs, report retention policies, diet-order override logs, role-change logs, and procurement-ready security documentation.
 - **Clinical modules:** Diabetes counseling depth, renal/nutrition-support workflows, structured food-frequency/anamnesis forms, diagnosis-specific intervention templates, and stronger indication-based decision support.
 - **Documentation packs:** Arztbrief, Ernährungsbericht, Übergabe Küche, Verlaufsbericht, Qualitätsbericht, patient handouts, and clinic-specific document templates.

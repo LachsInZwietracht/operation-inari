@@ -1,12 +1,12 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { AlertTriangle, CheckCircle2, ChevronDown, CreditCard, FileText, Stethoscope, UserRound } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Stethoscope, UserRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -34,20 +34,18 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
 import { AMPUTATION_AREAS, INDICATION_OPTIONS } from "@/lib/constants"
 import type {
-  EgkCardData,
   Gender,
   Patient,
   PatientCareSetting,
   PatientStatus,
   PreferredContactChannel,
 } from "@/lib/types"
-import { useEgkScanner } from "@/hooks/use-egk-scanner"
 
 const NO_CONTACT_CHANNEL_VALUE = "__none__"
 
@@ -126,17 +124,6 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
   const router = useRouter()
   const [submitIntent, setSubmitIntent] = useState<SubmitIntent>("detail")
   const [showAmputations, setShowAmputations] = useState(() => (patient?.amputations?.length ?? 0) > 0)
-  const {
-    status: egkStatus,
-    isSupported: egkSupported,
-    connect: connectEgk,
-    scanCard,
-    simulateCard,
-    isReading: isEgkReading,
-    isConnecting: isEgkConnecting,
-    lastCard,
-    lastError,
-  } = useEgkScanner()
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientSchema),
@@ -212,45 +199,6 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
       .slice(0, 3)
   }, [existingPatients, patient?.id, watchedIdentity])
 
-  const applyCardData = useCallback(
-    (card: EgkCardData) => {
-      form.setValue("firstName", card.firstName, { shouldDirty: true })
-      form.setValue("lastName", card.lastName, { shouldDirty: true })
-      form.setValue("dateOfBirth", card.dateOfBirth, { shouldDirty: true })
-      form.setValue("gender", card.gender, { shouldDirty: true })
-      form.setValue("street", card.street, { shouldDirty: true })
-      form.setValue("zip", card.zip, { shouldDirty: true })
-      form.setValue("city", card.city, { shouldDirty: true })
-      form.setValue("insuranceProvider", card.insuranceProvider, { shouldDirty: true })
-      form.setValue("insuranceNumber", card.insuranceNumber, { shouldDirty: true })
-    },
-    [form],
-  )
-
-  const handleEgkScan = useCallback(async () => {
-    try {
-      const card = await scanCard()
-      applyCardData(card)
-      toast.success("Demo-eGK-Daten übernommen")
-    } catch (error) {
-      toast.error((error as Error).message || "Demo-Karte konnte nicht eingelesen werden")
-    }
-  }, [applyCardData, scanCard])
-
-  const handleEgkSimulation = useCallback(() => {
-    const card = simulateCard()
-    applyCardData(card)
-    toast.info("Demokarte übernommen")
-  }, [applyCardData, simulateCard])
-
-  const egkStatusLabel: Record<string, string> = {
-    disconnected: "Getrennt",
-    connecting: "Verbindung wird aufgebaut",
-    ready: "Bereit",
-    reading: "Karte wird gelesen",
-    error: "Fehler",
-  }
-
   async function handleSubmit(values: PatientFormValues) {
     try {
       const savedPatient = await Promise.resolve(
@@ -308,61 +256,6 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        <Card className="border-dashed border-primary/40 bg-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CreditCard className="h-4 w-4" />
-                Aufnahme per eGK-Demo
-              </CardTitle>
-              <CardDescription>
-                Simulieren Sie eGK-Stammdaten für Tests und Demos.
-              </CardDescription>
-            </div>
-            <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>{egkStatusLabel[egkStatus]}</Badge>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!egkSupported && (
-              <p className="text-sm text-muted-foreground">
-                Ihr Browser unterstützt aktuell keine Demo-Web-Serial-Verbindung. Nutzen Sie die Demo-Schaltfläche.
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={egkStatus === "ready" || isEgkConnecting}
-                onClick={() => void connectEgk()}
-              >
-                {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={egkStatus !== "ready" || isEgkReading}
-                onClick={() => void handleEgkScan()}
-              >
-                {isEgkReading ? "Lese Demo-Karte..." : "Demo-Karte einlesen"}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={handleEgkSimulation}>
-                Demo-Karte nutzen
-              </Button>
-            </div>
-            {lastCard && (
-              <div className="rounded-md border bg-background p-3 text-sm">
-                <p className="font-medium">
-                  Zuletzt simuliert: {lastCard.firstName} {lastCard.lastName}
-                </p>
-                <p className="text-muted-foreground">
-                  {lastCard.street}, {lastCard.zip} {lastCard.city} · {lastCard.insuranceProvider}
-                </p>
-              </div>
-            )}
-            {lastError && <p className="text-sm text-destructive">{lastError}</p>}
-          </CardContent>
-        </Card>
-
         {duplicateCandidates.length > 0 && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />

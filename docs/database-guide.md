@@ -698,7 +698,6 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Branded foods | Mock fallback still present | `lib/data/foods.ts` |
 | Patient mail-merge templates / placeholders | Moved to bundled product defaults outside `lib/mock-data` | `lib/patient-mailings.ts`, `app/(app)/patienten/page.tsx` |
 | Patient counseling session summary on `/patienten` | Migrated to real `useCounseling()` session data | `app/(app)/patienten/page.tsx` |
-| eGK scanner / inbox / companion API | Explicit demo mode powered by mock cards/events | `hooks/use-egk-scanner.ts`, `hooks/use-egk-inbox.ts`, `app/api/egk/route.ts` |
 | Food synonyms | System synonyms now load from Supabase `food_synonyms`; user-created aliases still persist locally as an offline overlay | `hooks/use-food-synonyms.ts`, `lib/data/food-synonyms-client.ts` |
 | Nutrition plan presets | Bundled static product defaults in reference data | `lib/reference-data/diet-lines.ts`, `app/(app)/ernaehrungsplan/ernaehrungsplan-client.tsx` |
 | Institution diet-form catalog / weekday labels | Bundled static institution reference data | `lib/reference-data/institution.ts`, `app/(app)/institution/**`, `lib/institution-analytics.ts`, `lib/hospital-workflow.ts` |
@@ -711,7 +710,6 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 
 **How to read the remaining mock data:**
-- **User-facing placeholder/demo data:** Explicitly labeled eGK demo flows.
 - **Bundled product/reference content:** Wissen cards, Leistung validation references.
 - **Static reference/catalog data:** bundled reference standards, plus compatibility re-export shims for catalogs now owned by `lib/reference-data`.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
@@ -719,7 +717,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 **Mock-data cleanup checklist:**
 - [x] Move `/patienten` mail-merge templates/placeholders to non-mock bundled product defaults.
 - [x] Replace the mock `COUNSELING_SESSIONS` summary on `/patienten` with real counseling-session queries.
-- [x] Keep eGK mock cards/events as explicit demo mode with user-facing demo labeling.
+- [x] Remove the mock card-reader intake demo workflow from the app.
 - [x] Move report-template seeds to non-mock bundled product defaults.
 - [x] Replace mock food-synonym seeds with seeded database rows or a curated bundled reference source.
 - [x] Keep `DIET_LINES` as bundled product defaults in `lib/reference-data/diet-lines.ts`, with user-defined diet-line presets persisted through `diet_line_presets`/`diet_line_targets`.

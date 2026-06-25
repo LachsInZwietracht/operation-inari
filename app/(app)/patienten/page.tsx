@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   addYears,
@@ -11,7 +11,7 @@ import {
   parseISO,
   setYear,
 } from "date-fns"
-import { Cable, ChevronDown, CreditCard, FileText, Gift, Inbox, Plus, Search, Sparkles } from "lucide-react"
+import { ChevronDown, FileText, Gift, Plus, Search, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/page-header"
@@ -48,16 +48,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { usePatients } from "@/hooks/use-patients"
 import { useCounseling } from "@/hooks/use-counseling"
-import { useEgkScanner } from "@/hooks/use-egk-scanner"
-import { useEgkInbox } from "@/hooks/use-egk-inbox"
 import { useMailMergeHistory } from "@/hooks/use-mail-merge"
 import { useBirthdayReminders } from "@/hooks/use-birthday-reminders"
 import { MAIL_MERGE_PLACEHOLDERS, MAIL_MERGE_TEMPLATES } from "@/lib/patient-mailings"
 import { INDICATION_OPTIONS } from "@/lib/constants"
-import type { EgkCardData, Patient, PatientMailMergeExportRequest } from "@/lib/types"
+import type { Patient, PatientMailMergeExportRequest } from "@/lib/types"
 import { downloadResponseFile } from "@/lib/utils"
-
-const UNASSIGNED_EGK_VALUE = "__unassigned__"
 
 export default function PatientenPage() {
   const { patients } = usePatients()
@@ -70,32 +66,9 @@ export default function PatientenPage() {
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([])
   const [lastBatch, setLastBatch] = useState<{ timestamp: string; count: number; templateName: string } | null>(null)
   const [birthdayWindow, setBirthdayWindow] = useState<string>("30")
-  const [hasMounted, setHasMounted] = useState(false)
   const bodyTextAreaRef = useRef<HTMLTextAreaElement | null>(null)
-  const {
-    status: egkStatus,
-    isSupported: egkSupported,
-    connect: connectEgk,
-    scanCard: scanEgkCard,
-    fetchFromCompanion,
-    simulateCard,
-    isReading: isEgkReading,
-    isConnecting: isEgkConnecting,
-    lastCard: lastEgkCard,
-    lastError: egkError,
-  } = useEgkScanner()
-  const {
-    pendingEvents: egkEvents,
-    addEvent: addEgkEvent,
-    linkToPatient: assignEgkEvent,
-    archiveEvent: archiveEgkEvent,
-  } = useEgkInbox()
   const { batches, logBatch, markExported } = useMailMergeHistory()
   const { reminders, markSent } = useBirthdayReminders(patients)
-
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
 
   const lastSessionMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -164,17 +137,6 @@ export default function PatientenPage() {
     })
   }
 
-  const matchPatientByInsurance = useCallback(
-    (card: EgkCardData) =>
-      patients.find(
-        (patient) =>
-          patient.insuranceNumber === card.insuranceNumber ||
-          `${patient.lastName}${patient.firstName}`.toLowerCase() ===
-            `${card.lastName}${card.firstName}`.toLowerCase(),
-      ),
-    [patients],
-  )
-
   const toggleRecipient = (patientId: string, checked: boolean) => {
     setSelectedRecipients((prev) =>
       checked ? Array.from(new Set([...prev, patientId])) : prev.filter((id) => id !== patientId),
@@ -192,33 +154,6 @@ export default function PatientenPage() {
     toast.success("Erinnerung als versendet markiert")
   }
 
-  const handleEgkIntake = async (mode: "serial" | "companion" | "demo") => {
-    try {
-      let card: EgkCardData
-      if (mode === "serial") {
-        card = await scanEgkCard()
-      } else if (mode === "companion") {
-        card = await fetchFromCompanion()
-      } else {
-        card = simulateCard()
-      }
-      const matchedPatient = matchPatientByInsurance(card)
-      const status = matchedPatient ? "matched" : "pending"
-      const event = addEgkEvent({ card, patientId: matchedPatient?.id, source: mode === "demo" ? "simulation" : mode === "serial" ? "webserial" : "companion", status })
-      if (matchedPatient) {
-        toast.success(`Demo-Karte ${matchedPatient.lastName} zugeordnet`)
-      } else {
-        toast.message("Neue Demo-eGK erfasst", {
-          description: "Noch keinem Patienten zugewiesen",
-        })
-      }
-      return event
-    } catch (error) {
-      toast.error((error as Error)?.message ?? "Demo-Karte konnte nicht eingelesen werden")
-      return null
-    }
-  }
-
   const handleInsertPlaceholder = (token: string) => {
     const textarea = bodyTextAreaRef.current
     const start = textarea?.selectionStart ?? mailBody.length
@@ -232,21 +167,6 @@ export default function PatientenPage() {
         textarea.selectionEnd = cursor
       }
     })
-  }
-
-  const egkStatusLabel: Record<string, string> = {
-    disconnected: "Nicht verbunden",
-    connecting: "Verbindung...",
-    ready: "Bereit",
-    reading: "Lese Daten",
-    error: "Fehler",
-  }
-
-  const handleAssignEgkEvent = (eventId: string, patientId: string) => {
-    const patient = patientMap.get(patientId)
-    if (!patient) return
-    assignEgkEvent(eventId, patient)
-    toast.success(`Demo-eGK ${patient.lastName} zugeordnet`)
   }
 
   const handleGenerateMerge = async () => {
@@ -348,9 +268,8 @@ export default function PatientenPage() {
       { label: "Ohne Indikation", value: withoutIndication, tone: withoutIndication > 0 ? "text-amber-700" : "text-emerald-700" },
       { label: "Beratung fällig", value: staleOrMissingSessions, tone: staleOrMissingSessions > 0 ? "text-amber-700" : "text-emerald-700" },
       { label: "Geburtstage", value: upcomingBirthdays.length, tone: upcomingBirthdays.length > 0 ? "text-blue-700" : "text-muted-foreground" },
-      { label: "Offene Kartenereignisse", value: egkEvents.filter((event) => event.status !== "matched").length, tone: "text-muted-foreground" },
     ]
-  }, [patients, lastSessionMap, upcomingBirthdays.length, egkEvents])
+  }, [patients, lastSessionMap, upcomingBirthdays.length])
 
   return (
     <div className="space-y-6">
@@ -436,163 +355,6 @@ export default function PatientenPage() {
         </TabsContent>
 
         <TabsContent value="workflows" className="space-y-4">
-          <Card className="border-dashed">
-            <Collapsible>
-              <CardHeader className="gap-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <CreditCard className="h-5 w-5" /> Patientenaufnahme: eGK-Demo
-                    </CardTitle>
-                    <CardDescription>
-                      Simulierte eGK-Daten für Tests und Produktdemos.
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={egkStatus === "ready" ? "secondary" : "outline"}>
-                      {egkStatusLabel[egkStatus]}
-                    </Badge>
-                    <CollapsibleTrigger asChild>
-                      <Button type="button" variant="outline" size="sm">
-                        Öffnen
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </CollapsibleTrigger>
-                  </div>
-                </div>
-              </CardHeader>
-              <CollapsibleContent>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={egkStatus === "ready" || isEgkConnecting}
-                      onClick={() => void connectEgk()}
-                    >
-                      {isEgkConnecting ? "Verbinde Demo..." : "Demo-Leser verbinden"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={egkStatus !== "ready" || isEgkReading}
-                      onClick={() => void handleEgkIntake("serial")}
-                    >
-                      <Cable className="mr-2 h-4 w-4" />
-                      {isEgkReading ? "Lese Demo..." : "Demo-Karte einlesen"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void handleEgkIntake("companion")}
-                    >
-                      <Inbox className="mr-2 h-4 w-4" /> Demo-Companion
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void handleEgkIntake("demo")}
-                    >
-                      Demo-Karte
-                    </Button>
-                  </div>
-                  {!egkSupported && (
-                    <p className="text-sm text-muted-foreground">
-                      Browser unterstützt keine Demo-Web-Serial-Verbindung. Nutzen Sie die
-                      Demo-Schaltfläche.
-                    </p>
-                  )}
-                  {egkError && <p className="text-sm text-destructive">{egkError}</p>}
-                  {lastEgkCard && (
-                    <div className="rounded-md border bg-background p-3 text-sm">
-                      <p className="font-medium">
-                        Zuletzt simuliert: {lastEgkCard.firstName} {lastEgkCard.lastName}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {lastEgkCard.street}, {lastEgkCard.zip} {lastEgkCard.city} ·{" "}
-                        {lastEgkCard.insuranceProvider}
-                      </p>
-                    </div>
-                  )}
-                  <div className="space-y-3">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Simulierte Kartenereignisse
-                    </p>
-                    {hasMounted && egkEvents.length > 0 ? (
-                      <div className="divide-y rounded-md border">
-                        {egkEvents.slice(0, 4).map((event) => {
-                          const matchedPatient = event.patientId
-                            ? patientMap.get(event.patientId)
-                            : null
-                          return (
-                            <div key={event.id} className="space-y-2 p-3 text-sm">
-                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                  <p className="font-semibold">
-                                    {event.card.lastName}, {event.card.firstName}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {event.card.insuranceProvider} · {event.card.insuranceNumber}
-                                  </p>
-                                </div>
-                                <Badge
-                                  variant={event.status === "matched" ? "secondary" : "outline"}
-                                >
-                                  {event.status === "matched" ? "Zugeordnet" : "Offen"}
-                                </Badge>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Select
-                                  value={matchedPatient?.id ?? UNASSIGNED_EGK_VALUE}
-                                  onValueChange={(value) => {
-                                    if (value === UNASSIGNED_EGK_VALUE) return
-                                    handleAssignEgkEvent(event.id, value)
-                                  }}
-                                >
-                                  <SelectTrigger className="w-[220px]">
-                                    <SelectValue placeholder="Patient verknüpfen" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value={UNASSIGNED_EGK_VALUE}>
-                                      Unzugeordnet
-                                    </SelectItem>
-                                    {patients.map((patient) => (
-                                      <SelectItem
-                                        key={`egk_select_${patient.id}`}
-                                        value={patient.id}
-                                      >
-                                        {patient.lastName}, {patient.firstName}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => archiveEgkEvent(event.id)}
-                                >
-                                  Archivieren
-                                </Button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Noch keine eingelesenen Karten.
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
-
           <Card className="border-dashed">
             <Collapsible>
               <CardHeader className="gap-3">

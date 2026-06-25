@@ -9,7 +9,7 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 - **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, protocols, meal plans, and the core patient clinical record with automatic cloud sync and local fallback.
 - **Smart Food Search:** Hybrid search engine combining local fuzzy matching with server-side trigram search across 7,000+ items.
 - **AI-Assisted Entry:** NLP-assisted food entry ("Smart-Eingabe") for rapid dietary assessment and protocol management.
-- **Professional Tools:** Pediatric percentile charts, PROCAM screening, plan PDF/CSV exports, patient document mail-merge PDFs, and an eGK demo workflow for patient intake simulations.
+- **Professional Tools:** Pediatric percentile charts, PROCAM screening, plan PDF/CSV exports, and patient document mail-merge PDFs.
 
 ## 🛠 Tech Stack
 

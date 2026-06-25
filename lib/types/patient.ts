@@ -50,27 +50,6 @@ export interface Patient extends Timestamped {
   emergencyContactRelationship?: string;
 }
 
-export interface EgkCardData {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: Gender;
-  insuranceProvider: string;
-  insuranceNumber: string;
-  street: string;
-  zip: string;
-  city: string;
-}
-
-export interface EgkScanEvent extends Timestamped {
-  id: ID;
-  status: "pending" | "matched" | "archived" | "error";
-  source: "webserial" | "companion" | "simulation";
-  card: EgkCardData;
-  patientId?: ID;
-  notes?: string;
-}
-
 export interface BirthdayReminder extends Timestamped {
   id: ID;
   patientId: ID;

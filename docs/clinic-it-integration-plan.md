@@ -264,9 +264,27 @@ FHIR job statuses should mirror HL7:
 - No outbound write-back is exposed in v1.
 - Audit events identify FHIR source system, resource type, resource ID, target type, and target ID without logging full PHI payloads.
 
-## 4. Next Implementation Order
+## 4. Future Card-Terminal Intake
+
+The previous simulated card-reader intake was removed from the app because it was demo-only and not near-term product-critical. Keep the idea as a future integration candidate, but rebuild it only as a production-grade clinic IT/device workflow.
+
+Potential scope:
+- Read patient master data from German health-card or clinic card-terminal infrastructure when a clinic has the required connector/device environment.
+- Use the same patient matching and duplicate-review surfaces as HL7/FHIR imports.
+- Never treat browser-only mock card data as a production path.
+- Persist only the minimum patient master data needed for intake; do not log raw device payloads.
+- Gate the feature behind explicit organization configuration, role checks, audit events, and procurement/security review.
+
+Acceptance criteria before implementation:
+- A real integration contract exists for the target connector/device path.
+- Security review covers device trust boundary, authentication, audit logging, PHI minimization, and failure handling.
+- Intake creates or updates patients only through reviewed match decisions, not silent overwrites.
+- Tests cover successful read, no-card/no-device errors, duplicate patient detection, access denial, and audit events.
+
+## 5. Next Implementation Order
 
 1. Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
 2. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
 3. Enable broader FHIR sync only after the HL7 review workflow is stable.
 4. Add outbound webhook retry workers and operational retry visibility.
+5. Revisit card-terminal intake only after HL7/FHIR and clinic security review foundations are stable.

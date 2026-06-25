@@ -364,31 +364,24 @@ test.describe("Patient Management", () => {
   test("creates a new patient", async ({ page }) => {
     await page.goto("/patienten/neu");
     await expect(page.getByRole("heading", { name: "Neuer Patient" })).toBeVisible();
-    await expect(page.getByText("eGK-Demo")).toBeVisible();
 
     const firstNameInput = page.locator('input[name="firstName"]');
     const lastNameInput = page.locator('input[name="lastName"]');
+    const dateOfBirthInput = page.locator('input[name="dateOfBirth"]');
     const uniqueLastName = `UITest${Date.now().toString().slice(-6)}`;
 
-    await page.getByRole("button", { name: "Demo-Karte nutzen" }).click();
-    await expect(firstNameInput).not.toHaveValue("");
-    const firstName = await firstNameInput.inputValue();
-
+    await firstNameInput.fill("Neu");
     await lastNameInput.fill(uniqueLastName);
+    await dateOfBirthInput.fill("1991-04-12");
+    await expect(firstNameInput).toHaveValue("Neu");
     await expect(lastNameInput).toHaveValue(uniqueLastName);
 
-    await page.getByRole("button", { name: "Patient erstellen" }).click();
+    await page.getByRole("button", { name: "Speichern & Liste" }).click();
 
     await expect(page).toHaveURL(/\/patienten/);
-    await expect(page.getByRole("link", { name: new RegExp(`${uniqueLastName}, ${firstName}`) }).first()).toBeVisible({
+    await expect(page.getByRole("link", { name: new RegExp(`${uniqueLastName}, Neu`) }).first()).toBeVisible({
       timeout: 30_000,
     });
-  });
-
-  test("labels the patient list egk area as demo mode", async ({ page }) => {
-    await openPatientList(page);
-    await expect(page.getByText("eGK-Demo")).toBeVisible();
-    await expect(page.getByText("Simulierte eGK-Daten für Tests und Produktdemos.")).toBeVisible();
   });
 
   test("views patient detail with tabs", async ({ page }) => {
