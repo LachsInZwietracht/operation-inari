@@ -32,13 +32,38 @@ interface LebensmittelVergleichPageClientProps {
 
 const NUTRIENTS_TO_COMPARE = [
   { id: "energie", label: "Energie", unit: "kcal" },
+  { id: "energie_kj", label: "Energie", unit: "kJ" },
   { id: "eiweiss", label: "Eiweiß", unit: "g" },
   { id: "fett", label: "Fett", unit: "g" },
   { id: "kohlenhydrate", label: "Kohlenhydrate", unit: "g" },
   { id: "ballaststoffe", label: "Ballaststoffe", unit: "g" },
+  { id: "zucker", label: "Zucker", unit: "g" },
+  { id: "gesaettigte_fettsaeuren", label: "Gesättigte Fettsäuren", unit: "g" },
+  { id: "ungesaettigte_fettsaeuren", label: "Ungesättigte Fettsäuren", unit: "g" },
+  { id: "wasser", label: "Wasser", unit: "g" },
+  { id: "vitamin_a", label: "Vitamin A", unit: "µg" },
+  { id: "vitamin_b1", label: "Vitamin B1", unit: "mg" },
+  { id: "vitamin_b2", label: "Vitamin B2", unit: "mg" },
+  { id: "vitamin_b6", label: "Vitamin B6", unit: "mg" },
+  { id: "vitamin_b12", label: "Vitamin B12", unit: "µg" },
+  { id: "vitamin_c", label: "Vitamin C", unit: "mg" },
+  { id: "vitamin_d", label: "Vitamin D", unit: "µg" },
+  { id: "vitamin_e", label: "Vitamin E", unit: "mg" },
+  { id: "folsaeure", label: "Folat", unit: "µg" },
+  { id: "calcium", label: "Calcium", unit: "mg" },
+  { id: "eisen", label: "Eisen", unit: "mg" },
+  { id: "magnesium", label: "Magnesium", unit: "mg" },
   { id: "natrium", label: "Natrium", unit: "mg" },
   { id: "kalium", label: "Kalium", unit: "mg" },
+  { id: "zink", label: "Zink", unit: "mg" },
+  { id: "phosphor", label: "Phosphor", unit: "mg" },
+  { id: "jod", label: "Jod", unit: "µg" },
 ];
+
+function getDecimals(nutrientId: string) {
+  if (nutrientId === "energie" || nutrientId === "energie_kj") return 0;
+  return 1;
+}
 
 function scale(food: Food | null, amount: number) {
   if (!food) return [];
@@ -62,7 +87,6 @@ function ComparisonFoodPicker({
 
   useEffect(() => {
     if (query.trim().length < 2) {
-      setResults([]);
       return;
     }
 
@@ -79,12 +103,12 @@ function ComparisonFoodPicker({
         try {
           const result = await searchFoodsInBrowser(query, {
             signal: controller.signal,
-            pageSize: 20,
+            pageSize: 50,
           });
 
-          // Merge server results with local branded matches (deduplicated)
+          // Keep ranked database results first; local branded matches fill gaps.
           const merged = new Map<string, Food>();
-          for (const f of [...localMatches, ...result.foods]) {
+          for (const f of [...result.foods, ...localMatches]) {
             merged.set(f.id, f);
           }
           setResults(Array.from(merged.values()));
@@ -238,13 +262,13 @@ export function LebensmittelVergleichPageClient({ brandedFoods }: LebensmittelVe
       {leftFood && rightFood ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Naehrstoffvergleich</CardTitle>
+            <CardTitle className="text-base">Nährstoffvergleich</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Naehrstoff</TableHead>
+                  <TableHead>Nährstoff</TableHead>
                   <TableHead className="text-right">{leftFood.name}</TableHead>
                   <TableHead className="text-right">{rightFood.name}</TableHead>
                   <TableHead className="text-right">Differenz</TableHead>
@@ -259,15 +283,15 @@ export function LebensmittelVergleichPageClient({ brandedFoods }: LebensmittelVe
                     <TableRow key={nutrient.id}>
                       <TableCell className="font-medium">{nutrient.label}</TableCell>
                       <TableCell className="text-right">
-                        {formatNumber(leftValue, nutrient.id === "energie" ? 0 : 1)} {nutrient.unit}
+                        {formatNumber(leftValue, getDecimals(nutrient.id))} {nutrient.unit}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatNumber(rightValue, nutrient.id === "energie" ? 0 : 1)} {nutrient.unit}
+                        {formatNumber(rightValue, getDecimals(nutrient.id))} {nutrient.unit}
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge variant={diff >= 0 ? "secondary" : "outline"}>
                           {diff >= 0 ? "+" : ""}
-                          {formatNumber(diff, 1)} {nutrient.unit}
+                          {formatNumber(diff, getDecimals(nutrient.id))} {nutrient.unit}
                         </Badge>
                       </TableCell>
                     </TableRow>

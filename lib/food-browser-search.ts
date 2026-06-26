@@ -1,4 +1,5 @@
 import type { Food, FoodBrowserQuery, FoodBrowserResult } from "@/lib/types";
+import { normalizeText, scoreMatch } from "@/lib/search";
 
 type SearchMode = Extract<NonNullable<FoodBrowserQuery["mode"]>, "name" | "code">;
 
@@ -15,6 +16,10 @@ const EMPTY_RESULT: FoodBrowserResult = {
   pageSize: 0,
   hasMore: false,
 };
+
+const SEARCH_SYNONYM_GROUPS = [
+  ["karotte", "karotten", "moehre", "moehren", "mohre", "mohren"],
+];
 
 function shouldPrioritizeCodeSearch(query: string) {
   const compact = query.trim().replace(/\s+/g, "");
@@ -36,14 +41,57 @@ function buildFoodBrowserUrl(query: string, mode: SearchMode, options: FoodBrows
   return `/api/foods/browser?${params.toString()}`;
 }
 
-function mergeFoodResults(results: FoodBrowserResult[]) {
+function getQueryVariants(query: string) {
+  const normalizedQuery = normalizeText(query);
+  const variants = new Set([query]);
+
+  for (const group of SEARCH_SYNONYM_GROUPS) {
+    if (group.some((term) => normalizedQuery.includes(term))) {
+      for (const term of group) {
+        variants.add(term);
+      }
+    }
+  }
+
+  return Array.from(variants);
+}
+
+function getFoodSearchScore(food: Food, query: string) {
+  const normalizedQuery = normalizeText(query);
+  const normalizedName = normalizeText(food.name);
+  const words = normalizedName.split(/[\s,;:()[\]{}-]+/).filter(Boolean);
+  const directMatch = scoreMatch(query, food.name);
+  let score = directMatch?.score ?? 0;
+
+  for (const variant of getQueryVariants(query)) {
+    const match = scoreMatch(variant, food.name);
+    score = Math.max(score, match?.score ?? 0);
+    if (words.some((word) => word === normalizeText(variant))) score = Math.max(score, 0.98);
+  }
+
+  if (normalizedName === normalizedQuery) score += 0.25;
+  if (normalizedName.startsWith(`${normalizedQuery} `)) score += 0.2;
+  if (words[0] === normalizedQuery) score += 0.15;
+  if (/\broh\b/.test(normalizedName)) score += 0.08;
+  if (food.sourceId === "bls") score += 0.04;
+  if (normalizedName.includes("gemuese-kartoffel") || normalizedName.includes("beikost")) score -= 0.2;
+  score -= Math.min(normalizedName.length / 400, 0.18);
+
+  return score;
+}
+
+function mergeFoodResults(results: FoodBrowserResult[], query: string) {
   const merged = new Map<string, Food>();
   for (const result of results) {
     for (const food of result.foods) {
       merged.set(food.id, food);
     }
   }
-  return Array.from(merged.values());
+  return Array.from(merged.values()).sort((a, b) => {
+    const scoreDiff = getFoodSearchScore(b, query) - getFoodSearchScore(a, query);
+    if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+    return a.name.localeCompare(b.name, "de");
+  });
 }
 
 export async function searchFoodsInBrowser(
@@ -59,20 +107,23 @@ export async function searchFoodsInBrowser(
     ? ["code", "name"]
     : ["name", "code"];
 
+  const queryVariants = getQueryVariants(query);
   const responses = await Promise.allSettled(
-    modes.map(async (mode) => {
-      const response = await fetch(buildFoodBrowserUrl(query, mode, options), {
-        signal: options.signal,
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
+    queryVariants.flatMap((queryVariant) =>
+      modes.map(async (mode) => {
+        const response = await fetch(buildFoodBrowserUrl(queryVariant, mode, options), {
+          signal: options.signal,
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
 
-      if (!response.ok) {
-        throw new Error("Lebensmittelsuche fehlgeschlagen");
-      }
+        if (!response.ok) {
+          throw new Error("Lebensmittelsuche fehlgeschlagen");
+        }
 
-      return (await response.json()) as FoodBrowserResult;
-    }),
+        return (await response.json()) as FoodBrowserResult;
+      }),
+    ),
   );
 
   const successfulResults = responses
@@ -88,7 +139,7 @@ export async function searchFoodsInBrowser(
       : new Error("Lebensmittelsuche fehlgeschlagen");
   }
 
-  const foods = mergeFoodResults(successfulResults);
+  const foods = mergeFoodResults(successfulResults, query);
   const totalCount = Math.max(foods.length, ...successfulResults.map((result) => result.totalCount));
 
   return {

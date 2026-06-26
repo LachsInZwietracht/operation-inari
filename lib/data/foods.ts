@@ -42,7 +42,35 @@ const FOOD_BASE_COLUMNS = [
   "created_at",
   "updated_at",
 ];
-const FOOD_BROWSER_NUTRIENT_IDS = ["energie", "eiweiss", "fett", "kohlenhydrate"];
+const FOOD_BROWSER_NUTRIENT_IDS = [
+  "energie",
+  "energie_kj",
+  "eiweiss",
+  "fett",
+  "kohlenhydrate",
+  "ballaststoffe",
+  "zucker",
+  "gesaettigte_fettsaeuren",
+  "ungesaettigte_fettsaeuren",
+  "wasser",
+  "vitamin_a",
+  "vitamin_b1",
+  "vitamin_b2",
+  "vitamin_b6",
+  "vitamin_b12",
+  "vitamin_c",
+  "vitamin_d",
+  "vitamin_e",
+  "folsaeure",
+  "calcium",
+  "eisen",
+  "magnesium",
+  "natrium",
+  "kalium",
+  "zink",
+  "phosphor",
+  "jod",
+];
 
 interface FoodRow {
   id: string;
@@ -1072,12 +1100,32 @@ const MEAL_PLAN_NUTRIENT_IDS = Array.from(
 
 const COMPARISON_NUTRIENT_IDS = [
   "energie",
+  "energie_kj",
   "eiweiss",
   "fett",
   "kohlenhydrate",
   "ballaststoffe",
+  "zucker",
+  "gesaettigte_fettsaeuren",
+  "ungesaettigte_fettsaeuren",
+  "wasser",
+  "vitamin_a",
+  "vitamin_b1",
+  "vitamin_b2",
+  "vitamin_b6",
+  "vitamin_b12",
+  "vitamin_c",
+  "vitamin_d",
+  "vitamin_e",
+  "folsaeure",
+  "calcium",
+  "eisen",
+  "magnesium",
   "natrium",
   "kalium",
+  "zink",
+  "phosphor",
+  "jod",
 ];
 
 const REPORT_NUTRIENT_IDS = Array.from(

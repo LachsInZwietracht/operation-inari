@@ -131,7 +131,7 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 - Used by list-style routes such as `/wissen` and protocol creation where full nutrient/portion data is not required but existing components still need `Food[]`
 
 **Tier 2c — Purpose-specific nutrient subsets:**
-- `fetchFoodsForComparison()` fetches only the seven nutrients rendered by `/lebensmittel/vergleichen` (`energie`, `eiweiss`, `fett`, `kohlenhydrate`, `ballaststoffe`, `natrium`, `kalium`)
+- `fetchFoodsForComparison()` fetches the nutrients rendered by `/lebensmittel/vergleichen`: energy in kcal/kJ, core macros, sugar, fatty-acid summary, water, selected vitamins, and key minerals
 - `fetchFoodsForMealPlans()`, `fetchFoodsForReports()`, and `fetchFoodsForProtocols()` keep route-specific nutrient sets for their calculation surfaces
 - Prefer adding a named subset wrapper when a route needs a stable nutrient profile that is smaller than the full catalog
 
@@ -906,7 +906,7 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 - Layout provides lazy access to the ~100 KB food search index; consumers load it through `/api/foods/search-index`
 - `/austauschtabellen` uses the search index plus nutrient value maps for selected table columns instead of hydrating `Food[]`; typed search is delegated to `/api/foods/browser` so RPC/name matching and BLS/source-code matching stay consistent with the main food browser
 - Remaining list pages that need `Food[]` use `fetchAllFoodsForList()` — 13 nutrients only, ~2-3 MB (down from ~46 MB with all 37 nutrients + portions)
-- Comparison uses `fetchFoodsForComparison()` — seven displayed nutrients only, no portions
+- Comparison uses `fetchFoodsForComparison()` — displayed comparison nutrients only, no portions
 - Pages requiring every nutrient and portion use `fetchAllFoods()` — all 37 nutrients + portions (~46 MB, use sparingly)
 - Protocol detail pages use `fetchFoodsForProtocols()` — protocol analysis/day-view nutrient subset, smaller than `fetchAllFoods()`
 - Food detail pages use `fetchFoodById()` for single-record queries (efficient)
@@ -934,7 +934,7 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 |---|---|---|---|
 | `fetchAllFoodsForList` | 13 | 1,935 | 4 |
 | `fetchFoodsForMealPlans` | 16 | 1,666 | 5 |
-| `fetchFoodsForComparison` | 7 | 2,608 | 3 |
+| `fetchFoodsForComparison` | 27 | 1,395 | 5 |
 | `fetchFoodsForReports` | 16 | 1,666 | 5 |
 | `fetchFoodsForProtocols` | 28 | 1,304 | 6 |
 | `fetchFoodsForInstitution` | 265 | 197 | 37 |
