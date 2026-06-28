@@ -255,6 +255,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260531000049_patient_scoped_meal_plan_uniqueness.sql` | Replaces user/date meal-plan uniqueness with patient-scoped uniqueness: one unassigned plan per user/date and one patient-bound plan per user/patient/date |
 | `20260609000056_organization_data_source_settings.sql` | Org-level activate/deactivate state for connected food databases (`organization_data_source_settings`), with member-read / owner-admin-write RLS |
 | `20260610000057_drop_lifecycle_and_replacement.sql` | Retires the removed database-lifecycle/food-replacement features: drops the `replace_food_references()` RPC and the `food_reference_replacements` and `data_source_events` tables |
+| `20260628000065_search_exclude_sources.sql` | Adds an `excluded_sources TEXT[]` argument to `search_foods_with_total`, `search_foods`, and `filter_foods_by_nutrient` so blocked/organization-disabled data sources are filtered in-query (before `COUNT(*) OVER ()` and `LIMIT`), instead of in JS after pagination |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -638,12 +639,17 @@ ETL Pipeline:
   same dataset (`openfoodfacts/product-database`) has ~70% German nutrition coverage.
   Before any large import, spot-check a few German barcodes for non-empty nutriments, and
   prefer the versioned Parquet (or a re-verified JSONL) over an arbitrary snapshot.
-- **Search gating is post-pagination (relevance prerequisite for a large import).**
-  Disabled/blocked data sources are filtered in JS *after* the paginated search RPC
-  returns (`lib/data/foods.ts` ~985-992), not inside the query. A large OFF import would
-  let branded OFF rows occupy result-page slots and skew counts even for orgs that have
-  OFF switched off (the default). Move active-source filtering into the RPC (exclude
-  disabled sources before LIMIT) BEFORE importing OFF at scale.
+- **Search gating now happens inside the RPCs (pre-pagination).** Disabled/blocked data
+  sources used to be filtered in JS *after* the paginated search RPC returned, which let
+  branded OFF rows occupy result-page slots and skewed `total_count` even for orgs that
+  have OFF switched off (the default). As of migration
+  `20260628000065_search_exclude_sources.sql`, `search_foods_with_total`, `search_foods`,
+  and `filter_foods_by_nutrient` take an `excluded_sources TEXT[]` argument and drop those
+  sources in the `WHERE` clause, before `COUNT(*) OVER ()` and `LIMIT/OFFSET`.
+  `fetchFoodsBrowserPage` (`lib/data/foods.ts`) resolves the blocked + organization-disabled
+  list once and threads it through all three query paths (plus the direct-query fallback,
+  which adds `NOT data_source_id IN (...)`); the JS post-filter remains only as a safety net.
+  This was the relevance prerequisite for importing OFF at scale — it is now satisfied.
 - Treat OFF strictly as a separate, optional supplement, never a BLS replacement.
 - OFF data often has `nutrition_data_per` set to "serving" not "100g" — normalize!
 - Many products are duplicates or have incomplete data
@@ -900,6 +906,8 @@ The paginated foods browser adds `search_foods_with_total()` in `supabase/migrat
 #### Nutrient sort/threshold RPC (`filter_foods_by_nutrient`)
 
 `supabase/migrations/20260604000054_filter_foods_by_nutrient.sql` adds `filter_foods_by_nutrient()`, which powers the foods browser's "Nach Nährstoff sortieren & filtern" panel (PRODI-feedback #4). It joins `food_nutrients` for a single `nutrient_id`, normalizes the amount to a per-100 g basis (`amount * 100 / NULLIF(per_amount, 0)` — `per_amount` is 100 for BLS/SFK rows but can differ for branded foods), applies the same source/category/group/custom-visibility filters as `search_foods_with_total`, optional `min_per_100g`/`max_per_100g` thresholds, and orders by the normalized amount (`asc`/`desc`). A composite `idx_food_nutrients_nutrient_amount (nutrient_id, amount)` index keeps the per-nutrient scan efficient. `group_filter` is a `TEXT[]` so the browser can pass `getFoodGroupDescendants(groupId)`. `fetchFoodsBrowserPageByNutrient` in `lib/data/foods.ts` calls it and falls back to the direct query path if the function is absent.
+
+All three catalog RPCs (`search_foods_with_total`, `search_foods`, `filter_foods_by_nutrient`) additionally accept an `excluded_sources TEXT[]` argument (migration `20260628000065_search_exclude_sources.sql`). `fetchFoodsBrowserPage` resolves the blocked (tariff-gated) plus organization-disabled source list once and passes it in, so disabled sources are removed inside the `WHERE` clause — before the window count and pagination. This keeps `total_count` honest and prevents a large optional source (Open Food Facts) from crowding the default BLS-first candidate set. When an explicit single-source filter is set the exclusion list is omitted (the source filter already narrows the scan); the JS post-filter in `fetchFoodsBrowserPage` stays as a defense-in-depth safety net.
 
 ### Search RPC Migration Path
 
