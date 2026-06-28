@@ -276,7 +276,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `user_reference_preferences` | Default reference selection for generic app views | `user_id`, `standard_id`, `profile_id`, `age_group_id`, `gender`, `life_stage` |
 | `patient_reference_assignments` | Patient-specific reference overrides | `patient_id`, `user_id`, `standard_id`, `profile_id`, `life_stage` |
 | `patients` intake extensions | Patient intake, clinic identifiers, consent, and contact context | `status`, `care_setting`, `external_patient_number`, `case_number`, preferred contact/language, consent flags, referrer/department, intake reason, patient goals, clinical/admin notes, emergency contact fields |
-| `off_staging` | Open Food Facts quarantine | `barcode`, `nutriments` (JSONB), `validated`, `promoted` |
+| `off_staging` | Open Food Facts quarantine | `barcode`, source/product metadata, `raw_product`, `nutriments` (JSONB), `data_quality_score`, `validated`, `promoted` |
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |
 | `daily_meal_plans` | Daily plans scoped by patient context, with lifecycle metadata and selected target preset | `user_id`, `date`, `patient_id` (unique as unassigned user/date or assigned user/patient/date), `title`, `status`, `notes`, `target_profile_id`, `diet_line_id`, `approved_at` |
@@ -535,35 +535,64 @@ ETL Pipeline:
 ### 5.2 Open Food Facts ETL
 
 **Current script:** `scripts/etl/import-off.ts`
+**Pre-filter script:** `scripts/etl/filter-off.ts`
 **Supported inputs:**
 - `OFF_SOURCE_FILE=/abs/path/file.json` for a local JSON payload
-- `OFF_SOURCE_URL=https://...` for a remote JSON payload
-- no OFF source env vars for a live sample fetch from Open Food Facts
+- `OFF_SOURCE_FILE=/abs/path/file.jsonl` or `.ndjson` for newline-delimited exports (decompress `.gz` first)
+- `OFF_SOURCE_URL=https://...` for a remote JSON or JSONL payload
+- no OFF source env vars for a live German sample fetch from the Open Food Facts search API
+
+**Configuration:**
+- `OFF_LIMIT=500` caps products processed in one run
+- `OFF_PAGE_SIZE=100` controls live API pagination
+- `OFF_MIN_QUALITY_SCORE=50` sets the promotion threshold after staging
+- `OFF_CHANGED_SINCE=<unix timestamp>` limits live API fetches to newer records where supported
+- `OFF_COUNTRY_TAG=en:germany` limits imports to products tagged for Germany; set `all` to disable
+- `OFF_SKIP_EMPTY_NUTRITION=true` skips products with no mapped nutrition values before staging
+- `OFF_ALLOW_SAMPLE_FALLBACK=true` permits the two-row sample fallback for local dry-runs only
+- `--dry-run` parses and validates without Supabase writes or promotion
 
 **Output:** Rows in `off_staging` → validated rows promoted to `foods` + `food_nutrients`
 
 **Run it:**
 ```bash
+OFF_FILTER_SOURCE_FILE="/abs/path/openfoodfacts-products.jsonl" npm run etl:filter:off
+OFF_SOURCE_FILE="data/off-germany-nutrition-sample.jsonl" npm run etl:off
 npm run etl:off
+OFF_LIMIT=25 npm run etl:off -- --dry-run
 ```
 
 ```
 ETL Pipeline:
-1. Load products from OFF_SOURCE_FILE, OFF_SOURCE_URL, or the live sample endpoint
-2. Parse each product:
+1. Optional pre-filter:
+   a. Read the large OFF JSONL export line-by-line
+   b. Keep only products matching `OFF_COUNTRY_TAG` and containing mapped energy/nutrition keys
+   c. Write a small JSONL file to `data/off-germany-nutrition-sample.jsonl` or `OFF_FILTER_OUTPUT_FILE`
+2. Load products from OFF_SOURCE_FILE, OFF_SOURCE_URL, or the live German OFF search API
+   - The JSONL reader is fault-tolerant: a single unparseable line is counted and
+     skipped, never aborts the run. A scan report (linesRead, parseErrors,
+     countrySkipped, droppedMissingFields, droppedNoNutrients, staged, promotable,
+     blockedForReview) is printed at the end so the true candidate count is visible.
+3. Parse each product:
    a. Extract barcode → source_food_id
    b. Extract product_name_de or product_name → name
    c. Extract brands → manufacturer
    d. Normalize nutriments to per-100g values where possible
-   e. Store normalized nutriments as JSONB in off_staging
-3. Validation pass (on off_staging):
-   a. REJECT if no energy value
-   b. REJECT if no product name
-   c. REJECT if macros exceed plausible 100g bounds
-   d. WARN if the payload reports serving-based data only
-   e. Score data quality 0-100 based on mapped nutrient completeness
-4. Promotion pass:
-   a. Promote validated rows into foods + food_nutrients
+   e. Store normalized nutriments, raw payload, source URL, image URL, product tags, allergen/additive tags, last-modified metadata, and data-quality score in off_staging
+4. Staging gate (lenient — controls review visibility):
+   a. DROP (never staged) only if barcode or product name is missing
+   b. DROP if no real per-100g nutrient could be mapped (when OFF_SKIP_EMPTY_NUTRITION)
+   c. Otherwise STAGE the product so it is visible in the review list, even when it
+      fails a promotion check below — the reason is recorded in `validation_errors`
+5. Validation pass (records blocking reasons on staged rows; `validated` = passes all):
+   a. BLOCK if no energy value
+   b. BLOCK if barcode is not a plausible GTIN/EAN (placeholder/ISBN/leading-zeros)
+   c. BLOCK if macros exceed plausible 100g bounds, subnutrients exceed parents, or energy is implausible versus macro-derived kcal
+   d. BLOCK if the payload reports nutriments per serving only
+   e. WARN if brand is missing
+   f. Score data quality 0-100 based on mapped nutrient completeness
+6. Promotion pass (strict):
+   a. Promote only validated rows at or above `OFF_MIN_QUALITY_SCORE` into foods + food_nutrients
    b. Set data_source_id = 'off' and is_branded = TRUE
    c. Persist data_quality_score on foods
    d. Map OFF nutrient keys to our nutrient_ids:
@@ -575,15 +604,33 @@ ETL Pipeline:
       - sugars_100g → zucker
       - saturated-fat_100g → gesaettigte_fettsaeuren
       - sodium_100g → natrium (stored in mg)
+      - salt_100g → salz
    e. Mark staging rows as promoted
 ```
 
 **Watch out for:**
+- **The JSONL snapshot can be defective — verify before bulk-importing.** A downloaded
+  `openfoodfacts-products.jsonl.gz` (2026-06) had near-zero nutrition for EU products:
+  only ~0.30% of German (and 0.14% of French) products carried per-100g energy, vs 72%
+  for US products — most EU records were skeletons with empty `nutriments: {}` and null
+  timestamps. This was a bad/partial export snapshot, NOT a real data gap: the same
+  products return full nutrition from the OFF API, and the Hugging Face Parquet of the
+  same dataset (`openfoodfacts/product-database`) has ~70% German nutrition coverage.
+  Before any large import, spot-check a few German barcodes for non-empty nutriments, and
+  prefer the versioned Parquet (or a re-verified JSONL) over an arbitrary snapshot.
+- **Search gating is post-pagination (relevance prerequisite for a large import).**
+  Disabled/blocked data sources are filtered in JS *after* the paginated search RPC
+  returns (`lib/data/foods.ts` ~985-992), not inside the query. A large OFF import would
+  let branded OFF rows occupy result-page slots and skew counts even for orgs that have
+  OFF switched off (the default). Move active-source filtering into the RPC (exclude
+  disabled sources before LIMIT) BEFORE importing OFF at scale.
+- Treat OFF strictly as a separate, optional supplement, never a BLS replacement.
 - OFF data often has `nutrition_data_per` set to "serving" not "100g" — normalize!
 - Many products are duplicates or have incomplete data
 - Product names are inconsistent (brand sometimes in name, sometimes not)
 - ODbL license requires attribution in the app (e.g., "Product data from Open Food Facts")
 - The app now surfaces OFF attribution and `dataQualityScore` on detail pages for promoted OFF foods
+- The live OFF endpoint can fail or time out. Production runs should fail loudly; use `OFF_ALLOW_SAMPLE_FALLBACK=true --dry-run` only for local smoke tests.
 
 ### 5.3 Swiss Food Composition Database ETL
 
