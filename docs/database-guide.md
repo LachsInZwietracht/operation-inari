@@ -536,6 +536,7 @@ ETL Pipeline:
 
 **Current script:** `scripts/etl/import-off.ts`
 **Pre-filter script:** `scripts/etl/filter-off.ts`
+**Parquet converter (recommended source):** `scripts/etl/off-parquet-to-jsonl.sql`
 **Supported inputs:**
 - `OFF_SOURCE_FILE=/abs/path/file.json` for a local JSON payload
 - `OFF_SOURCE_FILE=/abs/path/file.jsonl` or `.ndjson` for newline-delimited exports (decompress `.gz` first)
@@ -554,11 +555,30 @@ ETL Pipeline:
 
 **Output:** Rows in `off_staging` → validated rows promoted to `foods` + `food_nutrients`
 
-**Run it:**
+**Recommended path — Parquet → JSONL → import** (the plain `*.jsonl.gz` snapshot can
+ship with empty EU nutriments; the HF Parquet of the same dataset is complete). Requires
+the DuckDB CLI once (`brew install duckdb`); `data/` is gitignored so the large files stay
+out of the repo:
+```bash
+# 1. Download the complete Parquet (~7.6 GB) of the OFF dataset
+mkdir -p data/off
+curl -L -o data/off/food.parquet \
+  https://huggingface.co/datasets/openfoodfacts/product-database/resolve/main/food.parquet
+
+# 2. Convert to OFF-native JSONL, filtered to Germany (reshapes localized fields +
+#    nested nutriments). Edit the country tag in the .sql to target another country.
+duckdb < scripts/etl/off-parquet-to-jsonl.sql   # -> data/off/off-germany.jsonl
+
+# 3. Verify the candidate counts without writing (scan report), then import for real
+OFF_SOURCE_FILE="data/off/off-germany.jsonl" OFF_LIMIT=1000000 npm run etl:off -- --dry-run
+OFF_SOURCE_FILE="data/off/off-germany.jsonl" npm run etl:off
+```
+
+**Legacy path — pre-filter a raw JSONL export** (only if a verified-complete JSONL is on
+hand; spot-check a few German barcodes for non-empty nutriments first):
 ```bash
 OFF_FILTER_SOURCE_FILE="/abs/path/openfoodfacts-products.jsonl" npm run etl:filter:off
 OFF_SOURCE_FILE="data/off-germany-nutrition-sample.jsonl" npm run etl:off
-npm run etl:off
 OFF_LIMIT=25 npm run etl:off -- --dry-run
 ```
 
