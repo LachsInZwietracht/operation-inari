@@ -700,79 +700,125 @@ async function stageProducts(): Promise<StageReport> {
   return report;
 }
 
-async function promoteValidatedProducts() {
-  const client = requireSupabase();
-  const { data: validatedRows, error } = await client
-    .from("off_staging")
-    .select("*")
-    .eq("validated", true)
-    .eq("promoted", false)
-    .gte("data_quality_score", OFF_MIN_QUALITY_SCORE);
+interface OffStagingPromotionRow {
+  barcode: string;
+  product_name: string;
+  brands: string | null;
+  last_modified_t: number | null;
+  allergens_tags: string[] | null;
+  additives_tags: string[] | null;
+  labels_tags: string[] | null;
+  data_quality_score: number | null;
+  nutriments: Record<string, number> | null;
+}
 
-  if (error) {
-    throw new Error(`Failed to fetch validated OFF staging rows: ${error.message}`);
+// Promote a single staged row into `foods` + `food_nutrients` and flag it.
+// Returns true only if the row was fully promoted and marked, so the caller
+// can detect a batch that made no progress and stop instead of looping.
+async function promoteStagingRow(
+  client: ReturnType<typeof requireSupabase>,
+  row: OffStagingPromotionRow,
+): Promise<boolean> {
+  const nutriments = (row.nutriments ?? {}) as Record<string, number>;
+  const dataQualityScore = Number(row.data_quality_score ?? scoreProduct(nutriments));
+
+  const { data: promotedFood, error: foodError } = await client
+    .from("foods")
+    .upsert(
+      {
+        data_source_id: "off",
+        source_food_id: row.barcode,
+        source_version: row.last_modified_t ? `OFF ${row.last_modified_t}` : "LIVE",
+        name: row.product_name,
+        manufacturer: row.brands,
+        category_id: "cat_sonstiges",
+        is_branded: true,
+        allergens: row.allergens_tags ?? null,
+        additives: row.additives_tags ?? null,
+        tags: [
+          "off",
+          "validated",
+          ...(Array.isArray(row.labels_tags) ? row.labels_tags.slice(0, 12) : []),
+        ],
+        data_quality_score: dataQualityScore,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "data_source_id,source_food_id" },
+    )
+    .select("id")
+    .single();
+
+  if (foodError) {
+    console.error(`Failed to promote food ${row.barcode}: ${foodError.message}`);
+    return false;
   }
 
+  const nutrientRows = mapNutrients(promotedFood.id, nutriments);
+  if (nutrientRows.length > 0) {
+    const { error: nutrientError } = await client
+      .from("food_nutrients")
+      .upsert(nutrientRows, { onConflict: "food_id,nutrient_id" });
+
+    if (nutrientError) {
+      console.error(`Failed to promote nutrients for ${row.barcode}: ${nutrientError.message}`);
+      return false;
+    }
+  }
+
+  const { error: stagingError } = await client
+    .from("off_staging")
+    .update({ promoted: true })
+    .eq("barcode", row.barcode);
+
+  if (stagingError) {
+    console.error(`Failed to mark ${row.barcode} as promoted: ${stagingError.message}`);
+    return false;
+  }
+
+  return true;
+}
+
+async function promoteValidatedProducts() {
+  const client = requireSupabase();
+  const PROMOTE_BATCH = 1000;
   let promotedCount = 0;
 
-  for (const row of validatedRows ?? []) {
-    const nutriments = (row.nutriments ?? {}) as Record<string, number>;
-    const dataQualityScore = Number(row.data_quality_score ?? scoreProduct(nutriments));
+  // Process in batches: each promoted row flips promoted=true, so re-querying
+  // for the next unpromoted batch advances on its own. A single unbounded
+  // select is capped by PostgREST's max-rows (10k), which previously left every
+  // candidate beyond the first 10k staged-but-unpromoted.
+  for (;;) {
+    const { data, error } = await client
+      .from("off_staging")
+      .select("*")
+      .eq("validated", true)
+      .eq("promoted", false)
+      .gte("data_quality_score", OFF_MIN_QUALITY_SCORE)
+      .limit(PROMOTE_BATCH);
 
-    const { data: promotedFood, error: foodError } = await client
-      .from("foods")
-      .upsert(
-        {
-          data_source_id: "off",
-          source_food_id: row.barcode,
-          source_version: row.last_modified_t ? `OFF ${row.last_modified_t}` : "LIVE",
-          name: row.product_name,
-          manufacturer: row.brands,
-          category_id: "cat_sonstiges",
-          is_branded: true,
-          allergens: row.allergens_tags ?? null,
-          additives: row.additives_tags ?? null,
-          tags: [
-            "off",
-            "validated",
-            ...(Array.isArray(row.labels_tags) ? row.labels_tags.slice(0, 12) : []),
-          ],
-          data_quality_score: dataQualityScore,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "data_source_id,source_food_id" },
-      )
-      .select("id")
-      .single();
-
-    if (foodError) {
-      console.error(`Failed to promote food ${row.barcode}: ${foodError.message}`);
-      continue;
+    if (error) {
+      throw new Error(`Failed to fetch validated OFF staging rows: ${error.message}`);
     }
 
-    const nutrientRows = mapNutrients(promotedFood.id, nutriments);
-    if (nutrientRows.length > 0) {
-      const { error: nutrientError } = await client
-        .from("food_nutrients")
-        .upsert(nutrientRows, { onConflict: "food_id,nutrient_id" });
+    const batch = (data ?? []) as OffStagingPromotionRow[];
+    if (batch.length === 0) break;
 
-      if (nutrientError) {
-        console.error(`Failed to promote nutrients for ${row.barcode}: ${nutrientError.message}`);
-        continue;
+    let promotedThisBatch = 0;
+    for (const row of batch) {
+      if (await promoteStagingRow(client, row)) {
+        promotedCount += 1;
+        promotedThisBatch += 1;
       }
     }
 
-    const { error: stagingError } = await client
-      .from("off_staging")
-      .update({ promoted: true })
-      .eq("barcode", row.barcode);
-
-    if (stagingError) {
-      console.error(`Failed to mark ${row.barcode} as promoted: ${stagingError.message}`);
-      continue;
+    // Guard against an infinite loop: if a whole batch failed to flip
+    // promoted=true (e.g. a persistent upsert error), stop making no progress.
+    if (promotedThisBatch === 0) {
+      console.error(
+        `Promote made no progress on ${batch.length} rows; stopping to avoid a loop.`,
+      );
+      break;
     }
-
-    promotedCount += 1;
   }
 
   return promotedCount;
