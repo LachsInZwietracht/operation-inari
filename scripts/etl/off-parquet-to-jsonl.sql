@@ -35,17 +35,17 @@ COPY (
   SELECT
     code,
     coalesce(
-      list_filter(product_name, x -> x.lang = 'main')[1].text,
-      list_filter(product_name, x -> x.lang = 'en')[1].text,
+      list_filter(product_name, lambda x: x.lang = 'main')[1].text,
+      list_filter(product_name, lambda x: x.lang = 'en')[1].text,
       product_name[1].text
     ) AS product_name,
-    list_filter(product_name, x -> x.lang = 'de')[1].text AS product_name_de,
+    list_filter(product_name, lambda x: x.lang = 'de')[1].text AS product_name_de,
     coalesce(
-      list_filter(generic_name, x -> x.lang = 'main')[1].text,
-      list_filter(generic_name, x -> x.lang = 'en')[1].text,
+      list_filter(generic_name, lambda x: x.lang = 'main')[1].text,
+      list_filter(generic_name, lambda x: x.lang = 'en')[1].text,
       generic_name[1].text
     ) AS generic_name,
-    list_filter(generic_name, x -> x.lang = 'de')[1].text AS generic_name_de,
+    list_filter(generic_name, lambda x: x.lang = 'de')[1].text AS generic_name_de,
     brands,
     categories,
     categories_tags,
@@ -56,11 +56,11 @@ COPY (
     quantity,
     lang,
     coalesce(
-      list_filter(ingredients_text, x -> x.lang = 'main')[1].text,
-      list_filter(ingredients_text, x -> x.lang = 'en')[1].text,
+      list_filter(ingredients_text, lambda x: x.lang = 'main')[1].text,
+      list_filter(ingredients_text, lambda x: x.lang = 'en')[1].text,
       ingredients_text[1].text
     ) AS ingredients_text,
-    list_filter(ingredients_text, x -> x.lang = 'de')[1].text AS ingredients_text_de,
+    list_filter(ingredients_text, lambda x: x.lang = 'de')[1].text AS ingredients_text_de,
     nutriscore_grade,
     nova_group,
     nutrition_data_per,
@@ -68,16 +68,16 @@ COPY (
     map_from_entries(
       list_concat(
         list_transform(
-          list_filter(nutriments, n -> n['100g'] IS NOT NULL),
-          n -> {'key': n.name || '_100g', 'value': n['100g']}
+          list_filter(nutriments, lambda n: n['100g'] IS NOT NULL),
+          lambda n: {'key': n.name || '_100g', 'value': n['100g']}
         ),
         list_transform(
-          list_filter(nutriments, n -> n.serving IS NOT NULL),
-          n -> {'key': n.name || '_serving', 'value': n.serving}
+          list_filter(nutriments, lambda n: n.serving IS NOT NULL),
+          lambda n: {'key': n.name || '_serving', 'value': n.serving}
         ),
         list_transform(
-          list_filter(nutriments, n -> n.value IS NOT NULL),
-          n -> {'key': n.name || '_value', 'value': n.value}
+          list_filter(nutriments, lambda n: n.value IS NOT NULL),
+          lambda n: {'key': n.name || '_value', 'value': n.value}
         )
       )
     ) AS nutriments

@@ -636,9 +636,14 @@ ETL Pipeline:
   for US products — most EU records were skeletons with empty `nutriments: {}` and null
   timestamps. This was a bad/partial export snapshot, NOT a real data gap: the same
   products return full nutrition from the OFF API, and the Hugging Face Parquet of the
-  same dataset (`openfoodfacts/product-database`) has ~70% German nutrition coverage.
-  Before any large import, spot-check a few German barcodes for non-empty nutriments, and
-  prefer the versioned Parquet (or a re-verified JSONL) over an arbitrary snapshot.
+  same dataset (`openfoodfacts/product-database`) carries real nutrition for the majority
+  of German products. Measured locally (2026-06-28) on the full 7.6 GB Parquet: of 412,879
+  German rows, 56.5% have `energy-kcal_100g` and 55.6% have `proteins_100g`. Converting it
+  with `scripts/etl/off-parquet-to-jsonl.sql` and running `import-off.ts --dry-run` over the
+  whole file (`OFF_LIMIT=500000`) yields 233,236 staged and **220,843 promotable** German
+  products (quality ≥ 50) — vs 4 promotable from the defective dump. Before any large import,
+  spot-check a few German barcodes for non-empty nutriments, and prefer the versioned Parquet
+  (or a re-verified JSONL) over an arbitrary snapshot.
 - **Search gating now happens inside the RPCs (pre-pagination).** Disabled/blocked data
   sources used to be filtered in JS *after* the paginated search RPC returned, which let
   branded OFF rows occupy result-page slots and skewed `total_count` even for orgs that
