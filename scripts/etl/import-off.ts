@@ -610,6 +610,21 @@ async function stageProducts(): Promise<StageReport> {
     upsertErrors: 0,
   };
 
+  // Stage in bulk: one upsert per STAGE_BATCH rows instead of one per product.
+  // Against a remote database the per-row round-trip was the dominant cost
+  // (~850 rows/min); batching cuts staging from hours to minutes.
+  const STAGE_BATCH = 250;
+  let stageBuffer: Record<string, unknown>[] = [];
+  const flushStage = async () => {
+    if (!client || stageBuffer.length === 0) return;
+    const { error } = await client.from("off_staging").upsert(stageBuffer, { onConflict: "barcode" });
+    if (error) {
+      console.error(`Failed to stage batch of ${stageBuffer.length}: ${error.message}`);
+      report.upsertErrors += stageBuffer.length;
+    }
+    stageBuffer = [];
+  };
+
   for await (const product of iterateSourceProducts(report.scan)) {
     if (report.staged >= OFF_LIMIT) break;
 
@@ -648,55 +663,49 @@ async function stageProducts(): Promise<StageReport> {
       continue;
     }
 
-    const { error } = await client!.from("off_staging").upsert(
-      {
-        barcode: normalized.barcode,
-        product_name: normalized.productName,
-        brands: normalized.brands,
-        categories: normalized.categories,
-        countries_tags: normalized.countriesTags,
-        nutriments: normalized.nutriments,
-        validated: promotable,
-        promoted: false,
-        validation_errors: normalized.validationErrors.length > 0 ? normalized.validationErrors : null,
-        data_quality_errors:
-          normalized.dataQualityErrors.length > 0
-            ? { issues: normalized.dataQualityErrors, score: normalized.dataQualityScore }
-            : { score: normalized.dataQualityScore },
-        data_quality_score: normalized.dataQualityScore,
-        raw_product: normalized.rawProduct,
-        source_url: normalized.sourceUrl,
-        selected_name_locale: normalized.nameLocale,
-        quantity: normalized.quantity,
-        image_url: normalized.imageUrl,
-        last_modified_t: normalized.lastModifiedT,
-        last_modified_datetime: normalized.lastModifiedDatetime,
-        nutriscore_grade: normalized.nutriscoreGrade,
-        nova_group: normalized.novaGroup,
-        ecoscore_grade: normalized.ecoscoreGrade,
-        allergens_tags: normalized.allergensTags,
-        additives_tags: normalized.additivesTags,
-        labels_tags: normalized.labelsTags,
-        ingredients_text: normalized.ingredientsText,
-      },
-      { onConflict: "barcode" },
-    );
-
-    if (error) {
-      console.error(`Failed to stage ${normalized.barcode}: ${error.message}`);
-      report.upsertErrors += 1;
-      continue;
-    }
+    stageBuffer.push({
+      barcode: normalized.barcode,
+      product_name: normalized.productName,
+      brands: normalized.brands,
+      categories: normalized.categories,
+      countries_tags: normalized.countriesTags,
+      nutriments: normalized.nutriments,
+      validated: promotable,
+      promoted: false,
+      validation_errors: normalized.validationErrors.length > 0 ? normalized.validationErrors : null,
+      data_quality_errors:
+        normalized.dataQualityErrors.length > 0
+          ? { issues: normalized.dataQualityErrors, score: normalized.dataQualityScore }
+          : { score: normalized.dataQualityScore },
+      data_quality_score: normalized.dataQualityScore,
+      raw_product: normalized.rawProduct,
+      source_url: normalized.sourceUrl,
+      selected_name_locale: normalized.nameLocale,
+      quantity: normalized.quantity,
+      image_url: normalized.imageUrl,
+      last_modified_t: normalized.lastModifiedT,
+      last_modified_datetime: normalized.lastModifiedDatetime,
+      nutriscore_grade: normalized.nutriscoreGrade,
+      nova_group: normalized.novaGroup,
+      ecoscore_grade: normalized.ecoscoreGrade,
+      allergens_tags: normalized.allergensTags,
+      additives_tags: normalized.additivesTags,
+      labels_tags: normalized.labelsTags,
+      ingredients_text: normalized.ingredientsText,
+    });
 
     report.staged += 1;
     if (promotable) report.promotable += 1;
     else report.blockedForReview += 1;
 
-    if (report.staged % 100 === 0) {
+    if (stageBuffer.length >= STAGE_BATCH) await flushStage();
+
+    if (report.staged % 1000 === 0) {
       console.log(`  Staging progress: ${report.staged} staged (${report.promotable} promotable)`);
     }
   }
 
+  await flushStage();
   return report;
 }
 
@@ -712,82 +721,45 @@ interface OffStagingPromotionRow {
   nutriments: Record<string, number> | null;
 }
 
-// Promote a single staged row into `foods` + `food_nutrients` and flag it.
-// Returns true only if the row was fully promoted and marked, so the caller
-// can detect a batch that made no progress and stop instead of looping.
-async function promoteStagingRow(
-  client: ReturnType<typeof requireSupabase>,
-  row: OffStagingPromotionRow,
-): Promise<boolean> {
+// Build the `foods` row for one validated staging row.
+function buildFoodRow(row: OffStagingPromotionRow) {
   const nutriments = (row.nutriments ?? {}) as Record<string, number>;
-  const dataQualityScore = Number(row.data_quality_score ?? scoreProduct(nutriments));
-
-  const { data: promotedFood, error: foodError } = await client
-    .from("foods")
-    .upsert(
-      {
-        data_source_id: "off",
-        source_food_id: row.barcode,
-        source_version: row.last_modified_t ? `OFF ${row.last_modified_t}` : "LIVE",
-        name: row.product_name,
-        manufacturer: row.brands,
-        category_id: "cat_sonstiges",
-        is_branded: true,
-        allergens: row.allergens_tags ?? null,
-        additives: row.additives_tags ?? null,
-        tags: [
-          "off",
-          "validated",
-          ...(Array.isArray(row.labels_tags) ? row.labels_tags.slice(0, 12) : []),
-        ],
-        data_quality_score: dataQualityScore,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "data_source_id,source_food_id" },
-    )
-    .select("id")
-    .single();
-
-  if (foodError) {
-    console.error(`Failed to promote food ${row.barcode}: ${foodError.message}`);
-    return false;
-  }
-
-  const nutrientRows = mapNutrients(promotedFood.id, nutriments);
-  if (nutrientRows.length > 0) {
-    const { error: nutrientError } = await client
-      .from("food_nutrients")
-      .upsert(nutrientRows, { onConflict: "food_id,nutrient_id" });
-
-    if (nutrientError) {
-      console.error(`Failed to promote nutrients for ${row.barcode}: ${nutrientError.message}`);
-      return false;
-    }
-  }
-
-  const { error: stagingError } = await client
-    .from("off_staging")
-    .update({ promoted: true })
-    .eq("barcode", row.barcode);
-
-  if (stagingError) {
-    console.error(`Failed to mark ${row.barcode} as promoted: ${stagingError.message}`);
-    return false;
-  }
-
-  return true;
+  return {
+    data_source_id: "off",
+    source_food_id: row.barcode,
+    source_version: row.last_modified_t ? `OFF ${row.last_modified_t}` : "LIVE",
+    name: row.product_name,
+    manufacturer: row.brands,
+    category_id: "cat_sonstiges",
+    is_branded: true,
+    allergens: row.allergens_tags ?? null,
+    additives: row.additives_tags ?? null,
+    tags: [
+      "off",
+      "validated",
+      ...(Array.isArray(row.labels_tags) ? row.labels_tags.slice(0, 12) : []),
+    ],
+    data_quality_score: Number(row.data_quality_score ?? scoreProduct(nutriments)),
+    updated_at: new Date().toISOString(),
+  };
 }
 
 async function promoteValidatedProducts() {
   const client = requireSupabase();
-  const PROMOTE_BATCH = 1000;
+  // Promote in bulk: each iteration upserts a whole batch of foods in one call,
+  // maps the returned ids back to barcodes, upserts all their nutrients in
+  // chunks, and flips the whole batch to promoted=true. This replaces ~3
+  // round-trips per row (food + nutrients + staging update) — fatal against a
+  // remote database — with ~4 round-trips per PROMOTE_BATCH rows. PROMOTE_BATCH
+  // is kept modest so the `.in(barcode, …)` URL and request payloads stay small.
+  const PROMOTE_BATCH = 200;
+  const NUTRIENT_CHUNK = 4000;
   let promotedCount = 0;
 
-  // Process in batches: each promoted row flips promoted=true, so re-querying
-  // for the next unpromoted batch advances on its own. A single unbounded
-  // select is capped by PostgREST's max-rows (10k), which previously left every
-  // candidate beyond the first 10k staged-but-unpromoted.
   for (;;) {
+    // Each promoted row flips promoted=true, so re-querying for the next
+    // unpromoted batch advances on its own (a single unbounded select would be
+    // capped by PostgREST's max-rows and silently leave the rest unpromoted).
     const { data, error } = await client
       .from("off_staging")
       .select("*")
@@ -803,22 +775,61 @@ async function promoteValidatedProducts() {
     const batch = (data ?? []) as OffStagingPromotionRow[];
     if (batch.length === 0) break;
 
-    let promotedThisBatch = 0;
+    // 1) Bulk-upsert foods; the returned id↔source_food_id pairs map nutrients.
+    const { data: upserted, error: foodError } = await client
+      .from("foods")
+      .upsert(batch.map(buildFoodRow), { onConflict: "data_source_id,source_food_id" })
+      .select("id, source_food_id");
+
+    if (foodError) {
+      console.error(`Failed to promote ${batch.length} foods: ${foodError.message}; stopping.`);
+      break;
+    }
+
+    const idByBarcode = new Map(
+      ((upserted ?? []) as { id: string; source_food_id: string }[]).map((f) => [
+        f.source_food_id,
+        f.id,
+      ]),
+    );
+
+    // 2) Build every nutrient row for the batch, upsert in chunks.
+    const nutrientRows: ReturnType<typeof mapNutrients> = [];
     for (const row of batch) {
-      if (await promoteStagingRow(client, row)) {
-        promotedCount += 1;
-        promotedThisBatch += 1;
+      const foodId = idByBarcode.get(row.barcode);
+      if (!foodId) continue;
+      for (const n of mapNutrients(foodId, (row.nutriments ?? {}) as Record<string, number>)) {
+        nutrientRows.push(n);
       }
     }
 
-    // Guard against an infinite loop: if a whole batch failed to flip
-    // promoted=true (e.g. a persistent upsert error), stop making no progress.
-    if (promotedThisBatch === 0) {
-      console.error(
-        `Promote made no progress on ${batch.length} rows; stopping to avoid a loop.`,
-      );
+    let nutrientOk = true;
+    for (let i = 0; i < nutrientRows.length; i += NUTRIENT_CHUNK) {
+      const { error: nutrientError } = await client
+        .from("food_nutrients")
+        .upsert(nutrientRows.slice(i, i + NUTRIENT_CHUNK), { onConflict: "food_id,nutrient_id" });
+      if (nutrientError) {
+        console.error(`Failed to promote nutrient chunk: ${nutrientError.message}; stopping.`);
+        nutrientOk = false;
+        break;
+      }
+    }
+    if (!nutrientOk) break;
+
+    // 3) Flip the whole batch to promoted=true.
+    const promotedBarcodes = batch.map((r) => r.barcode).filter((b) => idByBarcode.has(b));
+    const { error: stagingError } = await client
+      .from("off_staging")
+      .update({ promoted: true })
+      .in("barcode", promotedBarcodes);
+
+    if (stagingError) {
+      console.error(`Failed to mark ${promotedBarcodes.length} rows promoted: ${stagingError.message}; stopping.`);
       break;
     }
+
+    promotedCount += promotedBarcodes.length;
+    console.log(`  Promote progress: ${promotedCount} promoted`);
   }
 
   return promotedCount;
