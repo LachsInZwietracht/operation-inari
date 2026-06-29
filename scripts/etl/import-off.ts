@@ -87,6 +87,9 @@ const OFF_CHANGED_SINCE = Number(process.env.OFF_CHANGED_SINCE || "0");
 const OFF_COUNTRY_TAG = process.env.OFF_COUNTRY_TAG || "en:germany";
 const OFF_SKIP_EMPTY_NUTRITION = process.env.OFF_SKIP_EMPTY_NUTRITION !== "false";
 const OFF_ALLOW_SAMPLE_FALLBACK = process.env.OFF_ALLOW_SAMPLE_FALLBACK === "true";
+// Skip staging and only promote already-staged validated rows. Lets a crashed
+// or partial import resume the promote phase without re-staging the whole file.
+const OFF_PROMOTE_ONLY = process.env.OFF_PROMOTE_ONLY === "true";
 const DRY_RUN = process.argv.includes("--dry-run");
 
 if (!SUPABASE_SERVICE_ROLE_KEY && !DRY_RUN) {
@@ -762,7 +765,9 @@ async function promoteValidatedProducts() {
     // capped by PostgREST's max-rows and silently leave the rest unpromoted).
     const { data, error } = await client
       .from("off_staging")
-      .select("*")
+      .select(
+        "barcode, product_name, brands, last_modified_t, allergens_tags, additives_tags, labels_tags, data_quality_score, nutriments",
+      )
       .eq("validated", true)
       .eq("promoted", false)
       .gte("data_quality_score", OFF_MIN_QUALITY_SCORE)
@@ -869,6 +874,15 @@ async function main() {
   console.log(
     `Config: limit=${OFF_LIMIT}, pageSize=${OFF_PAGE_SIZE}, minQuality=${OFF_MIN_QUALITY_SCORE}, country=${OFF_COUNTRY_TAG}, skipEmptyNutrition=${OFF_SKIP_EMPTY_NUTRITION}, dryRun=${DRY_RUN}`,
   );
+
+  if (OFF_PROMOTE_ONLY) {
+    console.log("Promote-only mode: skipping staging, promoting validated rows.");
+    const promoted = await promoteValidatedProducts();
+    console.log(`Promoted ${promoted} validated products`);
+    await updateSourceMetadata(promoted);
+    console.log("Open Food Facts import complete.");
+    return;
+  }
 
   const report = await stageProducts();
   console.log("OFF scan report:");
