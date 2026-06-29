@@ -689,6 +689,7 @@ function normalizeFoodBrowserQuery(query: FoodBrowserQuery) {
 async function fetchFoodsBrowserPageByName(
   query: ReturnType<typeof normalizeFoodBrowserQuery>,
   client: SupabaseClient,
+  excludedSources: FoodSourceId[] = [],
 ): Promise<FoodBrowserResult> {
   try {
     const params = {
@@ -700,6 +701,7 @@ async function fetchFoodsBrowserPageByName(
       requesting_user_id: null,
       result_limit: query.pageSize,
       result_offset: query.offset,
+      excluded_sources: excludedSources.length > 0 ? excludedSources : null,
     };
 
     let rows: SearchFoodsRpcRow[] = [];
@@ -722,7 +724,7 @@ async function fetchFoodsBrowserPageByName(
         console.error(
           `Food browser name search RPCs failed; falling back to direct query: ${fallback.error.message}`,
         );
-        return fetchFoodsBrowserPageByQuery(query, client);
+        return fetchFoodsBrowserPageByQuery(query, client, excludedSources);
       }
 
       rows = ((fallback.data ?? []) as SearchFoodsRpcRow[]).map((row) => ({
@@ -777,6 +779,7 @@ async function fetchFoodsBrowserPageByName(
 async function fetchFoodsBrowserPageByQuery(
   query: ReturnType<typeof normalizeFoodBrowserQuery>,
   client: SupabaseClient,
+  excludedSources: FoodSourceId[] = [],
 ): Promise<FoodBrowserResult> {
   try {
     const withExactCount = shouldUseExactFoodBrowserCount(query);
@@ -793,6 +796,9 @@ async function fetchFoodsBrowserPageByQuery(
 
     if (query.dataSourceId) {
       builder = builder.eq("data_source_id", query.dataSourceId);
+    }
+    if (excludedSources.length > 0) {
+      builder = builder.not("data_source_id", "in", `(${excludedSources.join(",")})`);
     }
     if (query.categoryId) {
       builder = builder.eq("category_id", query.categoryId);
@@ -879,9 +885,10 @@ interface FilterFoodsByNutrientRpcRow {
 async function fetchFoodsBrowserPageByNutrient(
   query: ReturnType<typeof normalizeFoodBrowserQuery>,
   client: SupabaseClient,
+  excludedSources: FoodSourceId[] = [],
 ): Promise<FoodBrowserResult> {
   if (!query.nutrientId) {
-    return fetchFoodsBrowserPageByQuery(query, client);
+    return fetchFoodsBrowserPageByQuery(query, client, excludedSources);
   }
   try {
     const params = {
@@ -897,6 +904,7 @@ async function fetchFoodsBrowserPageByNutrient(
       requesting_user_id: null,
       result_limit: query.pageSize,
       result_offset: query.offset,
+      excluded_sources: excludedSources.length > 0 ? excludedSources : null,
     };
 
     const { data, error } = await withTimeout(
@@ -909,7 +917,7 @@ async function fetchFoodsBrowserPageByNutrient(
       console.error(
         `Food browser nutrient sort RPC failed; falling back to direct query: ${error.message}`,
       );
-      return fetchFoodsBrowserPageByQuery(query, client);
+      return fetchFoodsBrowserPageByQuery(query, client, excludedSources);
     }
 
     const rows = (data ?? []) as FilterFoodsByNutrientRpcRow[];
@@ -971,21 +979,30 @@ export async function fetchFoodsBrowserPage(
         normalized.nutrientMax != null),
   );
 
-  let result: FoodBrowserResult;
-  if (nutrientModeActive) {
-    result = await fetchFoodsBrowserPageByNutrient(normalized, client);
-  } else if (normalized.mode === "name" && normalized.q) {
-    result = await fetchFoodsBrowserPageByName(normalized, client);
-  } else {
-    result = await fetchFoodsBrowserPageByQuery(normalized, client);
-  }
-
-  // Filter out blocked data sources: tariff-gated (e.g., SFK without license)
-  // plus any source the organization has switched off in /datenbank.
+  // Resolve the data sources to hide BEFORE querying: tariff-gated (e.g. SFK
+  // without license) plus any source the organization switched off in
+  // /datenbank. Pushing this into the search/filter RPCs (instead of dropping
+  // rows after pagination) keeps total counts honest and stops a large optional
+  // source like Open Food Facts from crowding the default BLS-first candidate
+  // set before the gate is applied. An explicit source filter already narrows
+  // to one source, so the exclusion list is only needed when none is set.
   const blocked = new Set<FoodSourceId>(getBlockedSourceIds());
   for (const id of await fetchOrganizationDisabledSourceIds()) {
     blocked.add(id);
   }
+  const excludedSources = normalized.dataSourceId ? [] : Array.from(blocked);
+
+  let result: FoodBrowserResult;
+  if (nutrientModeActive) {
+    result = await fetchFoodsBrowserPageByNutrient(normalized, client, excludedSources);
+  } else if (normalized.mode === "name" && normalized.q) {
+    result = await fetchFoodsBrowserPageByName(normalized, client, excludedSources);
+  } else {
+    result = await fetchFoodsBrowserPageByQuery(normalized, client, excludedSources);
+  }
+
+  // Safety net: if an explicit source filter is set, or a query path could not
+  // apply the exclusion, drop any blocked rows that slipped through.
   if (blocked.size > 0) {
     result = {
       ...result,

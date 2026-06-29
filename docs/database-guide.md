@@ -255,6 +255,8 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260531000049_patient_scoped_meal_plan_uniqueness.sql` | Replaces user/date meal-plan uniqueness with patient-scoped uniqueness: one unassigned plan per user/date and one patient-bound plan per user/patient/date |
 | `20260609000056_organization_data_source_settings.sql` | Org-level activate/deactivate state for connected food databases (`organization_data_source_settings`), with member-read / owner-admin-write RLS |
 | `20260610000057_drop_lifecycle_and_replacement.sql` | Retires the removed database-lifecycle/food-replacement features: drops the `replace_food_references()` RPC and the `food_reference_replacements` and `data_source_events` tables |
+| `20260628000065_search_exclude_sources.sql` | Adds an `excluded_sources TEXT[]` argument to `search_foods_with_total`, `search_foods`, and `filter_foods_by_nutrient` so blocked/organization-disabled data sources are filtered in-query (before `COUNT(*) OVER ()` and `LIMIT`), instead of in JS after pagination |
+| `20260629000066_search_bls_priority.sql` | Makes `is_branded` the primary sort key in `search_foods_with_total` and `search_foods` so curated reference foods (BLS/SFK, `is_branded = FALSE`) always rank above branded Open Food Facts products (`is_branded = TRUE`); OFF stays visible but never crowds the top of name-search results |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -276,7 +278,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `user_reference_preferences` | Default reference selection for generic app views | `user_id`, `standard_id`, `profile_id`, `age_group_id`, `gender`, `life_stage` |
 | `patient_reference_assignments` | Patient-specific reference overrides | `patient_id`, `user_id`, `standard_id`, `profile_id`, `life_stage` |
 | `patients` intake extensions | Patient intake, clinic identifiers, consent, and contact context | `status`, `care_setting`, `external_patient_number`, `case_number`, preferred contact/language, consent flags, referrer/department, intake reason, patient goals, clinical/admin notes, emergency contact fields |
-| `off_staging` | Open Food Facts quarantine | `barcode`, `nutriments` (JSONB), `validated`, `promoted` |
+| `off_staging` | Open Food Facts quarantine | `barcode`, source/product metadata, `raw_product`, `nutriments` (JSONB), `data_quality_score`, `validated`, `promoted` |
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |
 | `daily_meal_plans` | Daily plans scoped by patient context, with lifecycle metadata and selected target preset | `user_id`, `date`, `patient_id` (unique as unassigned user/date or assigned user/patient/date), `title`, `status`, `notes`, `target_profile_id`, `diet_line_id`, `approved_at` |
@@ -535,35 +537,84 @@ ETL Pipeline:
 ### 5.2 Open Food Facts ETL
 
 **Current script:** `scripts/etl/import-off.ts`
+**Pre-filter script:** `scripts/etl/filter-off.ts`
+**Parquet converter (recommended source):** `scripts/etl/off-parquet-to-jsonl.sql`
 **Supported inputs:**
 - `OFF_SOURCE_FILE=/abs/path/file.json` for a local JSON payload
-- `OFF_SOURCE_URL=https://...` for a remote JSON payload
-- no OFF source env vars for a live sample fetch from Open Food Facts
+- `OFF_SOURCE_FILE=/abs/path/file.jsonl` or `.ndjson` for newline-delimited exports (decompress `.gz` first)
+- `OFF_SOURCE_URL=https://...` for a remote JSON or JSONL payload
+- no OFF source env vars for a live German sample fetch from the Open Food Facts search API
+
+**Configuration:**
+- `OFF_LIMIT=500` caps products processed in one run
+- `OFF_PAGE_SIZE=100` controls live API pagination
+- `OFF_MIN_QUALITY_SCORE=50` sets the promotion threshold after staging
+- `OFF_CHANGED_SINCE=<unix timestamp>` limits live API fetches to newer records where supported
+- `OFF_COUNTRY_TAG=en:germany` limits imports to products tagged for Germany; set `all` to disable
+- `OFF_SKIP_EMPTY_NUTRITION=true` skips products with no mapped nutrition values before staging
+- `OFF_ALLOW_SAMPLE_FALLBACK=true` permits the two-row sample fallback for local dry-runs only
+- `--dry-run` parses and validates without Supabase writes or promotion
 
 **Output:** Rows in `off_staging` → validated rows promoted to `foods` + `food_nutrients`
 
-**Run it:**
+**Recommended path — Parquet → JSONL → import** (the plain `*.jsonl.gz` snapshot can
+ship with empty EU nutriments; the HF Parquet of the same dataset is complete). Requires
+the DuckDB CLI once (`brew install duckdb`); `data/` is gitignored so the large files stay
+out of the repo:
 ```bash
-npm run etl:off
+# 1. Download the complete Parquet (~7.6 GB) of the OFF dataset
+mkdir -p data/off
+curl -L -o data/off/food.parquet \
+  https://huggingface.co/datasets/openfoodfacts/product-database/resolve/main/food.parquet
+
+# 2. Convert to OFF-native JSONL, filtered to Germany (reshapes localized fields +
+#    nested nutriments). Edit the country tag in the .sql to target another country.
+duckdb < scripts/etl/off-parquet-to-jsonl.sql   # -> data/off/off-germany.jsonl
+
+# 3. Verify the candidate counts without writing (scan report), then import for real
+OFF_SOURCE_FILE="data/off/off-germany.jsonl" OFF_LIMIT=1000000 npm run etl:off -- --dry-run
+OFF_SOURCE_FILE="data/off/off-germany.jsonl" npm run etl:off
+```
+
+**Legacy path — pre-filter a raw JSONL export** (only if a verified-complete JSONL is on
+hand; spot-check a few German barcodes for non-empty nutriments first):
+```bash
+OFF_FILTER_SOURCE_FILE="/abs/path/openfoodfacts-products.jsonl" npm run etl:filter:off
+OFF_SOURCE_FILE="data/off-germany-nutrition-sample.jsonl" npm run etl:off
+OFF_LIMIT=25 npm run etl:off -- --dry-run
 ```
 
 ```
 ETL Pipeline:
-1. Load products from OFF_SOURCE_FILE, OFF_SOURCE_URL, or the live sample endpoint
-2. Parse each product:
+1. Optional pre-filter:
+   a. Read the large OFF JSONL export line-by-line
+   b. Keep only products matching `OFF_COUNTRY_TAG` and containing mapped energy/nutrition keys
+   c. Write a small JSONL file to `data/off-germany-nutrition-sample.jsonl` or `OFF_FILTER_OUTPUT_FILE`
+2. Load products from OFF_SOURCE_FILE, OFF_SOURCE_URL, or the live German OFF search API
+   - The JSONL reader is fault-tolerant: a single unparseable line is counted and
+     skipped, never aborts the run. A scan report (linesRead, parseErrors,
+     countrySkipped, droppedMissingFields, droppedNoNutrients, staged, promotable,
+     blockedForReview) is printed at the end so the true candidate count is visible.
+3. Parse each product:
    a. Extract barcode → source_food_id
    b. Extract product_name_de or product_name → name
    c. Extract brands → manufacturer
    d. Normalize nutriments to per-100g values where possible
-   e. Store normalized nutriments as JSONB in off_staging
-3. Validation pass (on off_staging):
-   a. REJECT if no energy value
-   b. REJECT if no product name
-   c. REJECT if macros exceed plausible 100g bounds
-   d. WARN if the payload reports serving-based data only
-   e. Score data quality 0-100 based on mapped nutrient completeness
-4. Promotion pass:
-   a. Promote validated rows into foods + food_nutrients
+   e. Store normalized nutriments, raw payload, source URL, image URL, product tags, allergen/additive tags, last-modified metadata, and data-quality score in off_staging
+4. Staging gate (lenient — controls review visibility):
+   a. DROP (never staged) only if barcode or product name is missing
+   b. DROP if no real per-100g nutrient could be mapped (when OFF_SKIP_EMPTY_NUTRITION)
+   c. Otherwise STAGE the product so it is visible in the review list, even when it
+      fails a promotion check below — the reason is recorded in `validation_errors`
+5. Validation pass (records blocking reasons on staged rows; `validated` = passes all):
+   a. BLOCK if no energy value
+   b. BLOCK if barcode is not a plausible GTIN/EAN (placeholder/ISBN/leading-zeros)
+   c. BLOCK if macros exceed plausible 100g bounds, subnutrients exceed parents, or energy is implausible versus macro-derived kcal
+   d. BLOCK if the payload reports nutriments per serving only
+   e. WARN if brand is missing
+   f. Score data quality 0-100 based on mapped nutrient completeness
+6. Promotion pass (strict):
+   a. Promote only validated rows at or above `OFF_MIN_QUALITY_SCORE` into foods + food_nutrients
    b. Set data_source_id = 'off' and is_branded = TRUE
    c. Persist data_quality_score on foods
    d. Map OFF nutrient keys to our nutrient_ids:
@@ -575,15 +626,43 @@ ETL Pipeline:
       - sugars_100g → zucker
       - saturated-fat_100g → gesaettigte_fettsaeuren
       - sodium_100g → natrium (stored in mg)
+      - salt_100g → salz
    e. Mark staging rows as promoted
 ```
 
 **Watch out for:**
+- **The JSONL snapshot can be defective — verify before bulk-importing.** A downloaded
+  `openfoodfacts-products.jsonl.gz` (2026-06) had near-zero nutrition for EU products:
+  only ~0.30% of German (and 0.14% of French) products carried per-100g energy, vs 72%
+  for US products — most EU records were skeletons with empty `nutriments: {}` and null
+  timestamps. This was a bad/partial export snapshot, NOT a real data gap: the same
+  products return full nutrition from the OFF API, and the Hugging Face Parquet of the
+  same dataset (`openfoodfacts/product-database`) carries real nutrition for the majority
+  of German products. Measured locally (2026-06-28) on the full 7.6 GB Parquet: of 412,879
+  German rows, 56.5% have `energy-kcal_100g` and 55.6% have `proteins_100g`. Converting it
+  with `scripts/etl/off-parquet-to-jsonl.sql` and running `import-off.ts --dry-run` over the
+  whole file (`OFF_LIMIT=500000`) yields 233,236 staged and **220,843 promotable** German
+  products (quality ≥ 50) — vs 4 promotable from the defective dump. Before any large import,
+  spot-check a few German barcodes for non-empty nutriments, and prefer the versioned Parquet
+  (or a re-verified JSONL) over an arbitrary snapshot.
+- **Search gating now happens inside the RPCs (pre-pagination).** Disabled/blocked data
+  sources used to be filtered in JS *after* the paginated search RPC returned, which let
+  branded OFF rows occupy result-page slots and skewed `total_count` even for orgs that
+  have OFF switched off (the default). As of migration
+  `20260628000065_search_exclude_sources.sql`, `search_foods_with_total`, `search_foods`,
+  and `filter_foods_by_nutrient` take an `excluded_sources TEXT[]` argument and drop those
+  sources in the `WHERE` clause, before `COUNT(*) OVER ()` and `LIMIT/OFFSET`.
+  `fetchFoodsBrowserPage` (`lib/data/foods.ts`) resolves the blocked + organization-disabled
+  list once and threads it through all three query paths (plus the direct-query fallback,
+  which adds `NOT data_source_id IN (...)`); the JS post-filter remains only as a safety net.
+  This was the relevance prerequisite for importing OFF at scale — it is now satisfied.
+- Treat OFF strictly as a separate, optional supplement, never a BLS replacement.
 - OFF data often has `nutrition_data_per` set to "serving" not "100g" — normalize!
 - Many products are duplicates or have incomplete data
 - Product names are inconsistent (brand sometimes in name, sometimes not)
 - ODbL license requires attribution in the app (e.g., "Product data from Open Food Facts")
 - The app now surfaces OFF attribution and `dataQualityScore` on detail pages for promoted OFF foods
+- The live OFF endpoint can fail or time out. Production runs should fail loudly; use `OFF_ALLOW_SAMPLE_FALLBACK=true --dry-run` only for local smoke tests.
 
 ### 5.3 Swiss Food Composition Database ETL
 
@@ -833,6 +912,10 @@ The paginated foods browser adds `search_foods_with_total()` in `supabase/migrat
 #### Nutrient sort/threshold RPC (`filter_foods_by_nutrient`)
 
 `supabase/migrations/20260604000054_filter_foods_by_nutrient.sql` adds `filter_foods_by_nutrient()`, which powers the foods browser's "Nach Nährstoff sortieren & filtern" panel (PRODI-feedback #4). It joins `food_nutrients` for a single `nutrient_id`, normalizes the amount to a per-100 g basis (`amount * 100 / NULLIF(per_amount, 0)` — `per_amount` is 100 for BLS/SFK rows but can differ for branded foods), applies the same source/category/group/custom-visibility filters as `search_foods_with_total`, optional `min_per_100g`/`max_per_100g` thresholds, and orders by the normalized amount (`asc`/`desc`). A composite `idx_food_nutrients_nutrient_amount (nutrient_id, amount)` index keeps the per-nutrient scan efficient. `group_filter` is a `TEXT[]` so the browser can pass `getFoodGroupDescendants(groupId)`. `fetchFoodsBrowserPageByNutrient` in `lib/data/foods.ts` calls it and falls back to the direct query path if the function is absent.
+
+All three catalog RPCs (`search_foods_with_total`, `search_foods`, `filter_foods_by_nutrient`) additionally accept an `excluded_sources TEXT[]` argument (migration `20260628000065_search_exclude_sources.sql`). `fetchFoodsBrowserPage` resolves the blocked (tariff-gated) plus organization-disabled source list once and passes it in, so disabled sources are removed inside the `WHERE` clause — before the window count and pagination. This keeps `total_count` honest and prevents a large optional source (Open Food Facts) from crowding the default BLS-first candidate set. When an explicit single-source filter is set the exclusion list is omitted (the source filter already narrows the scan); the JS post-filter in `fetchFoodsBrowserPage` stays as a defense-in-depth safety net.
+
+**BLS-priority ranking (migration `20260629000066`).** OFF is default-visible (a source is active unless an org switches it off), so with ~220k branded German OFF products promoted, a generic query like "Milch" otherwise returns thousands of branded hits whose trigram similarity rivals the canonical BLS entries — branded products crowd the top. `search_foods_with_total` and `search_foods` therefore sort by `is_branded ASC` first (generic reference foods lead), then `sim_score DESC`, then name. BLS/SFK are `is_branded = FALSE`; promoted OFF foods are `is_branded = TRUE`. Net effect: branded products stay searchable (a brand-specific query like "Haribo" still surfaces OFF, since no BLS row competes) but never displace the reference catalog at the top. `filter_foods_by_nutrient` is intentionally left ordered by the nutrient amount — "sort foods by protein" must rank by the nutrient, not by source.
 
 ### Search RPC Migration Path
 
