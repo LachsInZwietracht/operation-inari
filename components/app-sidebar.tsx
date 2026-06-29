@@ -188,10 +188,21 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard" prefetch={false}>
-                <span className="flex aspect-square size-8 items-center justify-center rounded-lg border bg-white p-1">
-                  <BrandMark className="size-full" priority />
+                <span
+                  className="flex aspect-square size-9 items-center justify-center rounded-[11px] p-1.5"
+                  style={{
+                    background: "linear-gradient(150deg, #46d896, #33b87b)",
+                    boxShadow: "0 6px 16px rgba(62, 207, 142, 0.32)",
+                  }}
+                >
+                  <BrandMark className="size-full" variant="black" priority />
                 </span>
-                <span className="truncate text-lg font-semibold">Inari</span>
+                <span className="grid leading-tight">
+                  <span className="truncate text-[18px] font-extrabold tracking-tight">Inari</span>
+                  <span className="truncate text-[10px] font-bold tracking-[0.14em] text-sidebar-foreground/70">
+                    ERNÄHRUNGSPRAXIS
+                  </span>
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
