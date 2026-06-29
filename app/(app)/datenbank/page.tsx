@@ -1,9 +1,6 @@
-import Link from "next/link"
-import { GitCompareArrows, Lock, PlugZap, ShieldCheck } from "lucide-react"
+import { PlugZap } from "lucide-react"
 
 import { PageHeader } from "@/components/page-header"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchCurrentMembership, getCurrentUser } from "@/lib/auth/access"
 import { ADMIN_ROLES } from "@/lib/auth/rbac"
@@ -103,51 +100,6 @@ export default async function DatenbankPage() {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-            Open Food Facts Review
-          </CardTitle>
-          <CardDescription>
-            Interne Pruefansicht fuer importierte Open-Food-Facts-Produkte, Qualitaetswerte und Warnungen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" asChild>
-            <Link href="/datenbank/open-food-facts">Review oeffnen</Link>
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="opacity-90">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <CardTitle className="flex items-center gap-2">
-              <GitCompareArrows className="h-5 w-5 text-muted-foreground" />
-              Naehrstoffvergleich
-            </CardTitle>
-            <Badge variant="outline" className="gap-1">
-              <Lock className="h-3 w-3" />
-              Bald verfuegbar
-            </Badge>
-          </div>
-          <CardDescription>
-            Zwei Lebensmittel (auch quellenuebergreifend) vergleichen. Abweichungen ueber 10% werden farblich hervorgehoben.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center">
-            <div className="rounded-full bg-muted p-3">
-              <Lock className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <p className="text-sm font-medium">Diese Funktion ist noch nicht freigeschaltet.</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Der Naehrstoffvergleich wird in einer kommenden Version verfuegbar sein.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

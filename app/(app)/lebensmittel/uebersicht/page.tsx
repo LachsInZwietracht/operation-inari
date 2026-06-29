@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { Apple, Plus, Scale, ArrowRight } from "lucide-react";
+import { Apple, Plus, ArrowRight } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const FOOD_HEADER = {
   title: "Lebensmittel",
-  description: "Lebensmittel durchsuchen, neue anlegen und Nährwerte vergleichen.",
+  description: "Lebensmittel durchsuchen und neue anlegen.",
   helpText:
-    "Hier laufen alle Lebensmittel-Workflows zusammen: Durchsuchen Sie die gesamte Datenbank, legen Sie ein eigenes Lebensmittel an oder vergleichen Sie mehrere Lebensmittel nebeneinander.",
+    "Hier laufen alle Lebensmittel-Workflows zusammen: Durchsuchen Sie die gesamte Datenbank oder legen Sie ein eigenes Lebensmittel an.",
 };
 
 interface FoodTile {
@@ -30,12 +30,6 @@ const FOOD_TILES: FoodTile[] = [
     description: "Ein eigenes Lebensmittel mit Nährwerten erfassen.",
     icon: Plus,
     route: "/lebensmittel/neu",
-  },
-  {
-    label: "Lebensmittel vergleichen",
-    description: "Mehrere Lebensmittel nebeneinander stellen und Nährwerte gegenüberstellen.",
-    icon: Scale,
-    route: "/lebensmittel/vergleichen",
   },
 ];
 

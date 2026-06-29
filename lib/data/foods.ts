@@ -1115,36 +1115,6 @@ const MEAL_PLAN_NUTRIENT_IDS = Array.from(
   new Set([...LIST_NUTRIENT_IDS, ...MEAL_PLAN_EXTRA_NUTRIENT_IDS]),
 );
 
-const COMPARISON_NUTRIENT_IDS = [
-  "energie",
-  "energie_kj",
-  "eiweiss",
-  "fett",
-  "kohlenhydrate",
-  "ballaststoffe",
-  "zucker",
-  "gesaettigte_fettsaeuren",
-  "ungesaettigte_fettsaeuren",
-  "wasser",
-  "vitamin_a",
-  "vitamin_b1",
-  "vitamin_b2",
-  "vitamin_b6",
-  "vitamin_b12",
-  "vitamin_c",
-  "vitamin_d",
-  "vitamin_e",
-  "folsaeure",
-  "calcium",
-  "eisen",
-  "magnesium",
-  "natrium",
-  "kalium",
-  "zink",
-  "phosphor",
-  "jod",
-];
-
 const REPORT_NUTRIENT_IDS = Array.from(
   new Set([
     ...LIST_NUTRIENT_IDS,
@@ -1173,10 +1143,6 @@ export const fetchAllFoodsForList = cache(async () => {
 
 export const fetchFoodsForMealPlans = cache(async () => {
   return fetchFoodsChunked({ cacheKeyPrefix: "foods-meal-plans", nutrientIds: MEAL_PLAN_NUTRIENT_IDS });
-});
-
-export const fetchFoodsForComparison = cache(async () => {
-  return fetchFoodsChunked({ cacheKeyPrefix: "foods-comparison", nutrientIds: COMPARISON_NUTRIENT_IDS });
 });
 
 export const fetchFoodsForReports = cache(async () => {

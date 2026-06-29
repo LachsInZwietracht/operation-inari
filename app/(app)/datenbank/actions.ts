@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/access";
 import { ADMIN_ROLES } from "@/lib/auth/rbac";
 import { canAccessDataSource } from "@/lib/data/entitlements";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import type { FoodSourceId } from "@/lib/types";
 
 export interface DataSourceActivationResult {
@@ -19,8 +19,6 @@ const activationSchema = z.object({
   sourceId: z.string().trim().min(1, "Quelle fehlt."),
   isActive: z.boolean(),
 });
-
-const offBarcodeSchema = z.string().trim().regex(/^\d{8,14}$/, "Barcode ist ungueltig.");
 
 /**
  * Switches a connected food database on or off for the current user's
@@ -83,52 +81,4 @@ export async function setDataSourceActiveAction(
 
     return { status: "error", message };
   }
-}
-
-export async function removeOpenFoodFactsFoodAction(formData: FormData) {
-  const parsed = offBarcodeSchema.safeParse(formData.get("barcode"));
-  if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Barcode ist ungueltig.");
-  }
-
-  const barcode = parsed.data;
-  const supabase = await createClient();
-  await requireRole(ADMIN_ROLES, supabase);
-
-  const serviceClient = await createServiceClient();
-  const { data: stagingRow, error: readError } = await serviceClient
-    .from("off_staging")
-    .select("validation_errors")
-    .eq("barcode", barcode)
-    .maybeSingle();
-
-  if (readError) throw new Error(readError.message);
-
-  const existingErrors = Array.isArray(stagingRow?.validation_errors)
-    ? stagingRow.validation_errors
-    : [];
-  const validationErrors = Array.from(new Set([...existingErrors, "Manually removed from food database"]));
-
-  const { error: deleteError } = await serviceClient
-    .from("foods")
-    .delete()
-    .eq("data_source_id", "off")
-    .eq("source_food_id", barcode);
-
-  if (deleteError) throw new Error(deleteError.message);
-
-  const { error: stagingError } = await serviceClient
-    .from("off_staging")
-    .update({
-      promoted: false,
-      validated: false,
-      validation_errors: validationErrors,
-    })
-    .eq("barcode", barcode);
-
-  if (stagingError) throw new Error(stagingError.message);
-
-  revalidatePath("/datenbank/open-food-facts");
-  revalidatePath("/datenbank");
-  revalidatePath("/lebensmittel");
 }
