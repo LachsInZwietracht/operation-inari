@@ -722,6 +722,7 @@ interface OffStagingPromotionRow {
   labels_tags: string[] | null;
   data_quality_score: number | null;
   nutriments: Record<string, number> | null;
+  promoted: boolean;
 }
 
 // Build the `foods` row for one validated staging row.
@@ -749,46 +750,32 @@ function buildFoodRow(row: OffStagingPromotionRow) {
 
 async function promoteValidatedProducts() {
   const client = requireSupabase();
-  // Promote in bulk: each iteration upserts a whole batch of foods in one call,
-  // maps the returned ids back to barcodes, upserts all their nutrients in
-  // chunks, and flips the whole batch to promoted=true. This replaces ~3
-  // round-trips per row (food + nutrients + staging update) — fatal against a
-  // remote database — with ~4 round-trips per PROMOTE_BATCH rows. PROMOTE_BATCH
-  // is kept modest so the `.in(barcode, …)` URL and request payloads stay small.
+  // Keyset-scan the validated, quality-cleared staging rows in barcode (primary
+  // key) order and promote the ones not yet in `foods`. Iterating by a forward
+  // PK cursor — instead of repeatedly querying for `promoted = false` — is immune
+  // to the table/index bloat that the per-row promoted=true updates create: each
+  // page reads a bounded window from the cursor, so a partial or resumed run
+  // never has to scan past a growing block of already-promoted rows (which
+  // previously hit Postgres' statement timeout around ~90k promoted).
+  const SCAN_PAGE = 1000;
   const PROMOTE_BATCH = 200;
   const NUTRIENT_CHUNK = 4000;
   let promotedCount = 0;
+  let cursor = "";
+  let pending: OffStagingPromotionRow[] = [];
 
-  for (;;) {
-    // Each promoted row flips promoted=true, so re-querying for the next
-    // unpromoted batch advances on its own (a single unbounded select would be
-    // capped by PostgREST's max-rows and silently leave the rest unpromoted).
-    const { data, error } = await client
-      .from("off_staging")
-      .select(
-        "barcode, product_name, brands, last_modified_t, allergens_tags, additives_tags, labels_tags, data_quality_score, nutriments",
-      )
-      .eq("validated", true)
-      .eq("promoted", false)
-      .gte("data_quality_score", OFF_MIN_QUALITY_SCORE)
-      .limit(PROMOTE_BATCH);
+  const flushPending = async () => {
+    if (pending.length === 0) return;
+    const rows = pending;
+    pending = [];
 
-    if (error) {
-      throw new Error(`Failed to fetch validated OFF staging rows: ${error.message}`);
-    }
-
-    const batch = (data ?? []) as OffStagingPromotionRow[];
-    if (batch.length === 0) break;
-
-    // 1) Bulk-upsert foods; the returned id↔source_food_id pairs map nutrients.
+    // Bulk-upsert foods; the returned id↔source_food_id pairs map nutrients.
     const { data: upserted, error: foodError } = await client
       .from("foods")
-      .upsert(batch.map(buildFoodRow), { onConflict: "data_source_id,source_food_id" })
+      .upsert(rows.map(buildFoodRow), { onConflict: "data_source_id,source_food_id" })
       .select("id, source_food_id");
-
     if (foodError) {
-      console.error(`Failed to promote ${batch.length} foods: ${foodError.message}; stopping.`);
-      break;
+      throw new Error(`Failed to promote ${rows.length} foods: ${foodError.message}`);
     }
 
     const idByBarcode = new Map(
@@ -798,45 +785,70 @@ async function promoteValidatedProducts() {
       ]),
     );
 
-    // 2) Build every nutrient row for the batch, upsert in chunks.
     const nutrientRows: ReturnType<typeof mapNutrients> = [];
-    for (const row of batch) {
+    for (const row of rows) {
       const foodId = idByBarcode.get(row.barcode);
       if (!foodId) continue;
       for (const n of mapNutrients(foodId, (row.nutriments ?? {}) as Record<string, number>)) {
         nutrientRows.push(n);
       }
     }
-
-    let nutrientOk = true;
     for (let i = 0; i < nutrientRows.length; i += NUTRIENT_CHUNK) {
       const { error: nutrientError } = await client
         .from("food_nutrients")
         .upsert(nutrientRows.slice(i, i + NUTRIENT_CHUNK), { onConflict: "food_id,nutrient_id" });
       if (nutrientError) {
-        console.error(`Failed to promote nutrient chunk: ${nutrientError.message}; stopping.`);
-        nutrientOk = false;
-        break;
+        throw new Error(`Failed to promote nutrient chunk: ${nutrientError.message}`);
       }
     }
-    if (!nutrientOk) break;
 
-    // 3) Flip the whole batch to promoted=true.
-    const promotedBarcodes = batch.map((r) => r.barcode).filter((b) => idByBarcode.has(b));
+    // Mark just these rows promoted to keep the staging review view consistent.
+    // The keyset scan does not rely on this flag, so the bloat the update creates
+    // no longer degrades fetching.
     const { error: stagingError } = await client
       .from("off_staging")
       .update({ promoted: true })
-      .in("barcode", promotedBarcodes);
-
+      .in(
+        "barcode",
+        rows.map((r) => r.barcode),
+      );
     if (stagingError) {
-      console.error(`Failed to mark ${promotedBarcodes.length} rows promoted: ${stagingError.message}; stopping.`);
-      break;
+      throw new Error(`Failed to mark ${rows.length} rows promoted: ${stagingError.message}`);
     }
 
-    promotedCount += promotedBarcodes.length;
+    promotedCount += rows.length;
     console.log(`  Promote progress: ${promotedCount} promoted`);
+  };
+
+  for (;;) {
+    let query = client
+      .from("off_staging")
+      .select(
+        "barcode, product_name, brands, last_modified_t, allergens_tags, additives_tags, labels_tags, data_quality_score, nutriments, promoted",
+      )
+      .eq("validated", true)
+      .gte("data_quality_score", OFF_MIN_QUALITY_SCORE)
+      .order("barcode", { ascending: true })
+      .limit(SCAN_PAGE);
+    if (cursor) query = query.gt("barcode", cursor);
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to scan OFF staging rows: ${error.message}`);
+    }
+
+    const page = (data ?? []) as OffStagingPromotionRow[];
+    if (page.length === 0) break;
+    cursor = page[page.length - 1].barcode;
+
+    for (const row of page) {
+      if (row.promoted) continue; // already in foods
+      pending.push(row);
+      if (pending.length >= PROMOTE_BATCH) await flushPending();
+    }
   }
 
+  await flushPending();
   return promotedCount;
 }
 
