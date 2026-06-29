@@ -11,7 +11,6 @@ import {
   Hash,
   Layers3,
   List,
-  Scale,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -612,12 +611,6 @@ export function LebensmittelPageClient({
             <Link href="/lebensmittel/neu">
               <Layers3 className="mr-1.5 h-4 w-4" />
               Neues Lebensmittel
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/lebensmittel/vergleichen">
-              <Scale className="mr-1.5 h-4 w-4" />
-              Vergleichen
             </Link>
           </Button>
         </div>
