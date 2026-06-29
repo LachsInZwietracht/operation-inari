@@ -87,6 +87,9 @@ const OFF_CHANGED_SINCE = Number(process.env.OFF_CHANGED_SINCE || "0");
 const OFF_COUNTRY_TAG = process.env.OFF_COUNTRY_TAG || "en:germany";
 const OFF_SKIP_EMPTY_NUTRITION = process.env.OFF_SKIP_EMPTY_NUTRITION !== "false";
 const OFF_ALLOW_SAMPLE_FALLBACK = process.env.OFF_ALLOW_SAMPLE_FALLBACK === "true";
+// Skip staging and only promote already-staged validated rows. Lets a crashed
+// or partial import resume the promote phase without re-staging the whole file.
+const OFF_PROMOTE_ONLY = process.env.OFF_PROMOTE_ONLY === "true";
 const DRY_RUN = process.argv.includes("--dry-run");
 
 if (!SUPABASE_SERVICE_ROLE_KEY && !DRY_RUN) {
@@ -610,6 +613,21 @@ async function stageProducts(): Promise<StageReport> {
     upsertErrors: 0,
   };
 
+  // Stage in bulk: one upsert per STAGE_BATCH rows instead of one per product.
+  // Against a remote database the per-row round-trip was the dominant cost
+  // (~850 rows/min); batching cuts staging from hours to minutes.
+  const STAGE_BATCH = 250;
+  let stageBuffer: Record<string, unknown>[] = [];
+  const flushStage = async () => {
+    if (!client || stageBuffer.length === 0) return;
+    const { error } = await client.from("off_staging").upsert(stageBuffer, { onConflict: "barcode" });
+    if (error) {
+      console.error(`Failed to stage batch of ${stageBuffer.length}: ${error.message}`);
+      report.upsertErrors += stageBuffer.length;
+    }
+    stageBuffer = [];
+  };
+
   for await (const product of iterateSourceProducts(report.scan)) {
     if (report.staged >= OFF_LIMIT) break;
 
@@ -648,55 +666,49 @@ async function stageProducts(): Promise<StageReport> {
       continue;
     }
 
-    const { error } = await client!.from("off_staging").upsert(
-      {
-        barcode: normalized.barcode,
-        product_name: normalized.productName,
-        brands: normalized.brands,
-        categories: normalized.categories,
-        countries_tags: normalized.countriesTags,
-        nutriments: normalized.nutriments,
-        validated: promotable,
-        promoted: false,
-        validation_errors: normalized.validationErrors.length > 0 ? normalized.validationErrors : null,
-        data_quality_errors:
-          normalized.dataQualityErrors.length > 0
-            ? { issues: normalized.dataQualityErrors, score: normalized.dataQualityScore }
-            : { score: normalized.dataQualityScore },
-        data_quality_score: normalized.dataQualityScore,
-        raw_product: normalized.rawProduct,
-        source_url: normalized.sourceUrl,
-        selected_name_locale: normalized.nameLocale,
-        quantity: normalized.quantity,
-        image_url: normalized.imageUrl,
-        last_modified_t: normalized.lastModifiedT,
-        last_modified_datetime: normalized.lastModifiedDatetime,
-        nutriscore_grade: normalized.nutriscoreGrade,
-        nova_group: normalized.novaGroup,
-        ecoscore_grade: normalized.ecoscoreGrade,
-        allergens_tags: normalized.allergensTags,
-        additives_tags: normalized.additivesTags,
-        labels_tags: normalized.labelsTags,
-        ingredients_text: normalized.ingredientsText,
-      },
-      { onConflict: "barcode" },
-    );
-
-    if (error) {
-      console.error(`Failed to stage ${normalized.barcode}: ${error.message}`);
-      report.upsertErrors += 1;
-      continue;
-    }
+    stageBuffer.push({
+      barcode: normalized.barcode,
+      product_name: normalized.productName,
+      brands: normalized.brands,
+      categories: normalized.categories,
+      countries_tags: normalized.countriesTags,
+      nutriments: normalized.nutriments,
+      validated: promotable,
+      promoted: false,
+      validation_errors: normalized.validationErrors.length > 0 ? normalized.validationErrors : null,
+      data_quality_errors:
+        normalized.dataQualityErrors.length > 0
+          ? { issues: normalized.dataQualityErrors, score: normalized.dataQualityScore }
+          : { score: normalized.dataQualityScore },
+      data_quality_score: normalized.dataQualityScore,
+      raw_product: normalized.rawProduct,
+      source_url: normalized.sourceUrl,
+      selected_name_locale: normalized.nameLocale,
+      quantity: normalized.quantity,
+      image_url: normalized.imageUrl,
+      last_modified_t: normalized.lastModifiedT,
+      last_modified_datetime: normalized.lastModifiedDatetime,
+      nutriscore_grade: normalized.nutriscoreGrade,
+      nova_group: normalized.novaGroup,
+      ecoscore_grade: normalized.ecoscoreGrade,
+      allergens_tags: normalized.allergensTags,
+      additives_tags: normalized.additivesTags,
+      labels_tags: normalized.labelsTags,
+      ingredients_text: normalized.ingredientsText,
+    });
 
     report.staged += 1;
     if (promotable) report.promotable += 1;
     else report.blockedForReview += 1;
 
-    if (report.staged % 100 === 0) {
+    if (stageBuffer.length >= STAGE_BATCH) await flushStage();
+
+    if (report.staged % 1000 === 0) {
       console.log(`  Staging progress: ${report.staged} staged (${report.promotable} promotable)`);
     }
   }
 
+  await flushStage();
   return report;
 }
 
@@ -710,117 +722,133 @@ interface OffStagingPromotionRow {
   labels_tags: string[] | null;
   data_quality_score: number | null;
   nutriments: Record<string, number> | null;
+  promoted: boolean;
 }
 
-// Promote a single staged row into `foods` + `food_nutrients` and flag it.
-// Returns true only if the row was fully promoted and marked, so the caller
-// can detect a batch that made no progress and stop instead of looping.
-async function promoteStagingRow(
-  client: ReturnType<typeof requireSupabase>,
-  row: OffStagingPromotionRow,
-): Promise<boolean> {
+// Build the `foods` row for one validated staging row.
+function buildFoodRow(row: OffStagingPromotionRow) {
   const nutriments = (row.nutriments ?? {}) as Record<string, number>;
-  const dataQualityScore = Number(row.data_quality_score ?? scoreProduct(nutriments));
-
-  const { data: promotedFood, error: foodError } = await client
-    .from("foods")
-    .upsert(
-      {
-        data_source_id: "off",
-        source_food_id: row.barcode,
-        source_version: row.last_modified_t ? `OFF ${row.last_modified_t}` : "LIVE",
-        name: row.product_name,
-        manufacturer: row.brands,
-        category_id: "cat_sonstiges",
-        is_branded: true,
-        allergens: row.allergens_tags ?? null,
-        additives: row.additives_tags ?? null,
-        tags: [
-          "off",
-          "validated",
-          ...(Array.isArray(row.labels_tags) ? row.labels_tags.slice(0, 12) : []),
-        ],
-        data_quality_score: dataQualityScore,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "data_source_id,source_food_id" },
-    )
-    .select("id")
-    .single();
-
-  if (foodError) {
-    console.error(`Failed to promote food ${row.barcode}: ${foodError.message}`);
-    return false;
-  }
-
-  const nutrientRows = mapNutrients(promotedFood.id, nutriments);
-  if (nutrientRows.length > 0) {
-    const { error: nutrientError } = await client
-      .from("food_nutrients")
-      .upsert(nutrientRows, { onConflict: "food_id,nutrient_id" });
-
-    if (nutrientError) {
-      console.error(`Failed to promote nutrients for ${row.barcode}: ${nutrientError.message}`);
-      return false;
-    }
-  }
-
-  const { error: stagingError } = await client
-    .from("off_staging")
-    .update({ promoted: true })
-    .eq("barcode", row.barcode);
-
-  if (stagingError) {
-    console.error(`Failed to mark ${row.barcode} as promoted: ${stagingError.message}`);
-    return false;
-  }
-
-  return true;
+  return {
+    data_source_id: "off",
+    source_food_id: row.barcode,
+    source_version: row.last_modified_t ? `OFF ${row.last_modified_t}` : "LIVE",
+    name: row.product_name,
+    manufacturer: row.brands,
+    category_id: "cat_sonstiges",
+    is_branded: true,
+    allergens: row.allergens_tags ?? null,
+    additives: row.additives_tags ?? null,
+    tags: [
+      "off",
+      "validated",
+      ...(Array.isArray(row.labels_tags) ? row.labels_tags.slice(0, 12) : []),
+    ],
+    data_quality_score: Number(row.data_quality_score ?? scoreProduct(nutriments)),
+    updated_at: new Date().toISOString(),
+  };
 }
 
 async function promoteValidatedProducts() {
   const client = requireSupabase();
-  const PROMOTE_BATCH = 1000;
+  // Keyset-scan the validated, quality-cleared staging rows in barcode (primary
+  // key) order and promote the ones not yet in `foods`. Iterating by a forward
+  // PK cursor — instead of repeatedly querying for `promoted = false` — is immune
+  // to the table/index bloat that the per-row promoted=true updates create: each
+  // page reads a bounded window from the cursor, so a partial or resumed run
+  // never has to scan past a growing block of already-promoted rows (which
+  // previously hit Postgres' statement timeout around ~90k promoted).
+  const SCAN_PAGE = 1000;
+  const PROMOTE_BATCH = 200;
+  const NUTRIENT_CHUNK = 4000;
   let promotedCount = 0;
+  let cursor = "";
+  let pending: OffStagingPromotionRow[] = [];
 
-  // Process in batches: each promoted row flips promoted=true, so re-querying
-  // for the next unpromoted batch advances on its own. A single unbounded
-  // select is capped by PostgREST's max-rows (10k), which previously left every
-  // candidate beyond the first 10k staged-but-unpromoted.
-  for (;;) {
-    const { data, error } = await client
-      .from("off_staging")
-      .select("*")
-      .eq("validated", true)
-      .eq("promoted", false)
-      .gte("data_quality_score", OFF_MIN_QUALITY_SCORE)
-      .limit(PROMOTE_BATCH);
+  const flushPending = async () => {
+    if (pending.length === 0) return;
+    const rows = pending;
+    pending = [];
 
-    if (error) {
-      throw new Error(`Failed to fetch validated OFF staging rows: ${error.message}`);
+    // Bulk-upsert foods; the returned id↔source_food_id pairs map nutrients.
+    const { data: upserted, error: foodError } = await client
+      .from("foods")
+      .upsert(rows.map(buildFoodRow), { onConflict: "data_source_id,source_food_id" })
+      .select("id, source_food_id");
+    if (foodError) {
+      throw new Error(`Failed to promote ${rows.length} foods: ${foodError.message}`);
     }
 
-    const batch = (data ?? []) as OffStagingPromotionRow[];
-    if (batch.length === 0) break;
+    const idByBarcode = new Map(
+      ((upserted ?? []) as { id: string; source_food_id: string }[]).map((f) => [
+        f.source_food_id,
+        f.id,
+      ]),
+    );
 
-    let promotedThisBatch = 0;
-    for (const row of batch) {
-      if (await promoteStagingRow(client, row)) {
-        promotedCount += 1;
-        promotedThisBatch += 1;
+    const nutrientRows: ReturnType<typeof mapNutrients> = [];
+    for (const row of rows) {
+      const foodId = idByBarcode.get(row.barcode);
+      if (!foodId) continue;
+      for (const n of mapNutrients(foodId, (row.nutriments ?? {}) as Record<string, number>)) {
+        nutrientRows.push(n);
+      }
+    }
+    for (let i = 0; i < nutrientRows.length; i += NUTRIENT_CHUNK) {
+      const { error: nutrientError } = await client
+        .from("food_nutrients")
+        .upsert(nutrientRows.slice(i, i + NUTRIENT_CHUNK), { onConflict: "food_id,nutrient_id" });
+      if (nutrientError) {
+        throw new Error(`Failed to promote nutrient chunk: ${nutrientError.message}`);
       }
     }
 
-    // Guard against an infinite loop: if a whole batch failed to flip
-    // promoted=true (e.g. a persistent upsert error), stop making no progress.
-    if (promotedThisBatch === 0) {
-      console.error(
-        `Promote made no progress on ${batch.length} rows; stopping to avoid a loop.`,
+    // Mark just these rows promoted to keep the staging review view consistent.
+    // The keyset scan does not rely on this flag, so the bloat the update creates
+    // no longer degrades fetching.
+    const { error: stagingError } = await client
+      .from("off_staging")
+      .update({ promoted: true })
+      .in(
+        "barcode",
+        rows.map((r) => r.barcode),
       );
-      break;
+    if (stagingError) {
+      throw new Error(`Failed to mark ${rows.length} rows promoted: ${stagingError.message}`);
+    }
+
+    promotedCount += rows.length;
+    console.log(`  Promote progress: ${promotedCount} promoted`);
+  };
+
+  for (;;) {
+    let query = client
+      .from("off_staging")
+      .select(
+        "barcode, product_name, brands, last_modified_t, allergens_tags, additives_tags, labels_tags, data_quality_score, nutriments, promoted",
+      )
+      .eq("validated", true)
+      .gte("data_quality_score", OFF_MIN_QUALITY_SCORE)
+      .order("barcode", { ascending: true })
+      .limit(SCAN_PAGE);
+    if (cursor) query = query.gt("barcode", cursor);
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to scan OFF staging rows: ${error.message}`);
+    }
+
+    const page = (data ?? []) as OffStagingPromotionRow[];
+    if (page.length === 0) break;
+    cursor = page[page.length - 1].barcode;
+
+    for (const row of page) {
+      if (row.promoted) continue; // already in foods
+      pending.push(row);
+      if (pending.length >= PROMOTE_BATCH) await flushPending();
     }
   }
 
+  await flushPending();
   return promotedCount;
 }
 
@@ -858,6 +886,15 @@ async function main() {
   console.log(
     `Config: limit=${OFF_LIMIT}, pageSize=${OFF_PAGE_SIZE}, minQuality=${OFF_MIN_QUALITY_SCORE}, country=${OFF_COUNTRY_TAG}, skipEmptyNutrition=${OFF_SKIP_EMPTY_NUTRITION}, dryRun=${DRY_RUN}`,
   );
+
+  if (OFF_PROMOTE_ONLY) {
+    console.log("Promote-only mode: skipping staging, promoting validated rows.");
+    const promoted = await promoteValidatedProducts();
+    console.log(`Promoted ${promoted} validated products`);
+    await updateSourceMetadata(promoted);
+    console.log("Open Food Facts import complete.");
+    return;
+  }
 
   const report = await stageProducts();
   console.log("OFF scan report:");
