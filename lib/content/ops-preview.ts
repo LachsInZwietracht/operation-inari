@@ -30,48 +30,6 @@ export const API_ENDPOINT_PREVIEWS: ApiEndpointDescription[] = [
   },
 ];
 
-export const INTEGRATION_PREVIEWS = [
-  {
-    id: "fhir",
-    label: "EHR/FHIR Schnittstelle",
-    description: "Praxis- und Kliniksysteme ueber standardisierte Ressourcen anbinden.",
-    status: "Preview",
-  },
-  {
-    id: "debinet",
-    label: "DEBInet Import",
-    description: "Importvorlagen fuer Ernährungsprotokolle und institutionelle Kostformen.",
-    status: "Preview",
-  },
-  {
-    id: "warehouse",
-    label: "BI / Data Warehouse",
-    description: "Geplante Event-Exporte fuer Controlling, Data Lake und Reporting.",
-    status: "Preview",
-  },
-] as const;
-
-export const WEBHOOK_EVENT_PREVIEWS = [
-  {
-    id: "patient.created",
-    event: "patient.created",
-    description: "Patient wurde angelegt oder aus einer Demo-Quelle uebernommen.",
-    delivery: "Noch nicht abonnierbar",
-  },
-  {
-    id: "protocol.submitted",
-    event: "protocol.submitted",
-    description: "Digitales Protokoll wurde ueber den oeffentlichen Link eingereicht.",
-    delivery: "Queue wird persistiert",
-  },
-  {
-    id: "export.completed",
-    event: "export.completed",
-    description: "Exportdatei wurde erzeugt und im Audit-Journal erfasst.",
-    delivery: "Queue wird persistiert",
-  },
-] as const;
-
 export const ADMIN_ROLE_MATRIX: RoleDefinition[] = [
   {
     id: "admin",

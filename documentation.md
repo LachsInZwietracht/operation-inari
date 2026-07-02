@@ -173,20 +173,9 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Failed history loads are shown inline so the export page does not silently degrade when the journal endpoint or schema is unavailable.
   - Export-journal failures include explicit recovery hints for missing `export_jobs` migrations or unavailable `/api/export-jobs` responses.
   - **API keys:** Owner/admin users can issue, list, and revoke live API keys from the REST API tab. Tokens are stored only as SHA-256 hashes in `api_keys`, the full token is shown once, and create/revoke events are written to `access_audit_logs`.
-  - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. `POST /api/integrations/hl7/import` accepts app sessions or API keys with `integrations:hl7:write` for inbound HL7 v2 ADT/ORU imports. Patient, meal-plan, recipe, and report API scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
-  - **HL7 import:** `/api/integrations/hl7/import` parses `MSH`, `PID`, and numeric `OBX` segments, persists `hl7_import_jobs`/`hl7_import_results`, maps observations through `hl7_lab_parameter_mappings`, writes patient/lab mutations with audit events, returns review items for ambiguous patients, unknown lab identifiers, and non-numeric values, and is idempotent by organization/source/`MSH-10`.
-  - **Webhooks:** Owner/admin users can create and disable HTTPS webhook endpoints from the `Integrationen` tab. Secrets are stored only as SHA-256 hashes, the full signing secret is shown once, and matching export/report/protocol events create persisted `webhook_delivery_attempts` rows with `queued` status.
-  - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, queued delivery attempts, and the HL7 import/admin foundation are live. FHIR/DEBInet/BI connector activation, outbound retry delivery, and richer HL7 resolution workflows remain future integration work.
+  - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. Patient, meal-plan, recipe, and report API scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
+  - **Truth model:** Export creation, export history, and API-key issuance are live. FHIR/DEBInet/BI connector activation remains future integration work.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
-
-### 4.10 Admin Integrationen (`/admin/integrationen`)
-- **Component:** `app/(app)/admin/integrationen/page.tsx`
-  - Owner/admin users can open a dedicated integration operations surface from the sidebar.
-  - The first version loads recent `hl7_import_jobs`, current `needs_review`/`failed` results from `hl7_import_results`, and existing `hl7_lab_parameter_mappings` through `lib/data/hl7-admin.ts`.
-  - HL7 lab mappings can be created, edited inline, and disabled from the page. Mapping changes write `hl7_lab_mapping_created`, `hl7_lab_mapping_updated`, and `hl7_lab_mapping_disabled` audit events.
-  - HL7 jobs can be filtered by status and source system, opened into a persisted job-detail table, and reviewed through the current open result queue.
-  - Open `needs_review`/`failed` review results can be marked checked from the page. The action stores review metadata, recomputes job counts/status, and writes a `hl7_review_result_reviewed` audit event.
-  - Migration/schema recovery errors are shown inline so missing HL7 migrations do not fail silently.
 
 ### 4.11 Admin & Sicherheit (`/admin/users`)
 - **Component:** `app/(app)/admin/users/page.tsx`
@@ -198,7 +187,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - **SSO foundation:** Admins can persist one organization-level OIDC/SAML configuration with display name, domains, status, provider metadata URLs/XML, client/entity IDs, SSO URL, and login-hint parameter.
   - **SSO role mappings:** The same panel manages `sso_group_role_mappings` for verified IdP claims. Claim mappings support deterministic priority, active/disabled status, audit events, and roles `admin`, `dietitian`, `assistant`, and `institution_admin`; `owner` remains manual.
   - **Login routing and callback:** `/api/sso/resolve` matches active SSO configs by email domain and returns minimal routing metadata to `components/auth-form.tsx`. `/auth/sso/callback` exchanges the auth code, verifies the user, applies `resolveSsoRoleFromClaims()`, and creates/updates `organization_memberships` only after a deterministic mapping match.
-  - **Integration contracts:** SSO provider callback handoff, the implemented HL7 MVP, and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
+  - **Integration contracts:** SSO provider callback handoff and first FHIR sync boundaries are defined in `docs/clinic-it-integration-plan.md`.
   - MFA reset and team-wide patient sharing workflows remain deferred.
 
 ### 4.12 Datenbankstatus (`/datenbank`)
@@ -214,12 +203,6 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - The page copy explicitly distinguishes bundled reference content from live runtime analytics.
   - Sustainability sections remain live calculations based on loaded foods, recipes, and meal plans.
   - The server page extracts referenced food IDs from recipes and meal plans, then fetches only those foods via `fetchFoodsViaRpc()` with a limited nutrient set (`LIST_NUTRIENT_IDS`) instead of loading the full catalog.
-
-### 4.14 Leistung & Validierung (`/leistung`)
-- **Component:** `app/(app)/leistung/page.tsx`
-  - The route is now an honest validation/reference surface instead of a fake live telemetry dashboard.
-  - It documents actual repo checks (`typecheck`, targeted Playwright, nutrient validation), benchmark targets, hotspot areas, and manual verification routes.
-  - Stress-test simulation, fake response curves, fake system metrics, and mock DB telemetry are no longer presented as live operational data.
 
 ### 4.15 Admin Tarife (`/admin/tarife`)
 - **Component:** `app/(app)/admin/tarife/page.tsx`

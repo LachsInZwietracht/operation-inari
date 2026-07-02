@@ -506,9 +506,9 @@ The official Prodi FAQ reveals recurring technical problems:
 - No CSV, Excel, or structured data export documented
 - Only external integration is with DEBInet for importing dietary protocols
 - No integration with practice management software, EHR, or billing systems
-- **No interoperability standards** (HL7, FHIR) mentioned
+- **No interoperability standards** (FHIR) mentioned
 
-**Our advantage:** REST API from day one. Export to CSV, Excel, PDF, JSON. Future integrations with EHR systems via FHIR. Webhook support for automation.
+**Our advantage:** REST API from day one. Export to CSV, Excel, PDF, JSON. Future integrations with EHR systems via FHIR.
 
 ### 14.9 Zero Public Social Proof
 - **Zero reviews** on Capterra, GetApp, G2, Trustpilot, Goodfirms, and all other major platforms
@@ -530,7 +530,7 @@ The official Prodi FAQ reveals recurring technical problems:
 | Client engagement | No client app or messaging | Client portal, food diary, messaging |
 | Scheduling | Not available | Built-in calendar and appointments |
 | Billing | Not available | Integrated invoicing and payments |
-| API | None | Full REST API, webhooks, integrations |
+| API | None | Full REST API, integrations |
 | Database | Germany-centric, gaps in data | International databases, OpenFoodFacts |
 | AI | None | AI-assisted meal plans and analysis |
 | Updates | Paid, infrequent | Continuous deployment, always up-to-date |

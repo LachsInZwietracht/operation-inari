@@ -255,7 +255,7 @@ export interface ApiKey {
   status: "aktiv" | "widerrufen";
 }
 
-export type ApiKeyScope = "exports:datasets:read" | "integrations:hl7:write";
+export type ApiKeyScope = "exports:datasets:read";
 
 export interface ApiKeyRecord {
   id: ID;
@@ -268,62 +268,6 @@ export interface ApiKeyRecord {
   lastUsedAt?: string;
   lastUsedIp?: string;
   revokedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface WebhookConfig {
-  id: ID;
-  url: string;
-  events: string[];
-  secret: string;
-  enabled: boolean;
-  lastTriggered?: string;
-  failCount: number;
-}
-
-export type WebhookEvent =
-  | "dataset_export_created"
-  | "report_export_created"
-  | "digital_protocol_submission_received";
-
-export type WebhookEndpointStatus = "active" | "disabled";
-
-export interface WebhookEndpointRecord {
-  id: ID;
-  organizationId: ID;
-  userId: ID;
-  name: string;
-  url: string;
-  secretPrefix: string;
-  events: WebhookEvent[];
-  status: WebhookEndpointStatus;
-  lastSuccessAt?: string;
-  lastFailureAt?: string;
-  disabledAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type WebhookDeliveryStatus = "queued" | "delivered" | "failed" | "skipped";
-
-export interface WebhookDeliveryAttemptRecord {
-  id: ID;
-  organizationId: ID;
-  webhookEndpointId: ID;
-  webhookEndpointName?: string;
-  event: WebhookEvent;
-  targetType: string;
-  targetId?: string;
-  status: WebhookDeliveryStatus;
-  attemptCount: number;
-  nextAttemptAt?: string;
-  responseStatus?: number;
-  responseBody?: string;
-  errorMessage?: string;
-  payload: Record<string, unknown>;
-  queuedAt: string;
-  deliveredAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -483,44 +427,3 @@ export interface GenericExportRequest {
   scope: ExportScope;
 }
 
-// --- Performance types ---
-
-export interface PerformanceMetric {
-  id: ID;
-  label: string;
-  value: number;
-  unit: string;
-  target: number;
-  status: "gut" | "warnung" | "kritisch";
-  trend: "up" | "down" | "flat";
-}
-
-export interface LoadTestResult {
-  id: ID;
-  testName: string;
-  concurrentUsers: number;
-  avgResponseMs: number;
-  p95ResponseMs: number;
-  p99ResponseMs: number;
-  errorRate: number;
-  throughputRps: number;
-  timestamp: string;
-}
-
-export interface DatabaseQueryStat {
-  id: ID;
-  queryName: string;
-  tableName: string;
-  avgDurationMs: number;
-  callsPerMinute: number;
-  cacheHitRate: number;
-  lastExecuted: string;
-}
-
-export interface SystemResource {
-  id: ID;
-  label: string;
-  currentValue: number;
-  maxValue: number;
-  unit: string;
-}

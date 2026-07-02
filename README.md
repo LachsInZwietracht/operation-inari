@@ -35,7 +35,7 @@ Current product surfaces include:
 - Recipes, meal plans, templates, shopping lists, nutrient analysis, and approval/version workflows.
 - Digital protocol intake with practitioner review and conversion into internal nutrition protocols.
 - Institution menu planning, inpatient meal orders, kitchen production, compliance analytics, and tray cards.
-- Admin/RBAC, SSO foundations, API keys, HL7 import, webhooks, export jobs, and billing-preview surfaces.
+- Admin/RBAC, SSO foundations, API keys, export jobs, and billing-preview surfaces.
 
 ## 🛠 Development
 

@@ -49,7 +49,7 @@ Enterprise healthcare and foodservice systems:
 The most important missing or incomplete capabilities for German clinic sales are:
 - **Scientific data moat:** SFK, broader official data coverage, full BLS expansion, OeNWT/Swiss/USDA/AFCD options, multilingual food names, and direct clinical manufacturer feeds.
 - **Database lifecycle management:** Global food replacement, database version migrations, nutrient-source diffing, release notes, and audit-friendly source/version traceability.
-- **Clinic IT readiness:** HL7 v2 import, FHIR sync, SSO via SAML/OIDC, LDAP/Active Directory mapping, API keys, webhooks, integration persistence, and production-grade device connectors.
+- **Clinic IT readiness:** FHIR sync, SSO via SAML/OIDC, LDAP/Active Directory mapping, API keys, integration persistence, and production-grade device connectors.
 - **Audit and compliance:** Record access logs, export logs beyond generic jobs, report retention policies, diet-order override logs, role-change logs, and procurement-ready security documentation.
 - **Clinical modules:** Diabetes counseling depth, renal/nutrition-support workflows, structured food-frequency/anamnesis forms, diagnosis-specific intervention templates, and stronger indication-based decision support.
 - **Documentation packs:** Arztbrief, Ernährungsbericht, Übergabe Küche, Verlaufsbericht, Qualitätsbericht, patient handouts, and clinic-specific document templates.
@@ -64,7 +64,7 @@ The most important missing or incomplete capabilities for German clinic sales ar
 For German clinics, prioritize work in this order:
 
 1. **Data credibility:** SFK/full BLS expansion, source/version visibility, calculation validation, and database update workflows.
-2. **Clinic IT readiness:** SSO, audit logs, HL7/FHIR, API keys, webhooks, and production connector foundations.
+2. **Clinic IT readiness:** SSO, audit logs, FHIR, API keys, and production connector foundations.
 3. **Patient-to-kitchen bridge:** Diet orders, allergen-safe meal selection, tray cards, kitchen reports, and institution analytics.
 4. **Clinical documentation:** Immutable report history, report packs, patient handouts, clinic handoff documents, and export retention policy.
 5. **Patient portal:** Remote diary, report delivery, follow-up reminders, patient feedback, and secure communication.
