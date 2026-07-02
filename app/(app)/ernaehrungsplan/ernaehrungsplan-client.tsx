@@ -47,6 +47,11 @@ import {
   MealPlanWeekBoard,
   type WeekBoardTarget,
 } from "@/components/meal-plan-week-board"
+import {
+  MealPlanWorkspace,
+  type WorkspaceBalanceRow,
+  type WorkspaceSuggestion,
+} from "@/components/meal-plan-workspace"
 import { NutrientBar } from "@/components/nutrient-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
@@ -1650,6 +1655,45 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       .slice(0, 4)
   }, [currentPlan, dietLine, dietLineCompliance, foods, patientAllergens, recipes])
 
+  const baseWeekStartIso = format(baseWeekStart, "yyyy-MM-dd")
+  const workspaceWeekPlans = useMemo(
+    () => getPlansInRange(baseWeekStartIso, 7),
+    [baseWeekStartIso, getPlansInRange],
+  )
+
+  const workspaceBalance = useMemo<WorkspaceBalanceRow[]>(() => {
+    return dietLineCompliance.map((target) => ({
+      nutrientId: target.nutrientId,
+      label: target.label,
+      value: target.value,
+      target: target.min ?? target.max,
+      unit: target.unit,
+      status: target.status,
+    }))
+  }, [dietLineCompliance])
+
+  const workspaceSuggestions = useMemo<WorkspaceSuggestion[]>(() => {
+    return optimizationSuggestions.slice(0, 3).map((suggestion) => ({
+      id: suggestion.id,
+      title: `${suggestion.targetLabel} unter Ziel`,
+      description: `${suggestion.name} · ${MEAL_SLOT_LABELS[suggestion.slotType]}`,
+      deltaLabel: `+${formatNumber(suggestion.contribution, 0)} ${suggestion.unit}`,
+    }))
+  }, [optimizationSuggestions])
+
+  const workspaceEntryName = useCallback(
+    (entry: MealEntry) => {
+      if (entry.type === "food") return foodMap.get(entry.referenceId)?.name ?? "Lebensmittel"
+      return recipeMap.get(entry.referenceId)?.name ?? "Rezept"
+    },
+    [foodMap, recipeMap],
+  )
+
+  const workspaceEntryNutrients = useCallback(
+    (entry: MealEntry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap),
+    [foodMap, foods, recipeMap],
+  )
+
   const clinicalReview = useMemo(() => {
     const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
     const allergenConflictCount = Array.from(entryAllergenWarnings.values()).reduce(
@@ -2279,6 +2323,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       <Tabs value={view} onValueChange={setView}>
         <TabsList>
           <TabsTrigger value="day">Tag</TabsTrigger>
+          <TabsTrigger value="workspace">Workspace</TabsTrigger>
           <TabsTrigger value="week">Woche</TabsTrigger>
           <TabsTrigger value="cycle">4-Wochen-Zyklus</TabsTrigger>
           <TabsTrigger value="einzelanalyse">Einzelanalyse</TabsTrigger>
@@ -2659,6 +2704,35 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               />
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="workspace" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium capitalize">{formattedDate}</div>
+            <div className="ml-auto text-xs text-muted-foreground">
+              Bezug: {dietLine?.name ?? "Zielprofil auswählen"}
+            </div>
+          </div>
+          <MealPlanWorkspace
+            days={workspaceWeekPlans}
+            activeDate={currentDate}
+            plan={currentPlan}
+            isLocked={currentPlan.status === "approved"}
+            referenceLabel={dietLine?.name}
+            balance={workspaceBalance}
+            suggestions={workspaceSuggestions}
+            getEntryName={workspaceEntryName}
+            getEntryNutrients={workspaceEntryNutrients}
+            onSelectDay={setDate}
+            onDuplicateDay={() => copyPlanToNextDay(currentDate)}
+            onAddToSlot={handleAddEntry}
+            onRemoveEntry={removeEntry}
+            onUpdateAmount={updateEntryAmount}
+            onApplySuggestion={(id) => {
+              const suggestion = optimizationSuggestions.find((item) => item.id === id)
+              if (suggestion) applyOptimizationSuggestion(suggestion)
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="week" className="space-y-4">
