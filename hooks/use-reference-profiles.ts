@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 import {
   deleteReferenceProfile,
@@ -149,8 +149,20 @@ async function ensureLoaded(isAuthenticated: boolean) {
   return inFlightLoad;
 }
 
-export function useReferenceProfiles() {
+export interface ReferenceStoreSeed {
+  officialRows: OfficialReferenceValueRow[];
+  customProfiles: CustomReferenceProfile[];
+  userPreference: UserReferencePreference | null;
+  patientAssignments: PatientReferenceAssignment[];
+}
+
+interface UseReferenceProfilesOptions {
+  initialState?: ReferenceStoreSeed;
+}
+
+export function useReferenceProfiles(options: UseReferenceProfilesOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const initialStateRef = useRef(options.initialState);
   // Subscribe to the module-level store via React's external-store contract so
   // every consumer re-renders synchronously on create/update/delete — robust
   // under the React Compiler, unlike a manual tick-state subscription.
@@ -158,6 +170,12 @@ export function useReferenceProfiles() {
 
   useEffect(() => {
     if (authLoading) return;
+    const seed = initialStateRef.current;
+    initialStateRef.current = undefined;
+    if (seed && !store.initialized && !inFlightLoad) {
+      updateStore({ ...seed, initialized: true, loading: false });
+      return;
+    }
     void ensureLoaded(isAuthenticated);
   }, [authLoading, isAuthenticated]);
 
