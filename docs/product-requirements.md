@@ -506,7 +506,7 @@ The official Prodi FAQ reveals recurring technical problems:
 - No CSV, Excel, or structured data export documented
 - Only external integration is with DEBInet for importing dietary protocols
 - No integration with practice management software, EHR, or billing systems
-- **No interoperability standards** (HL7, FHIR) mentioned
+- **No interoperability standards** (FHIR) mentioned
 
 **Our advantage:** REST API from day one. Export to CSV, Excel, PDF, JSON. Future integrations with EHR systems via FHIR. Webhook support for automation.
 

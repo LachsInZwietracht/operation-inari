@@ -1,8 +1,8 @@
 # Clinic IT Integration Plan
 
-This document defines the remaining P1 clinic IT contracts after the SSO, API key, webhook, and HL7 import foundations.
+This document defines the remaining P1 clinic IT contracts after the SSO, API key, and webhook foundations.
 
-Status: SSO claim mapping, SSO callback membership application, and the HL7 import API foundation are implemented. Remaining connector work should build on the persisted schemas and acceptance criteria below, not on ad-hoc connector code.
+Status: SSO claim mapping and SSO callback membership application are implemented. Remaining connector work should build on the persisted schemas and acceptance criteria below, not on ad-hoc connector code.
 
 ## 1. LDAP / Active Directory Mapping
 
@@ -70,138 +70,11 @@ RLS:
 - Audit log captures actor, mapping ID, previous role/status, next role/status, claim name/value, and SSO config ID.
 - Tests cover deterministic priority, ambiguity rejection, Owner downgrade protection, and no-match behavior.
 
-## 2. HL7 v2 Import MVP
-
-Status: implemented as the first inbound API foundation via migration `20260522000040_hl7_import_mvp.sql`, `POST /api/integrations/hl7/import`, `/admin/integrationen`, `tests/hl7-import.spec.ts`, and `tests/ops-surfaces.spec.ts`. The remaining follow-up is richer review resolution for mapping suggestions and patient-match decisions.
-
-### Goal
-
-Import a minimal, auditable subset of HL7 v2 messages for clinics that cannot offer FHIR first.
-
-The MVP parses patient identity and numeric lab observations into existing tables:
-- `patients`
-- `patient_lab_values`
-- `access_audit_logs`
-
-### Message Types
-
-Initial support:
-- `ADT^A01`, `ADT^A04`, `ADT^A08` for patient create/update.
-- `ORU^R01` for lab observations.
-
-Initial segments:
-- `MSH` for message metadata.
-- `PID` for patient identity.
-- `OBR` for observation group context.
-- `OBX` for lab observations.
-
-Explicitly out of scope for MVP:
-- Orders (`ORM`, `ORC`) beyond optional OBR context.
-- Allergies (`AL1`), diagnoses (`DG1`), encounters (`PV1`) as persisted imports.
-- Bidirectional ACK transport. MVP may store parse results and return API JSON.
-- Binary HL7 attachments.
-
-### PID Mapping
-
-| HL7 field | Meaning | Target |
-|---|---|---|
-| `PID-3` | Patient identifiers | `patients.legacy_id` using source prefix, plus import metadata |
-| `PID-5` | Patient name | `patients.last_name`, `patients.first_name` |
-| `PID-7` | Birth date | `patients.date_of_birth` |
-| `PID-8` | Sex | `patients.gender` (`M` -> `m`, `F` -> `w`, other/unknown -> `d`) |
-| `PID-11` | Address | `street`, `city`, `zip` when present |
-| `PID-13` | Phone | `patients.phone` |
-| `PID-19` | National identifier | metadata only; do not store raw national IDs unless a legal basis is confirmed |
-
-Patient matching order:
-1. Existing `patients.legacy_id` for the configured HL7 assigning authority.
-2. Exact match on name + date of birth + user/organization scope.
-3. Create new patient only if the import mode allows creation.
-4. Ambiguous matches must stop the import and produce a review result.
-
-### OBX Mapping
-
-| HL7 field | Meaning | Target |
-|---|---|---|
-| `OBX-3` | Observation identifier | `patient_lab_values.parameter_id` via mapping table |
-| `OBX-5` | Observation value | `patient_lab_values.value` when numeric |
-| `OBX-6` | Units | `patient_lab_values.metadata.unit` |
-| `OBX-7` | Reference range | `patient_lab_values.metadata.referenceRange` |
-| `OBX-8` | Abnormal flags | `patient_lab_values.metadata.abnormalFlags` |
-| `OBX-11` | Result status | `patient_lab_values.metadata.resultStatus` |
-| `OBX-14` | Observation time | `patient_lab_values.date` |
-
-Implemented mapping table:
-
-```sql
-CREATE TABLE hl7_lab_parameter_mappings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  source_system TEXT NOT NULL,
-  hl7_identifier TEXT NOT NULL,
-  hl7_text TEXT,
-  hl7_coding_system TEXT NOT NULL DEFAULT '',
-  parameter_id TEXT NOT NULL,
-  unit TEXT,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, source_system, hl7_identifier, hl7_coding_system)
-);
-```
-
-### Import Job Contract
-
-Implemented tables:
-- `hl7_import_jobs`: one row per uploaded message or batch.
-- `hl7_import_results`: one row per parsed patient/observation outcome.
-
-Minimum job fields:
-- `organization_id`
-- `actor_user_id`
-- `source_system`
-- `message_control_id` from `MSH-10`
-- `message_type` from `MSH-9`
-- `status`: `received`, `parsed`, `needs_review`, `imported`, `failed`
-- `raw_message_sha256`; raw payload storage should be private and retention-controlled
-- `summary` JSONB with counts and non-PHI parse diagnostics
-
-Minimum result fields:
-- `job_id`
-- `target_type`: `patient` or `patient_lab_value`
-- `target_id`
-- `status`: `created`, `updated`, `skipped`, `needs_review`, `failed`
-- `metadata` JSONB with source segment references, not full raw segments when avoidable
-
-### API Boundary
-
-MVP endpoint:
-- `POST /api/integrations/hl7/import`
-- Requires an app-session institution role or an API key with scope `integrations:hl7:write`.
-- Accepts `text/plain` HL7 with `x-hl7-source-system`, or JSON `{ sourceSystem, message, allowCreatePatients }`.
-- Returns a job summary with counts and review items.
-
-Security:
-- Do not accept anonymous HL7 imports.
-- Do not store raw messages in logs.
-- Do not echo full PID/OBX content in error responses.
-- Every accepted message writes an audit event `hl7_import_received`.
-- Every patient/lab mutation writes `hl7_patient_upserted` or `hl7_lab_value_upserted`.
-
-### Acceptance Criteria
-
-- Parser handles HL7 delimiters from `MSH-1` and `MSH-2`.
-- Parser extracts `MSH`, `PID`, `OBR`, and multiple `OBX` segments from a sample ORU message.
-- Unknown lab identifiers produce `needs_review`, not a silently invented `parameter_id`.
-- Numeric OBX values import to `patient_lab_values`; non-numeric values are skipped with review reason.
-- Duplicate `MSH-10` from the same source system is idempotent.
-- Tests include one ADT patient update, one ORU lab import, one unknown lab mapping, and one ambiguous patient match.
-
-## 3. First FHIR Sync Boundary
+## 2. First FHIR Sync Boundary
 
 ### Sequencing
 
-FHIR should start after the HL7 MVP is stable because the same patient matching, lab mapping, audit, and import-review surfaces are needed for both.
+FHIR is the primary inbound interoperability boundary. It reuses the shared patient matching, lab mapping, audit, and import-review surfaces that inbound imports require.
 
 ### First Boundary
 
@@ -220,7 +93,7 @@ FHIR resources intentionally deferred:
 ### Resource Mapping
 
 FHIR `Patient`:
-- `Patient.identifier` -> same external identifier model used by HL7 imports
+- `Patient.identifier` -> external patient identifier model (source prefix plus `patients.legacy_id`)
 - `Patient.name[0].family` -> `patients.last_name`
 - `Patient.name[0].given[0]` -> `patients.first_name`
 - `Patient.birthDate` -> `patients.date_of_birth`
@@ -249,7 +122,7 @@ Recommended scopes:
 - API key scope `integrations:fhir:write` for inbound sync.
 - Admin UI can run dry-run imports before enabling live import.
 
-FHIR job statuses should mirror HL7:
+FHIR job statuses:
 - `received`
 - `parsed`
 - `needs_review`
@@ -259,18 +132,18 @@ FHIR job statuses should mirror HL7:
 ### Acceptance Criteria
 
 - Dry-run returns patient and observation match decisions without mutation.
-- Import mode writes patients/lab values using the same idempotency and review rules as HL7.
+- Import mode writes patients/lab values using idempotent upserts and review rules for ambiguous matches.
 - Unknown codes require mapping review.
 - No outbound write-back is exposed in v1.
 - Audit events identify FHIR source system, resource type, resource ID, target type, and target ID without logging full PHI payloads.
 
-## 4. Future Card-Terminal Intake
+## 3. Future Card-Terminal Intake
 
 The previous simulated card-reader intake was removed from the app because it was demo-only and not near-term product-critical. Keep the idea as a future integration candidate, but rebuild it only as a production-grade clinic IT/device workflow.
 
 Potential scope:
 - Read patient master data from German health-card or clinic card-terminal infrastructure when a clinic has the required connector/device environment.
-- Use the same patient matching and duplicate-review surfaces as HL7/FHIR imports.
+- Use the same patient matching and duplicate-review surfaces as FHIR imports.
 - Never treat browser-only mock card data as a production path.
 - Persist only the minimum patient master data needed for intake; do not log raw device payloads.
 - Gate the feature behind explicit organization configuration, role checks, audit events, and procurement/security review.
@@ -281,10 +154,9 @@ Acceptance criteria before implementation:
 - Intake creates or updates patients only through reviewed match decisions, not silent overwrites.
 - Tests cover successful read, no-card/no-device errors, duplicate patient detection, access denial, and audit events.
 
-## 5. Next Implementation Order
+## 4. Next Implementation Order
 
-1. Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
-2. Reuse the same job/result and mapping surfaces for FHIR Patient/Observation dry-run.
-3. Enable broader FHIR sync only after the HL7 review workflow is stable.
-4. Add outbound webhook retry workers and operational retry visibility.
-5. Revisit card-terminal intake only after HL7/FHIR and clinic security review foundations are stable.
+1. Build the FHIR Patient/Observation dry-run with job/result and mapping surfaces.
+2. Enable broader FHIR sync only after the dry-run review workflow is stable.
+3. Add outbound webhook retry workers and operational retry visibility.
+4. Revisit card-terminal intake only after FHIR and clinic security review foundations are stable.

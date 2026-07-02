@@ -246,9 +246,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260519000037_api_keys.sql` | Organization-scoped hashed API keys for the first external dataset export boundary |
 | `20260520000038_webhooks.sql` | Organization-scoped webhook endpoints plus persisted delivery attempts for export/report/protocol events |
 | `20260521000039_sso_configs.sql` | Organization-scoped OIDC/SAML SSO configuration, provider metadata storage, and domain-based login routing foundation |
-| `20260522000040_hl7_import_mvp.sql` | HL7 lab mappings, import jobs/results, RLS, and audit-backed ADT/ORU import persistence |
 | `20260523000041_sso_group_role_mappings.sql` | Organization-scoped SSO claim/group to RBAC role mappings with priority and audit support |
-| `20260524000042_hl7_import_results_update_policy.sql` | Admin-scoped update policy for closing HL7 review results through the integration operations surface |
 | `20260525000043_kitchen_production_batches.sql` | Persisted kitchen production batch current state plus append-only event history for production execution |
 | `20260528000046_meal_plan_diet_line.sql` | Persists selected diet-line/target-preset identifiers on `daily_meal_plans` |
 | `20260530000048_meal_plan_versions.sql` | Append-only immutable meal-plan version snapshots for approved/reopened/manual plan revisions |
@@ -257,6 +255,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260610000057_drop_lifecycle_and_replacement.sql` | Retires the removed database-lifecycle/food-replacement features: drops the `replace_food_references()` RPC and the `food_reference_replacements` and `data_source_events` tables |
 | `20260628000065_search_exclude_sources.sql` | Adds an `excluded_sources TEXT[]` argument to `search_foods_with_total`, `search_foods`, and `filter_foods_by_nutrient` so blocked/organization-disabled data sources are filtered in-query (before `COUNT(*) OVER ()` and `LIMIT`), instead of in JS after pagination |
 | `20260629000066_search_bls_priority.sql` | Makes `is_branded` the primary sort key in `search_foods_with_total` and `search_foods` so curated reference foods (BLS/SFK, `is_branded = FALSE`) always rank above branded Open Food Facts products (`is_branded = TRUE`); OFF stays visible but never crowds the top of name-search results |
+| `20260630000069_drop_hl7_import.sql` | Retires the removed inbound lab-import feature: drops the `hl7_import_results`, `hl7_import_jobs`, and `hl7_lab_parameter_mappings` tables together with their RLS policies, triggers, and indexes |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -318,10 +317,9 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `api_keys` stores organization-scoped API tokens for external integrations:
   - only the token prefix and SHA-256 hash are persisted
   - owner/admin users can list, create, and revoke keys through `/api/api-keys`
-  - current scopes are `exports:datasets:read` and `integrations:hl7:write`
+  - current scope is `exports:datasets:read`
   - API-key dataset exports are limited to non-custom Lebensmittel rows via `/api/exports/datasets`
-  - `integrations:hl7:write` can call `/api/integrations/hl7/import` for inbound HL7 jobs
-  - create, revoke, dataset-export, and HL7-import actions write `access_audit_logs`
+  - create, revoke, and dataset-export actions write `access_audit_logs`
 - `webhook_endpoints` and `webhook_delivery_attempts` store the first durable integration queue:
   - only HTTPS endpoints are accepted
   - endpoint signing secrets are stored as prefixes plus SHA-256 hashes
@@ -349,11 +347,8 @@ The full schema is defined in Supabase migration files under `supabase/migration
 ### Clinic Integration Notes
 
 - `docs/clinic-it-integration-plan.md` defines the remaining clinic IT integration contracts:
-  - richer HL7 review resolution workflows for mapping suggestions and patient-match decisions
-  - first FHIR boundary for inbound `Patient` and lab `Observation` sync after the HL7 admin surface is stable
-- HL7 v2 import persistence is implemented through `hl7_lab_parameter_mappings`, `hl7_import_jobs`, and `hl7_import_results`. Raw messages are not stored; only `raw_message_sha256`, count summaries, and non-PHI review metadata are persisted.
-- `/admin/integrationen` reads those HL7 tables for the first admin operations surface: filtered jobs, job details, open review results, and lab mapping maintenance. Lab mappings can be created, edited, and disabled from the page with `hl7_lab_mapping_*` audit events. Open review results can be marked checked through `POST /api/admin/integrations/hl7/review-result`, which updates result metadata, recomputes parent job counts/status, and writes `hl7_review_result_reviewed` audit events.
-- HL7/FHIR implementations must not write raw messages/resources to logs or API error bodies.
+  - first FHIR boundary for inbound `Patient` and lab `Observation` sync
+- FHIR implementations must not write raw messages/resources to logs or API error bodies.
 
 ### Database Status Notes
 
@@ -786,10 +781,9 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, report-retention controls, and organization SSO configuration | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts`, `lib/data/sso.ts` |
 | Kitchen production | Persisted production batch current state and event ledger for menu-derived kitchen execution | `app/(app)/institution/produktion/page.tsx`, `lib/data/production-batches.ts`, `lib/data/production-batches-client.ts` |
 | Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
-| Performance / validation | Bundled validation reference page, not live telemetry | `app/(app)/leistung/page.tsx`, `lib/content/validation-reference.ts` |
 
 **How to read the remaining mock data:**
-- **Bundled product/reference content:** Wissen cards, Leistung validation references.
+- **Bundled product/reference content:** Wissen cards.
 - **Static reference/catalog data:** bundled reference standards, plus compatibility re-export shims for catalogs now owned by `lib/reference-data`.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
 
@@ -805,7 +799,6 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - [x] Reclassify `/wissen` knowledge cards as bundled product content and keep analytics live/runtime-backed.
 - [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog plus per-organization source activation.
 - [x] Replace Admin preview with persisted RBAC membership data and real invitation actions; role-edit workflows remain deferred.
-- [x] Rework Leistung into a truthful preview/reference surface instead of a fake live operational backend.
 - [x] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
 - [x] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
 

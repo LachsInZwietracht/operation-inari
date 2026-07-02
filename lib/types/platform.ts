@@ -255,7 +255,7 @@ export interface ApiKey {
   status: "aktiv" | "widerrufen";
 }
 
-export type ApiKeyScope = "exports:datasets:read" | "integrations:hl7:write";
+export type ApiKeyScope = "exports:datasets:read";
 
 export interface ApiKeyRecord {
   id: ID;
@@ -483,44 +483,3 @@ export interface GenericExportRequest {
   scope: ExportScope;
 }
 
-// --- Performance types ---
-
-export interface PerformanceMetric {
-  id: ID;
-  label: string;
-  value: number;
-  unit: string;
-  target: number;
-  status: "gut" | "warnung" | "kritisch";
-  trend: "up" | "down" | "flat";
-}
-
-export interface LoadTestResult {
-  id: ID;
-  testName: string;
-  concurrentUsers: number;
-  avgResponseMs: number;
-  p95ResponseMs: number;
-  p99ResponseMs: number;
-  errorRate: number;
-  throughputRps: number;
-  timestamp: string;
-}
-
-export interface DatabaseQueryStat {
-  id: ID;
-  queryName: string;
-  tableName: string;
-  avgDurationMs: number;
-  callsPerMinute: number;
-  cacheHitRate: number;
-  lastExecuted: string;
-}
-
-export interface SystemResource {
-  id: ID;
-  label: string;
-  currentValue: number;
-  maxValue: number;
-  unit: string;
-}

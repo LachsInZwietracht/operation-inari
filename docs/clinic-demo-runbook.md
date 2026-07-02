@@ -10,7 +10,7 @@ Purpose:
 Source-of-truth rule:
 - Code, migrations, and tests win over this runbook.
 - Use `documentation.md` for route/component details and `docs/database-guide.md` for schema, ETL, search, export, and audit details.
-- Use `docs/clinic-it-integration-plan.md` for LDAP/AD, HL7, and FHIR contracts.
+- Use `docs/clinic-it-integration-plan.md` for LDAP/AD and FHIR contracts.
 
 ## Demo Goal
 
@@ -40,8 +40,8 @@ What to say:
 - `export_jobs` is an operational journal of export metadata. (Patient-bound report binaries/snapshots were removed with the Berichte feature.)
 
 Important boundary:
-- SSO configuration, claim-to-role mappings, Supabase Auth SSO callback membership application, API keys, webhooks, audit records, and the HL7 import/admin foundation are implemented.
-- Outbound webhook retry workers, richer HL7 resolution workflows, and FHIR sync are still follow-up implementation work.
+- SSO configuration, claim-to-role mappings, Supabase Auth SSO callback membership application, API keys, webhooks, and audit records are implemented.
+- Outbound webhook retry workers and FHIR sync are still follow-up implementation work.
 
 ### 2. Patient Intake
 
@@ -193,8 +193,7 @@ P0 demo hardening:
 
 P1 clinic readiness:
 - Add outbound webhook retry workers and operational retry visibility for failed integration deliveries.
-- Add richer HL7 review resolution workflows for mapping suggestions and patient-match decisions.
-- Reuse the HL7 job/review surfaces for FHIR Patient/Observation dry runs.
+- Build FHIR Patient/Observation dry-run job/review surfaces.
 
 P2 product depth:
 - Extend patient portal/PWA beyond diary entry to report delivery, reminders, meal-plan feedback, and secure messages.

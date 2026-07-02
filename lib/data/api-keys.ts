@@ -10,7 +10,6 @@ import type { ApiKeyRecord, ApiKeyScope } from "@/lib/types";
 
 export const API_KEY_SCOPES = [
   "exports:datasets:read",
-  "integrations:hl7:write",
 ] as const satisfies readonly ApiKeyScope[];
 
 type ApiKeyRow = {

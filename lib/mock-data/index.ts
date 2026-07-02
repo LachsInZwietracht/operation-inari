@@ -65,11 +65,4 @@ export {
   WEBHOOK_CONFIGS,
   EXPORT_HISTORY,
 } from "./admin";
-export {
-  PERFORMANCE_KPIS,
-  LOAD_TEST_RESULTS,
-  DATABASE_QUERY_STATS,
-  SYSTEM_RESOURCES,
-  RESPONSE_TIME_HISTORY,
-} from "./performance";
 export { KNOWLEDGE_CARDS, SUSTAINABILITY_METRICS } from "./knowledge";
