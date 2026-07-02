@@ -272,62 +272,6 @@ export interface ApiKeyRecord {
   updatedAt: string;
 }
 
-export interface WebhookConfig {
-  id: ID;
-  url: string;
-  events: string[];
-  secret: string;
-  enabled: boolean;
-  lastTriggered?: string;
-  failCount: number;
-}
-
-export type WebhookEvent =
-  | "dataset_export_created"
-  | "report_export_created"
-  | "digital_protocol_submission_received";
-
-export type WebhookEndpointStatus = "active" | "disabled";
-
-export interface WebhookEndpointRecord {
-  id: ID;
-  organizationId: ID;
-  userId: ID;
-  name: string;
-  url: string;
-  secretPrefix: string;
-  events: WebhookEvent[];
-  status: WebhookEndpointStatus;
-  lastSuccessAt?: string;
-  lastFailureAt?: string;
-  disabledAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type WebhookDeliveryStatus = "queued" | "delivered" | "failed" | "skipped";
-
-export interface WebhookDeliveryAttemptRecord {
-  id: ID;
-  organizationId: ID;
-  webhookEndpointId: ID;
-  webhookEndpointName?: string;
-  event: WebhookEvent;
-  targetType: string;
-  targetId?: string;
-  status: WebhookDeliveryStatus;
-  attemptCount: number;
-  nextAttemptAt?: string;
-  responseStatus?: number;
-  responseBody?: string;
-  errorMessage?: string;
-  payload: Record<string, unknown>;
-  queuedAt: string;
-  deliveredAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export type SsoProviderType = "oidc" | "saml";
 export type SsoConfigStatus = "draft" | "active" | "disabled";
 export type SsoRoleMappingStatus = "active" | "disabled";

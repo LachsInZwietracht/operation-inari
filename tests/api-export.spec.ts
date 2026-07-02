@@ -125,47 +125,6 @@ test.describe("API & Export", () => {
     expect(await revokedResponse.json()).toEqual({ error: "API_KEY_INVALID" });
   });
 
-  test("shows persisted integration and webhook management", async ({ page }) => {
-    await page.goto("/api-export");
-
-    await page.getByRole("tab", { name: "Integrationen" }).click();
-
-    await expect(page.getByRole("tab", { name: "Integrationen" })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByText("Webhooks live")).toBeVisible();
-    await expect(page.getByText("EHR/FHIR Schnittstelle")).toBeVisible();
-    await expect(page.getByText("DEBInet Import")).toBeVisible();
-    await expect(page.getByTestId("webhook-endpoints-table")).toBeVisible();
-    await expect(page.getByText("patient.created")).toBeVisible();
-    await expect(page.getByText("protocol.submitted")).toBeVisible();
-  });
-
-  test("creates a webhook endpoint and queues delivery attempts for exports", async ({ page }) => {
-    await page.goto("/api-export");
-    await page.getByRole("tab", { name: "Integrationen" }).click();
-
-    const webhookName = `Playwright Webhook ${Date.now()}`;
-    await page.locator("#webhook-name").fill(webhookName);
-    await page.locator("#webhook-url").fill(`https://example.org/prodi/${Date.now()}`);
-    await page.getByRole("button", { name: "Webhook erstellen" }).click();
-
-    await expect(page.getByTestId("created-webhook-secret")).toHaveText(/^whsec_/);
-    const endpointRow = page.getByRole("row", { name: new RegExp(webhookName) }).first();
-    await expect(endpointRow.getByRole("button", { name: "Deaktivieren" })).toBeEnabled();
-
-    await page.getByRole("tab", { name: "Export" }).click();
-    const download = page.waitForEvent("download");
-    await page.locator("[data-slot='card']", { hasText: "CSV-Export" }).getByRole("button", { name: "Exportieren" }).click();
-    await download;
-
-    await page.getByRole("tab", { name: "Integrationen" }).click();
-    const attemptsTable = page.getByTestId("webhook-attempts-table");
-    await expect(attemptsTable.getByRole("row", { name: new RegExp(`${webhookName}.*dataset_export_created`) }).first()).toBeVisible();
-    await expect(attemptsTable.getByRole("cell", { name: "queued" }).first()).toBeVisible();
-
-    await endpointRow.getByRole("button", { name: "Deaktivieren" }).click();
-    await expect(endpointRow.getByRole("button", { name: "Deaktivieren" })).toBeDisabled();
-  });
-
   test("filters real export history", async ({ page }) => {
     await page.goto("/api-export");
 

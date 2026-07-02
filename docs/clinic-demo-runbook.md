@@ -32,7 +32,7 @@ This is intentionally not a generic tour. It should prove the buyer-facing promi
 Start with:
 - `/datenbank` for the live data-source catalog (with per-organization activate/deactivate) and nutrient diffing.
 - `/admin/users` for RBAC roles, invitations, SSO configuration, and report-retention policy.
-- `/api-export` for API keys, export journal, webhook endpoints, and queued delivery attempts.
+- `/api-export` for API keys and export journal.
 
 What to say:
 - BLS/SFK/OFF/source visibility is separate from user-authored records.
@@ -40,8 +40,8 @@ What to say:
 - `export_jobs` is an operational journal of export metadata. (Patient-bound report binaries/snapshots were removed with the Berichte feature.)
 
 Important boundary:
-- SSO configuration, claim-to-role mappings, Supabase Auth SSO callback membership application, API keys, webhooks, and audit records are implemented.
-- Outbound webhook retry workers and FHIR sync are still follow-up implementation work.
+- SSO configuration, claim-to-role mappings, Supabase Auth SSO callback membership application, API keys, and audit records are implemented.
+- FHIR sync is still follow-up implementation work.
 
 ### 2. Patient Intake
 
@@ -192,7 +192,6 @@ P0 demo hardening:
 - Keep `tests/fixtures/clinic-demo.ts` aligned with the deployed seed story as report, institution, and digital-protocol coverage expands.
 
 P1 clinic readiness:
-- Add outbound webhook retry workers and operational retry visibility for failed integration deliveries.
 - Build FHIR Patient/Observation dry-run job/review surfaces.
 
 P2 product depth:

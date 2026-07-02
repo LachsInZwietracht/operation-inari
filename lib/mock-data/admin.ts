@@ -5,7 +5,6 @@ import type {
   IntegrationToggle,
   ApiEndpointDescription,
   ApiKey,
-  WebhookConfig,
   ExportJob,
   RoleDefinition,
   SecurityControl,
@@ -366,17 +365,6 @@ export const API_ENDPOINTS: ApiEndpointDescription[] = [
     },
   },
   {
-    id: "endpoint_webhooks",
-    route: "/api/v1/webhooks",
-    method: "PUT",
-    description: "Aktualisiert eine bestehende Webhook-Konfiguration.",
-    sampleResponse: {
-      id: "webhook_1",
-      url: "https://clinic.example.de/hooks",
-      enabled: true,
-    },
-  },
-  {
     id: "endpoint_meal_plans",
     route: "/api/v1/meal-plans",
     method: "GET",
@@ -415,36 +403,6 @@ export const API_KEYS: ApiKey[] = [
     lastUsed: "2026-01-15T09:00:00Z",
     scopes: ["foods:read"],
     status: "widerrufen",
-  },
-];
-
-export const WEBHOOK_CONFIGS: WebhookConfig[] = [
-  {
-    id: "webhook_patient",
-    url: "https://klinik.example.de/hooks/patient",
-    events: ["patient.created", "patient.updated"],
-    secret: "whsec_****f2a1",
-    enabled: true,
-    lastTriggered: "2026-04-10T07:30:00Z",
-    failCount: 0,
-  },
-  {
-    id: "webhook_protocol",
-    url: "https://praxis.example.de/api/protocol-received",
-    events: ["protocol.submitted", "protocol.analyzed"],
-    secret: "whsec_****b3c8",
-    enabled: true,
-    lastTriggered: "2026-04-09T14:10:00Z",
-    failCount: 1,
-  },
-  {
-    id: "webhook_billing",
-    url: "https://billing.example.de/webhooks/prodi",
-    events: ["invoice.created", "invoice.paid"],
-    secret: "whsec_****e7d4",
-    enabled: false,
-    lastTriggered: "2026-03-28T11:00:00Z",
-    failCount: 5,
   },
 ];
 

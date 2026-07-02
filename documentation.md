@@ -174,8 +174,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - Export-journal failures include explicit recovery hints for missing `export_jobs` migrations or unavailable `/api/export-jobs` responses.
   - **API keys:** Owner/admin users can issue, list, and revoke live API keys from the REST API tab. Tokens are stored only as SHA-256 hashes in `api_keys`, the full token is shown once, and create/revoke events are written to `access_audit_logs`.
   - **External API boundary:** `POST /api/exports/datasets` accepts `Authorization: Bearer prodi_...` for the `exports:datasets:read` scope. Patient, meal-plan, recipe, and report API scopes still require cookie-authenticated app sessions until their integration contracts are hardened.
-  - **Webhooks:** Owner/admin users can create and disable HTTPS webhook endpoints from the `Integrationen` tab. Secrets are stored only as SHA-256 hashes, the full signing secret is shown once, and matching export/report/protocol events create persisted `webhook_delivery_attempts` rows with `queued` status.
-  - **Truth model:** Export creation, export history, API-key issuance, webhook endpoints, and queued delivery attempts are live. FHIR/DEBInet/BI connector activation and outbound retry delivery remain future integration work.
+  - **Truth model:** Export creation, export history, and API-key issuance are live. FHIR/DEBInet/BI connector activation remains future integration work.
   - **Import status:** The import card is now explicitly labeled as planned instead of simulating a live upload workflow.
 
 ### 4.11 Admin & Sicherheit (`/admin/users`)

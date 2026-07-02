@@ -1,6 +1,6 @@
 # Clinic IT Integration Plan
 
-This document defines the remaining P1 clinic IT contracts after the SSO, API key, and webhook foundations.
+This document defines the remaining P1 clinic IT contracts after the SSO and API key foundations.
 
 Status: SSO claim mapping and SSO callback membership application are implemented. Remaining connector work should build on the persisted schemas and acceptance criteria below, not on ad-hoc connector code.
 
@@ -158,5 +158,4 @@ Acceptance criteria before implementation:
 
 1. Build the FHIR Patient/Observation dry-run with job/result and mapping surfaces.
 2. Enable broader FHIR sync only after the dry-run review workflow is stable.
-3. Add outbound webhook retry workers and operational retry visibility.
-4. Revisit card-terminal intake only after FHIR and clinic security review foundations are stable.
+3. Revisit card-terminal intake only after FHIR and clinic security review foundations are stable.

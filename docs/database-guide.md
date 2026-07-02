@@ -244,7 +244,6 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260516000034_food_replacement_org_scope.sql` | Extends `food_reference_replacements` to allow `organization` scope, updates `replace_food_references()` with `p_scope` parameter and `is_organization_admin()` check for org-wide replacements (objects later dropped in `20260610000057`) |
 | `20260518000036_team_invitations.sql` | Adds invitation timestamps/expiry/revoke metadata to `organization_memberships` and permits admin-created invited memberships |
 | `20260519000037_api_keys.sql` | Organization-scoped hashed API keys for the first external dataset export boundary |
-| `20260520000038_webhooks.sql` | Organization-scoped webhook endpoints plus persisted delivery attempts for export/report/protocol events |
 | `20260521000039_sso_configs.sql` | Organization-scoped OIDC/SAML SSO configuration, provider metadata storage, and domain-based login routing foundation |
 | `20260523000041_sso_group_role_mappings.sql` | Organization-scoped SSO claim/group to RBAC role mappings with priority and audit support |
 | `20260525000043_kitchen_production_batches.sql` | Persisted kitchen production batch current state plus append-only event history for production execution |
@@ -256,6 +255,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `20260628000065_search_exclude_sources.sql` | Adds an `excluded_sources TEXT[]` argument to `search_foods_with_total`, `search_foods`, and `filter_foods_by_nutrient` so blocked/organization-disabled data sources are filtered in-query (before `COUNT(*) OVER ()` and `LIMIT`), instead of in JS after pagination |
 | `20260629000066_search_bls_priority.sql` | Makes `is_branded` the primary sort key in `search_foods_with_total` and `search_foods` so curated reference foods (BLS/SFK, `is_branded = FALSE`) always rank above branded Open Food Facts products (`is_branded = TRUE`); OFF stays visible but never crowds the top of name-search results |
 | `20260630000069_drop_hl7_import.sql` | Retires the removed inbound lab-import feature: drops the `hl7_import_results`, `hl7_import_jobs`, and `hl7_lab_parameter_mappings` tables together with their RLS policies, triggers, and indexes |
+| `20260630000070_drop_webhooks.sql` | Retires the removed outbound webhooks feature: drops the `webhook_delivery_attempts` and `webhook_endpoints` tables together with their RLS policies, triggers, and indexes |
 
 **Seed data** (`supabase/seed.sql`): 10 data sources, 42 nutrient definitions (28 original + 14 from BLS 4.0) plus 46 additional definitions added by `20260513000030_sfk_nutrient_definitions.sql` (amino acids, detailed fatty acids, extended vitamins/minerals, and other SFK nutrients) for a total of 88, 54 DGE reference values (adults 25–51, gender-stratified).
 
@@ -320,12 +320,6 @@ The full schema is defined in Supabase migration files under `supabase/migration
   - current scope is `exports:datasets:read`
   - API-key dataset exports are limited to non-custom Lebensmittel rows via `/api/exports/datasets`
   - create, revoke, and dataset-export actions write `access_audit_logs`
-- `webhook_endpoints` and `webhook_delivery_attempts` store the first durable integration queue:
-  - only HTTPS endpoints are accepted
-  - endpoint signing secrets are stored as prefixes plus SHA-256 hashes
-  - owner/admin users manage endpoints through `/api/webhooks`
-  - delivery attempts are queued for `dataset_export_created`, `report_export_created`, and `digital_protocol_submission_received`
-  - outbound HTTP delivery and retry workers are intentionally deferred; the current contract persists queue/failure state for the operations UI
 - Patient-bound report persistence (`patient_reports`, `patient_report_versions`, the `patient-report-files` bucket) was removed; `/api/exports/report` now only generates and returns the PDF/CSV file and logs the export job.
 - RLS is user-scoped:
   - users can read their own export rows

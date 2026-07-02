@@ -62,7 +62,6 @@ export {
   INTEGRATION_TOGGLES,
   API_ENDPOINTS,
   API_KEYS,
-  WEBHOOK_CONFIGS,
   EXPORT_HISTORY,
 } from "./admin";
 export { KNOWLEDGE_CARDS, SUSTAINABILITY_METRICS } from "./knowledge";
