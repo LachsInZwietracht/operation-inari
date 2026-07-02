@@ -343,6 +343,44 @@ export function useMealPlan(
     [currentDate, isPlanLocked, updateCurrentPlan]
   )
 
+  const addEntryForDate = useCallback(
+    (date: string, slotType: MealSlotType, entry: Omit<MealEntry, "id">) => {
+      if (isPlanLocked(date)) return
+      updatePlanForDate(date, (plan) => {
+        if (plan.status === "approved") return plan
+        const newSlots = plan.slots.map((slot) => {
+          if (slot.type !== slotType) return slot
+          return {
+            ...slot,
+            entries: [...slot.entries, { ...entry, id: generateId() }],
+          }
+        })
+
+        return { ...plan, slots: newSlots }
+      })
+    },
+    [isPlanLocked, updatePlanForDate]
+  )
+
+  const removeEntryForDate = useCallback(
+    (date: string, slotType: MealSlotType, entryId: string) => {
+      if (isPlanLocked(date)) return
+      updatePlanForDate(date, (plan) => {
+        if (plan.status === "approved") return plan
+        const newSlots = plan.slots.map((slot) => {
+          if (slot.type !== slotType) return slot
+          return {
+            ...slot,
+            entries: slot.entries.filter((e) => e.id !== entryId),
+          }
+        })
+
+        return { ...plan, slots: newSlots }
+      })
+    },
+    [isPlanLocked, updatePlanForDate]
+  )
+
   const removeEntry = useCallback(
     (slotType: MealSlotType, entryId: string) => {
       if (isPlanLocked(currentDate)) return
@@ -691,7 +729,9 @@ export function useMealPlan(
     getPlanForDate,
     getPlansInRange,
     addEntry,
+    addEntryForDate,
     removeEntry,
+    removeEntryForDate,
     updateEntryAmount,
     replaceEntry,
     moveEntry,

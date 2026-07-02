@@ -21,7 +21,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   ChefHat,
-  Copy,
   Download,
   FileText,
   FolderOpen,
@@ -43,6 +42,11 @@ import {
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { MealSlotCard } from "@/components/meal-slot"
+import {
+  MealPlanLibrary,
+  MealPlanWeekBoard,
+  type WeekBoardTarget,
+} from "@/components/meal-plan-week-board"
 import { NutrientBar } from "@/components/nutrient-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
@@ -212,6 +216,8 @@ interface PendingAllergenIntent {
   payload: { type: MealEntry["type"]; referenceId: string; amount: number }
   warnings: AllergenWarning[]
   replaceEntryId?: string
+  /** Target plan date; defaults to the currently opened day when omitted. */
+  date?: string
   followUp?: () => void
 }
 
@@ -361,7 +367,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     currentPlan,
     getPlansInRange,
     addEntry,
+    addEntryForDate,
     removeEntry,
+    removeEntryForDate,
     updateEntryAmount,
     replaceEntry,
     moveEntry,
@@ -507,10 +515,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   }, [serverFoods])
 
   useEffect(() => {
-    if (commandOpen) {
+    // The week board's library needs the search index too, so load it lazily
+    // for both the command palette and the week view.
+    if (commandOpen || view === "week") {
       void loadFoodSearchIndex()
     }
-  }, [commandOpen, loadFoodSearchIndex])
+  }, [commandOpen, loadFoodSearchIndex, view])
 
   useEffect(() => {
     if (currentPlan.status !== "approved") return
@@ -591,12 +601,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     (intent: PendingAllergenIntent) => {
       if (intent.replaceEntryId) {
         replaceEntry(intent.slotType, intent.replaceEntryId, intent.payload)
+      } else if (intent.date) {
+        addEntryForDate(intent.date, intent.slotType, intent.payload)
       } else {
         addEntry(intent.slotType, intent.payload)
       }
       intent.followUp?.()
     },
-    [addEntry, replaceEntry],
+    [addEntry, addEntryForDate, replaceEntry],
   )
 
   const guardedAddEntry = useCallback(
@@ -608,6 +620,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         itemName: string
         allergens: string[] | undefined
         replaceEntryId?: string
+        date?: string
         followUp?: () => void
       },
     ) => {
@@ -625,6 +638,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           payload,
           warnings,
           replaceEntryId: context.replaceEntryId,
+          date: context.date,
           followUp: context.followUp,
         })
         return
@@ -637,6 +651,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         payload,
         warnings,
         replaceEntryId: context.replaceEntryId,
+        date: context.date,
         followUp: context.followUp,
       })
 
@@ -723,6 +738,34 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         slotType,
         { type: "food", referenceId: food.id, amount: 120 },
         { itemKind: "food", itemName: food.name, allergens: food.allergens },
+      )
+    }
+  }
+
+  const handleWeekDropPayload = async (
+    date: string,
+    slotType: MealSlotType,
+    payload: { type: MealEntry["type"]; referenceId: string },
+  ) => {
+    if (payload.type === "recipe") {
+      const recipe = recipeMap.get(payload.referenceId)
+      guardedAddEntry(
+        slotType,
+        { type: "recipe", referenceId: payload.referenceId, amount: 1 },
+        {
+          itemKind: "recipe",
+          itemName: recipe?.name ?? "Rezept",
+          allergens: recipe?.allergens,
+          date,
+        },
+      )
+    } else {
+      const food = await hydrateFood(payload.referenceId)
+      if (!food) return
+      guardedAddEntry(
+        slotType,
+        { type: "food", referenceId: food.id, amount: 120 },
+        { itemKind: "food", itemName: food.name, allergens: food.allergens, date },
       )
     }
   }
@@ -1476,6 +1519,35 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       }
     })
   }, [dailyNutrients, dietLine])
+
+  const energyTargetValue = useMemo(() => {
+    const target = dietLine?.targets.find((item) => item.nutrientId === "energie")
+    return target?.min ?? target?.max
+  }, [dietLine])
+
+  const weekBoardTargets = useMemo<WeekBoardTarget[]>(() => {
+    return dietLineCompliance
+      .filter((target) => target.nutrientId !== "energie")
+      .slice(0, 6)
+      .map((target) => ({
+        nutrientId: target.nutrientId,
+        label: target.label,
+        value: target.value,
+        target: target.min ?? target.max,
+        unit: target.unit,
+        status: target.status,
+      }))
+  }, [dietLineCompliance])
+
+  const foodCategoryLabels = useMemo(
+    () => new Map(FOOD_CATEGORIES.map((category) => [category.id, category.name])),
+    [],
+  )
+
+  const weekEntryLabel = useCallback(
+    (entry: MealEntry) => getEntryLabel(entry, foodMap, recipeMap),
+    [foodMap, recipeMap],
+  )
 
   const optimizationSuggestions = useMemo(() => {
     if (!dietLine) return [] as OptimizationSuggestion[]
@@ -2605,88 +2677,38 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_1fr]">
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {weekSummaries.map(({ plan, totals }) => (
-                  <Card key={plan.date}>
-                    <CardHeader className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <CardTitle className="text-base">
-                            {format(parseISO(plan.date), "EEE, dd.MM.", { locale: de })}
-                          </CardTitle>
-                          <CardDescription>
-                            {formatNumber(Math.round(getNutrientValue(totals, "energie")))} kcal ·{' '}
-                            {formatNumber(getNutrientValue(totals, "eiweiss"), 0)} g Eiweiß
-                          </CardDescription>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setDate(plan.date)
-                            setView("day")
-                          }}
-                        >
-                          Öffnen
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => copyCurrentPlanToDate(plan.date)}
-                        >
-                          <Copy className="mr-1 h-3.5 w-3.5" />
-                          Heute hierher
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => copyPlanToNextDay(plan.date)}
-                        >
-                          <Copy className="mr-1 h-3.5 w-3.5" />
-                          Auf Folgetag
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                          onClick={() => clearPlan(plan.date)}
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" />
-                          Leeren
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-1.5 text-sm">
-                      {plan.slots.map((slot) => (
-                        <div key={slot.type} className="flex items-start justify-between gap-2">
-                          <span className="font-medium text-muted-foreground">
-                            {MEAL_SLOT_LABELS[slot.type]}
-                          </span>
-                          <span className="text-right">
-                            {slot.entries.length > 0
-                              ? slot.entries
-                                  .map((entry) =>
-                                    getEntryLabel(entry, foodMap, recipeMap).split("(")[0]?.trim(),
-                                  )
-                                  .slice(0, 2)
-                                  .join(", ")
-                              : "–"}
-                          </span>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
+          <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+            <MealPlanLibrary
+              foods={foodCommandSource}
+              fullFoods={foods}
+              recipes={recipes}
+              categoryLabels={foodCategoryLabels}
+            />
+            <MealPlanWeekBoard
+              days={weekSummaries.map(({ plan, totals }) => ({
+                plan,
+                kcal: getNutrientValue(totals, "energie"),
+              }))}
+              activeDate={currentDate}
+              activeDayLabel={formattedDate}
+              energyValue={getNutrientValue(dailyNutrients, "energie")}
+              energyTarget={energyTargetValue}
+              barTargets={weekBoardTargets}
+              getEntryLabel={weekEntryLabel}
+              onSelectDay={setDate}
+              onOpenDay={(date) => {
+                setDate(date)
+                setView("day")
+              }}
+              onCopyCurrentToDay={copyCurrentPlanToDate}
+              onCopyToNextDay={copyPlanToNextDay}
+              onClearDay={clearPlan}
+              onDrop={(date, slotType, payload) => void handleWeekDropPayload(date, slotType, payload)}
+              onRemoveEntry={removeEntryForDate}
+            />
+          </div>
 
-            <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-3">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Wöchentliche Kennzahlen</CardTitle>
@@ -2766,7 +2788,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   Tippe auf einen Slot im Tagesmodus, um Alternativen einzufügen.
                 </CardContent>
               </Card>
-            </div>
           </div>
         </TabsContent>
 
