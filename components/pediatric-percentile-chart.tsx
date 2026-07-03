@@ -27,13 +27,13 @@ const METRICS = [
 
 const PERCENTILE_KEYS = ["p3", "p10", "p25", "p50", "p75", "p90", "p97"] as const
 const PERCENTILE_COLORS: Record<(typeof PERCENTILE_KEYS)[number], string> = {
-  p3: "#94a3b8",
-  p10: "#6b7280",
-  p25: "#4b5563",
-  p50: "#2563eb",
-  p75: "#047857",
-  p90: "#f97316",
-  p97: "#dc2626",
+  p3: "color-mix(in oklab, var(--muted-foreground) 55%, transparent)",
+  p10: "color-mix(in oklab, var(--muted-foreground) 75%, transparent)",
+  p25: "var(--muted-foreground)",
+  p50: "var(--chart-2)",
+  p75: "var(--chart-1)",
+  p90: "var(--chart-4)",
+  p97: "var(--chart-5)",
 }
 
 interface PediatricPercentileChartProps {
@@ -130,8 +130,8 @@ export function PediatricPercentileChart({ entries, gender, birthDate }: Pediatr
             <Scatter
               data={patientSeries}
               name="Patient"
-              fill="#0f172a"
-              line={{ strokeDasharray: "4 2", stroke: "#0f172a" }}
+              fill="var(--foreground)"
+              line={{ strokeDasharray: "4 2", stroke: "var(--foreground)" }}
               shape="circle"
             />
           </ComposedChart>

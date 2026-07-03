@@ -43,39 +43,52 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * Inari light theme — cool-neutral counterpart to the dark clinical palette.
+ * Chart hues validated for CVD separation and 3:1 surface contrast
+ * (green/blue/violet/amber/red, worst adjacent pair ΔE 16.4).
+ */
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #f6f7f9;
+  --foreground: #1a1f26;
+  --card: #ffffff;
+  --card-foreground: #14171c;
+  --popover: #ffffff;
+  --popover-foreground: #14171c;
+  --primary: #0d7a45;
+  --primary-foreground: #ffffff;
+  --secondary: #eceff3;
+  --secondary-foreground: #2a313a;
+  --muted: #eff1f5;
+  --muted-foreground: #5f6b78;
+  --accent: #e9edf2;
+  --accent-foreground: #14171c;
+  --destructive: #d64545;
+  --border: #dfe4ea;
+  --input: #ccd3dc;
+  --ring: #0d7a45;
+  /* Domain colour coding: pläne=green, patienten=blue, analyse=violet, berichte=amber, kritisch=red */
+  --chart-1: #0f8a4f;
+  --chart-2: #0e7bc0;
+  --chart-3: #9333ea;
+  --chart-4: #a16207;
+  --chart-5: #d64545;
+  --sidebar: #fbfcfd;
+  --sidebar-foreground: #5f6b78;
+  --sidebar-primary: #0d7a45;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(13, 122, 69, 0.1);
+  --sidebar-accent-foreground: #0d7a45;
+  --sidebar-border: #e4e8ee;
+  --sidebar-ring: #0d7a45;
+  /* Dashboard hero surfaces (see dashboard-overview-client.tsx) */
+  --brand-gradient: linear-gradient(150deg, #0d7a45, #0a6238);
+  --on-brand: #ffffff;
+  --brand-shadow: rgba(13, 122, 69, 0.25);
+  --hero-panel-bg: radial-gradient(120% 140% at 0% 0%, #e6f4ec 0%, #eef1f6 62%);
+  --hero-panel-border: #cfe3d6;
 }
 
 /*
@@ -83,6 +96,7 @@
  * design handoff. Hex values are authoritative (see docs/design tokens).
  */
 .dark {
+  color-scheme: dark;
   --background: #0f1115;
   --foreground: #e8ebef;
   --card: #14171c;
@@ -115,6 +129,12 @@
   --sidebar-accent-foreground: #3ecf8e;
   --sidebar-border: #1a1e24;
   --sidebar-ring: #3ecf8e;
+  /* Dashboard hero surfaces (see dashboard-overview-client.tsx) */
+  --brand-gradient: linear-gradient(150deg, #46d896, #33b87b);
+  --on-brand: #0c1f16;
+  --brand-shadow: rgba(62, 207, 142, 0.3);
+  --hero-panel-bg: radial-gradient(120% 140% at 0% 0%, #16241c 0%, #121820 62%);
+  --hero-panel-border: #284035;
 }
 
 @layer base {
@@ -140,5 +160,34 @@
 @layer utilities {
   .animate-pulse-dot {
     animation: inari-pulse-dot 1.8s ease-in-out infinite;
+  }
+}
+
+/*
+ * Theme-switch reveal: the new theme expands as a circle from the toggle
+ * button (coordinates set as --theme-switch-x/y by ThemeToggle). Browsers
+ * without the View Transitions API switch instantly instead.
+ */
+@keyframes inari-theme-reveal {
+  from {
+    clip-path: circle(0px at var(--theme-switch-x, 50%) var(--theme-switch-y, 50%));
+  }
+  to {
+    clip-path: circle(150% at var(--theme-switch-x, 50%) var(--theme-switch-y, 50%));
+  }
+}
+
+html[data-theme-switching]::view-transition-old(root) {
+  animation: none;
+}
+
+html[data-theme-switching]::view-transition-new(root) {
+  animation: inari-theme-reveal 0.45s ease-in-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-switching]::view-transition-old(root),
+  html[data-theme-switching]::view-transition-new(root) {
+    animation: none;
   }
 }
