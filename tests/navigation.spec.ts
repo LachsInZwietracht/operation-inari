@@ -94,4 +94,21 @@ test.describe("Navigation", () => {
     await dashboardLink.click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: navTimeout });
   });
+
+  test("global command palette opens with Cmd+K and navigates", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
+
+    await page.keyboard.press("ControlOrMeta+k");
+
+    const paletteInput = page.getByPlaceholder(/Wohin möchtest du springen/);
+    await expect(paletteInput).toBeVisible({ timeout: 15_000 });
+
+    await paletteInput.fill("Rezepte");
+    const recipesOption = page.getByRole("option", { name: /Rezepte/ }).first();
+    await expect(recipesOption).toBeVisible();
+    await recipesOption.click();
+
+    await expect(page).toHaveURL(/\/rezepte/, { timeout: 30_000 });
+  });
 });

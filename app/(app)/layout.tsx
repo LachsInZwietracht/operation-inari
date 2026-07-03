@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
-import { ContextualFoodSearchTrigger } from "@/components/food-search-command"
+import { AppCommandPalette } from "@/components/app-command-palette"
 import { Separator } from "@/components/ui/separator"
 import { FoodSearchProvider } from "@/components/foods-provider"
 import { AuthProvider } from "@/components/auth-provider"
@@ -51,7 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <SidebarTrigger className="-ml-1 shrink-0" />
               <Separator orientation="vertical" className="mr-1 h-4 shrink-0 sm:mr-2" />
               <div className="min-w-0 flex-1 sm:flex-none">
-                <ContextualFoodSearchTrigger />
+                <AppCommandPalette canAccessInstitution={canAccessInstitution} />
               </div>
             </header>
             <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
