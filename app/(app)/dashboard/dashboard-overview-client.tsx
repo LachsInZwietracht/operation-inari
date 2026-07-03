@@ -3,26 +3,31 @@
 /**
  * Dashboard A — "Geführter Start" (Übersicht).
  *
- * Faithful build of the Inari clinical dashboard design handoff. This screen is
- * a launch ramp, not a report: it returns the dietitian to her work as fast as
- * possible (Patient → Erstgespräch/Notizen → Plan → Übergabe).
+ * This screen is a launch ramp, not a report: it returns the dietitian to her
+ * work as fast as possible (Patient → Erstgespräch/Notizen → Plan → Übergabe).
  *
- * Content is the demo dataset specified in the handoff. Wiring these rows to
- * live app entities (recent plans / patients / appointments) is a follow-up;
- * the data shapes below mirror what the screen reads from real entities.
+ * All content derives from real app entities passed in from the server page:
+ * the user's meal plans, patients, and appointments. Every row and button
+ * links into the corresponding workflow.
  */
 
 import { useMemo } from "react"
-import { format } from "date-fns"
-import { de } from "date-fns/locale"
+import Link from "next/link"
 import {
-  ArrowRight,
-  Bell,
-  Calendar,
-  ChevronRight,
-  FileText,
-  Plus,
-} from "lucide-react"
+  differenceInCalendarDays,
+  format,
+  formatDistanceToNowStrict,
+  parseISO,
+} from "date-fns"
+import { de } from "date-fns/locale"
+import { ArrowRight, Calendar, ChevronRight, Plus, User } from "lucide-react"
+
+import type {
+  DailyMealPlan,
+  MealPlanStatus,
+  Patient,
+  PracticeAppointment,
+} from "@/lib/types"
 
 // --- Design tokens ---------------------------------------------------------------
 // All colours resolve through the theme variables in globals.css so the screen
@@ -44,17 +49,21 @@ const ON_BRAND = "var(--on-brand)"
 const BRAND_SHADOW = "0 6px 18px var(--brand-shadow)"
 
 // Plan status colour coding (badges + left accent edge).
-type PlanState = "Entwurf" | "In Arbeit" | "Bereit" | "Freigegeben" | "Archiviert"
-
-const STATE_COLOR: Record<PlanState, string> = {
-  Entwurf: "var(--chart-4)",
-  "In Arbeit": "var(--chart-2)",
-  Bereit: "light-dark(#0d9488, #2dd4bf)",
-  Freigegeben: "var(--chart-1)",
-  Archiviert: "var(--muted-foreground)",
+const STATUS_LABEL: Record<MealPlanStatus, string> = {
+  draft: "Entwurf",
+  active: "In Arbeit",
+  approved: "Freigegeben",
+  archived: "Archiviert",
 }
 
-// Domain colour coding: pläne=green, patienten=blue, analyse=violet, berichte=amber.
+const STATUS_COLOR: Record<MealPlanStatus, string> = {
+  draft: "var(--chart-4)",
+  active: "var(--chart-2)",
+  approved: "var(--chart-1)",
+  archived: "var(--muted-foreground)",
+}
+
+// Domain colour coding: pläne=green, patienten=blue, analyse=violett, berichte=amber.
 const DOMAIN = {
   patient: "var(--chart-2)",
   plan: "var(--chart-1)",
@@ -62,99 +71,84 @@ const DOMAIN = {
   report: "var(--chart-4)",
 } as const
 
+const APPOINTMENT_TYPE_LABEL: Record<PracticeAppointment["type"], string> = {
+  beratung: "Beratung",
+  kontrolle: "Kontrolle",
+  team: "Team",
+  webinar: "Webinar",
+}
+
+const APPOINTMENT_TYPE_COLOR: Record<PracticeAppointment["type"], string> = {
+  beratung: DOMAIN.analysis,
+  kontrolle: DOMAIN.patient,
+  team: DOMAIN.report,
+  webinar: DOMAIN.plan,
+}
+
 /** Soft fill = accent colour at 12.5% opacity. */
 const soft = (color: string) => `color-mix(in srgb, ${color} 12.5%, transparent)`
 
-// --- Demo data (shapes mirror real app entities) -------------------------------
+// --- Derivation helpers ----------------------------------------------------------
 
-interface RecentPlan {
-  name: string
-  patient: string
-  initials: string
-  state: PlanState
-  edited: string
-  action: "Weiterbearbeiten" | "Übergeben" | "Öffnen"
+const MEAL_SLOT_COUNT = 5
+
+interface DashboardProps {
+  firstName: string | null
+  plans: DailyMealPlan[]
+  patients: Patient[]
+  appointments: PracticeAppointment[]
 }
 
-const recentPlans: RecentPlan[] = [
-  { name: "Mediterrane Kost", patient: "Anna Bergmann", initials: "AB", state: "Entwurf", edited: "vor 18 Min", action: "Weiterbearbeiten" },
-  { name: "Eliminationsdiät", patient: "Julia Schäfer", initials: "JS", state: "In Arbeit", edited: "vor 2 Std", action: "Weiterbearbeiten" },
-  { name: "Vollkost-Aufbau", patient: "Lukas Fischer", initials: "LF", state: "Bereit", edited: "vor 4 Std", action: "Übergeben" },
-  { name: "Diabetes Typ 2", patient: "Thomas Krüger", initials: "TK", state: "Freigegeben", edited: "gestern", action: "Öffnen" },
-  { name: "Low-FODMAP Aufbau", patient: "Sofia Lindqvist", initials: "SL", state: "In Arbeit", edited: "gestern", action: "Weiterbearbeiten" },
-]
-
-interface PlanTask {
-  action: string
-  plan: string
-  patient: string
-  state: PlanState
+function patientInitials(patient: Patient): string {
+  return `${patient.firstName.charAt(0)}${patient.lastName.charAt(0)}`.toUpperCase()
 }
 
-/** Derived from plan status — there are no manually planned tasks. */
-const PLAN_TASK_ACTION: Partial<Record<PlanState, string>> = {
-  Entwurf: "Entwurf fertigstellen",
-  "In Arbeit": "Weiterbearbeiten",
-  Bereit: "Freigeben & übergeben (PDF)",
+function patientFullName(patient: Patient): string {
+  return `${patient.firstName} ${patient.lastName}`
 }
 
-const planTasks: PlanTask[] = recentPlans
-  .filter((plan) => plan.state in PLAN_TASK_ACTION)
-  .map((plan) => ({
-    action: PLAN_TASK_ACTION[plan.state] as string,
-    plan: plan.name,
-    patient: plan.patient,
-    state: plan.state,
-  }))
-
-interface RecentPatient {
-  name: string
-  initials: string
-  contextMeta: string
-  when: string
+function planTitle(plan: DailyMealPlan): string {
+  return plan.title || `Tagesplan ${format(parseISO(plan.date), "d. MMMM", { locale: de })}`
 }
 
-const recentPatients: RecentPatient[] = [
-  { name: "Anna Bergmann", initials: "AB", contextMeta: "Plan: Mediterrane Kost", when: "vor 18 Min" },
-  { name: "Julia Schäfer", initials: "JS", contextMeta: "Erstgespräch · Notizen", when: "vor 2 Std" },
-  { name: "Lukas Fischer", initials: "LF", contextMeta: "Plan: Vollkost-Aufbau", when: "vor 4 Std" },
-  { name: "Thomas Krüger", initials: "TK", contextMeta: "Plan: Diabetes Typ 2", when: "gestern" },
-  { name: "Sofia Lindqvist", initials: "SL", contextMeta: "Plan: Low-FODMAP Aufbau", when: "gestern" },
-  { name: "Markus Wolf", initials: "MW", contextMeta: "Neuer Patient angelegt", when: "gestern" },
-]
-
-interface Appointment {
-  time: string
-  name: string
-  sub: string
-  duration: string
-  domain: string
+function planHref(plan: DailyMealPlan): string {
+  const params = new URLSearchParams({ date: plan.date })
+  if (plan.patientId) params.set("patientId", plan.patientId)
+  return `/ernaehrungsplan?${params.toString()}`
 }
 
-const appointments: Appointment[] = [
-  { time: "09:00", name: "Anna Bergmann", sub: "Erstgespräch · Notizen", duration: "60 Min", domain: DOMAIN.analysis },
-  { time: "11:00", name: "Thomas Krüger", sub: "Plan-Besprechung", duration: "30 Min", domain: DOMAIN.plan },
-  { time: "14:30", name: "Sofia Lindqvist", sub: "Verlaufskontrolle", duration: "30 Min", domain: DOMAIN.analysis },
-]
-
-interface PulseStat {
-  value: string
-  label: string
-  color: string
+function planDateLabel(plan: DailyMealPlan): string {
+  const diff = differenceInCalendarDays(new Date(), parseISO(plan.date))
+  if (diff === 0) return "heute"
+  if (diff === 1) return "gestern"
+  if (diff === -1) return "morgen"
+  return format(parseISO(plan.date), "dd.MM.yyyy")
 }
 
-const pulseStats: PulseStat[] = [
-  { value: "12", label: "Aktive Pläne", color: DOMAIN.plan },
-  { value: "4", label: "Entwürfe", color: DOMAIN.report },
-  { value: "48", label: "Aktive Patienten", color: DOMAIN.patient },
-  { value: "6", label: "Erstgespräche · Woche", color: DOMAIN.analysis },
-]
+function filledSlotCount(plan: DailyMealPlan): number {
+  return plan.slots.filter((slot) => slot.entries.length > 0).length
+}
 
-// UI preferences (would come from user settings).
-const hasTermine = true
-const showPulse = true
+function relativeTimestamp(iso: string | undefined): string {
+  if (!iso) return ""
+  try {
+    return formatDistanceToNowStrict(parseISO(iso), { locale: de, addSuffix: true })
+  } catch {
+    return ""
+  }
+}
 
-const resume = recentPlans[0]
+function appointmentDuration(appointment: PracticeAppointment): string {
+  const [startHours, startMinutes] = appointment.startTime.split(":").map(Number)
+  const [endHours, endMinutes] = appointment.endTime.split(":").map(Number)
+  const minutes = endHours * 60 + endMinutes - (startHours * 60 + startMinutes)
+  return minutes > 0 ? `${minutes} Min` : ""
+}
+
+const PLAN_TASK_ACTION: Partial<Record<MealPlanStatus, string>> = {
+  draft: "Entwurf fertigstellen",
+  active: "Weiterbearbeiten",
+}
 
 // --- Small primitives ----------------------------------------------------------
 
@@ -169,14 +163,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function StatusBadge({ state }: { state: PlanState }) {
-  const color = STATE_COLOR[state]
+function StatusBadge({ status }: { status: MealPlanStatus }) {
+  const color = STATUS_COLOR[status]
   return (
     <span
       className="inline-flex items-center rounded-full px-[11px] py-1 text-[11px] font-bold"
       style={{ color, backgroundColor: soft(color) }}
     >
-      {state}
+      {STATUS_LABEL[status]}
     </span>
   )
 }
@@ -206,7 +200,7 @@ function CardTitle({
   children: React.ReactNode
   count?: string
   helper?: string
-  link?: { label: string; color: string }
+  link?: { label: string; color: string; href: string }
 }) {
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
@@ -229,13 +223,50 @@ function CardTitle({
         ) : null}
       </div>
       {link ? (
-        <button
-          type="button"
+        <Link
+          href={link.href}
           className="inline-flex items-center gap-0.5 text-[12.5px] font-semibold transition-opacity hover:opacity-80"
           style={{ color: link.color }}
         >
           {link.label} ›
-        </button>
+        </Link>
+      ) : null}
+    </div>
+  )
+}
+
+function EmptyHint({
+  icon: Icon,
+  title,
+  text,
+  action,
+}: {
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+  title: string
+  text: string
+  action?: { label: string; href: string }
+}) {
+  return (
+    <div
+      className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center"
+      style={{ borderColor: "var(--input)" }}
+    >
+      <Icon className="size-7" style={{ color: TEXT.muted, opacity: 0.5 }} />
+      <p className="text-[13.5px] font-bold" style={{ color: TEXT.muted }}>
+        {title}
+      </p>
+      <p className="max-w-xs text-[12.5px]" style={{ color: TEXT.faint }}>
+        {text}
+      </p>
+      {action ? (
+        <Link
+          href={action.href}
+          className="mt-1 flex items-center gap-1.5 rounded-[10px] border px-3.5 py-2 text-[12.5px] font-semibold transition-colors hover:bg-accent"
+          style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
+        >
+          <Plus className="size-4" />
+          {action.label}
+        </Link>
       ) : null}
     </div>
   )
@@ -243,29 +274,47 @@ function CardTitle({
 
 // --- Row components ------------------------------------------------------------
 
-function PlanTaskRow({ task }: { task: PlanTask }) {
-  const color = STATE_COLOR[task.state]
+function PlanTaskRow({
+  plan,
+  patientName,
+}: {
+  plan: DailyMealPlan
+  patientName: string | null
+}) {
+  const status = plan.status ?? "draft"
+  const color = STATUS_COLOR[status]
   return (
-    <button
-      type="button"
+    <Link
+      href={planHref(plan)}
       className="flex w-full items-center gap-3 rounded-[10px] px-1.5 py-[9px] text-left transition-colors hover:bg-muted"
     >
       <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13.5px] font-bold" style={{ color: TEXT.body }}>
-          {task.action}
+          {PLAN_TASK_ACTION[status]}
         </span>
         <span className="block truncate text-[12px]" style={{ color: TEXT.muted2 }}>
-          {task.plan} · {task.patient}
+          {planTitle(plan)}
+          {patientName ? ` · ${patientName}` : ""}
         </span>
       </span>
       <ChevronRight className="size-[15px] shrink-0" style={{ color: TEXT.faint }} />
-    </button>
+    </Link>
   )
 }
 
-function PlanRow({ plan }: { plan: RecentPlan }) {
-  const color = STATE_COLOR[plan.state]
+function PlanRow({
+  plan,
+  patientName,
+  initials,
+}: {
+  plan: DailyMealPlan
+  patientName: string | null
+  initials: string
+}) {
+  const status = plan.status ?? "draft"
+  const color = STATUS_COLOR[status]
+  const action = status === "approved" || status === "archived" ? "Öffnen" : "Weiterbearbeiten"
   return (
     <div
       className="group flex items-center gap-3 rounded-xl border-l-2 px-3 py-[11px] transition-colors"
@@ -275,89 +324,101 @@ function PlanRow({ plan }: { plan: RecentPlan }) {
         className="flex size-9 shrink-0 items-center justify-center rounded-[10px] text-[12.5px] font-bold"
         style={{ color, backgroundColor: soft(color) }}
       >
-        {plan.initials}
+        {initials}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14.5px] font-bold" style={{ color: TEXT.hi }}>
-          {plan.name}
+          {planTitle(plan)}
         </span>
-        <span className="block truncate text-[12.5px]" style={{ color: TEXT.muted2 }}>
-          {plan.patient} · {plan.edited}
+        <span className="block truncate text-[12.5px]" style={{ color: TEXT.muted2 }} suppressHydrationWarning>
+          {patientName ? `${patientName} · ` : ""}
+          {planDateLabel(plan)}
         </span>
       </span>
-      <StatusBadge state={plan.state} />
-      <button
-        type="button"
+      <span className="hidden sm:inline-flex">
+        <StatusBadge status={status} />
+      </span>
+      <Link
+        href={planHref(plan)}
         className="shrink-0 rounded-[9px] px-3 py-1.5 text-[12.5px] font-bold transition-opacity hover:opacity-80"
         style={{ color, backgroundColor: soft(color) }}
       >
-        {plan.action}
-      </button>
+        {action}
+      </Link>
     </div>
   )
 }
 
-function PatientRow({ patient }: { patient: RecentPatient }) {
+function PatientRow({ patient, contextMeta }: { patient: Patient; contextMeta: string }) {
   return (
-    <button
-      type="button"
+    <Link
+      href={`/patienten/${patient.id}`}
       className="flex w-full items-center gap-3 rounded-[10px] px-1.5 py-[9px] text-left transition-colors hover:bg-muted"
     >
       <span
         className="flex size-[34px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold"
         style={{ color: DOMAIN.patient, backgroundColor: soft(DOMAIN.patient) }}
       >
-        {patient.initials}
+        {patientInitials(patient)}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13.5px] font-bold" style={{ color: TEXT.body }}>
-          {patient.name}
+          {patientFullName(patient)}
         </span>
         <span className="block truncate text-[11.5px]" style={{ color: TEXT.muted2 }}>
-          {patient.contextMeta}
+          {contextMeta}
         </span>
       </span>
-      <span className="shrink-0 text-[11px]" style={{ color: TEXT.faint }}>
-        {patient.when}
+      <span className="shrink-0 text-[11px]" style={{ color: TEXT.faint }} suppressHydrationWarning>
+        {relativeTimestamp(patient.updatedAt)}
       </span>
-    </button>
+    </Link>
   )
 }
 
-function AppointmentRow({ appointment }: { appointment: Appointment }) {
+function AppointmentRow({
+  appointment,
+  patientName,
+}: {
+  appointment: PracticeAppointment
+  patientName: string | null
+}) {
   return (
     <div className="flex items-center gap-3 rounded-[9px] px-1.5 py-[9px]">
       <span
         className="w-11 shrink-0 font-mono text-[13px] font-semibold tabular-nums"
         style={{ color: TEXT.muted }}
       >
-        {appointment.time}
+        {appointment.startTime}
       </span>
-      <span className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: appointment.domain }} />
+      <span
+        className="size-[7px] shrink-0 rounded-full"
+        style={{ backgroundColor: APPOINTMENT_TYPE_COLOR[appointment.type] }}
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13.5px] font-bold" style={{ color: TEXT.body }}>
-          {appointment.name}
+          {patientName ?? appointment.title}
         </span>
         <span className="block truncate text-[11.5px]" style={{ color: TEXT.muted2 }}>
-          {appointment.sub}
+          {patientName ? appointment.title : APPOINTMENT_TYPE_LABEL[appointment.type]}
         </span>
       </span>
       <span className="shrink-0 text-[11px]" style={{ color: TEXT.faint }}>
-        {appointment.duration}
+        {appointmentDuration(appointment)}
       </span>
     </div>
   )
 }
 
-function PulseStatItem({ stat }: { stat: PulseStat }) {
+function PulseStatItem({ value, label, color }: { value: number; label: string; color: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: stat.color }} />
+      <span className="size-[7px] shrink-0 rounded-full" style={{ backgroundColor: color }} />
       <span className="font-mono text-[20px] font-semibold tabular-nums" style={{ color: TEXT.hi }}>
-        {stat.value}
+        {value}
       </span>
       <span className="text-[12.5px]" style={{ color: TEXT.muted }}>
-        {stat.label}
+        {label}
       </span>
     </div>
   )
@@ -365,7 +426,12 @@ function PulseStatItem({ stat }: { stat: PulseStat }) {
 
 // --- Page ----------------------------------------------------------------------
 
-export function DashboardOverviewClient() {
+export function DashboardOverviewClient({
+  firstName,
+  plans,
+  patients,
+  appointments,
+}: DashboardProps) {
   const { greeting, dateLabel } = useMemo(() => {
     const now = new Date()
     const hour = now.getHours()
@@ -375,6 +441,95 @@ export function DashboardOverviewClient() {
       dateLabel: format(now, "EEEE, d. MMMM yyyy", { locale: de }),
     }
   }, [])
+
+  const {
+    patientNameById,
+    visiblePlans,
+    resume,
+    planTasks,
+    recentPatients,
+    patientContextById,
+    todaysAppointments,
+    pulseStats,
+  } = useMemo(() => {
+    const nameById = new Map<string, string>()
+    const initialsById = new Map<string, string>()
+    for (const patient of patients) {
+      nameById.set(patient.id, patientFullName(patient))
+      initialsById.set(patient.id, patientInitials(patient))
+    }
+
+    const visible = plans.filter((plan) => plan.status !== "archived")
+    const resumePlan =
+      visible.find((plan) => plan.status === "draft" || plan.status === "active") ?? null
+    const tasks = visible
+      .filter((plan) => (plan.status ?? "draft") in PLAN_TASK_ACTION)
+      .slice(0, 4)
+
+    const sortedPatients = [...patients]
+      .filter((patient) => patient.status !== "archived")
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
+      .slice(0, 6)
+
+    // Latest plan per patient gives the "where you left off" context line.
+    const contextById = new Map<string, string>()
+    for (const plan of plans) {
+      if (plan.patientId && !contextById.has(plan.patientId)) {
+        contextById.set(plan.patientId, `Plan: ${planTitle(plan)}`)
+      }
+    }
+
+    const todayIso = format(new Date(), "yyyy-MM-dd")
+    const today = appointments.filter((appointment) => appointment.date === todayIso)
+
+    const in7DaysIso = format(
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd",
+    )
+    const upcomingCount = appointments.filter(
+      (appointment) => appointment.date >= todayIso && appointment.date <= in7DaysIso,
+    ).length
+
+    const stats = [
+      {
+        value: plans.filter((plan) => plan.status === "active").length,
+        label: "Aktive Pläne",
+        color: DOMAIN.plan,
+      },
+      {
+        value: plans.filter((plan) => plan.status === "draft").length,
+        label: "Entwürfe",
+        color: DOMAIN.report,
+      },
+      {
+        value: patients.filter((patient) => (patient.status ?? "active") === "active").length,
+        label: "Aktive Patienten",
+        color: DOMAIN.patient,
+      },
+      {
+        value: upcomingCount,
+        label: "Termine · 7 Tage",
+        color: DOMAIN.analysis,
+      },
+    ]
+
+    return {
+      patientNameById: nameById,
+      visiblePlans: visible.slice(0, 5),
+      resume: resumePlan,
+      planTasks: tasks,
+      recentPatients: sortedPatients,
+      patientContextById: contextById,
+      todaysAppointments: today,
+      pulseStats: stats,
+    }
+  }, [plans, patients, appointments])
+
+  const resumeFilled = resume ? filledSlotCount(resume) : 0
+  const resumeProgress = Math.round((resumeFilled / MEAL_SLOT_COUNT) * 100)
+  const resumePatientName = resume?.patientId
+    ? (patientNameById.get(resume.patientId) ?? null)
+    : null
 
   return (
     <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-[22px]">
@@ -386,37 +541,25 @@ export function DashboardOverviewClient() {
             style={{ color: TEXT.hi }}
             suppressHydrationWarning
           >
-            {greeting}, Julia
+            {greeting}
+            {firstName ? `, ${firstName}` : ""}
           </h1>
           <p className="text-[13px]" style={{ color: TEXT.faint }} suppressHydrationWarning>
             {dateLabel}
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            aria-label="Benachrichtigungen"
-            className="relative flex size-10 items-center justify-center rounded-[10px] border bg-card transition-colors hover:bg-accent"
-          >
-            <Bell className="size-[18px]" style={{ color: TEXT.muted }} />
-            <span
-              className="absolute right-2.5 top-2.5 size-1.5 rounded-full"
-              style={{ backgroundColor: "var(--destructive)" }}
-            />
-          </button>
-          <button
-            type="button"
-            className="flex h-10 items-center gap-2 rounded-[10px] px-4 text-[13.5px] font-extrabold transition-opacity hover:opacity-90"
-            style={{
-              background: BRAND_GRADIENT,
-              color: ON_BRAND,
-              boxShadow: BRAND_SHADOW,
-            }}
-          >
-            <Plus className="size-[18px]" />
-            Neuer Patient
-          </button>
-        </div>
+        <Link
+          href="/patienten/neu"
+          className="flex h-10 items-center gap-2 rounded-[10px] px-4 text-[13.5px] font-extrabold transition-opacity hover:opacity-90"
+          style={{
+            background: BRAND_GRADIENT,
+            color: ON_BRAND,
+            boxShadow: BRAND_SHADOW,
+          }}
+        >
+          <Plus className="size-[18px]" />
+          Neuer Patient
+        </Link>
       </header>
 
       {/* Row 1 — Hero "Weiter machen" + Pläne, die auf dich warten */}
@@ -428,156 +571,256 @@ export function DashboardOverviewClient() {
             borderColor: "var(--hero-panel-border)",
           }}
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span
-                className="size-2 rounded-full animate-pulse-dot"
-                style={{ backgroundColor: "var(--primary)" }}
-              />
-              <span
-                className="text-[11px] font-extrabold uppercase tracking-[0.14em]"
-                style={{ color: "var(--primary)" }}
-              >
-                Weiter machen
-              </span>
-            </div>
-            <StatusBadge state={resume.state} />
-          </div>
+          {resume ? (
+            <>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="size-2 rounded-full animate-pulse-dot"
+                    style={{ backgroundColor: "var(--primary)" }}
+                  />
+                  <span
+                    className="text-[11px] font-extrabold uppercase tracking-[0.14em]"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    Weiter machen
+                  </span>
+                </div>
+                <StatusBadge status={resume.status ?? "draft"} />
+              </div>
 
-          <h2 className="text-[24px] font-extrabold tracking-tight" style={{ color: TEXT.hi }}>
-            {resume.name}
-          </h2>
-          <p className="mt-1 text-[13.5px]" style={{ color: TEXT.muted }}>
-            {resume.patient} · zuletzt {resume.edited} bearbeitet
-          </p>
+              <h2 className="text-[24px] font-extrabold tracking-tight" style={{ color: TEXT.hi }}>
+                {planTitle(resume)}
+              </h2>
+              <p className="mt-1 text-[13.5px]" style={{ color: TEXT.muted }} suppressHydrationWarning>
+                {resumePatientName ? `${resumePatientName} · ` : ""}
+                Plan für {planDateLabel(resume)}
+              </p>
 
-          <div className="mt-auto pt-6">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[13px]" style={{ color: TEXT.mid }}>
-                3 von 5 Bausteinen fertig
-              </span>
-              <span className="font-mono text-[13px] font-semibold" style={{ color: "var(--primary)" }}>
-                70%
-              </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-[6px]" style={{ backgroundColor: "var(--secondary)" }}>
-              <div className="h-full rounded-[6px]" style={{ width: "70%", background: PROGRESS_GRADIENT }} />
-            </div>
+              <div className="mt-auto pt-6">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[13px]" style={{ color: TEXT.mid }}>
+                    {resumeFilled} von {MEAL_SLOT_COUNT} Mahlzeiten geplant
+                  </span>
+                  <span className="font-mono text-[13px] font-semibold" style={{ color: "var(--primary)" }}>
+                    {resumeProgress}%
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-[6px]" style={{ backgroundColor: "var(--secondary)" }}>
+                  <div
+                    className="h-full rounded-[6px]"
+                    style={{ width: `${resumeProgress}%`, background: PROGRESS_GRADIENT }}
+                  />
+                </div>
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                type="button"
-                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[14px] font-extrabold transition-opacity hover:opacity-90"
-                style={{
-                  background: BRAND_GRADIENT,
-                  color: ON_BRAND,
-                  boxShadow: BRAND_SHADOW,
-                }}
-              >
-                Plan weiterbearbeiten
-                <ArrowRight className="size-[18px]" />
-              </button>
-              <button
-                type="button"
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border px-5 text-[13.5px] font-semibold transition-colors hover:bg-accent"
-                style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
-              >
-                <FileText className="size-[17px]" />
-                Vorschau (PDF)
-              </button>
-            </div>
-          </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Link
+                    href={planHref(resume)}
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[14px] font-extrabold transition-opacity hover:opacity-90"
+                    style={{
+                      background: BRAND_GRADIENT,
+                      color: ON_BRAND,
+                      boxShadow: BRAND_SHADOW,
+                    }}
+                  >
+                    Plan weiterbearbeiten
+                    <ArrowRight className="size-[18px]" />
+                  </Link>
+                  {resume.patientId ? (
+                    <Link
+                      href={`/patienten/${resume.patientId}`}
+                      className="flex h-12 items-center justify-center gap-2 rounded-xl border px-5 text-[13.5px] font-semibold transition-colors hover:bg-accent"
+                      style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
+                    >
+                      <User className="size-[17px]" />
+                      Zum Patienten
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-2">
+                <span
+                  className="text-[11px] font-extrabold uppercase tracking-[0.14em]"
+                  style={{ color: "var(--primary)" }}
+                >
+                  Loslegen
+                </span>
+              </div>
+              <h2 className="text-[24px] font-extrabold tracking-tight" style={{ color: TEXT.hi }}>
+                Kein offener Plan
+              </h2>
+              <p className="mt-1 text-[13.5px]" style={{ color: TEXT.muted }}>
+                Starte einen neuen Ernährungsplan oder beginne mit einer Vorlage.
+              </p>
+              <div className="mt-auto flex flex-wrap gap-3 pt-6">
+                <Link
+                  href="/ernaehrungsplan"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[14px] font-extrabold transition-opacity hover:opacity-90"
+                  style={{
+                    background: BRAND_GRADIENT,
+                    color: ON_BRAND,
+                    boxShadow: BRAND_SHADOW,
+                  }}
+                >
+                  Neuen Plan erstellen
+                  <ArrowRight className="size-[18px]" />
+                </Link>
+                <Link
+                  href="/ernaehrungsplan/bibliothek"
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl border px-5 text-[13.5px] font-semibold transition-colors hover:bg-accent"
+                  style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
+                >
+                  Vorlagen ansehen
+                </Link>
+              </div>
+            </>
+          )}
         </div>
 
         <CardShell className="flex-1">
-          <CardTitle count="4" helper="Abgeleitet aus dem Status deiner Pläne">
+          <CardTitle
+            count={planTasks.length > 0 ? String(planTasks.length) : undefined}
+            helper="Abgeleitet aus dem Status deiner Pläne"
+          >
             Pläne, die auf dich warten
           </CardTitle>
-          <div className="flex flex-col gap-0.5">
-            {planTasks.map((task) => (
-              <PlanTaskRow key={`${task.action}-${task.plan}`} task={task} />
-            ))}
-          </div>
+          {planTasks.length > 0 ? (
+            <div className="flex flex-col gap-0.5">
+              {planTasks.map((plan) => (
+                <PlanTaskRow
+                  key={plan.id}
+                  plan={plan}
+                  patientName={plan.patientId ? (patientNameById.get(plan.patientId) ?? null) : null}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyHint
+              icon={Calendar}
+              title="Alles erledigt"
+              text="Keine Entwürfe oder offenen Pläne. Neue Pläne erscheinen hier automatisch."
+            />
+          )}
         </CardShell>
       </section>
 
       {/* Row 2 — Recents (the star) */}
       <section className="flex flex-col gap-5 lg:flex-row">
         <CardShell className="flex-[1.5]">
-          <CardTitle link={{ label: "Alle Pläne", color: "var(--primary)" }}>
+          <CardTitle link={{ label: "Alle Pläne", color: "var(--primary)", href: "/ernaehrungsplan" }}>
             Zuletzt bearbeitete Pläne
           </CardTitle>
-          <div className="flex flex-col gap-2">
-            {recentPlans.map((plan) => (
-              <PlanRow key={plan.name} plan={plan} />
-            ))}
-          </div>
+          {visiblePlans.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {visiblePlans.map((plan) => (
+                <PlanRow
+                  key={plan.id}
+                  plan={plan}
+                  patientName={plan.patientId ? (patientNameById.get(plan.patientId) ?? null) : null}
+                  initials={
+                    (plan.patientId ? patientInitialsFromMap(patientNameById.get(plan.patientId)) : null) ?? "PL"
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyHint
+              icon={Calendar}
+              title="Noch keine Pläne"
+              text="Erstelle deinen ersten Ernährungsplan — er erscheint danach hier."
+              action={{ label: "Plan erstellen", href: "/ernaehrungsplan" }}
+            />
+          )}
         </CardShell>
 
         <CardShell className="flex-1">
-          <CardTitle link={{ label: "Alle", color: DOMAIN.patient }}>
+          <CardTitle link={{ label: "Alle", color: DOMAIN.patient, href: "/patienten" }}>
             Zuletzt geöffnete Patienten
           </CardTitle>
-          <div className="flex flex-col gap-0.5">
-            {recentPatients.map((patient) => (
-              <PatientRow key={patient.name} patient={patient} />
-            ))}
-          </div>
+          {recentPatients.length > 0 ? (
+            <div className="flex flex-col gap-0.5">
+              {recentPatients.map((patient) => (
+                <PatientRow
+                  key={patient.id}
+                  patient={patient}
+                  contextMeta={patientContextById.get(patient.id) ?? "Patientenakte"}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyHint
+              icon={User}
+              title="Noch keine Patienten"
+              text="Lege deinen ersten Patienten an, um Pläne und Beratungen zu starten."
+              action={{ label: "Patient anlegen", href: "/patienten/neu" }}
+            />
+          )}
         </CardShell>
       </section>
 
-      {/* Row 3 — Heute (optional) + Praxis-Puls */}
+      {/* Row 3 — Heute (Termine) + Praxis-Puls */}
       <section className="flex flex-col gap-5 lg:flex-row">
         <CardShell className="flex-1">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-[15px] font-bold" style={{ color: TEXT.hi }}>
               Heute
             </h2>
-            <SectionLabel>Optional · Termine</SectionLabel>
+            <Link
+              href="/termine"
+              className="inline-flex items-center gap-0.5 text-[12.5px] font-semibold transition-opacity hover:opacity-80"
+              style={{ color: DOMAIN.analysis }}
+            >
+              Alle Termine ›
+            </Link>
           </div>
-          {hasTermine ? (
+          {todaysAppointments.length > 0 ? (
             <div className="flex flex-col gap-0.5">
-              {appointments.map((appointment) => (
-                <AppointmentRow key={appointment.time} appointment={appointment} />
+              {todaysAppointments.map((appointment) => (
+                <AppointmentRow
+                  key={appointment.id}
+                  appointment={appointment}
+                  patientName={
+                    appointment.patientId
+                      ? (patientNameById.get(appointment.patientId) ?? null)
+                      : null
+                  }
+                />
               ))}
             </div>
           ) : (
-            <div
-              className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center"
-              style={{ borderColor: "var(--input)" }}
-            >
-              <Calendar className="size-7" style={{ color: TEXT.muted, opacity: 0.5 }} />
-              <p className="text-[13.5px] font-bold" style={{ color: TEXT.muted }}>
-                Keine Termine heute
-              </p>
-              <p className="max-w-xs text-[12.5px]" style={{ color: TEXT.faint }}>
-                Inari verwaltet Termine optional. Trag einen ein oder verbinde deinen Kalender.
-              </p>
-              <button
-                type="button"
-                className="mt-1 flex items-center gap-1.5 rounded-[10px] border px-3.5 py-2 text-[12.5px] font-semibold transition-colors hover:bg-accent"
-                style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
-              >
-                <Plus className="size-4" />
-                Termin eintragen
-              </button>
-            </div>
+            <EmptyHint
+              icon={Calendar}
+              title="Keine Termine heute"
+              text="Inari verwaltet Termine optional. Trag einen ein oder verbinde deinen Kalender."
+              action={{ label: "Termin eintragen", href: "/termine" }}
+            />
           )}
         </CardShell>
 
-        {showPulse ? (
-          <CardShell className="flex-1">
-            <div className="mb-4">
-              <SectionLabel>Praxis-Puls</SectionLabel>
-            </div>
-            <div className="flex flex-wrap gap-x-7 gap-y-2.5">
-              {pulseStats.map((stat) => (
-                <PulseStatItem key={stat.label} stat={stat} />
-              ))}
-            </div>
-          </CardShell>
-        ) : null}
+        <CardShell className="flex-1">
+          <div className="mb-4">
+            <SectionLabel>Praxis-Puls</SectionLabel>
+          </div>
+          <div className="flex flex-wrap gap-x-7 gap-y-2.5">
+            {pulseStats.map((stat) => (
+              <PulseStatItem key={stat.label} value={stat.value} label={stat.label} color={stat.color} />
+            ))}
+          </div>
+        </CardShell>
       </section>
     </div>
   )
+}
+
+/** "Anna Bergmann" → "AB"; falls back to null when the name is unknown. */
+function patientInitialsFromMap(fullName: string | undefined): string | null {
+  if (!fullName) return null
+  const parts = fullName.split(" ").filter(Boolean)
+  if (parts.length === 0) return null
+  const first = parts[0].charAt(0)
+  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ""
+  return `${first}${last}`.toUpperCase()
 }
