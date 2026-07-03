@@ -29,14 +29,11 @@ import {
   Leaf,
   Loader2,
   Lock,
-  Plus,
   RotateCcw,
   Save,
-  Search,
   Settings2,
   Sparkles,
   Target,
-  Trash2,
   Users,
   Utensils,
 } from "lucide-react"
@@ -52,15 +49,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import {
-  CommandDialog,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from "@/components/ui/command"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
@@ -71,17 +59,8 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -90,16 +69,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { Toggle } from "@/components/ui/toggle"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -137,13 +106,11 @@ import type {
   MealPlanVersion,
   Patient,
   Recipe,
-  DietLinePreset,
 } from "@/lib/types"
 import { evaluatePlanSustainability } from "@/lib/sustainability"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useFoods, useFoodSearch } from "@/components/foods-provider"
 import { createRecipeLookup } from "@/lib/recipes"
-import { useNutrientValues, useNutrientValueMaps } from "@/hooks/use-nutrient-values"
 import type { FoodSearchItem } from "@/lib/types"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import {
@@ -156,6 +123,15 @@ import {
   ALLERGEN_TYPE_LABELS,
 } from "@/lib/allergen-constants"
 import { PlanAllergenBanner } from "@/components/plan-allergen-banner"
+import { PlanAddEntryCommand } from "@/components/plan-add-entry-command"
+import { PlanAkteSheet } from "@/components/plan-akte-sheet"
+import { PlanAllergenWarningDialog } from "@/components/plan-allergen-warning-dialog"
+import { PlanApplyTemplateDialog } from "@/components/plan-apply-template-dialog"
+import { PlanAssignPatientDialog } from "@/components/plan-assign-patient-dialog"
+import { PlanDietLineDialog, type DietLineDraft } from "@/components/plan-diet-line-dialog"
+import { PlanExchangeDialog } from "@/components/plan-exchange-dialog"
+import { PlanRecipePalette } from "@/components/plan-recipe-palette"
+import { PlanSaveTemplateDialog, type SaveTemplateDraft } from "@/components/plan-save-template-dialog"
 import { toast } from "sonner"
 import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
@@ -182,14 +158,6 @@ const KEY_NUTRIENT_IDS = [
   "magnesium",
 ]
 
-const EXCHANGE_DELTA_NUTRIENT_IDS = [
-  "energie",
-  "eiweiss",
-  "fett",
-  "kohlenhydrate",
-  "ballaststoffe",
-] as const
-
 const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> = {
   draft: "Entwurf",
   active: "Aktiv",
@@ -199,7 +167,6 @@ const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> =
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
 
-type DietLineTargetDraft = DietLinePreset["targets"][number]
 type PlanReviewSeverity = "critical" | "warning" | "ok"
 
 interface PlanReviewItem {
@@ -246,23 +213,6 @@ function getPatientIndications(patient?: Patient): string[] {
   const record = patient as PatientWithLegacyIndication
   if (record.indications?.length) return record.indications
   return record.indication ? [record.indication] : []
-}
-
-function createTargetDraft(nutrientId = "energie"): DietLineTargetDraft {
-  const definition = NUTRIENT_DEFINITIONS.find((item) => item.id === nutrientId)
-  return {
-    nutrientId,
-    label: definition?.shortName ?? definition?.name ?? nutrientId,
-    unit: definition?.unit ?? "",
-    min: undefined,
-    max: undefined,
-  }
-}
-
-function parseOptionalNumber(value: string): number | undefined {
-  if (!value.trim()) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function calculateEntryNutrients(
@@ -436,41 +386,20 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   ])
 
   const [commandOpen, setCommandOpen] = useState(false)
-  const [foodCommandQuery, setFoodCommandQuery] = useState("")
   const [activeSlot, setActiveSlot] = useState<MealSlotType>("fruehstueck")
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [view, setView] = useState("day")
-  const [paletteSlot, setPaletteSlot] = useState<MealSlotType>("mittagessen")
-  const [recipeSearch, setRecipeSearch] = useState("")
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [paletteCategory, setPaletteCategory] = useState<string>("alle")
-  const [paletteSort, setPaletteSort] = useState<"name" | "kcalAsc" | "kcalDesc" | "prep">("name")
-  const [paletteIndicationOnly, setPaletteIndicationOnly] = useState(false)
-  const [paletteAllergenSafeOnly, setPaletteAllergenSafeOnly] = useState(false)
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
-  const [exchangeSearch, setExchangeSearch] = useState("")
-  const [exchangeCategory, setExchangeCategory] = useState<string>("alle")
-  const [exchangeNutrient, setExchangeNutrient] = useState("energie")
   const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
-  const [dietLineDraftName, setDietLineDraftName] = useState("")
-  const [dietLineDraftDescription, setDietLineDraftDescription] = useState("")
-  const [dietLineDraftTargets, setDietLineDraftTargets] = useState<DietLineTargetDraft[]>([])
-  const [isSavingDietLine, setIsSavingDietLine] = useState(false)
   const [exportingVariant, setExportingVariant] = useState<MealPlanReportVariant | null>(null)
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
-  const [applyTemplateSearch, setApplyTemplateSearch] = useState("")
-  const [applyTemplateScope, setApplyTemplateScope] = useState<"alle" | "indikation" | "kostform">("alle")
   const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
-  const [templateDraftName, setTemplateDraftName] = useState("")
-  const [templateDraftDescription, setTemplateDraftDescription] = useState("")
-  const [templateDraftIndication, setTemplateDraftIndication] = useState("")
-  const [templateDraftDietLineId, setTemplateDraftDietLineId] = useState<string>("")
   const [isCheckpointing, setIsCheckpointing] = useState(false)
   const [isSavingPlan, setIsSavingPlan] = useState(false)
   const [isApprovingPlan, setIsApprovingPlan] = useState(false)
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
   const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
   const [planAkteOpen, setPlanAkteOpen] = useState(false)
@@ -488,19 +417,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   ])
   const [einzelPerKgEnabled, setEinzelPerKgEnabled] = useState(false)
   const [einzelPickerOpen, setEinzelPickerOpen] = useState(false)
-  const {
-    values: exchangeNutrientValues,
-    isLoading: exchangeNutrientLoading,
-    error: exchangeNutrientError,
-  } = useNutrientValues(exchangeNutrient, hydratedFoods, {
-    forceRemote: foodSearchIndex.length > hydratedFoods.length,
-  })
-  const exchangeDeltaNutrientIds = useMemo(() => {
-    const ids = new Set<string>(EXCHANGE_DELTA_NUTRIENT_IDS)
-    if (exchangeNutrient) ids.add(exchangeNutrient)
-    return Array.from(ids)
-  }, [exchangeNutrient])
-  const { valuesByNutrient: exchangeDeltaValues } = useNutrientValueMaps(exchangeDeltaNutrientIds)
   const [weekOffset, setWeekOffset] = useState(0)
   const [cycleOffset, setCycleOffset] = useState(0)
 
@@ -689,7 +605,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     if (!food) return
 
     setCommandOpen(false)
-    setFoodCommandQuery("")
     guardedAddEntry(
       activeSlot,
       { type: "food", referenceId: food.id, amount: 100 },
@@ -700,7 +615,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const handleSelectRecipe = (recipeId: string) => {
     const recipe = recipeMap.get(recipeId)
     setCommandOpen(false)
-    setFoodCommandQuery("")
     guardedAddEntry(
       activeSlot,
       { type: "recipe", referenceId: recipeId, amount: 1 },
@@ -770,10 +684,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
   }
 
-  const handleQuickAddRecipe = (recipeId: string) => {
+  const handleQuickAddRecipe = (recipeId: string, slotType: MealSlotType) => {
     const recipe = recipeMap.get(recipeId)
     guardedAddEntry(
-      paletteSlot,
+      slotType,
       { type: "recipe", referenceId: recipeId, amount: 1 },
       {
         itemKind: "recipe",
@@ -939,179 +853,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     return map
   }, [currentPlan.slots, dietLine, foodMap, foods, nutrientDefMap, recipeMap])
 
-  const recipeCategories = useMemo(() => {
-    const set = new Set<string>()
-    for (const recipe of recipes) {
-      if (recipe.category) set.add(recipe.category)
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "de"))
-  }, [recipes])
-
-  const paletteRecipes = useMemo(() => {
-    const search = recipeSearch.trim().toLowerCase()
-    const indicationTokens = patientIndications
-      .map((indication) => indication.trim().toLowerCase())
-      .filter(Boolean)
-
-    type EnrichedRecipe = {
-      recipe: Recipe
-      kcal: number
-      totalTime: number
-      conflictCount: number
-    }
-
-    const enriched: EnrichedRecipe[] = recipes
-      .map((recipe) => {
-        const kcal =
-          recipe.cachedKcalPerPortion ??
-          (() => {
-            const total = calculateRecipeNutrients(recipe, foods)
-            const perServing = calculatePerServing(total, recipe.servings)
-            return getNutrientValue(perServing, "energie")
-          })()
-        const conflictCount =
-          patientAllergens.length > 0 && recipe.allergens?.length
-            ? checkAllergenConflicts(recipe.allergens, patientAllergens).length
-            : 0
-        return {
-          recipe,
-          kcal,
-          totalTime: (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0),
-          conflictCount,
-        }
-      })
-      .filter(({ recipe, conflictCount }) => {
-        if (search) {
-          const matchesSearch =
-            recipe.name.toLowerCase().includes(search) ||
-            recipe.tags?.some((tag) => tag.toLowerCase().includes(search))
-          if (!matchesSearch) return false
-        }
-        if (paletteCategory !== "alle" && recipe.category !== paletteCategory) return false
-        if (paletteIndicationOnly && indicationTokens.length > 0) {
-          const description = recipe.description?.toLowerCase() ?? ""
-          const matches = indicationTokens.some((token) =>
-            recipe.tags?.some((tag) => tag.toLowerCase().includes(token)) ||
-            description.includes(token),
-          )
-          if (!matches) return false
-        }
-        if (paletteAllergenSafeOnly && conflictCount > 0) return false
-        return true
-      })
-
-    enriched.sort((a, b) => {
-      switch (paletteSort) {
-        case "kcalAsc":
-          return a.kcal - b.kcal
-        case "kcalDesc":
-          return b.kcal - a.kcal
-        case "prep":
-          return a.totalTime - b.totalTime
-        case "name":
-        default:
-          return a.recipe.name.localeCompare(b.recipe.name, "de")
-      }
-    })
-
-    return enriched
-  }, [
-    recipes,
-    foods,
-    recipeSearch,
-    paletteCategory,
-    paletteSort,
-    paletteIndicationOnly,
-    paletteAllergenSafeOnly,
-    patientIndications,
-    patientAllergens,
-  ])
-
-
   const foodCommandSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
-  const filteredCommandFoods = useMemo(() => {
-    const query = foodCommandQuery.trim().toLowerCase()
-    return foodCommandSource
-      .filter((food) => !query || food.name.toLowerCase().includes(query))
-      .slice(0, 80)
-  }, [foodCommandQuery, foodCommandSource])
-
-  const filteredCommandRecipes = useMemo(() => {
-    const query = foodCommandQuery.trim().toLowerCase()
-    return recipes
-      .filter((recipe) => !query || recipe.name.toLowerCase().includes(query))
-      .slice(0, 40)
-  }, [foodCommandQuery, recipes])
-
-  // Use the lightweight search index for the exchange dialog (instead of all 7,140 full Food objects)
-  const exchangeSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
-  const filteredExchangeFoods = useMemo(() => {
-    const query = exchangeSearch.toLowerCase()
-    return exchangeSource
-      .filter((food) => {
-        const matchesSearch = !query || food.name.toLowerCase().includes(query)
-        const matchesCategory = exchangeCategory === "alle" || food.categoryId === exchangeCategory
-        return matchesSearch && matchesCategory
-      })
-      .sort((a, b) =>
-        (exchangeNutrientValues.get(b.id) ?? 0) - (exchangeNutrientValues.get(a.id) ?? 0),
-      )
-  }, [exchangeCategory, exchangeNutrientValues, exchangeSearch, exchangeSource])
-
-  const exchangeOriginal = useMemo(() => {
-    if (!exchangeEntryId || !exchangeSlot) return null
-    const slot = currentPlan.slots.find((item) => item.type === exchangeSlot)
-    const entry = slot?.entries.find((item) => item.id === exchangeEntryId)
-    if (!entry) return null
-
-    if (entry.type === "food") {
-      const food = foodMap.get(entry.referenceId)
-      if (!food) return null
-      const scaled = scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
-      const nutrients = new Map<string, number>()
-      for (const id of exchangeDeltaNutrientIds) {
-        nutrients.set(id, getNutrientValue(scaled, id))
-      }
-      return {
-        kind: "food" as const,
-        entry,
-        name: food.name,
-        amount: entry.amount,
-        unitLabel: "g",
-        nutrients,
-      }
-    }
-
-    const recipe = recipeMap.get(entry.referenceId)
-    if (!recipe) return null
-    const totalNutrients = calculateRecipeNutrients(recipe, foods)
-    const perServing = calculatePerServing(totalNutrients, recipe.servings)
-    const scaled = scaleNutrients(perServing, 1, entry.amount)
-    const nutrients = new Map<string, number>()
-    for (const id of exchangeDeltaNutrientIds) {
-      nutrients.set(id, getNutrientValue(scaled, id))
-    }
-    return {
-      kind: "recipe" as const,
-      entry,
-      name: recipe.name,
-      amount: entry.amount,
-      unitLabel: entry.amount === 1 ? "Portion" : "Portionen",
-      nutrients,
-    }
-  }, [
-    currentPlan,
-    exchangeEntryId,
-    exchangeSlot,
-    foodMap,
-    recipeMap,
-    foods,
-    exchangeDeltaNutrientIds,
-  ])
-
-  const exchangeCompareAmount =
-    exchangeOriginal?.kind === "food" ? exchangeOriginal.amount : 100
-  const exchangeShowDelta = exchangeOriginal?.kind === "food"
 
   const baseWeekStart = startOfWeek(parsedDate, { weekStartsOn: 1 })
   const computedWeekStart = addWeeks(baseWeekStart, weekOffset)
@@ -1335,84 +1077,26 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     toast.success(`${suggestion.name} für ${MEAL_SLOT_LABELS[suggestion.slotType]} vorgemerkt.`)
   }
 
-  const openDietLineEditor = () => {
-    const baseTargets = dietLine?.targets.length
-      ? dietLine.targets.map((target) => ({ ...target }))
-      : [createTargetDraft("energie"), createTargetDraft("eiweiss"), createTargetDraft("kohlenhydrate")]
-
-    setDietLineDraftName(
-      dietLine ? (isCurrentDietLineEditable ? dietLine.name : `${dietLine.name} Kopie`) : "",
-    )
-    setDietLineDraftDescription(dietLine?.description ?? "")
-    setDietLineDraftTargets(baseTargets)
-    setDietLineDialogOpen(true)
-  }
-
-  const updateDietLineDraftTarget = (index: number, patch: Partial<DietLineTargetDraft>) => {
-    setDietLineDraftTargets((prev) =>
-      prev.map((target, targetIndex) => {
-        if (targetIndex !== index) return target
-        const next = { ...target, ...patch }
-        if (patch.nutrientId) {
-          const definition = NUTRIENT_DEFINITIONS.find((item) => item.id === patch.nutrientId)
-          next.label = definition?.shortName ?? definition?.name ?? patch.nutrientId
-          next.unit = definition?.unit ?? ""
-        }
-        return next
-      }),
-    )
-  }
-
-  const addDietLineDraftTarget = () => {
-    const firstUnused = NUTRIENT_DEFINITIONS.find(
-      (definition) => !dietLineDraftTargets.some((target) => target.nutrientId === definition.id),
-    )
-    setDietLineDraftTargets((prev) => [...prev, createTargetDraft(firstUnused?.id ?? "energie")])
-  }
-
-  const removeDietLineDraftTarget = (index: number) => {
-    setDietLineDraftTargets((prev) => prev.filter((_, targetIndex) => targetIndex !== index))
-  }
-
-  const saveDietLineDraft = async () => {
-    const name = dietLineDraftName.trim()
-    const description = dietLineDraftDescription.trim()
-    const targets = dietLineDraftTargets
-      .map((target) => ({
-        ...target,
-        label:
-          target.label.trim() ||
-          (NUTRIENT_DEFINITIONS.find((item) => item.id === target.nutrientId)?.shortName ?? target.nutrientId),
-      }))
-      .filter((target) => target.nutrientId && (target.min != null || target.max != null))
-
-    if (!name) {
-      toast.error("Bitte einen Namen für das Zielprofil eingeben.")
-      return
-    }
-    if (targets.length === 0) {
-      toast.error("Bitte mindestens einen Zielwert mit Unter- oder Obergrenze pflegen.")
-      return
-    }
-
-    setIsSavingDietLine(true)
-    try {
-      const savedPreset = await saveDietLinePreset({
-        id: isCurrentDietLineEditable ? dietLine?.id : undefined,
-        name,
-        description,
-        targets,
-      })
-      updatePlanMetadata(currentDate, { dietLineId: savedPreset.id })
-      setDietLineDialogOpen(false)
-      toast.success("Zielprofil gespeichert.")
-    } catch (error) {
-      console.error("Failed to save diet line preset:", error)
-      toast.error("Zielprofil konnte nicht gespeichert werden.")
-    } finally {
-      setIsSavingDietLine(false)
-    }
-  }
+  const handleSaveDietLine = useCallback(
+    async (draft: DietLineDraft): Promise<boolean> => {
+      try {
+        const savedPreset = await saveDietLinePreset({
+          id: draft.id,
+          name: draft.name,
+          description: draft.description,
+          targets: draft.targets,
+        })
+        updatePlanMetadata(currentDate, { dietLineId: savedPreset.id })
+        toast.success("Zielprofil gespeichert.")
+        return true
+      } catch (error) {
+        console.error("Failed to save diet line preset:", error)
+        toast.error("Zielprofil konnte nicht gespeichert werden.")
+        return false
+      }
+    },
+    [currentDate, saveDietLinePreset, updatePlanMetadata],
+  )
 
   const deleteCurrentDietLine = async () => {
     if (!dietLine?.id || !isCurrentDietLineEditable) return
@@ -1735,38 +1419,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     patientId,
   ])
 
-  const filteredTemplates = useMemo(() => {
-    const query = applyTemplateSearch.trim().toLowerCase()
-    const patientIndicationsLower = patientIndications.map((indication) => indication.toLowerCase())
-    return mealPlanTemplates.filter((template) => {
-      if (applyTemplateScope === "indikation" && patientIndicationsLower.length > 0) {
-        const templateIndication = template.indication?.toLowerCase()
-        if (!templateIndication || !patientIndicationsLower.includes(templateIndication)) {
-          return false
-        }
-      }
-      if (applyTemplateScope === "kostform" && dietLineId) {
-        if (template.dietLineId !== dietLineId) {
-          return false
-        }
-      }
-      if (!query) return true
-      const haystack = [
-        template.name,
-        template.description ?? "",
-        template.indication ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-      return haystack.includes(query)
-    })
-  }, [applyTemplateScope, applyTemplateSearch, dietLineId, mealPlanTemplates, patientIndications])
-
   const openApplyTemplateDialog = useCallback(() => {
-    setApplyTemplateSearch("")
-    setApplyTemplateScope(patientIndications.length ? "indikation" : "alle")
     setApplyTemplateDialogOpen(true)
-  }, [patientIndications])
+  }, [])
 
   const handleApplyTemplate = useCallback(
     (template: MealPlanTemplate) => {
@@ -1794,52 +1449,47 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     ],
   )
 
+  // Prefill values the save-template dialog seeds from each time it opens.
+  const saveTemplateDefaults = useMemo<SaveTemplateDraft>(
+    () => ({
+      name: currentPlan.title ?? "",
+      description: "",
+      indication: patientIndications[0] ?? "",
+      dietLineId: dietLineId || "",
+    }),
+    [currentPlan.title, dietLineId, patientIndications],
+  )
+
   const openSaveTemplateDialog = useCallback(() => {
     const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
     if (totalEntries === 0) {
       toast.error("Speichern nicht möglich: Der aktuelle Plan enthält keine Einträge.")
       return
     }
-    setTemplateDraftName(currentPlan.title ?? "")
-    setTemplateDraftDescription("")
-    setTemplateDraftIndication(patientIndications[0] ?? "")
-    setTemplateDraftDietLineId(dietLineId || "")
     setSaveTemplateDialogOpen(true)
-  }, [currentPlan.slots, currentPlan.title, dietLineId, patientIndications])
+  }, [currentPlan.slots])
 
-  const handleSaveTemplate = useCallback(async () => {
-    const name = templateDraftName.trim()
-    if (!name) {
-      toast.error("Bitte einen Namen für die Vorlage eingeben.")
-      return
-    }
-    setIsSavingTemplate(true)
-    try {
-      await saveMealPlanTemplateFromHook({
-        name,
-        description: templateDraftDescription.trim() || undefined,
-        indication: templateDraftIndication.trim() || undefined,
-        dietLineId: templateDraftDietLineId || undefined,
-        slots: currentPlan.slots,
-        notes: currentPlan.notes,
-      })
-      setSaveTemplateDialogOpen(false)
-      toast.success("Vorlage gespeichert.")
-    } catch (error) {
-      console.error("Failed to save meal plan template:", error)
-      toast.error("Vorlage konnte nicht gespeichert werden.")
-    } finally {
-      setIsSavingTemplate(false)
-    }
-  }, [
-    currentPlan.notes,
-    currentPlan.slots,
-    saveMealPlanTemplateFromHook,
-    templateDraftDescription,
-    templateDraftDietLineId,
-    templateDraftIndication,
-    templateDraftName,
-  ])
+  const handleSaveTemplate = useCallback(
+    async (draft: SaveTemplateDraft): Promise<boolean> => {
+      try {
+        await saveMealPlanTemplateFromHook({
+          name: draft.name,
+          description: draft.description || undefined,
+          indication: draft.indication || undefined,
+          dietLineId: draft.dietLineId || undefined,
+          slots: currentPlan.slots,
+          notes: currentPlan.notes,
+        })
+        toast.success("Vorlage gespeichert.")
+        return true
+      } catch (error) {
+        console.error("Failed to save meal plan template:", error)
+        toast.error("Vorlage konnte nicht gespeichert werden.")
+        return false
+      }
+    },
+    [currentPlan.notes, currentPlan.slots, saveMealPlanTemplateFromHook],
+  )
 
   const handleExportPlan = useCallback(
     async (variant: MealPlanReportVariant) => {
@@ -2373,7 +2023,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  onClick={openDietLineEditor}
+                  onClick={() => setDietLineDialogOpen(true)}
                 >
                   <Settings2 className="h-3.5 w-3.5" />
                   <span className="sr-only">Zielprofil verwalten</span>
@@ -2975,1010 +2625,124 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </>
       )}
 
-      <Dialog open={dietLineDialogOpen} onOpenChange={setDietLineDialogOpen}>
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Kostform/Zielprofil verwalten</DialogTitle>
-            <DialogDescription>
-              Eigene Vorgaben werden gespeichert und können direkt mit dem aktuellen Tagesplan verknüpft werden.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-              <div className="space-y-2">
-                <Label htmlFor="diet-line-name">Name</Label>
-                <Input
-                  id="diet-line-name"
-                  value={dietLineDraftName}
-                  onChange={(event) => setDietLineDraftName(event.target.value)}
-                  placeholder="z. B. Dialyse 1800 kcal"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="diet-line-description">Beschreibung</Label>
-                <Input
-                  id="diet-line-description"
-                  value={dietLineDraftDescription}
-                  onChange={(event) => setDietLineDraftDescription(event.target.value)}
-                  placeholder="Kurzbeschreibung für Planung und Prüfung"
-                />
-              </div>
-            </div>
+      <PlanDietLineDialog
+        open={dietLineDialogOpen}
+        onOpenChange={setDietLineDialogOpen}
+        dietLine={dietLine}
+        isEditable={isCurrentDietLineEditable}
+        onSave={handleSaveDietLine}
+        onDelete={deleteCurrentDietLine}
+      />
 
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nährstoff</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead className="w-28">Min.</TableHead>
-                    <TableHead className="w-28">Max.</TableHead>
-                    <TableHead className="w-20">Einheit</TableHead>
-                    <TableHead className="w-12">
-                      <span className="sr-only">Entfernen</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dietLineDraftTargets.map((target, index) => (
-                    <TableRow key={`${target.nutrientId}-${index}`}>
-                      <TableCell>
-                        <Select
-                          value={target.nutrientId}
-                          onValueChange={(value) => updateDietLineDraftTarget(index, { nutrientId: value })}
-                        >
-                          <SelectTrigger className="w-[190px]">
-                            <SelectValue placeholder="Nährstoff" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {NUTRIENT_DEFINITIONS.map((definition) => (
-                              <SelectItem key={definition.id} value={definition.id}>
-                                {definition.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={target.label}
-                          onChange={(event) => updateDietLineDraftTarget(index, { label: event.target.value })}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          value={target.min ?? ""}
-                          onChange={(event) => updateDietLineDraftTarget(index, { min: parseOptionalNumber(event.target.value) })}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          value={target.max ?? ""}
-                          onChange={(event) => updateDietLineDraftTarget(index, { max: parseOptionalNumber(event.target.value) })}
-                        />
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{target.unit}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeDietLineDraftTarget(index)}
-                          disabled={dietLineDraftTargets.length <= 1}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Zielwert entfernen</span>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <Button variant="outline" className="w-fit" onClick={addDietLineDraftTarget}>
-              <Plus className="mr-2 h-4 w-4" />
-              Zielwert hinzufügen
-            </Button>
-          </div>
-          <DialogFooter className="items-center justify-between sm:justify-between">
-            <div>
-              {isCurrentDietLineEditable && (
-                <Button variant="ghost" className="text-destructive" onClick={deleteCurrentDietLine}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Löschen
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setDietLineDialogOpen(false)}>
-                Abbrechen
-              </Button>
-              <Button onClick={saveDietLineDraft} disabled={isSavingDietLine}>
-                <Save className="mr-2 h-4 w-4" />
-                {isSavingDietLine ? "Speichert..." : "Speichern"}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <CommandDialog
+      <PlanAddEntryCommand
         open={commandOpen}
-        onOpenChange={(open) => {
-          setCommandOpen(open)
-          if (!open) setFoodCommandQuery("")
-        }}
-        title="Lebensmittel oder Rezept hinzufügen"
-        description="Suche nach einem Lebensmittel oder Rezept."
-      >
-        <CommandInput
-          placeholder="Lebensmittel oder Rezept suchen..."
-          value={foodCommandQuery}
-          onValueChange={setFoodCommandQuery}
+        onOpenChange={setCommandOpen}
+        foods={foodCommandSource}
+        recipes={recipes}
+        foodMap={foodMap}
+        onSelectFood={(foodId) => void handleSelectFood(foodId)}
+        onSelectRecipe={handleSelectRecipe}
+      />
+
+      {/* Mounted lazily: the exchange dialog's nutrient hooks fetch whole
+          nutrient columns from Supabase and must not run on page load. */}
+      {exchangeDialogOpen && (
+        <PlanExchangeDialog
+          open={exchangeDialogOpen}
+          onOpenChange={(open) => {
+            setExchangeDialogOpen(open)
+            if (!open) {
+              setExchangeSlot(null)
+              setExchangeEntryId(null)
+            }
+          }}
+          slotType={exchangeSlot}
+          entryId={exchangeEntryId}
+          plan={currentPlan}
+          foods={foods}
+          searchIndex={foodSearchIndex}
+          foodMap={foodMap}
+          recipeMap={recipeMap}
+          onSelectFood={(foodId) => void handleSelectExchangeFood(foodId)}
         />
-        <CommandList>
-          <CommandEmpty>Keine Ergebnisse gefunden.</CommandEmpty>
-          <CommandGroup heading="Lebensmittel">
-            {filteredCommandFoods.map((food) => {
-              const hydratedFood = foodMap.get(food.id)
-              return (
-              <CommandItem
-                key={food.id}
-                value={`${food.name} ${food.id}`}
-                onSelect={() => void handleSelectFood(food.id)}
-              >
-                <span>{food.name}</span>
-                <span className="text-muted-foreground ml-auto text-xs">
-                  {hydratedFood
-                    ? `${formatNumber(Math.round(getNutrientValue(hydratedFood.nutrients, "energie")))} kcal / 100g`
-                    : "wird beim Einfügen geladen"}
-                </span>
-              </CommandItem>
-              )
-            })}
-          </CommandGroup>
-          <Separator />
-          <CommandGroup heading="Rezepte">
-            {filteredCommandRecipes.map((recipe) => (
-              <CommandItem
-                key={recipe.id}
-                value={`${recipe.name} ${recipe.id}`}
-                onSelect={() => handleSelectRecipe(recipe.id)}
-              >
-                <span>{recipe.name}</span>
-                <span className="text-muted-foreground ml-auto text-xs">
-                  {recipe.servings} {recipe.servings === 1 ? "Portion" : "Portionen"}
-                </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+      )}
 
-      <Dialog
-        open={exchangeDialogOpen}
-        onOpenChange={(open) => {
-          setExchangeDialogOpen(open)
-          if (!open) {
-            setExchangeSlot(null)
-            setExchangeEntryId(null)
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>
-              {exchangeEntryId ? "Eintrag austauschen" : "Austauschliste"} für{" "}
-              {exchangeSlot ? MEAL_SLOT_LABELS[exchangeSlot] : "Slot"}
-            </DialogTitle>
-            <DialogDescription>
-              {exchangeShowDelta
-                ? "Werte und Δ beziehen sich auf die ursprüngliche Menge. Beim Austauschen bleibt die bisherige Menge erhalten."
-                : "Werte je 100 g. Beim Austauschen bleibt die bisherige Menge erhalten."}
-            </DialogDescription>
-          </DialogHeader>
-          {exchangeOriginal && (
-            <div className="bg-muted/40 rounded-md border border-dashed p-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <div>
-                  <div className="text-muted-foreground text-[11px] uppercase tracking-wide">
-                    Original
-                  </div>
-                  <div className="text-sm font-medium">
-                    {exchangeOriginal.name}{" "}
-                    <span className="text-muted-foreground font-normal">
-                      ({formatNumber(exchangeOriginal.amount, 0)} {exchangeOriginal.unitLabel})
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                  {EXCHANGE_DELTA_NUTRIENT_IDS.map((nutrientId) => {
-                    const def = nutrientDefMap.get(nutrientId)
-                    const value = exchangeOriginal.nutrients.get(nutrientId) ?? 0
-                    return (
-                      <Badge key={nutrientId} variant="outline" className="bg-background">
-                        {def?.shortName ?? nutrientId}:{" "}
-                        {formatNumber(value, nutrientId === "energie" ? 0 : 1)} {def?.unit ?? ""}
-                      </Badge>
-                    )
-                  })}
-                </div>
-              </div>
-              {exchangeOriginal.kind === "recipe" && (
-                <p className="text-muted-foreground mt-2 text-[11px]">
-                  Hinweis: Beim Tausch eines Rezepts gegen ein Lebensmittel ist kein Δ-Vergleich
-                  möglich. Die Liste zeigt Werte je 100 g.
-                </p>
-              )}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-3">
-            <Input
-              placeholder="Lebensmittel suchen..."
-              value={exchangeSearch}
-              onChange={(e) => setExchangeSearch(e.target.value)}
-              className="flex-1"
-            />
-            <Select value={exchangeCategory} onValueChange={setExchangeCategory}>
-              <SelectTrigger className="min-w-[180px]">
-                <SelectValue placeholder="Kategorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="alle">Alle Kategorien</SelectItem>
-                {FOOD_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={exchangeNutrient} onValueChange={setExchangeNutrient}>
-              <SelectTrigger className="min-w-[180px]">
-                <SelectValue placeholder="Nährstoff" />
-              </SelectTrigger>
-              <SelectContent>
-                {NUTRIENT_DEFINITIONS.map((def) => (
-                  <SelectItem key={def.id} value={def.id}>
-                    {def.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {exchangeNutrientLoading && (
-            <p className="text-muted-foreground mt-2 text-sm">
-              Nährstoffwerte werden geladen …
-            </p>
-          )}
-          {exchangeNutrientError && (
-            <p className="text-destructive mt-2 text-sm">
-              Nährstoffe konnten nicht geladen werden: {exchangeNutrientError}
-            </p>
-          )}
-          <div className="mt-2 max-h-[420px] overflow-hidden rounded-md border">
-            <ScrollArea className="h-[420px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Lebensmittel</TableHead>
-                    <TableHead>Kategorie</TableHead>
-                    <TableHead className="text-right">
-                      {nutrientDefMap.get(exchangeNutrient)?.shortName ?? exchangeNutrient}
-                      {exchangeShowDelta && (
-                        <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                          ({formatNumber(exchangeCompareAmount, 0)} g)
-                        </span>
-                      )}
-                    </TableHead>
-                    <TableHead className="text-right">Makros</TableHead>
-                    <TableHead className="text-right">Aktion</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredExchangeFoods.slice(0, 20).map((food) => {
-                    const pivotPer100 = exchangeNutrientValues.get(food.id) ?? 0
-                    const pivotAbs = (pivotPer100 * exchangeCompareAmount) / 100
-                    const pivotOriginalAbs = exchangeOriginal?.nutrients.get(exchangeNutrient) ?? 0
-                    const pivotDelta = exchangeShowDelta ? pivotAbs - pivotOriginalAbs : null
-                    const pivotDef = nutrientDefMap.get(exchangeNutrient)
-                    const category = FOOD_CATEGORIES.find((cat) => cat.id === food.categoryId)
-                    const pivotDecimals = exchangeNutrient === "energie" ? 0 : 1
-                    return (
-                      <TableRow key={food.id}>
-                        <TableCell className="font-medium">{food.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {category?.name ?? "–"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span>
-                              {formatNumber(pivotAbs, pivotDecimals)} {pivotDef?.unit ?? ""}
-                            </span>
-                            {pivotDelta !== null && (
-                              <span
-                                className={cn(
-                                  "text-[11px] font-medium",
-                                  Math.abs(pivotDelta) < 0.05
-                                    ? "text-muted-foreground"
-                                    : pivotDelta > 0
-                                      ? "text-blue-600 dark:text-blue-400"
-                                      : "text-orange-600 dark:text-orange-400",
-                                )}
-                              >
-                                {pivotDelta > 0 ? "+" : ""}
-                                {formatNumber(pivotDelta, pivotDecimals)} {pivotDef?.unit ?? ""}
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-1">
-                            {EXCHANGE_DELTA_NUTRIENT_IDS.filter(
-                              (id) => id !== exchangeNutrient,
-                            ).map((nutrientId) => {
-                              const def = nutrientDefMap.get(nutrientId)
-                              const per100 =
-                                exchangeDeltaValues.get(nutrientId)?.get(food.id) ?? 0
-                              const abs = (per100 * exchangeCompareAmount) / 100
-                              const originalAbs =
-                                exchangeOriginal?.nutrients.get(nutrientId) ?? 0
-                              const delta = exchangeShowDelta ? abs - originalAbs : null
-                              const decimals = nutrientId === "energie" ? 0 : 1
-                              if (delta === null) {
-                                return (
-                                  <Badge
-                                    key={nutrientId}
-                                    variant="outline"
-                                    className="text-[10px] font-normal"
-                                  >
-                                    {def?.shortName ?? nutrientId} {formatNumber(abs, decimals)}
-                                  </Badge>
-                                )
-                              }
-                              const isNeutral = Math.abs(delta) < 0.05
-                              return (
-                                <Badge
-                                  key={nutrientId}
-                                  variant="outline"
-                                  className={cn(
-                                    "text-[10px] font-medium",
-                                    isNeutral
-                                      ? "text-muted-foreground"
-                                      : delta > 0
-                                        ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200"
-                                        : "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200",
-                                  )}
-                                >
-                                  {def?.shortName ?? nutrientId} {delta > 0 ? "+" : ""}
-                                  {formatNumber(delta, decimals)}
-                                </Badge>
-                              )
-                            })}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" onClick={() => handleSelectExchangeFood(food.id)}>
-                            {exchangeEntryId ? "Ersetzen" : "Übernehmen"}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <PlanApplyTemplateDialog
+        open={applyTemplateDialogOpen}
+        onOpenChange={setApplyTemplateDialogOpen}
+        templates={mealPlanTemplates}
+        templatesLoading={templatesLoading}
+        dietLines={dietLines}
+        dietLine={dietLine}
+        dietLineId={dietLineId}
+        patientIndications={patientIndications}
+        onApply={handleApplyTemplate}
+      />
 
-      <Dialog open={applyTemplateDialogOpen} onOpenChange={setApplyTemplateDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Plan aus Vorlage erzeugen</DialogTitle>
-            <DialogDescription>
-              Die ausgewählte Vorlage ersetzt den aktuellen Tagesplan. Status und Freigabe werden zurückgesetzt.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="text-muted-foreground absolute left-2.5 top-2.5 h-4 w-4" />
-                <Input
-                  value={applyTemplateSearch}
-                  onChange={(event) => setApplyTemplateSearch(event.target.value)}
-                  placeholder="Vorlagen durchsuchen..."
-                  className="pl-8"
-                />
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant={applyTemplateScope === "alle" ? "default" : "outline"}
-                  onClick={() => setApplyTemplateScope("alle")}
-                >
-                  Alle
-                </Button>
-                {patientIndications.length ? (
-                  <Button
-                    size="sm"
-                    variant={applyTemplateScope === "indikation" ? "default" : "outline"}
-                    onClick={() => setApplyTemplateScope("indikation")}
-                  >
-                    {patientIndications.length === 1
-                      ? patientIndications[0]
-                      : `Indikationen (${patientIndications.length})`}
-                  </Button>
-                ) : null}
-                {dietLine && (
-                  <Button
-                    size="sm"
-                    variant={applyTemplateScope === "kostform" ? "default" : "outline"}
-                    onClick={() => setApplyTemplateScope("kostform")}
-                  >
-                    {dietLine.name}
-                  </Button>
-                )}
-              </div>
-            </div>
+      <PlanSaveTemplateDialog
+        open={saveTemplateDialogOpen}
+        onOpenChange={setSaveTemplateDialogOpen}
+        dietLines={dietLines}
+        defaults={saveTemplateDefaults}
+        onSave={handleSaveTemplate}
+      />
 
-            <ScrollArea className="h-[360px] rounded-md border">
-              {templatesLoading && filteredTemplates.length === 0 ? (
-                <div className="text-muted-foreground p-4 text-sm">Vorlagen werden geladen …</div>
-              ) : filteredTemplates.length === 0 ? (
-                <div className="text-muted-foreground p-4 text-sm">
-                  Keine Vorlagen für die aktuelle Filterauswahl.
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {filteredTemplates.map((template) => {
-                    const entryCount = template.slots.reduce(
-                      (sum, slot) => sum + slot.entries.length,
-                      0,
-                    )
-                    const dietLineForTemplate = dietLines.find(
-                      (line) => line.id === template.dietLineId,
-                    )
-                    return (
-                      <li key={template.id} className="flex flex-wrap items-start justify-between gap-3 p-3">
-                        <div className="min-w-[220px] flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{template.name}</span>
-                            <Badge variant="outline" className="text-[10px]">
-                              {template.sourceType === "system" ? "System" : "Eigene"}
-                            </Badge>
-                            {template.indication && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                {template.indication}
-                              </Badge>
-                            )}
-                            {dietLineForTemplate && (
-                              <Badge variant="outline" className="text-[10px]">
-                                {dietLineForTemplate.name}
-                              </Badge>
-                            )}
-                          </div>
-                          {template.description && (
-                            <p className="text-muted-foreground mt-1 text-xs">{template.description}</p>
-                          )}
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {entryCount} {entryCount === 1 ? "Eintrag" : "Einträge"} über alle Mahlzeiten
-                          </p>
-                        </div>
-                        <Button size="sm" onClick={() => handleApplyTemplate(template)}>
-                          Übernehmen
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </ScrollArea>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setApplyTemplateDialogOpen(false)}>
-              Schließen
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={saveTemplateDialogOpen} onOpenChange={setSaveTemplateDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Plan als Vorlage speichern</DialogTitle>
-            <DialogDescription>
-              Die Vorlage wird Ihrem Konto zugeordnet und steht für künftige Pläne zur Verfügung.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="template-name">Name</Label>
-              <Input
-                id="template-name"
-                value={templateDraftName}
-                onChange={(event) => setTemplateDraftName(event.target.value)}
-                placeholder="z. B. Reduktion 1500 kcal Tag 1"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="template-description">Beschreibung</Label>
-              <Textarea
-                id="template-description"
-                value={templateDraftDescription}
-                onChange={(event) => setTemplateDraftDescription(event.target.value)}
-                placeholder="Wofür eignet sich die Vorlage?"
-                rows={2}
-              />
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="template-indication">Indikation</Label>
-                <Input
-                  id="template-indication"
-                  value={templateDraftIndication}
-                  onChange={(event) => setTemplateDraftIndication(event.target.value)}
-                  placeholder="z. B. Diabetes mellitus Typ 2"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Kostform</Label>
-                <Select
-                  value={templateDraftDietLineId || "none"}
-                  onValueChange={(value) =>
-                    setTemplateDraftDietLineId(value === "none" ? "" : value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kostform" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Keine Zuordnung</SelectItem>
-                    {dietLines.map((line) => (
-                      <SelectItem key={line.id} value={line.id}>
-                        {line.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveTemplateDialogOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button onClick={handleSaveTemplate} disabled={isSavingTemplate}>
-              {isSavingTemplate ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" />
-              )}
-              Speichern
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
+      <PlanAssignPatientDialog
         open={pendingPatientAssignmentId !== null}
         onOpenChange={(open) => {
           if (!open) setPendingPatientAssignmentId(null)
         }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Plan einem Patienten zuordnen?</DialogTitle>
-            <DialogDescription>
-              Der aktuelle Tagesplan enthält bereits Einträge. Wählen Sie, ob dieser Plan dem
-              Patienten zugeordnet oder nur der Patientenplan für diesen Tag geöffnet werden soll.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-md border bg-muted/30 p-3 text-sm">
-            <p className="font-medium">
-              {pendingAssignmentPatient
-                ? `${pendingAssignmentPatient.firstName} ${pendingAssignmentPatient.lastName}`
-                : "Ausgewählter Patient"}
-            </p>
-            {pendingAssignmentPatientIndications.length ? (
-              <p className="text-muted-foreground">{pendingAssignmentPatientIndications.join(" · ")}</p>
-            ) : null}
-            <p className="text-muted-foreground mt-2">
-              {currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)} Einträge ·{" "}
-              {format(parseISO(currentDate), "dd.MM.yyyy")}
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={() => {
-                const nextPatientId = pendingPatientAssignmentId
-                setPendingPatientAssignmentId(null)
-                if (nextPatientId) openPatientContext(nextPatientId)
-              }}
-            >
-              Nur Patientenplan öffnen
-            </Button>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button variant="ghost" onClick={() => setPendingPatientAssignmentId(null)}>
-                Abbrechen
-              </Button>
-              <Button
-                onClick={() => {
-                  if (pendingPatientAssignmentId) {
-                    assignCurrentPlanToPatient(pendingPatientAssignmentId)
-                  }
-                }}
-                disabled={currentPlan.status === "approved"}
-              >
-                Diesen Plan zuordnen
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={pendingAllergenIntent !== null}
-        onOpenChange={(open) => {
-          if (!open) dismissPendingAllergenIntent()
+        patientName={
+          pendingAssignmentPatient
+            ? `${pendingAssignmentPatient.firstName} ${pendingAssignmentPatient.lastName}`
+            : undefined
+        }
+        patientIndications={pendingAssignmentPatientIndications}
+        entryCount={currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)}
+        dateLabel={format(parseISO(currentDate), "dd.MM.yyyy")}
+        isApproved={currentPlan.status === "approved"}
+        onOpenPlanOnly={() => {
+          const nextPatientId = pendingPatientAssignmentId
+          setPendingPatientAssignmentId(null)
+          if (nextPatientId) openPatientContext(nextPatientId)
         }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-red-700">
-              Schwere Allergenwarnung – Eintrag blockiert
-            </DialogTitle>
-            <DialogDescription>
-              {pendingAllergenIntent
-                ? `${pendingAllergenIntent.itemName} kollidiert mit einem als „schwer“ eingestuften Allergen-/Intoleranzhinweis dieses Patienten.`
-                : null}
-            </DialogDescription>
-          </DialogHeader>
-          {pendingAllergenIntent && (
-            <div className="space-y-3 text-sm">
-              <ul className="space-y-1">
-                {pendingAllergenIntent.warnings.map((warning) => (
-                  <li
-                    key={warning.allergenId}
-                    className="flex flex-wrap items-center gap-2"
-                  >
-                    <Badge
-                      variant="outline"
-                      className={
-                        warning.severity === "severe"
-                          ? "border-red-300 bg-red-100 text-red-800"
-                          : warning.severity === "moderate"
-                            ? "border-amber-300 bg-amber-100 text-amber-800"
-                            : "border-yellow-300 bg-yellow-100 text-yellow-800"
-                      }
-                    >
-                      {ALLERGEN_SEVERITY_LABELS[warning.severity]}
-                    </Badge>
-                    <span className="font-medium">{warning.allergenLabel}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {ALLERGEN_TYPE_LABELS[warning.type]} · Treffer: {warning.matchedToken}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-muted-foreground text-xs">
-                Bitte vor der Übernahme die klinische Indikation und alternative Lebensmittel
-                prüfen. Eine Übernahme wird im Plan und in der nächsten Versionsspeicherung
-                dokumentiert.
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={dismissPendingAllergenIntent}>
-              Abbrechen
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmPendingAllergenIntent}
-            >
-              Trotzdem übernehmen
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onAssign={() => {
+          if (pendingPatientAssignmentId) {
+            assignCurrentPlanToPatient(pendingPatientAssignmentId)
+          }
+        }}
+        onCancel={() => setPendingPatientAssignmentId(null)}
+      />
 
-      <Sheet open={planAkteOpen} onOpenChange={setPlanAkteOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
-        >
-          <SheetHeader className="border-b">
-            <SheetTitle className="flex items-center gap-2 text-base">
-              <FolderOpen className="text-primary h-4 w-4" />
-              Planakte – Detailansicht
-            </SheetTitle>
-            <SheetDescription>
-              Hinweise, Nachhaltigkeit und vollständige Versionshistorie.
-            </SheetDescription>
-          </SheetHeader>
-          <ScrollArea className="flex-1">
-            <div className="space-y-5 p-4">
-              <section className="space-y-2">
-                <Label
-                  htmlFor="planakte-notes"
-                  className="text-muted-foreground text-xs uppercase tracking-wide"
-                >
-                  Hinweise
-                </Label>
-                <Textarea
-                  id="planakte-notes"
-                  key={`notes-${currentPlan.id}-${currentPlan.date}`}
-                  defaultValue={currentPlan.notes ?? ""}
-                  placeholder="Indikation, Beratungshinweise, Patientenvorlieben oder interne Prüfnotizen"
-                  rows={4}
-                  readOnly={currentPlan.status === "approved"}
-                  onBlur={(event) => {
-                    if (event.currentTarget.value.trim() !== (currentPlan.notes ?? "")) {
-                      saveCurrentPlanNotes(event.currentTarget.value)
-                    }
-                  }}
-                />
-              </section>
+      <PlanAllergenWarningDialog
+        open={pendingAllergenIntent !== null}
+        itemName={pendingAllergenIntent?.itemName}
+        warnings={pendingAllergenIntent?.warnings ?? []}
+        onConfirm={confirmPendingAllergenIntent}
+        onDismiss={dismissPendingAllergenIntent}
+      />
 
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Nachhaltigkeit – Top-Verursacher</p>
-                  <Badge variant="outline" className="font-normal">
-                    {formatNumber(planSustainability.totalCo2, 2)} kg CO₂e
-                  </Badge>
-                </div>
-                {planSustainability.topEmitters.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {planSustainability.topEmitters.slice(0, 5).map((emitter) => (
-                      <div
-                        key={emitter.id}
-                        className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] font-normal">
-                            {MEAL_SLOT_LABELS[emitter.slot] ?? emitter.slot}
-                          </Badge>
-                          <span className="truncate">{emitter.label}</span>
-                        </div>
-                        <span className="font-semibold">
-                          {formatNumber(emitter.co2, 2)} kg
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-xs">
-                    Noch keine Daten zu Emittenten.
-                  </p>
-                )}
-              </section>
+      <PlanAkteSheet
+        open={planAkteOpen}
+        onOpenChange={setPlanAkteOpen}
+        plan={currentPlan}
+        sustainability={planSustainability}
+        versions={mealPlanVersions}
+        versionsLoading={mealPlanVersionsLoading}
+        onSaveNotes={saveCurrentPlanNotes}
+        onRestoreVersion={restoreVersion}
+      />
 
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Versionshistorie</p>
-                  <Badge variant="outline" className="font-normal">
-                    {mealPlanVersionsLoading ? "lädt" : `${mealPlanVersions.length} Versionen`}
-                  </Badge>
-                </div>
-                {mealPlanVersions.length === 0 ? (
-                  <p className="text-muted-foreground text-xs">
-                    Noch keine freigegebene oder gespeicherte Version.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {mealPlanVersions.map((version) => {
-                      const entryCount = version.snapshot.slots.reduce(
-                        (sum, slot) => sum + slot.entries.length,
-                        0,
-                      )
-                      return (
-                        <div
-                          key={version.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium">
-                              Version {version.versionNumber} ·{" "}
-                              {format(parseISO(version.createdAt), "dd.MM.yyyy HH:mm")}
-                            </p>
-                            <p className="text-muted-foreground">
-                              {entryCount} Einträge ·{" "}
-                              {version.reason === "approved"
-                                ? "Freigabe"
-                                : version.reason === "manual"
-                                  ? "Checkpoint"
-                                  : "Wiederöffnung"}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7"
-                            disabled={currentPlan.status === "approved"}
-                            onClick={() => restoreVersion(version)}
-                          >
-                            Wiederherstellen
-                          </Button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {currentPlan.status === "approved" && mealPlanVersions.length > 0 && (
-                  <p className="text-muted-foreground text-[11px]">
-                    Zum Wiederherstellen zuerst den Plan als Entwurf öffnen.
-                  </p>
-                )}
-              </section>
-            </div>
-          </ScrollArea>
-          <SheetFooter className="border-t">
-            <Button variant="outline" onClick={() => setPlanAkteOpen(false)}>
-              Schließen
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
-        >
-          <SheetHeader className="border-b">
-            <SheetTitle className="flex items-center gap-2 text-base">
-              <ChefHat className="text-primary h-4 w-4" />
-              Rezeptbibliothek
-            </SheetTitle>
-            <SheetDescription>
-              {paletteRecipes.length} von {recipes.length} Rezepten ·{" "}
-              Treffer landen in {MEAL_SLOT_LABELS[paletteSlot]}.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="border-b p-4 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-[180px] flex-1">
-                <Search className="text-muted-foreground absolute left-2.5 top-2.5 h-4 w-4" />
-                <Input
-                  value={recipeSearch}
-                  onChange={(event) => setRecipeSearch(event.target.value)}
-                  placeholder="Name oder Tag..."
-                  className="pl-8"
-                />
-              </div>
-              <Select
-                value={paletteSlot}
-                onValueChange={(value) => setPaletteSlot(value as MealSlotType)}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Slot" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(MEAL_SLOT_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Select value={paletteCategory} onValueChange={setPaletteCategory}>
-                <SelectTrigger className="h-8 w-[170px] text-xs">
-                  <SelectValue placeholder="Kategorie" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="alle">Alle Kategorien</SelectItem>
-                  {recipeCategories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={paletteSort}
-                onValueChange={(value) =>
-                  setPaletteSort(value as "name" | "kcalAsc" | "kcalDesc" | "prep")
-                }
-              >
-                <SelectTrigger className="h-8 w-[170px] text-xs">
-                  <SelectValue placeholder="Sortierung" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name (A→Z)</SelectItem>
-                  <SelectItem value="kcalAsc">kcal aufsteigend</SelectItem>
-                  <SelectItem value="kcalDesc">kcal absteigend</SelectItem>
-                  <SelectItem value="prep">Zubereitungszeit</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {(patientIndications.length || patientAllergens.length > 0) ? (
-              <div className="flex flex-wrap gap-2">
-                {patientIndications.length ? (
-                  <Toggle
-                    size="sm"
-                    pressed={paletteIndicationOnly}
-                    onPressedChange={setPaletteIndicationOnly}
-                    className="h-7 text-xs"
-                  >
-                    Indikation passt
-                  </Toggle>
-                ) : null}
-                {patientAllergens.length > 0 && (
-                  <Toggle
-                    size="sm"
-                    pressed={paletteAllergenSafeOnly}
-                    onPressedChange={setPaletteAllergenSafeOnly}
-                    className="h-7 text-xs"
-                  >
-                    Allergen-sicher
-                  </Toggle>
-                )}
-              </div>
-            ) : null}
-          </div>
-          <ScrollArea className="flex-1">
-            <div className="space-y-2 p-4">
-              {paletteRecipes.length === 0 && (
-                <p className="text-muted-foreground text-sm">
-                  Keine Rezepte entsprechen den aktuellen Filtern.
-                </p>
-              )}
-              {paletteRecipes.map(({ recipe, kcal, totalTime, conflictCount }) => {
-                const tags = (recipe.tags ?? []).slice(0, 3)
-                return (
-                  <div
-                    key={recipe.id}
-                    className="hover:border-primary/40 hover:bg-muted/50 rounded-lg border p-3 transition"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium leading-tight">
-                          {recipe.name}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {recipe.category}
-                          {tags.length > 0 ? ` · ${tags.join(", ")}` : ""}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={currentPlan.status === "approved"}
-                        onClick={() => {
-                          handleQuickAddRecipe(recipe.id)
-                        }}
-                      >
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        Hinzufügen
-                      </Button>
-                    </div>
-                    <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                      <span>{formatNumber(kcal, 0)} kcal/Portion</span>
-                      {totalTime > 0 && <span>· {totalTime} min</span>}
-                      {conflictCount > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="border-orange-200 bg-orange-50 text-[10px] text-orange-700"
-                        >
-                          <AlertTriangle className="mr-1 h-3 w-3" />
-                          {conflictCount} Allergen-Konflikt
-                          {conflictCount === 1 ? "" : "e"}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </ScrollArea>
-        </SheetContent>
-      </Sheet>
+      <PlanRecipePalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        recipes={recipes}
+        foods={foods}
+        patientIndications={patientIndications}
+        patientAllergens={patientAllergens}
+        isLocked={currentPlan.status === "approved"}
+        onQuickAdd={handleQuickAddRecipe}
+      />
     </div>
   )
 }
