@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AppCommandPalette } from "@/components/app-command-palette"
+import { KonamiEasterEgg } from "@/components/easter-egg/konami-easter-egg"
 import { Separator } from "@/components/ui/separator"
 import { FoodSearchProvider } from "@/components/foods-provider"
 import { AuthProvider } from "@/components/auth-provider"
@@ -55,6 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
             </header>
             <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+            <KonamiEasterEgg />
           </SidebarInset>
         </SidebarProvider>
       </FoodSearchProvider>
