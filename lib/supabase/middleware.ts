@@ -4,8 +4,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { ADMIN_ROLES, INSTITUTION_ROLES, hasAnyRole, mapLegacyUserRole } from "@/lib/auth/rbac"
 import type { AppRole } from "@/lib/types"
 
-const PUBLIC_APP_PATHS = ["/login", "/registrieren"]
-const PUBLIC_PREFIXES = ["/_next", "/api", "/protokoll"]
+const PUBLIC_APP_PATHS = ["/login", "/registrieren", "/passwort-vergessen"]
+const PUBLIC_PREFIXES = ["/_next", "/api", "/protokoll", "/auth"]
 
 async function resolveRole(supabase: ReturnType<typeof createServerClient>, userId: string, legacyRole: unknown): Promise<AppRole> {
   const { data, error } = await supabase
