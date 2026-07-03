@@ -24,42 +24,46 @@ import {
   Plus,
 } from "lucide-react"
 
-// --- Design tokens (authoritative hex values from the handoff) ------------------
+// --- Design tokens ---------------------------------------------------------------
+// All colours resolve through the theme variables in globals.css so the screen
+// renders correctly in light and dark mode.
 
 const TEXT = {
-  hi: "#f3f5f8",
-  body: "#e8ebef",
-  mid: "#cdd3da",
-  muted: "#9aa4b1",
-  muted2: "#8a93a0",
-  faint: "#6b7682",
-  label: "#586472",
+  hi: "var(--card-foreground)",
+  body: "var(--foreground)",
+  mid: "var(--secondary-foreground)",
+  muted: "var(--muted-foreground)",
+  muted2: "var(--muted-foreground)",
+  faint: "color-mix(in oklab, var(--muted-foreground) 78%, transparent)",
+  label: "color-mix(in oklab, var(--muted-foreground) 68%, transparent)",
 } as const
 
-const BRAND_GRADIENT = "linear-gradient(150deg, #46d896, #33b87b)"
-const PROGRESS_GRADIENT = "linear-gradient(150deg, #46d896, #33b87b)"
+const BRAND_GRADIENT = "var(--brand-gradient)"
+const PROGRESS_GRADIENT = "var(--brand-gradient)"
+const ON_BRAND = "var(--on-brand)"
+const BRAND_SHADOW = "0 6px 18px var(--brand-shadow)"
 
 // Plan status colour coding (badges + left accent edge).
 type PlanState = "Entwurf" | "In Arbeit" | "Bereit" | "Freigegeben" | "Archiviert"
 
 const STATE_COLOR: Record<PlanState, string> = {
-  Entwurf: "#eab458",
-  "In Arbeit": "#5897f0",
-  Bereit: "#2dd4bf",
-  Freigegeben: "#3ecf8e",
-  Archiviert: "#6b7682",
+  Entwurf: "var(--chart-4)",
+  "In Arbeit": "var(--chart-2)",
+  Bereit: "light-dark(#0d9488, #2dd4bf)",
+  Freigegeben: "var(--chart-1)",
+  Archiviert: "var(--muted-foreground)",
 }
 
-// Domain colour coding.
+// Domain colour coding: pläne=green, patienten=blue, analyse=violet, berichte=amber.
 const DOMAIN = {
-  patient: "#5897f0",
-  plan: "#3ecf8e",
-  analysis: "#a78bfa",
-  report: "#eab458",
+  patient: "var(--chart-2)",
+  plan: "var(--chart-1)",
+  analysis: "var(--chart-3)",
+  report: "var(--chart-4)",
 } as const
 
-/** Soft fill = accent colour at 12.5% opacity (8-digit hex `…20`). */
-const soft = (hex: string) => `${hex}20`
+/** Soft fill = accent colour at 12.5% opacity. */
+const soft = (color: string) => `color-mix(in srgb, ${color} 12.5%, transparent)`
 
 // --- Demo data (shapes mirror real app entities) -------------------------------
 
@@ -186,8 +190,7 @@ function CardShell({
 }) {
   return (
     <div
-      className={`flex flex-col rounded-[18px] border p-5 sm:p-6 ${className}`}
-      style={{ backgroundColor: "#14171c", borderColor: "#232931" }}
+      className={`flex flex-col rounded-[18px] border bg-card p-5 sm:p-6 ${className}`}
     >
       {children}
     </div>
@@ -214,7 +217,7 @@ function CardTitle({
         {count ? (
           <span
             className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold"
-            style={{ color: TEXT.muted, backgroundColor: "#1c2129" }}
+            style={{ color: TEXT.muted, backgroundColor: "var(--accent)" }}
           >
             {count}
           </span>
@@ -245,7 +248,7 @@ function PlanTaskRow({ task }: { task: PlanTask }) {
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-3 rounded-[10px] px-1.5 py-[9px] text-left transition-colors hover:bg-[#171b21]"
+      className="flex w-full items-center gap-3 rounded-[10px] px-1.5 py-[9px] text-left transition-colors hover:bg-muted"
     >
       <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
       <span className="min-w-0 flex-1">
@@ -256,7 +259,7 @@ function PlanTaskRow({ task }: { task: PlanTask }) {
           {task.plan} · {task.patient}
         </span>
       </span>
-      <ChevronRight className="size-[15px] shrink-0" style={{ color: "#5f6b78" }} />
+      <ChevronRight className="size-[15px] shrink-0" style={{ color: TEXT.faint }} />
     </button>
   )
 }
@@ -266,7 +269,7 @@ function PlanRow({ plan }: { plan: RecentPlan }) {
   return (
     <div
       className="group flex items-center gap-3 rounded-xl border-l-2 px-3 py-[11px] transition-colors"
-      style={{ borderLeftColor: color, backgroundColor: "#171b21" }}
+      style={{ borderLeftColor: color, backgroundColor: "var(--muted)" }}
     >
       <span
         className="flex size-9 shrink-0 items-center justify-center rounded-[10px] text-[12.5px] font-bold"
@@ -298,11 +301,11 @@ function PatientRow({ patient }: { patient: RecentPatient }) {
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-3 rounded-[10px] px-1.5 py-[9px] text-left transition-colors hover:bg-[#171b21]"
+      className="flex w-full items-center gap-3 rounded-[10px] px-1.5 py-[9px] text-left transition-colors hover:bg-muted"
     >
       <span
         className="flex size-[34px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold"
-        style={{ color: DOMAIN.patient, backgroundColor: "rgba(88,151,240,0.16)" }}
+        style={{ color: DOMAIN.patient, backgroundColor: soft(DOMAIN.patient) }}
       >
         {patient.initials}
       </span>
@@ -393,13 +396,12 @@ export function DashboardOverviewClient() {
           <button
             type="button"
             aria-label="Benachrichtigungen"
-            className="relative flex size-10 items-center justify-center rounded-[10px] border transition-colors hover:bg-[#1c2129]"
-            style={{ backgroundColor: "#14171c", borderColor: "#232931" }}
+            className="relative flex size-10 items-center justify-center rounded-[10px] border bg-card transition-colors hover:bg-accent"
           >
             <Bell className="size-[18px]" style={{ color: TEXT.muted }} />
             <span
               className="absolute right-2.5 top-2.5 size-1.5 rounded-full"
-              style={{ backgroundColor: "#ef6b6e" }}
+              style={{ backgroundColor: "var(--destructive)" }}
             />
           </button>
           <button
@@ -407,8 +409,8 @@ export function DashboardOverviewClient() {
             className="flex h-10 items-center gap-2 rounded-[10px] px-4 text-[13.5px] font-extrabold transition-opacity hover:opacity-90"
             style={{
               background: BRAND_GRADIENT,
-              color: "#0c1f16",
-              boxShadow: "0 6px 18px rgba(62,207,142,0.3)",
+              color: ON_BRAND,
+              boxShadow: BRAND_SHADOW,
             }}
           >
             <Plus className="size-[18px]" />
@@ -422,19 +424,19 @@ export function DashboardOverviewClient() {
         <div
           className="flex flex-[1.55] flex-col rounded-[18px] border p-6"
           style={{
-            background: "radial-gradient(120% 140% at 0% 0%, #16241c 0%, #121820 62%)",
-            borderColor: "#284035",
+            background: "var(--hero-panel-bg)",
+            borderColor: "var(--hero-panel-border)",
           }}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span
                 className="size-2 rounded-full animate-pulse-dot"
-                style={{ backgroundColor: "#3ecf8e" }}
+                style={{ backgroundColor: "var(--primary)" }}
               />
               <span
                 className="text-[11px] font-extrabold uppercase tracking-[0.14em]"
-                style={{ color: "#3ecf8e" }}
+                style={{ color: "var(--primary)" }}
               >
                 Weiter machen
               </span>
@@ -454,11 +456,11 @@ export function DashboardOverviewClient() {
               <span className="text-[13px]" style={{ color: TEXT.mid }}>
                 3 von 5 Bausteinen fertig
               </span>
-              <span className="font-mono text-[13px] font-semibold" style={{ color: "#3ecf8e" }}>
+              <span className="font-mono text-[13px] font-semibold" style={{ color: "var(--primary)" }}>
                 70%
               </span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-[6px]" style={{ backgroundColor: "#21262e" }}>
+            <div className="h-2 w-full overflow-hidden rounded-[6px]" style={{ backgroundColor: "var(--secondary)" }}>
               <div className="h-full rounded-[6px]" style={{ width: "70%", background: PROGRESS_GRADIENT }} />
             </div>
 
@@ -468,8 +470,8 @@ export function DashboardOverviewClient() {
                 className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[14px] font-extrabold transition-opacity hover:opacity-90"
                 style={{
                   background: BRAND_GRADIENT,
-                  color: "#0c1f16",
-                  boxShadow: "0 6px 18px rgba(62,207,142,0.3)",
+                  color: ON_BRAND,
+                  boxShadow: BRAND_SHADOW,
                 }}
               >
                 Plan weiterbearbeiten
@@ -477,8 +479,8 @@ export function DashboardOverviewClient() {
               </button>
               <button
                 type="button"
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border px-5 text-[13.5px] font-semibold transition-colors hover:bg-[#1c2129]"
-                style={{ backgroundColor: "#1a1f26", borderColor: "#2a313a", color: TEXT.mid }}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border px-5 text-[13.5px] font-semibold transition-colors hover:bg-accent"
+                style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
               >
                 <FileText className="size-[17px]" />
                 Vorschau (PDF)
@@ -502,7 +504,7 @@ export function DashboardOverviewClient() {
       {/* Row 2 — Recents (the star) */}
       <section className="flex flex-col gap-5 lg:flex-row">
         <CardShell className="flex-[1.5]">
-          <CardTitle link={{ label: "Alle Pläne", color: "#3ecf8e" }}>
+          <CardTitle link={{ label: "Alle Pläne", color: "var(--primary)" }}>
             Zuletzt bearbeitete Pläne
           </CardTitle>
           <div className="flex flex-col gap-2">
@@ -542,7 +544,7 @@ export function DashboardOverviewClient() {
           ) : (
             <div
               className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center"
-              style={{ borderColor: "#2a313a" }}
+              style={{ borderColor: "var(--input)" }}
             >
               <Calendar className="size-7" style={{ color: TEXT.muted, opacity: 0.5 }} />
               <p className="text-[13.5px] font-bold" style={{ color: TEXT.muted }}>
@@ -553,8 +555,8 @@ export function DashboardOverviewClient() {
               </p>
               <button
                 type="button"
-                className="mt-1 flex items-center gap-1.5 rounded-[10px] border px-3.5 py-2 text-[12.5px] font-semibold transition-colors hover:bg-[#1c2129]"
-                style={{ backgroundColor: "#1a1f26", borderColor: "#2a313a", color: TEXT.mid }}
+                className="mt-1 flex items-center gap-1.5 rounded-[10px] border px-3.5 py-2 text-[12.5px] font-semibold transition-colors hover:bg-accent"
+                style={{ backgroundColor: "var(--secondary)", borderColor: "var(--input)", color: TEXT.mid }}
               >
                 <Plus className="size-4" />
                 Termin eintragen
