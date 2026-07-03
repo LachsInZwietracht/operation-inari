@@ -205,11 +205,17 @@ test.describe("Lebensmittel", () => {
   test("command palette search jumps to food detail", async ({ page }) => {
     await page.goto("/dashboard");
 
-    const searchButton = page.getByRole("button", {
+    const paletteButton = page.getByRole("button", {
+      name: /Suchen oder springen/,
+    });
+    await expect(paletteButton).toBeVisible({ timeout: 15_000 });
+    await paletteButton.click();
+
+    const foodSearchItem = page.getByRole("option", {
       name: /Lebensmittel suchen/,
     });
-    await expect(searchButton).toBeVisible({ timeout: 15_000 });
-    await searchButton.click();
+    await expect(foodSearchItem).toBeVisible();
+    await foodSearchItem.click();
 
     const searchInput = page.getByPlaceholder(/Tippfehler werden erkannt/);
     await expect(searchInput).toBeVisible();

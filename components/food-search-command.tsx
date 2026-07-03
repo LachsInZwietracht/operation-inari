@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter } from "next/navigation"
-import { Loader2, SearchIcon, Sparkles } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Loader2 } from "lucide-react"
 import {
   Command,
   CommandEmpty,
@@ -18,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import type { FoodSearchItem, FoodSourceId } from "@/lib/types"
 import { useFoodSynonyms } from "@/hooks/use-food-synonyms"
@@ -45,7 +44,7 @@ function getCategoryName(categoryId: string): string {
   return FOOD_CATEGORIES.find((c) => c.id === categoryId)?.name ?? categoryId
 }
 
-function SearchDialog({
+export function FoodSearchDialog({
   open,
   onOpenChange,
 }: {
@@ -233,70 +232,4 @@ function SearchDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-export function FoodSearchTrigger() {
-  const { loadIndex } = useFoodSearch()
-  const [open, setOpen] = React.useState(false)
-
-  React.useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setOpen((prev) => !prev)
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown)
-    return () => document.removeEventListener("keydown", onKeyDown)
-  }, [])
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        className="text-muted-foreground relative w-full min-w-0 justify-start text-sm sm:w-64"
-        onClick={() => setOpen(true)}
-        onMouseEnter={() => loadIndex()}
-        onFocus={() => loadIndex()}
-      >
-        <SearchIcon className="mr-2 size-4 shrink-0" />
-        <span className="min-w-0 truncate">Lebensmittel suchen...</span>
-        <Sparkles className="mr-1 ml-auto size-3 text-purple-400" />
-        <kbd className="bg-muted text-muted-foreground pointer-events-none hidden h-5 select-none items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium sm:flex">
-          <span className="text-xs">&#8984;</span>K
-        </kbd>
-      </Button>
-
-      <SearchDialog open={open} onOpenChange={setOpen} />
-    </>
-  )
-}
-
-const FOOD_SEARCH_ROUTE_PREFIXES = [
-  "/lebensmittel",
-  "/rezepte",
-  "/ernaehrungsplan",
-  "/austauschtabellen",
-  "/datenbank",
-  "/institution/menueplaene",
-  "/institution/produktion",
-]
-
-function isProtocolRoute(pathname: string) {
-  return /^\/patienten\/[^/]+\/protokolle(?:\/|$)/.test(pathname)
-}
-
-function shouldShowFoodSearch(pathname: string | null) {
-  if (!pathname) return false
-
-  return FOOD_SEARCH_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix)) || isProtocolRoute(pathname)
-}
-
-export function ContextualFoodSearchTrigger() {
-  const pathname = usePathname()
-
-  if (!shouldShowFoodSearch(pathname)) return null
-
-  return <FoodSearchTrigger />
 }
