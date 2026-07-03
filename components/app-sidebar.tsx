@@ -92,7 +92,7 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard" prefetch={false}>
                 <span
-                  className="flex aspect-square size-9 items-center justify-center rounded-[11px] p-1.5"
+                  className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-[11px] p-1.5 group-data-[collapsible=icon]:size-8"
                   style={{
                     background: "linear-gradient(150deg, #46d896, #33b87b)",
                     boxShadow: "0 6px 16px rgba(62, 207, 142, 0.32)",

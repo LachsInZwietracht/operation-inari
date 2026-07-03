@@ -1,13 +1,11 @@
-import { createHash } from "node:crypto";
-import { unstable_cache } from "next/cache";
 import { ErnaehrungsplanPageClient } from "./ernaehrungsplan-client";
-import { fetchFoodsViaRpc } from "@/lib/data/foods";
+import { fetchFoodsByIdsCached } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { FoodsProvider } from "@/components/foods-provider";
-import type { DailyMealPlan, Food, MealPlanTemplate, Recipe } from "@/lib/types";
+import type { DailyMealPlan, MealPlanTemplate, Recipe } from "@/lib/types";
 
 const MEAL_PLAN_NUTRIENT_IDS = [
   "energie", "eiweiss", "fett", "kohlenhydrate", "ballaststoffe",
@@ -15,23 +13,6 @@ const MEAL_PLAN_NUTRIENT_IDS = [
   "natrium", "vitamin_c", "calcium", "eisen", "magnesium",
   "vitamin_d", "kalium", "phosphor",
 ];
-
-/**
- * The foods RPC is the slowest part of this page (hundreds of foods × 16
- * nutrients) but its result is global, not user-specific: nutrient data
- * only changes on ETL imports. Cache per distinct ID set so repeat
- * navigations skip the RPC; the ID set is hashed because cache key parts
- * must stay small.
- */
-function fetchMealPlanFoodsCached(foodIds: string[]): Promise<Food[]> {
-  const sortedIds = [...foodIds].sort();
-  const idsHash = createHash("sha1").update(sortedIds.join(",")).digest("hex");
-  return unstable_cache(
-    () => fetchFoodsViaRpc({ foodIds: sortedIds, nutrientIds: MEAL_PLAN_NUTRIENT_IDS }),
-    ["meal-plan-foods", idsHash],
-    { revalidate: 300, tags: ["foods"] },
-  )();
-}
 
 function extractFoodIds(
   recipes: Recipe[],
@@ -92,7 +73,14 @@ export default async function ErnaehrungsplanPage({
 
   const foodIds = extractFoodIds(recipes, mealPlans, templates);
 
-  const foods = foodIds.length > 0 ? await fetchMealPlanFoodsCached(foodIds) : [];
+  const foods =
+    foodIds.length > 0
+      ? await fetchFoodsByIdsCached({
+          foodIds,
+          nutrientIds: MEAL_PLAN_NUTRIENT_IDS,
+          cacheKeyPrefix: "meal-plan-foods",
+        })
+      : [];
 
   return (
     <FoodsProvider foods={foods}>

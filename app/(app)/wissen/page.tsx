@@ -1,5 +1,5 @@
 import { WissenPageClient } from "./wissen-client";
-import { fetchFoodsViaRpc } from "@/lib/data/foods";
+import { fetchFoodsByIdsCached } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { FoodsProvider } from "@/components/foods-provider";
@@ -41,7 +41,11 @@ export default async function WissenPage() {
 
   const foodIds = extractFoodIds(recipes, mealPlans);
   const foods = foodIds.length > 0
-    ? await fetchFoodsViaRpc({ foodIds, nutrientIds: LIST_NUTRIENT_IDS })
+    ? await fetchFoodsByIdsCached({
+        foodIds,
+        nutrientIds: LIST_NUTRIENT_IDS,
+        cacheKeyPrefix: "wissen-foods",
+      })
     : [];
 
   return (

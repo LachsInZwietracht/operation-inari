@@ -57,43 +57,59 @@ const NUTRIENT_BATCH_SIZE = 2000;
 // First letter of BLS code indicates the main food group
 // ---------------------------------------------------------------------------
 
+// Official BLS 4.0 main groups (verified against the imported data — e.g.
+// F* rows are fruit, Q* rows are oils, U*/V*/W* rows are meat/game/sausage).
 const BLS_LETTER_TO_FOOD_GROUP: Record<string, string> = {
-  B: "fg_B", // Brot
-  C: "fg_C", // Cerealien/Getreide
-  D: "fg_D", // Kuchen/Gebäck
-  E: "fg_E", // Eier
-  F: "fg_F", // Fette/Öle
-  G: "fg_G", // Gemüse
-  H: "fg_H", // Getränke
-  K: "fg_K", // Kartoffeln
-  M: "fg_M", // Milch
-  N: "fg_N", // Nüsse/Samen
-  O: "fg_O", // Obst
-  R: "fg_R", // Fleisch
-  S: "fg_S", // Süßwaren
-  T: "fg_T", // Fisch
-  W: "fg_W", // Gewürze
+  B: "fg_B", // Brot und Kleingebäck
+  C: "fg_C", // Cerealien, Getreide und Getreideerzeugnisse
+  D: "fg_D", // Dauerbackwaren, Kuchen und Gebäck
+  E: "fg_E", // Eier und Teigwaren
+  F: "fg_F", // Früchte, Obst und Obsterzeugnisse
+  G: "fg_G", // Gemüse und Gemüseerzeugnisse
+  H: "fg_H", // Hülsenfrüchte, Schalenobst, Nüsse und Samen
+  K: "fg_K", // Kartoffeln und stärkereiche Pflanzenteile
+  M: "fg_M", // Milch und Milcherzeugnisse
+  N: "fg_N", // Nichtalkoholische Getränke
+  P: "fg_P", // Alkoholische Getränke
+  Q: "fg_Q", // Fette und Öle
+  R: "fg_R", // Gewürze, Würzmittel und Hilfsstoffe
+  S: "fg_S", // Süßwaren und Zucker
+  T: "fg_T", // Fisch und Meeresfrüchte
+  U: "fg_U", // Fleisch und Innereien
+  V: "fg_V", // Wild und Geflügel
+  W: "fg_W", // Fleisch- und Wurstwaren
+  X: "fg_X", // Gerichte und Menükomponenten
+  Y: "fg_Y", // Zusammengesetzte Gerichte
 };
 
-// Map food groups to UI categories (must match IDs in lib/mock-data/categories.ts)
-// Groups without a matching category → null (no category_id set)
+// Map food groups to UI categories (must match IDs in lib/data/food-categories.ts)
+// Subgroup entries override the main-group default (e.g. Teigwaren inside E).
 const FOOD_GROUP_TO_CATEGORY: Record<string, string | null> = {
   fg_B: "cat_getreide",
   fg_C: "cat_getreide",
   fg_D: "cat_snacks",
   fg_E: "cat_eier",
-  fg_F: "cat_oele",
+  fg_E4: "cat_getreide", // Teigwaren eifrei
+  fg_E6: "cat_getreide", // Eier-Teigwaren
+  fg_F: "cat_obst",
   fg_G: "cat_gemuese",
-  fg_G6: "cat_huelsenfruechte",
-  fg_H: "cat_getraenke",
+  fg_H: "cat_nuesse",
+  fg_H5: "cat_gemuese", // Oliven
+  fg_H6: "cat_gemuese", // Sprossen
+  fg_H7: "cat_huelsenfruechte", // Bohnen, Linsen, Erbsen
   fg_K: "cat_gemuese",
   fg_M: "cat_milch",
-  fg_N: "cat_nuesse",
-  fg_O: "cat_obst",
-  fg_R: "cat_fleisch",
+  fg_N: "cat_getraenke",
+  fg_P: "cat_getraenke",
+  fg_Q: "cat_oele",
+  fg_R: "cat_gewuerze",
   fg_S: "cat_snacks",
   fg_T: "cat_fisch",
-  fg_W: "cat_gewuerze",
+  fg_U: "cat_fleisch",
+  fg_V: "cat_fleisch",
+  fg_W: "cat_fleisch",
+  fg_X: "cat_fertiggerichte",
+  fg_Y: "cat_fertiggerichte",
 };
 
 function deriveFoodGroupFromBlsCode(blsCode: string): {
