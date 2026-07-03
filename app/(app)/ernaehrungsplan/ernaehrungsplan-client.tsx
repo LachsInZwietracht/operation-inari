@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -12,7 +13,6 @@ import {
 import { de } from "date-fns/locale"
 import {
   Activity,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CalendarIcon,
@@ -39,11 +39,7 @@ import {
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { MealSlotCard } from "@/components/meal-slot"
-import {
-  MealPlanLibrary,
-  MealPlanWeekBoard,
-  type WeekBoardTarget,
-} from "@/components/meal-plan-week-board"
+import type { WeekBoardTarget } from "@/components/meal-plan-week-board"
 import { NutrientBar } from "@/components/nutrient-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
@@ -61,14 +57,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -88,12 +76,14 @@ import {
   calculatePerServing,
   getBroteinheiten,
 } from "@/lib/nutrients"
-import { buildEinzelanalyseTable } from "@/lib/einzelanalyse"
-import { EinzelanalyseTableView } from "@/components/einzelanalyse-table"
+import {
+  calculateEntryNutrients,
+  chooseOptimizationSlot,
+  complianceBadge,
+  type DietLineComplianceItem,
+} from "@/lib/meal-plan-calc"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Switch } from "@/components/ui/switch"
 import { formatNumber, formatNutrient } from "@/lib/format"
 import { MEAL_SLOT_LABELS, MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
 import type {
@@ -133,6 +123,22 @@ import { PlanExchangeDialog } from "@/components/plan-exchange-dialog"
 import { PlanRecipePalette } from "@/components/plan-recipe-palette"
 import { PlanSaveTemplateDialog, type SaveTemplateDraft } from "@/components/plan-save-template-dialog"
 import { toast } from "sonner"
+
+// Secondary views load lazily so the (default) day view ships less code
+// and the week/cycle/analysis computations only run when their tab opens.
+const viewFallback = () => <div className="h-[420px] rounded-md bg-muted/40" />
+const PlanWeekView = dynamic(
+  () => import("@/components/plan-week-view").then((mod) => mod.PlanWeekView),
+  { ssr: false, loading: viewFallback },
+)
+const PlanCycleView = dynamic(
+  () => import("@/components/plan-cycle-view").then((mod) => mod.PlanCycleView),
+  { ssr: false, loading: viewFallback },
+)
+const PlanEinzelanalyseView = dynamic(
+  () => import("@/components/plan-einzelanalyse-view").then((mod) => mod.PlanEinzelanalyseView),
+  { ssr: false, loading: viewFallback },
+)
 import { fetchFoodById } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
@@ -213,60 +219,6 @@ function getPatientIndications(patient?: Patient): string[] {
   const record = patient as PatientWithLegacyIndication
   if (record.indications?.length) return record.indications
   return record.indication ? [record.indication] : []
-}
-
-function calculateEntryNutrients(
-  entry: MealEntry,
-  foodMap: Map<string, Food>,
-  foods: Food[],
-  recipeMap: Map<string, Recipe>,
-): NutrientValue[] {
-  if (entry.type === "food") {
-    const food = foodMap.get(entry.referenceId)
-    if (!food) return []
-    return scaleNutrients(food.nutrients, food.baseAmount, entry.amount)
-  }
-
-  const recipe = recipeMap.get(entry.referenceId)
-  if (!recipe) return []
-  const totalNutrients = calculateRecipeNutrients(recipe, foods)
-  const perServing = calculatePerServing(totalNutrients, recipe.servings)
-  return scaleNutrients(perServing, 1, entry.amount)
-}
-
-function getEntryLabel(
-  entry: MealEntry,
-  foodMap: Map<string, Food>,
-  recipeMap: Map<string, Recipe>,
-): string {
-  if (entry.type === "food") {
-    const food = foodMap.get(entry.referenceId)
-    if (!food) return "Lebensmittel"
-    return `${food.name} (${formatNumber(entry.amount, 0)} g)`
-  }
-  const recipe = recipeMap.get(entry.referenceId)
-  if (!recipe) return "Rezept"
-  const portions = entry.amount === 1 ? "Portion" : "Portionen"
-  return `${recipe.name} (${formatNumber(entry.amount, 0)} ${portions})`
-}
-
-function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
-  if (typeof min === "number" && value < min) return "low"
-  if (typeof max === "number" && value > max) return "high"
-  return "ok"
-}
-
-function chooseOptimizationSlot(nutrientId: string, plan: DailyMealPlan): MealSlotType {
-  const openCoreSlot = plan.slots.find(
-    (slot) =>
-      ["mittagessen", "abendessen", "fruehstueck"].includes(slot.type) &&
-      slot.entries.length === 0,
-  )?.type
-
-  if (openCoreSlot) return openCoreSlot
-  if (["energie", "eiweiss", "fett", "kohlenhydrate"].includes(nutrientId)) return "mittagessen"
-  if (["ballaststoffe", "vitamin_c", "calcium", "magnesium"].includes(nutrientId)) return "snack_nachmittag"
-  return "abendessen"
 }
 
 interface ErnaehrungsplanPageClientProps {
@@ -404,21 +356,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
   const [planAkteOpen, setPlanAkteOpen] = useState(false)
   const planTitleInputRef = useRef<HTMLInputElement | null>(null)
-  // Default Einzelanalyse columns mirror the macros surfaced in the daily-total
-  // card (Energie/Eiweiß/Fett/KH/BE) plus Ballaststoffe — the same nutrients
-  // clinicians scan when reviewing whether a single food carries the plan.
-  const [einzelNutrientIds, setEinzelNutrientIds] = useState<string[]>([
-    "energie",
-    "eiweiss",
-    "fett",
-    "kohlenhydrate",
-    "broteinheiten",
-    "ballaststoffe",
-  ])
-  const [einzelPerKgEnabled, setEinzelPerKgEnabled] = useState(false)
-  const [einzelPickerOpen, setEinzelPickerOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
-  const [cycleOffset, setCycleOffset] = useState(0)
 
   useEffect(() => {
     setHydratedFoods((prev) => {
@@ -487,16 +425,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
     return map
   }, [planAllergenSummary])
-
-  const aggregatePlanNutrients = useCallback(
-    (plan: DailyMealPlan): NutrientValue[] =>
-      sumNutrients(
-        plan.slots.flatMap((slot) =>
-          slot.entries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap)),
-        ),
-      ),
-    [foodMap, foods, recipeMap],
-  )
 
   const notifyAllergenWarnings = useCallback(
     (itemName: string, warnings: AllergenWarning[]) => {
@@ -760,31 +688,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const totalCarbs = getNutrientValue(dailyNutrients, "kohlenhydrate")
   const totalBE = getBroteinheiten(totalCarbs)
 
-  const einzelanalyseTable = useMemo(
-    () =>
-      buildEinzelanalyseTable(
-        currentPlan,
-        foodMap,
-        recipeMap,
-        foods,
-        einzelNutrientIds,
-        {
-          perKgBodyWeight:
-            einzelPerKgEnabled && typeof latestPatientWeightKg === "number"
-              ? latestPatientWeightKg
-              : undefined,
-        },
-      ),
-    [
-      currentPlan,
-      foodMap,
-      recipeMap,
-      foods,
-      einzelNutrientIds,
-      einzelPerKgEnabled,
-      latestPatientWeightKg,
-    ],
-  )
   const planSustainability = useMemo(
     () => evaluatePlanSustainability(currentPlan, foods, recipes),
     [currentPlan, foods, recipes],
@@ -1113,79 +1016,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
   }
 
-  const cycleStart = addWeeks(baseWeekStart, cycleOffset * 4)
-  const cycleStartIso = format(cycleStart, "yyyy-MM-dd")
-  const cyclePlans = useMemo(() => getPlansInRange(cycleStartIso, 28), [cycleStartIso, getPlansInRange])
-  const cycleEnd = addDays(cycleStart, 27)
-  const cycleRangeLabel = `${format(cycleStart, "d. MMM", { locale: de })} – ${format(cycleEnd, "d. MMM yyyy", { locale: de })}`
-
-  const weekSummaries = useMemo(() => {
-    return weekPlans.map((plan) => ({ plan, totals: aggregatePlanNutrients(plan) }))
-  }, [aggregatePlanNutrients, weekPlans])
-
-  const teachingKitchenRows = useMemo(() => {
-    return weekPlans.map((plan) => {
-      const dateLabel = format(parseISO(plan.date), "EEE, dd.MM.", { locale: de })
-      const lunch = plan.slots.find((slot) => slot.type === "mittagessen")
-      const dinner = plan.slots.find((slot) => slot.type === "abendessen")
-      return {
-        dateLabel,
-        lunch:
-          lunch && lunch.entries[0]
-            ? getEntryLabel(lunch.entries[0], foodMap, recipeMap)
-            : "noch offen",
-        dinner:
-          dinner && dinner.entries[0]
-            ? getEntryLabel(dinner.entries[0], foodMap, recipeMap)
-            : "Snack-/Buffetplanung",
-        kcal: formatNumber(Math.round(getNutrientValue(aggregatePlanNutrients(plan), "energie"))),
-      }
-    })
-  }, [aggregatePlanNutrients, foodMap, recipeMap, weekPlans])
-
-  const cycleWeekChunks = useMemo(() => {
-    return Array.from({ length: 4 }, (_, index) => cyclePlans.slice(index * 7, index * 7 + 7))
-  }, [cyclePlans])
-
-  const cycleWeekStats = useMemo(() => {
-    return cycleWeekChunks.map((days, index) => {
-      const totalsPerDay = days.map((plan) => aggregatePlanNutrients(plan))
-      const weeklyTotals = sumNutrients(totalsPerDay)
-      const avgEnergy = getNutrientValue(weeklyTotals, "energie") / (days.length || 1)
-      const avgProtein = getNutrientValue(weeklyTotals, "eiweiss") / (days.length || 1)
-      const avgCarbs = getNutrientValue(weeklyTotals, "kohlenhydrate") / (days.length || 1)
-      const highlights = Array.from(
-        new Set(
-          days
-            .map((plan) => plan.slots.find((slot) => slot.type === "mittagessen")?.entries[0])
-            .filter(Boolean)
-            .map((entry) => getEntryLabel(entry as MealEntry, foodMap, recipeMap)),
-        ),
-      ).slice(0, 3)
-      const energyTarget = dietLine?.targets.find((target) => target.nutrientId === "energie")
-      const complianceState = complianceBadge(avgEnergy, energyTarget?.min, energyTarget?.max)
-      return {
-        weekLabel: `Woche ${index + 1}`,
-        avgEnergy,
-        avgProtein,
-        avgCarbs,
-        highlights,
-        compliance: complianceState,
-      }
-    })
-  }, [aggregatePlanNutrients, cycleWeekChunks, dietLine, foodMap, recipeMap])
-
   const dietLineCompliance = useMemo(() => {
-    if (!dietLine)
-      return [] as {
-        nutrientId: string
-        label: string
-        status: "ok" | "low" | "high"
-        value: number
-        unit: string
-        min?: number
-        max?: number
-      }[]
+    if (!dietLine) return [] as DietLineComplianceItem[]
 
     return dietLine.targets.map((target) => {
       const value =
@@ -1226,11 +1058,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const foodCategoryLabels = useMemo(
     () => new Map(FOOD_CATEGORIES.map((category) => [category.id, category.name])),
     [],
-  )
-
-  const weekEntryLabel = useCallback(
-    (entry: MealEntry) => getEntryLabel(entry, foodMap, recipeMap),
-    [foodMap, recipeMap],
   )
 
   const optimizationSuggestions = useMemo(() => {
@@ -2312,314 +2139,58 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </TabsContent>
 
         <TabsContent value="week" className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setWeekOffset((prev) => prev - 1)}>
-              <ChevronLeft className="h-4 w-4" />
-              <span className="sr-only">Vorherige Woche</span>
-            </Button>
-            <div className="text-sm font-medium">{weekRangeLabel}</div>
-            <Button variant="outline" size="icon" onClick={() => setWeekOffset((prev) => prev + 1)}>
-              <ChevronRight className="h-4 w-4" />
-              <span className="sr-only">Nächste Woche</span>
-            </Button>
-            <div className="ml-auto text-xs text-muted-foreground">
-              Bezug: {dietLine?.name ?? "Zielprofil auswählen"}
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <MealPlanLibrary
-              foods={foodCommandSource}
-              fullFoods={foods}
-              recipes={recipes}
-              categoryLabels={foodCategoryLabels}
-            />
-            <MealPlanWeekBoard
-              days={weekSummaries.map(({ plan, totals }) => ({
-                plan,
-                kcal: getNutrientValue(totals, "energie"),
-              }))}
-              activeDate={currentDate}
-              activeDayLabel={formattedDate}
-              energyValue={getNutrientValue(dailyNutrients, "energie")}
-              energyTarget={energyTargetValue}
-              barTargets={weekBoardTargets}
-              getEntryLabel={weekEntryLabel}
-              onSelectDay={setDate}
-              onOpenDay={(date) => {
-                setDate(date)
-                setView("day")
-              }}
-              onCopyCurrentToDay={copyCurrentPlanToDate}
-              onCopyToNextDay={copyPlanToNextDay}
-              onClearDay={clearPlan}
-              onDrop={(date, slotType, payload) => void handleWeekDropPayload(date, slotType, payload)}
-              onRemoveEntry={removeEntryForDate}
-            />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Wöchentliche Kennzahlen</CardTitle>
-                  <CardDescription>Vergleich mit {dietLine?.name ?? "Zielprofil"}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {dietLineCompliance.map((target) => {
-                    const weekTotal = weekSummaries.reduce(
-                      (sum, { totals }) => sum + getNutrientValue(totals, target.nutrientId),
-                      0,
-                    )
-                    const divisor = weekSummaries.length || 1
-                    const weekAvg = weekTotal / divisor
-                    return (
-                      <div key={target.label} className="flex items-center justify-between">
-                        <span>{target.label}</span>
-                        <span className="text-right">
-                          {formatNumber(weekAvg, 0)} {target.unit}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0">
-                  <div>
-                    <CardTitle className="text-base">Lehrküchenplan</CardTitle>
-                    <CardDescription>Preview für Aushänge & Druck</CardDescription>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={exportingVariant !== null}
-                    onClick={() => void handleExportPlan("lehrkueche")}
-                  >
-                    {exportingVariant === "lehrkueche" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="mr-2 h-4 w-4" />
-                    )}
-                    PDF exportieren
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tag</TableHead>
-                        <TableHead>Mittag</TableHead>
-                        <TableHead>Abend</TableHead>
-                        <TableHead className="text-right">kcal</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {teachingKitchenRows.map((row) => (
-                        <TableRow key={row.dateLabel}>
-                          <TableCell className="font-medium">{row.dateLabel}</TableCell>
-                          <TableCell>{row.lunch}</TableCell>
-                          <TableCell>{row.dinner}</TableCell>
-                          <TableCell className="text-right">{row.kcal}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Exchange-Listen Notizen</CardTitle>
-                  <CardDescription>Markierte Lebensmittel aus Austauschlisten</CardDescription>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Kombiniere Snack-Slots mit ballaststoffreichen Optionen aus den Austauschlisten.
-                  Tippe auf einen Slot im Tagesmodus, um Alternativen einzufügen.
-                </CardContent>
-              </Card>
-          </div>
+          <PlanWeekView
+            weekPlans={weekPlans}
+            weekRangeLabel={weekRangeLabel}
+            onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
+            onNextWeek={() => setWeekOffset((prev) => prev + 1)}
+            dietLine={dietLine}
+            dietLineCompliance={dietLineCompliance}
+            foods={foods}
+            foodMap={foodMap}
+            recipes={recipes}
+            recipeMap={recipeMap}
+            libraryFoods={foodCommandSource}
+            categoryLabels={foodCategoryLabels}
+            activeDate={currentDate}
+            activeDayLabel={formattedDate}
+            energyValue={getNutrientValue(dailyNutrients, "energie")}
+            energyTarget={energyTargetValue}
+            barTargets={weekBoardTargets}
+            onSelectDay={setDate}
+            onOpenDay={(date) => {
+              setDate(date)
+              setView("day")
+            }}
+            onCopyCurrentToDay={copyCurrentPlanToDate}
+            onCopyToNextDay={copyPlanToNextDay}
+            onClearDay={clearPlan}
+            onDrop={(date, slotType, payload) => void handleWeekDropPayload(date, slotType, payload)}
+            onRemoveEntry={removeEntryForDate}
+            isExporting={exportingVariant !== null}
+            onExportLehrkueche={() => void handleExportPlan("lehrkueche")}
+          />
         </TabsContent>
 
         <TabsContent value="cycle" className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setCycleOffset((prev) => prev - 1)}>
-              <ChevronLeft className="h-4 w-4" />
-              <span className="sr-only">Vorheriger Zyklus</span>
-            </Button>
-            <div className="text-sm font-medium">{cycleRangeLabel}</div>
-            <Button variant="outline" size="icon" onClick={() => setCycleOffset((prev) => prev + 1)}>
-              <ChevronRight className="h-4 w-4" />
-              <span className="sr-only">Nächster Zyklus</span>
-            </Button>
-            <Badge variant="secondary" className="ml-auto">
-              {dietLine?.name ?? "Zielprofil"}
-            </Badge>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Wochensummen & Zielerreichung</CardTitle>
-                <CardDescription>Durchschnittswerte pro Woche</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Woche</TableHead>
-                      <TableHead>Ø kcal</TableHead>
-                      <TableHead>Ø Eiweiß</TableHead>
-                      <TableHead>Ø Kohlenhydrate</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cycleWeekStats.map((week) => (
-                      <TableRow key={week.weekLabel}>
-                        <TableCell className="font-medium">{week.weekLabel}</TableCell>
-                        <TableCell>{formatNumber(week.avgEnergy, 0)}</TableCell>
-                        <TableCell>{formatNumber(week.avgProtein, 0)} g</TableCell>
-                        <TableCell>{formatNumber(week.avgCarbs, 0)} g</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={week.compliance === "ok" ? "secondary" : "outline"}
-                            className={
-                              week.compliance === "ok"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : week.compliance === "low"
-                                  ? "bg-amber-50 text-amber-700"
-                                  : "bg-rose-50 text-rose-700"
-                            }
-                          >
-                            {week.compliance === "ok" ? "im Ziel" : week.compliance === "low" ? "unter Ziel" : "über Ziel"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="space-y-1">
-                <CardTitle className="text-base">Menürotation & Highlights</CardTitle>
-                <CardDescription>
-                  Zeigt Signature-Dishes für Lehrküche und Stationsversorgung.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {cycleWeekStats.map((week) => (
-                  <div key={week.weekLabel} className="rounded-lg border p-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <ChefHat className="h-4 w-4 text-muted-foreground" />
-                      {week.weekLabel}
-                    </div>
-                    <ul className="mt-2 list-disc space-y-1 pl-6 text-sm">
-                      {week.highlights.length > 0 ? (
-                        week.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)
-                      ) : (
-                        <li className="text-muted-foreground">Noch keine Highlights geplant.</li>
-                      )}
-                    </ul>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
+          <PlanCycleView
+            baseWeekStart={baseWeekStart}
+            getPlansInRange={getPlansInRange}
+            dietLine={dietLine}
+            foods={foods}
+            foodMap={foodMap}
+            recipeMap={recipeMap}
+          />
         </TabsContent>
 
         <TabsContent value="einzelanalyse" className="space-y-4">
-          <Card>
-            <CardHeader className="space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <CardTitle className="text-base">Einzelanalyse</CardTitle>
-                  <CardDescription>
-                    Beitrag jedes Lebensmittels und Rezepts zum Tagestotal. Die größte
-                    Quelle pro Nährstoff ist hervorgehoben.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="einzel-per-kg"
-                      checked={einzelPerKgEnabled}
-                      onCheckedChange={setEinzelPerKgEnabled}
-                      disabled={typeof latestPatientWeightKg !== "number"}
-                    />
-                    <Label
-                      htmlFor="einzel-per-kg"
-                      className="cursor-pointer text-sm font-normal"
-                    >
-                      pro kg KG
-                      {typeof latestPatientWeightKg === "number" ? (
-                        <span className="text-muted-foreground ml-1 text-xs">
-                          ({formatNumber(latestPatientWeightKg, 0)} kg)
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground ml-1 text-xs">
-                          (Gewicht fehlt)
-                        </span>
-                      )}
-                    </Label>
-                  </div>
-                  <Popover open={einzelPickerOpen} onOpenChange={setEinzelPickerOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8">
-                        Nährstoffe ({einzelNutrientIds.length})
-                        <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-60" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-72 p-1" align="end">
-                      <div className="max-h-80 overflow-y-auto">
-                        {NUTRIENT_DEFINITIONS.map((def) => {
-                          const isActive = einzelNutrientIds.includes(def.id)
-                          // Block deselecting the last column — an empty table
-                          // has no rows to render and offers no signal.
-                          const isLastSelected = isActive && einzelNutrientIds.length === 1
-                          return (
-                            <label
-                              key={def.id}
-                              className={cn(
-                                "hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
-                                isLastSelected && "cursor-not-allowed opacity-60",
-                              )}
-                            >
-                              <Checkbox
-                                checked={isActive}
-                                disabled={isLastSelected}
-                                onCheckedChange={() => {
-                                  setEinzelNutrientIds((prev) =>
-                                    prev.includes(def.id)
-                                      ? prev.filter((id) => id !== def.id)
-                                      : [...prev, def.id],
-                                  )
-                                }}
-                              />
-                              <span className="flex-1">{def.name}</span>
-                              <span className="text-muted-foreground text-xs">
-                                {def.unit}
-                              </span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <EinzelanalyseTableView
-                table={einzelanalyseTable}
-                nutrientDefinitions={NUTRIENT_DEFINITIONS}
-                slotLabels={MEAL_SLOT_LABELS}
-                bodyWeightKg={latestPatientWeightKg}
-              />
-            </CardContent>
-          </Card>
+          <PlanEinzelanalyseView
+            plan={currentPlan}
+            foods={foods}
+            foodMap={foodMap}
+            recipeMap={recipeMap}
+            bodyWeightKg={latestPatientWeightKg}
+          />
         </TabsContent>
       </Tabs>
         </>
