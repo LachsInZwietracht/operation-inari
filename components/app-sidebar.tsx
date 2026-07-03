@@ -60,27 +60,29 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    title: "Übersicht",
+    // Patientenarbeit: der tägliche Beratungs-Workflow von Übersicht bis Plan.
+    title: "Arbeitsbereich",
     items: [
       { label: "Dashboard", icon: LayoutDashboard, route: "/dashboard" },
+      { label: "Patienten", icon: Users, route: "/patienten" },
+      { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplaene" },
       { label: "Datenbank", icon: Database, route: "/datenbank" },
     ],
   },
   {
-    title: "Ernährung",
+    // Lebensmittel-Bibliothek: das Material, aus dem Pläne gebaut werden.
+    title: "Küche",
     items: [
-      { label: "Lebensmittel", icon: Apple, route: "/lebensmittel/uebersicht" },
       { label: "Rezepte", icon: ChefHat, route: "/rezepte" },
-      { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplaene" },
+      { label: "Lebensmittel", icon: Apple, route: "/lebensmittel/uebersicht" },
       { label: "Einkaufsliste", icon: ShoppingBasket, route: "/ernaehrungsplan/einkaufsliste" },
-      { label: "Referenzwerte", icon: Ruler, route: "/referenzwerte" },
-      { label: "Kalorienrechner", icon: Flame, route: "/kalorienrechner" },
     ],
   },
   {
-    title: "Patienten",
+    title: "Tools",
     items: [
-      { label: "Patienten", icon: Users, route: "/patienten" },
+      { label: "Referenzwerte", icon: Ruler, route: "/referenzwerte" },
+      { label: "Kalorienrechner", icon: Flame, route: "/kalorienrechner" },
     ],
   },
   {
