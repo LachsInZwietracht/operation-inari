@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -254,7 +255,17 @@ export function AuthForm({ mode }: AuthFormProps) {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Passwort</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel>Passwort</FormLabel>
+                {!isRegister && (
+                  <Link
+                    href="/passwort-vergessen"
+                    className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Passwort vergessen?
+                  </Link>
+                )}
+              </div>
               <FormControl>
                 <Input type="password" placeholder="••••••••" {...field} />
               </FormControl>
