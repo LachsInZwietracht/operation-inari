@@ -283,6 +283,7 @@ export function EinkaufslisteClient({
                           <button
                             key={plan.id}
                             type="button"
+                            aria-pressed={checked}
                             onClick={() => togglePlan(plan.id)}
                             disabled={disabled}
                             className={cn(
@@ -290,12 +291,16 @@ export function EinkaufslisteClient({
                               disabled && "opacity-40",
                             )}
                           >
-                            <Checkbox
-                              checked={checked}
-                              tabIndex={-1}
-                              onCheckedChange={() => togglePlan(plan.id)}
-                              className="pointer-events-none"
-                            />
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                "border-input flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
+                                checked &&
+                                  "bg-primary text-primary-foreground border-primary",
+                              )}
+                            >
+                              {checked && <Check className="h-3 w-3" />}
+                            </span>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="truncate font-medium">

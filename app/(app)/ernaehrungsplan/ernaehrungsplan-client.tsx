@@ -34,6 +34,7 @@ import {
   Settings2,
   Sparkles,
   Target,
+  UserPlus,
   Users,
   Utensils,
 } from "lucide-react"
@@ -49,6 +50,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -150,6 +152,7 @@ const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> =
 }
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
+const CREATE_PATIENT_VALUE = "__create_patient__"
 
 type PatientWithLegacyIndication = Patient & {
   indication?: string
@@ -578,6 +581,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   )
 
   const handlePlanPatientChange = (value: string) => {
+    if (value === CREATE_PATIENT_VALUE) {
+      router.push("/patienten/neu")
+      return
+    }
+
     const nextPatientId = value === UNASSIGNED_PATIENT_VALUE ? undefined : value
 
     if (!nextPatientId) {
@@ -1070,7 +1078,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,280px)_auto]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(200px,1fr)_minmax(220px,280px)]">
             <div className="space-y-1.5">
               <Label
                 htmlFor="planakte-title"
@@ -1113,10 +1121,16 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                       {getPatientIndications(item).length ? ` · ${getPatientIndications(item).join(" · ")}` : ""}
                     </SelectItem>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value={CREATE_PATIENT_VALUE}>
+                    <UserPlus className="h-4 w-4" />
+                    Neuen Patienten anlegen
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex flex-wrap items-end justify-end gap-1.5">
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
               {patientId && currentPlan.patientId !== patientId && (
                 <Button size="sm" variant="outline" onClick={attachCurrentPatient}>
                   Patient zuordnen
@@ -1173,7 +1187,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
                 Akte öffnen
               </Button>
-            </div>
           </div>
           <div className="bg-muted/30 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
             <div className="flex min-w-0 flex-wrap items-center gap-2">

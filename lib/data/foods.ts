@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1072,6 +1073,31 @@ async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> 
   }
 
   return allFoods;
+}
+
+interface FoodsByIdsCachedOptions {
+  foodIds: string[];
+  nutrientIds: string[];
+  /** Distinguishes cache entries between callers (e.g. "meal-plan-foods"). */
+  cacheKeyPrefix: string;
+  revalidate?: number;
+}
+
+/**
+ * Cached variant of `fetchFoodsViaRpc` for pages that resolve a known set of
+ * food IDs (meal plans, shopping list, knowledge library). The result is
+ * global, not user-specific: nutrient data only changes on ETL imports.
+ * Cached per distinct ID set so repeat navigations skip the RPC; the ID set
+ * is hashed because cache key parts must stay small.
+ */
+export function fetchFoodsByIdsCached(options: FoodsByIdsCachedOptions): Promise<Food[]> {
+  const sortedIds = [...options.foodIds].sort();
+  const idsHash = createHash("sha1").update(sortedIds.join(",")).digest("hex");
+  return unstable_cache(
+    () => fetchFoodsViaRpc({ foodIds: sortedIds, nutrientIds: options.nutrientIds }),
+    [options.cacheKeyPrefix, idsHash],
+    { revalidate: options.revalidate ?? 300, tags: [CACHE_TAGS.FOODS] },
+  )();
 }
 
 /**
