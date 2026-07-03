@@ -39,7 +39,6 @@ import {
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { MealSlotCard } from "@/components/meal-slot"
-import type { WeekBoardTarget } from "@/components/meal-plan-week-board"
 import { NutrientBar } from "@/components/nutrient-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
@@ -66,30 +65,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useMealPlan } from "@/hooks/use-meal-plan"
+import { useAllergenGuard } from "@/hooks/use-allergen-guard"
+import {
+  usePlanAnalysis,
+  type OptimizationSuggestion,
+} from "@/hooks/use-plan-analysis"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
-import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
-import {
-  scaleNutrients,
-  sumNutrients,
-  getNutrientValue,
-  calculateRecipeNutrients,
-  calculatePerServing,
-  getBroteinheiten,
-} from "@/lib/nutrients"
-import {
-  calculateEntryNutrients,
-  chooseOptimizationSlot,
-  complianceBadge,
-  type DietLineComplianceItem,
-} from "@/lib/meal-plan-calc"
+import { getNutrientValue } from "@/lib/nutrients"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
 import { formatNumber, formatNutrient } from "@/lib/format"
-import { MEAL_SLOT_LABELS, MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
+import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import type {
   MealSlotType,
   MealEntry,
-  NutrientValue,
   DailyMealPlan,
   Food,
   MealPlanTemplate,
@@ -97,21 +86,10 @@ import type {
   Patient,
   Recipe,
 } from "@/lib/types"
-import { evaluatePlanSustainability } from "@/lib/sustainability"
-import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useFoods, useFoodSearch } from "@/components/foods-provider"
 import { createRecipeLookup } from "@/lib/recipes"
 import type { FoodSearchItem } from "@/lib/types"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
-import {
-  checkAllergenConflicts,
-  summarizePlanAllergenConflicts,
-  type AllergenWarning,
-} from "@/lib/allergen-warnings"
-import {
-  ALLERGEN_SEVERITY_LABELS,
-  ALLERGEN_TYPE_LABELS,
-} from "@/lib/allergen-constants"
 import { PlanAllergenBanner } from "@/components/plan-allergen-banner"
 import { PlanAddEntryCommand } from "@/components/plan-add-entry-command"
 import { PlanAkteSheet } from "@/components/plan-akte-sheet"
@@ -172,42 +150,6 @@ const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> =
 }
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
-
-type PlanReviewSeverity = "critical" | "warning" | "ok"
-
-interface PlanReviewItem {
-  id: string
-  label: string
-  description: string
-  severity: PlanReviewSeverity
-}
-
-interface PendingAllergenIntent {
-  itemKind: "food" | "recipe"
-  itemName: string
-  slotType: MealSlotType
-  payload: { type: MealEntry["type"]; referenceId: string; amount: number }
-  warnings: AllergenWarning[]
-  replaceEntryId?: string
-  /** Target plan date; defaults to the currently opened day when omitted. */
-  date?: string
-  followUp?: () => void
-}
-
-interface OptimizationSuggestion {
-  id: string
-  type: "food" | "recipe"
-  referenceId: string
-  name: string
-  slotType: MealSlotType
-  amount: number
-  nutrientId: string
-  targetLabel: string
-  unit: string
-  deficit: number
-  contribution: number
-  allergens?: string[]
-}
 
 type PatientWithLegacyIndication = Patient & {
   indication?: string
@@ -352,7 +294,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [isCheckpointing, setIsCheckpointing] = useState(false)
   const [isSavingPlan, setIsSavingPlan] = useState(false)
   const [isApprovingPlan, setIsApprovingPlan] = useState(false)
-  const [pendingAllergenIntent, setPendingAllergenIntent] = useState<PendingAllergenIntent | null>(null)
   const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
   const [planAkteOpen, setPlanAkteOpen] = useState(false)
   const planTitleInputRef = useRef<HTMLInputElement | null>(null)
@@ -413,112 +354,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
 
-  const planAllergenSummary = useMemo(
-    () => summarizePlanAllergenConflicts(currentPlan, patientAllergens, foodMap, recipeMap),
-    [currentPlan, foodMap, recipeMap, patientAllergens],
-  )
-
-  const entryAllergenWarnings = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const [entryId, warnings] of planAllergenSummary.byEntry) {
-      map.set(entryId, warnings.map((warning) => warning.allergenLabel))
-    }
-    return map
-  }, [planAllergenSummary])
-
-  const notifyAllergenWarnings = useCallback(
-    (itemName: string, warnings: AllergenWarning[]) => {
-      for (const warning of warnings) {
-        const headline =
-          warning.severity === "moderate"
-            ? `Mittlerer Allergenkonflikt: ${itemName}`
-            : `Allergenhinweis: ${itemName}`
-        toast.warning(headline, {
-          description: `${warning.allergenLabel} · ${ALLERGEN_TYPE_LABELS[warning.type]} · ${ALLERGEN_SEVERITY_LABELS[warning.severity]}`,
-        })
-      }
-    },
-    [],
-  )
-
-  const commitAllergenIntent = useCallback(
-    (intent: PendingAllergenIntent) => {
-      if (intent.replaceEntryId) {
-        replaceEntry(intent.slotType, intent.replaceEntryId, intent.payload)
-      } else if (intent.date) {
-        addEntryForDate(intent.date, intent.slotType, intent.payload)
-      } else {
-        addEntry(intent.slotType, intent.payload)
-      }
-      intent.followUp?.()
-    },
-    [addEntry, addEntryForDate, replaceEntry],
-  )
-
-  const guardedAddEntry = useCallback(
-    (
-      slotType: MealSlotType,
-      payload: { type: MealEntry["type"]; referenceId: string; amount: number },
-      context: {
-        itemKind: "food" | "recipe"
-        itemName: string
-        allergens: string[] | undefined
-        replaceEntryId?: string
-        date?: string
-        followUp?: () => void
-      },
-    ) => {
-      const warnings =
-        patientAllergens.length > 0 && context.allergens?.length
-          ? checkAllergenConflicts(context.allergens, patientAllergens)
-          : []
-      const hasSevere = warnings.some((warning) => warning.severity === "severe")
-
-      if (hasSevere) {
-        setPendingAllergenIntent({
-          itemKind: context.itemKind,
-          itemName: context.itemName,
-          slotType,
-          payload,
-          warnings,
-          replaceEntryId: context.replaceEntryId,
-          date: context.date,
-          followUp: context.followUp,
-        })
-        return
-      }
-
-      commitAllergenIntent({
-        itemKind: context.itemKind,
-        itemName: context.itemName,
-        slotType,
-        payload,
-        warnings,
-        replaceEntryId: context.replaceEntryId,
-        date: context.date,
-        followUp: context.followUp,
-      })
-
-      if (warnings.length > 0) {
-        notifyAllergenWarnings(context.itemName, warnings)
-      }
-    },
-    [commitAllergenIntent, notifyAllergenWarnings, patientAllergens],
-  )
-
-  const confirmPendingAllergenIntent = useCallback(() => {
-    if (!pendingAllergenIntent) return
-    commitAllergenIntent(pendingAllergenIntent)
-    notifyAllergenWarnings(pendingAllergenIntent.itemName, pendingAllergenIntent.warnings)
-    toast.warning(
-      `${pendingAllergenIntent.itemName} wurde trotz schwerer Allergenwarnung übernommen.`,
-    )
-    setPendingAllergenIntent(null)
-  }, [commitAllergenIntent, notifyAllergenWarnings, pendingAllergenIntent])
-
-  const dismissPendingAllergenIntent = useCallback(() => {
-    setPendingAllergenIntent(null)
-  }, [])
+  const {
+    pendingIntent: pendingAllergenIntent,
+    guardedAddEntry,
+    confirmPendingIntent: confirmPendingAllergenIntent,
+    dismissPendingIntent: dismissPendingAllergenIntent,
+  } = useAllergenGuard({ patientAllergens, addEntry, addEntryForDate, replaceEntry })
 
   const parsedDate = parseISO(currentDate)
   const formattedDate = format(parsedDate, "EEEE, d. MMMM yyyy", { locale: de })
@@ -672,89 +513,36 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const isCurrentDietLineEditable = Boolean(dietLine?.userId)
 
-  const dailyNutrients = useMemo(() => {
-    const allEntryNutrients: NutrientValue[][] = []
-    for (const slot of currentPlan.slots) {
-      for (const entry of slot.entries) {
-        allEntryNutrients.push(calculateEntryNutrients(entry, foodMap, foods, recipeMap))
-      }
-    }
-    return sumNutrients(allEntryNutrients)
-  }, [currentPlan, foodMap, foods, recipeMap])
-
-  const totalKcal = getNutrientValue(dailyNutrients, "energie")
-  const totalProtein = getNutrientValue(dailyNutrients, "eiweiss")
-  const totalFat = getNutrientValue(dailyNutrients, "fett")
-  const totalCarbs = getNutrientValue(dailyNutrients, "kohlenhydrate")
-  const totalBE = getBroteinheiten(totalCarbs)
-
-  const planSustainability = useMemo(
-    () => evaluatePlanSustainability(currentPlan, foods, recipes),
-    [currentPlan, foods, recipes],
-  )
-
-  const { getResolvedConfig } = useReferenceProfiles()
-  const refConfig = useMemo(() => {
-    return getResolvedConfig({
-      patientId,
-      dateOfBirth: patient?.dateOfBirth ?? "1990-01-01",
-      gender: patient?.gender ?? "w",
-    })
-  }, [getResolvedConfig, patient?.dateOfBirth, patient?.gender, patientId])
-
-  const referenceMap = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const v of refConfig.values) {
-      map.set(v.nutrientId, v.amount)
-    }
-    return map
-  }, [refConfig.values])
-
-  const nutrientDefMap = useMemo(() => {
-    return new Map(NUTRIENT_DEFINITIONS.map((nd) => [nd.id, nd]))
-  }, [])
-
-  const slotCompliance = useMemo(() => {
-    const map = {} as Record<MealSlotType, { label: string; status: "ok" | "low" | "high" }[]>
-    if (!dietLine) return map
-
-    // Per-slot evaluation only fires for macronutrient targets. Vitamin /
-    // mineral targets are daily-aggregate by clinical convention and would
-    // produce noise when scaled to a single meal.
-    const macroTargets = dietLine.targets.filter((target) => {
-      const definition = nutrientDefMap.get(target.nutrientId)
-      return definition?.group === "makronaehrstoffe"
-    })
-
-    if (macroTargets.length === 0) return map
-
-    for (const slot of currentPlan.slots) {
-      if (slot.entries.length === 0) {
-        map[slot.type] = []
-        continue
-      }
-
-      const fraction = MEAL_SLOT_TARGET_FRACTIONS[slot.type] ?? 1 / (currentPlan.slots.length || 1)
-      const summed = sumNutrients(
-        slot.entries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap)),
-      )
-
-      map[slot.type] = macroTargets.map((target) => {
-        const value =
-          target.nutrientId === "broteinheiten"
-            ? getBroteinheiten(getNutrientValue(summed, "kohlenhydrate"))
-            : getNutrientValue(summed, target.nutrientId)
-        const perSlotMin = typeof target.min === "number" ? target.min * fraction : undefined
-        const perSlotMax = typeof target.max === "number" ? target.max * fraction : undefined
-        return {
-          label: target.label,
-          status: complianceBadge(value, perSlotMin, perSlotMax),
-        }
-      })
-    }
-
-    return map
-  }, [currentPlan.slots, dietLine, foodMap, foods, nutrientDefMap, recipeMap])
+  const {
+    planAllergenSummary,
+    entryAllergenWarnings,
+    dailyNutrients,
+    totalKcal,
+    totalProtein,
+    totalFat,
+    totalCarbs,
+    totalBE,
+    planSustainability,
+    refConfig,
+    referenceMap,
+    nutrientDefMap,
+    slotCompliance,
+    dietLineCompliance,
+    energyTargetValue,
+    weekBoardTargets,
+    optimizationSuggestions,
+    clinicalReview,
+  } = usePlanAnalysis({
+    plan: currentPlan,
+    foods,
+    foodMap,
+    recipes,
+    recipeMap,
+    dietLine,
+    patientAllergens,
+    patientId,
+    patient,
+  })
 
   const foodCommandSource: FoodSearchItem[] = foodSearchIndex.length > 0 ? foodSearchIndex : foods
 
@@ -1016,235 +804,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
   }
 
-  const dietLineCompliance = useMemo(() => {
-    if (!dietLine) return [] as DietLineComplianceItem[]
-
-    return dietLine.targets.map((target) => {
-      const value =
-        target.nutrientId === "broteinheiten"
-          ? getBroteinheiten(getNutrientValue(dailyNutrients, "kohlenhydrate"))
-          : getNutrientValue(dailyNutrients, target.nutrientId)
-      return {
-        nutrientId: target.nutrientId,
-        label: target.label,
-        status: complianceBadge(value, target.min, target.max),
-        value,
-        unit: target.unit,
-        min: target.min,
-        max: target.max,
-      }
-    })
-  }, [dailyNutrients, dietLine])
-
-  const energyTargetValue = useMemo(() => {
-    const target = dietLine?.targets.find((item) => item.nutrientId === "energie")
-    return target?.min ?? target?.max
-  }, [dietLine])
-
-  const weekBoardTargets = useMemo<WeekBoardTarget[]>(() => {
-    return dietLineCompliance
-      .filter((target) => target.nutrientId !== "energie")
-      .slice(0, 6)
-      .map((target) => ({
-        nutrientId: target.nutrientId,
-        label: target.label,
-        value: target.value,
-        target: target.min ?? target.max,
-        unit: target.unit,
-        status: target.status,
-      }))
-  }, [dietLineCompliance])
-
   const foodCategoryLabels = useMemo(
     () => new Map(FOOD_CATEGORIES.map((category) => [category.id, category.name])),
     [],
   )
-
-  const optimizationSuggestions = useMemo(() => {
-    if (!dietLine) return [] as OptimizationSuggestion[]
-
-    const existingKeys = new Set(
-      currentPlan.slots.flatMap((slot) =>
-        slot.entries.map((entry) => `${entry.type}:${entry.referenceId}`),
-      ),
-    )
-
-    const rankedSuggestions = dietLineCompliance
-      .filter((target) => target.status === "low" && typeof target.min === "number")
-      .flatMap((target) => {
-        const deficit = Math.max(0, (target.min ?? 0) - target.value)
-        if (deficit <= 0) return [] as OptimizationSuggestion[]
-
-        const slotType = chooseOptimizationSlot(target.nutrientId, currentPlan)
-        // BE is a derived display nutrient — a food's BE contribution = its
-        // carb contribution / 12. Translate the lookup so suggestions still
-        // rank correctly if a custom preset ever defines a BE minimum.
-        const lookupNutrientId =
-          target.nutrientId === "broteinheiten" ? "kohlenhydrate" : target.nutrientId
-        const projectContribution = (raw: number) =>
-          target.nutrientId === "broteinheiten" ? getBroteinheiten(raw) : raw
-        const foodSuggestions = foods
-          .filter((food) => !existingKeys.has(`food:${food.id}`) && food.nutrients.length > 0)
-          .map((food) => {
-            const contribution = projectContribution(
-              getNutrientValue(
-                scaleNutrients(food.nutrients, food.baseAmount, 100),
-                lookupNutrientId,
-              ),
-            )
-            const severeConflict =
-              patientAllergens.length > 0 && food.allergens?.length
-                ? checkAllergenConflicts(food.allergens, patientAllergens).some((warning) => warning.severity === "severe")
-                : false
-            return {
-              id: `food-${target.nutrientId}-${food.id}`,
-              type: "food" as const,
-              referenceId: food.id,
-              name: food.name,
-              slotType,
-              amount: 100,
-              nutrientId: target.nutrientId,
-              targetLabel: target.label,
-              unit: target.unit,
-              deficit,
-              contribution,
-              allergens: food.allergens,
-              severeConflict,
-            }
-          })
-
-        const recipeSuggestions = recipes
-          .filter((recipe) => !existingKeys.has(`recipe:${recipe.id}`))
-          .map((recipe) => {
-            const perServing = calculatePerServing(calculateRecipeNutrients(recipe, foods), recipe.servings)
-            const contribution = projectContribution(getNutrientValue(perServing, lookupNutrientId))
-            const severeConflict =
-              patientAllergens.length > 0 && recipe.allergens?.length
-                ? checkAllergenConflicts(recipe.allergens, patientAllergens).some((warning) => warning.severity === "severe")
-                : false
-            return {
-              id: `recipe-${target.nutrientId}-${recipe.id}`,
-              type: "recipe" as const,
-              referenceId: recipe.id,
-              name: recipe.name,
-              slotType,
-              amount: 1,
-              nutrientId: target.nutrientId,
-              targetLabel: target.label,
-              unit: target.unit,
-              deficit,
-              contribution,
-              allergens: recipe.allergens,
-              severeConflict,
-            }
-          })
-
-        return [...foodSuggestions, ...recipeSuggestions]
-          .filter((suggestion) => suggestion.contribution > 0 && !suggestion.severeConflict)
-          .sort((a, b) => {
-            const aCoverage = Math.min(a.contribution, a.deficit) / a.deficit
-            const bCoverage = Math.min(b.contribution, b.deficit) / b.deficit
-            return bCoverage - aCoverage
-          })
-          .slice(0, 2)
-      })
-      .sort((a, b) => b.deficit - a.deficit)
-
-    const seenSuggestions = new Set<string>()
-    return rankedSuggestions
-      .filter((suggestion) => {
-        const key = `${suggestion.type}:${suggestion.referenceId}`
-        if (seenSuggestions.has(key)) return false
-        seenSuggestions.add(key)
-        return true
-      })
-      .slice(0, 4)
-  }, [currentPlan, dietLine, dietLineCompliance, foods, patientAllergens, recipes])
-
-  const clinicalReview = useMemo(() => {
-    const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
-    const allergenConflictCount = Array.from(entryAllergenWarnings.values()).reduce(
-      (sum, warnings) => sum + warnings.length,
-      0,
-    )
-    const missingCoreSlots = currentPlan.slots
-      .filter((slot) => ["fruehstueck", "mittagessen", "abendessen"].includes(slot.type))
-      .filter((slot) => slot.entries.length === 0)
-      .map((slot) => MEAL_SLOT_LABELS[slot.type])
-    const offTargetItems = dietLineCompliance.filter((target) => target.status !== "ok")
-    const items: PlanReviewItem[] = []
-
-    items.push({
-      id: "entries",
-      label: "Planinhalt",
-      description:
-        totalEntries > 0
-          ? `${totalEntries} Einträge geplant.`
-          : "Der Tagesplan enthält noch keine Mahlzeiten.",
-      severity: totalEntries > 0 ? "ok" : "critical",
-    })
-
-    items.push({
-      id: "patient",
-      label: "Patientenkontext",
-      description:
-        patientId && currentPlan.patientId !== patientId
-          ? "Der geöffnete Patientenkontext ist noch nicht am Plan gespeichert."
-          : currentPlan.patientId
-            ? "Patientenkontext ist am Plan gespeichert."
-            : "Allgemeiner Plan ohne Patientenzuordnung.",
-      severity: patientId && currentPlan.patientId !== patientId ? "critical" : "ok",
-    })
-
-    items.push({
-      id: "targets",
-      label: "Zielprofil",
-      description: dietLine
-        ? `${dietLine.name}: ${offTargetItems.length === 0 ? "alle Zielwerte im Bereich." : `${offTargetItems.length} Zielwerte außerhalb des Bereichs.`}`
-        : "Es ist kein Kostform-/Zielprofil ausgewählt.",
-      severity: dietLine ? (offTargetItems.length === 0 ? "ok" : "warning") : "critical",
-    })
-
-    items.push({
-      id: "allergens",
-      label: "Allergenprüfung",
-      description:
-        allergenConflictCount > 0
-          ? `${allergenConflictCount} Konflikthinweise im aktuellen Plan.`
-          : patientAllergens.length > 0
-            ? "Keine Konflikte gegen die hinterlegten Allergen-/Intoleranzhinweise."
-            : "Keine patientenspezifischen Allergenhinweise hinterlegt.",
-      severity: allergenConflictCount > 0 ? "critical" : "ok",
-    })
-
-    items.push({
-      id: "meal-structure",
-      label: "Mahlzeitenstruktur",
-      description:
-        missingCoreSlots.length > 0
-          ? `Noch offen: ${missingCoreSlots.join(", ")}.`
-          : "Frühstück, Mittagessen und Abendessen sind belegt.",
-      severity: missingCoreSlots.length > 0 ? "warning" : "ok",
-    })
-
-    const blockingItems = items.filter((item) => item.severity === "critical")
-    const warningItems = items.filter((item) => item.severity === "warning")
-
-    return {
-      items,
-      blockingItems,
-      warningItems,
-      canApprove: blockingItems.length === 0,
-    }
-  }, [
-    currentPlan.patientId,
-    currentPlan.slots,
-    dietLine,
-    dietLineCompliance,
-    entryAllergenWarnings,
-    patientAllergens.length,
-    patientId,
-  ])
 
   const openApplyTemplateDialog = useCallback(() => {
     setApplyTemplateDialogOpen(true)
