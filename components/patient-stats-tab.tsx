@@ -163,6 +163,8 @@ function StatCard({
 
 export function PatientStatsTab({ patient, entries, activities, sessions }: PatientStatsTabProps) {
   const [timeRange, setTimeRange] = useState<TimeRangeValue>("all")
+  // Mount-stable timestamp: Date.now() inside useMemo is impure.
+  const [nowTs] = useState(() => Date.now())
   const [bodyMetricKey, setBodyMetricKey] = useState<BodyCompositionMetricKey>("bodyFatPercentage")
 
   const sorted = useMemo(
@@ -220,14 +222,13 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
 
   const timeDomain = useMemo<[number, number]>(() => {
     if (weightData.length === 0) {
-      const now = Date.now()
-      return [now - DAY_MS, now + DAY_MS]
+      return [nowTs - DAY_MS, nowTs + DAY_MS]
     }
     const min = weightData[0].timestamp
     const max = weightData[weightData.length - 1].timestamp
     if (min === max) return [min - DAY_MS, max + DAY_MS]
     return [min, max]
-  }, [weightData])
+  }, [weightData, nowTs])
 
   const activityData = useMemo(
     () =>

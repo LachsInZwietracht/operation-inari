@@ -117,6 +117,18 @@ interface RezeptePageClientProps {
   recipes: Recipe[];
 }
 
+// Module-level so the impure ID generation stays outside component render scope.
+function buildImportedRecipeClone(recipe: Recipe): Recipe {
+  const now = new Date().toISOString();
+  return {
+    ...recipe,
+    id: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    createdAt: now,
+    updatedAt: now,
+    sourceType: "personal",
+  };
+}
+
 function normalize(value: string): string {
   return value.toLowerCase();
 }
@@ -233,15 +245,7 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
   }
 
   async function handleImportRecipe(recipe: Recipe) {
-    const now = new Date().toISOString();
-    const clone: Recipe = {
-      ...recipe,
-      id: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      createdAt: now,
-      updatedAt: now,
-      sourceType: "personal",
-    };
-    await addRecipe(clone);
+    await addRecipe(buildImportedRecipeClone(recipe));
     toast.success("Rezept in eigene Sammlung importiert");
   }
 

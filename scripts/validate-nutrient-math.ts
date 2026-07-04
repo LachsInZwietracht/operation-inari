@@ -15,7 +15,7 @@ async function main() {
   let workbookData;
   try {
     workbookData = loadBlsWorkbook();
-  } catch (err) {
+  } catch {
     console.error("❌ Failed to load BLS workbook. Ensure data/BLS_4_0_2025_DE/BLS_4_0_Daten_2025_DE.xlsx exists.");
     process.exit(1);
   }
@@ -58,7 +58,7 @@ async function main() {
     process.exit(1);
   }
 
-  const mapToFood = (row: any): Food => {
+  const mapToFood = (row: (typeof rows)[number]): Food => {
     const nutrients: NutrientValue[] = [];
     
     // Map standard nutrients
