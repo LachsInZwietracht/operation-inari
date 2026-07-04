@@ -47,7 +47,7 @@ const PLAN_DATE_CANDIDATES = [
   "2026-05-24",
 ];
 
-type AnySupabaseClient = SupabaseClient<any, "public", any>;
+type AnySupabaseClient = SupabaseClient;
 type JsonRecord = Record<string, unknown>;
 
 interface DemoUser {

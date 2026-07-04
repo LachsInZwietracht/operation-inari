@@ -11,7 +11,7 @@
  * links into the corresponding workflow.
  */
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import {
   differenceInCalendarDays,
@@ -432,15 +432,18 @@ export function DashboardOverviewClient({
   patients,
   appointments,
 }: DashboardProps) {
+  // Mount-stable timestamp: impure Date.now()/new Date() inside useMemo gives
+  // unstable results across re-renders.
+  const [nowTs] = useState(() => Date.now())
   const { greeting, dateLabel } = useMemo(() => {
-    const now = new Date()
+    const now = new Date(nowTs)
     const hour = now.getHours()
     const greetingLabel = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"
     return {
       greeting: greetingLabel,
       dateLabel: format(now, "EEEE, d. MMMM yyyy", { locale: de }),
     }
-  }, [])
+  }, [nowTs])
 
   const {
     patientNameById,
@@ -479,11 +482,11 @@ export function DashboardOverviewClient({
       }
     }
 
-    const todayIso = format(new Date(), "yyyy-MM-dd")
+    const todayIso = format(new Date(nowTs), "yyyy-MM-dd")
     const today = appointments.filter((appointment) => appointment.date === todayIso)
 
     const in7DaysIso = format(
-      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      new Date(nowTs + 7 * 24 * 60 * 60 * 1000),
       "yyyy-MM-dd",
     )
     const upcomingCount = appointments.filter(
@@ -523,7 +526,7 @@ export function DashboardOverviewClient({
       todaysAppointments: today,
       pulseStats: stats,
     }
-  }, [plans, patients, appointments])
+  }, [plans, patients, appointments, nowTs])
 
   const resumeFilled = resume ? filledSlotCount(resume) : 0
   const resumeProgress = Math.round((resumeFilled / MEAL_SLOT_COUNT) * 100)

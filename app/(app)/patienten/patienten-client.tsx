@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   addYears,
@@ -68,7 +68,9 @@ export function PatientenPageClient({ initialPatients, initialSessions }: Patien
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(MAIL_MERGE_TEMPLATES[0]?.id ?? "")
   const [mailSubject, setMailSubject] = useState<string>(MAIL_MERGE_TEMPLATES[0]?.subject ?? "")
   const [mailBody, setMailBody] = useState<string>(MAIL_MERGE_TEMPLATES[0]?.body ?? "")
-  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([])
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>(() =>
+    (initialPatients ?? []).slice(0, 5).map((patient) => patient.id),
+  )
   const [lastBatch, setLastBatch] = useState<{ timestamp: string; count: number; templateName: string } | null>(null)
   const [birthdayWindow, setBirthdayWindow] = useState<string>("30")
   const bodyTextAreaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -105,18 +107,16 @@ export function PatientenPageClient({ initialPatients, initialSessions }: Patien
     [selectedTemplateId],
   )
 
-  useEffect(() => {
-    if (selectedTemplate) {
-      setMailSubject(selectedTemplate.subject)
-      setMailBody(selectedTemplate.body)
+  // Event-driven template switch instead of a setState-in-effect cascade:
+  // changing the template resets subject/body in the same handler.
+  const applyTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId)
+    const template = MAIL_MERGE_TEMPLATES.find((item) => item.id === templateId)
+    if (template) {
+      setMailSubject(template.subject)
+      setMailBody(template.body)
     }
-  }, [selectedTemplate])
-
-  useEffect(() => {
-    if (filtered.length > 0 && selectedRecipients.length === 0) {
-      setSelectedRecipients(filtered.slice(0, Math.min(filtered.length, 5)).map((p) => p.id))
-    }
-  }, [filtered, selectedRecipients.length])
+  }
 
   const renderTemplate = (template: string, patientId?: string) => {
     if (!template) return ""
@@ -149,7 +149,7 @@ export function PatientenPageClient({ initialPatients, initialSessions }: Patien
   }
 
   const handleBirthdayPrepare = (patientId: string) => {
-    setSelectedTemplateId("birthday_greeting")
+    applyTemplate("birthday_greeting")
     setSelectedRecipients([patientId])
     toast.success("Geburtstagsgruß vorbereitet")
   }
@@ -394,7 +394,7 @@ export function PatientenPageClient({ initialPatients, initialSessions }: Patien
                     <div className="space-y-3">
                       <div className="grid gap-2">
                         <Label>Vorlage</Label>
-                        <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                        <Select value={selectedTemplateId} onValueChange={applyTemplate}>
                           <SelectTrigger>
                             <SelectValue placeholder="Vorlage auswählen" />
                           </SelectTrigger>

@@ -106,14 +106,17 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
     [],
   );
 
-  function getCategoryInfo(foodId: string) {
-    const food = foodMap.get(foodId);
-    if (!food) return DEFAULT_CATEGORY;
-    return {
-      categoryId: food.categoryId,
-      categoryName: categoryNameMap.get(food.categoryId) ?? DEFAULT_CATEGORY.categoryName,
-    };
-  }
+  const getCategoryInfo = useCallback(
+    (foodId: string) => {
+      const food = foodMap.get(foodId);
+      if (!food) return DEFAULT_CATEGORY;
+      return {
+        categoryId: food.categoryId,
+        categoryName: categoryNameMap.get(food.categoryId) ?? DEFAULT_CATEGORY.categoryName,
+      };
+    },
+    [foodMap, categoryNameMap],
+  );
 
   // Load from Supabase when authenticated
   useEffect(() => {
@@ -553,7 +556,7 @@ export function useInstitutionMenu(initialMenus: InstitutionMenu[] = [], recipes
 
       return items;
     },
-    [menus, foodMap, recipeMap],
+    [menus, foodMap, recipeMap, getCategoryInfo],
   );
 
   return {

@@ -24,10 +24,11 @@ export function useDigitalProtocolSubmissions(
     options.initialSubmissions ?? [],
   );
   const [isLoading, setIsLoading] = useState(false);
+  const hasInitialSubmissions = Boolean(options.initialSubmissions);
 
   useEffect(() => {
     if (!isAuthenticated || authLoading) return;
-    if (options.initialSubmissions) return;
+    if (hasInitialSubmissions) return;
 
     let cancelled = false;
     setIsLoading(true);
@@ -47,7 +48,7 @@ export function useDigitalProtocolSubmissions(
     return () => {
       cancelled = true;
     };
-  }, [patientId, isAuthenticated, authLoading]);
+  }, [patientId, isAuthenticated, authLoading, hasInitialSubmissions]);
 
   const updateStatus = useCallback(
     async (submissionId: string, status: DigitalProtocolSubmission["status"]) => {

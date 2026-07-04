@@ -213,10 +213,6 @@ async function fetchClinicalRows<T extends Record<string, unknown>>(
   return (data ?? []) as T[];
 }
 
-function patientLabel(patient: CreatedPatient) {
-  return `${patient.lastName}, ${patient.firstName}`;
-}
-
 function patientHeading(patient: CreatedPatient) {
   return `${patient.firstName} ${patient.lastName}`;
 }

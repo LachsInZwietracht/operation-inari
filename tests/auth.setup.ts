@@ -1,12 +1,12 @@
 import { test as setup } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const STORAGE_STATE_PATH = "tests/.auth/user.json";
 
 const TEST_EMAIL = "test@prodi.local";
 const TEST_PASSWORD = "test-password-123!";
 
-async function ensureOwnerMembership(admin: any, userId: string, email: string) {
+async function ensureOwnerMembership(admin: SupabaseClient, userId: string, email: string) {
   const { data: existing } = await admin
     .from("organization_memberships")
     .select("organization_id")

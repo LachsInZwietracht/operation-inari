@@ -1,10 +1,23 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect, Page, Request } from "@playwright/test";
 
 /**
  * Comprehensive site speed audit.
  * Measures real browser metrics: navigation timing, resource sizes,
  * Core Web Vitals (LCP, CLS), JS bundle weight, and API latencies.
  */
+
+declare global {
+  interface Window {
+    __LCP__?: number;
+    __CLS__?: number;
+  }
+}
+
+/** layout-shift entries aren't in the standard DOM lib typings. */
+type LayoutShiftEntry = PerformanceEntry & {
+  hadRecentInput: boolean;
+  value: number;
+};
 
 interface TimingResult {
   route: string;
@@ -54,20 +67,20 @@ async function measureRoute(page: Page, path: string): Promise<TimingResult> {
 
   // Inject LCP + CLS observers before navigation
   await page.addInitScript(() => {
-    (window as any).__LCP__ = 0;
-    (window as any).__CLS__ = 0;
+    window.__LCP__ = 0;
+    window.__CLS__ = 0;
 
     new PerformanceObserver((list) => {
       const entries = list.getEntries();
       if (entries.length > 0) {
-        (window as any).__LCP__ = entries[entries.length - 1].startTime;
+        window.__LCP__ = entries[entries.length - 1].startTime;
       }
     }).observe({ type: "largest-contentful-paint", buffered: true });
 
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (!(entry as any).hadRecentInput) {
-          (window as any).__CLS__ += (entry as any).value;
+      for (const entry of list.getEntries() as LayoutShiftEntry[]) {
+        if (!entry.hadRecentInput) {
+          window.__CLS__ = (window.__CLS__ ?? 0) + entry.value;
         }
       }
     }).observe({ type: "layout-shift", buffered: true });
@@ -133,8 +146,8 @@ async function measureRoute(page: Page, path: string): Promise<TimingResult> {
   });
 
   // LCP & CLS
-  const lcp = await page.evaluate(() => (window as any).__LCP__ || null);
-  const cls = await page.evaluate(() => (window as any).__CLS__ || null);
+  const lcp = await page.evaluate(() => window.__LCP__ || null);
+  const cls = await page.evaluate(() => window.__CLS__ || null);
 
   // Long tasks (> 50ms) — count from PerformanceObserver if available
   const longTasks = await page.evaluate(() => {
@@ -276,17 +289,19 @@ test.describe("Site Speed Audit", () => {
     const apiTimings: { url: string; start: number; duration: number; size: number }[] = [];
     const testStart = Date.now();
 
+    const supabaseRequestStarts = new WeakMap<Request, number>();
+
     page.on("request", (req) => {
       const url = req.url();
       if (url.includes("supabase")) {
-        (req as any).__start = Date.now();
+        supabaseRequestStarts.set(req, Date.now());
       }
     });
 
     page.on("response", async (res) => {
       const req = res.request();
       const url = res.url();
-      const start = (req as any).__start;
+      const start = supabaseRequestStarts.get(req);
       if (start && url.includes("supabase")) {
         const duration = Date.now() - start;
         let size = 0;

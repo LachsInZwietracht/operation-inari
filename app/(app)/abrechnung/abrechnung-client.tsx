@@ -81,6 +81,9 @@ export function AbrechnungPageClient({
   const { patients } = usePatients({ initialPatients })
 
   const [formState, setFormState] = useState<InvoiceFormState>(() => buildInvoiceFormState())
+  // Mount-stable timestamp: Date.now() inside useMemo is impure and gives
+  // unstable results across re-renders.
+  const [nowTs] = useState(() => Date.now())
   const generatorRef = useRef<HTMLDivElement>(null)
 
   const patientLookup = useMemo(() => {
@@ -162,7 +165,7 @@ export function AbrechnungPageClient({
   }, [invoices])
 
   const paymentAging = useMemo(() => {
-    const now = Date.now()
+    const now = nowTs
     return invoices
       .filter((invoice) => invoice.status !== "bezahlt")
       .map((invoice) => {
@@ -174,7 +177,7 @@ export function AbrechnungPageClient({
         }
       })
       .sort((a, b) => a.deltaDays - b.deltaDays)
-  }, [invoices])
+  }, [invoices, nowTs])
 
   function handleReminder(invoice: InvoiceEntry) {
     const patientName = patientLookup.get(invoice.patientId)?.name ?? "Patient"
