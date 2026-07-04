@@ -14,36 +14,52 @@ const MEAL_PLAN_NUTRIENT_IDS = [
   "vitamin_d", "kalium", "phosphor",
 ];
 
-function extractFoodIds(
+/** Today in the user-facing timezone; a mismatch is self-healed client-side. */
+function todayInBerlin(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(new Date());
+}
+
+/**
+ * Foods for the active day's plan(s) and a template being applied — not for
+ * every plan/template/recipe the user has. Everything else is batch-hydrated
+ * on demand by the client (see the lazy hydration effect in the page client).
+ */
+function extractActiveFoodIds(
   recipes: Recipe[],
   mealPlans: DailyMealPlan[],
   templates: MealPlanTemplate[],
+  activeDate: string,
+  applyTemplateId?: string,
 ): string[] {
   const ids = new Set<string>();
+  const recipeIds = new Set<string>();
+
+  const collectSlots = (slots: DailyMealPlan["slots"] | MealPlanTemplate["slots"]) => {
+    for (const slot of slots) {
+      for (const entry of slot.entries) {
+        if (entry.type === "food") {
+          ids.add(entry.referenceId);
+        } else {
+          recipeIds.add(entry.referenceId);
+        }
+      }
+    }
+  };
 
   for (const plan of mealPlans) {
-    for (const slot of plan.slots) {
-      for (const entry of slot.entries) {
-        if (entry.type === "food") {
-          ids.add(entry.referenceId);
-        }
-      }
-    }
+    if (plan.date === activeDate) collectSlots(plan.slots);
   }
 
-  for (const template of templates) {
-    for (const slot of template.slots) {
-      for (const entry of slot.entries) {
-        if (entry.type === "food") {
-          ids.add(entry.referenceId);
-        }
-      }
-    }
-  }
+  const applyTemplate = applyTemplateId
+    ? templates.find((template) => template.id === applyTemplateId)
+    : undefined;
+  if (applyTemplate) collectSlots(applyTemplate.slots);
 
   for (const recipe of recipes) {
-    for (const ingredient of recipe.ingredients) {
-      ids.add(ingredient.foodId);
+    if (recipeIds.has(recipe.id) || (recipe.legacyId && recipeIds.has(recipe.legacyId))) {
+      for (const ingredient of recipe.ingredients) {
+        ids.add(ingredient.foodId);
+      }
     }
   }
 
@@ -71,7 +87,13 @@ export default async function ErnaehrungsplanPage({
     }),
   ]);
 
-  const foodIds = extractFoodIds(recipes, mealPlans, templates);
+  const foodIds = extractActiveFoodIds(
+    recipes,
+    mealPlans,
+    templates,
+    date ?? todayInBerlin(),
+    template,
+  );
 
   const foods =
     foodIds.length > 0

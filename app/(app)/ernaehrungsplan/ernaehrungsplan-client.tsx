@@ -119,7 +119,7 @@ const PlanEinzelanalyseView = dynamic(
   () => import("@/components/plan-einzelanalyse-view").then((mod) => mod.PlanEinzelanalyseView),
   { ssr: false, loading: viewFallback },
 )
-import { fetchFoodById } from "@/lib/data/foods-client"
+import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
@@ -232,6 +232,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     setDate,
     goToNextDay,
     goToPreviousDay,
+    allPlans,
   } = useMealPlan(initialPlans, serverFoods, defaultPlanMetadata, initialDate)
   const {
     versions: mealPlanVersions,
@@ -356,6 +357,55 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const foods = hydratedFoods
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
+
+  // The server only ships foods for the active day's plan. Week/cycle views
+  // and template application reference other plans, so batch-hydrate any
+  // referenced foods (including recipe ingredients) that are still missing.
+  const requestedFoodIdsRef = useRef(new Set<string>())
+  useEffect(() => {
+    const referenced = new Set<string>()
+    for (const plan of Object.values(allPlans)) {
+      for (const slot of plan.slots) {
+        for (const entry of slot.entries) {
+          if (entry.type === "food") {
+            referenced.add(entry.referenceId)
+          } else {
+            const recipe = recipeMap.get(entry.referenceId)
+            recipe?.ingredients.forEach((ingredient) => referenced.add(ingredient.foodId))
+          }
+        }
+      }
+    }
+
+    const missing = Array.from(referenced).filter(
+      (id) =>
+        !requestedFoodIdsRef.current.has(id) &&
+        !hydratedFoods.some((food) => food.id === id || food.legacyId === id),
+    )
+    if (missing.length === 0) return
+
+    // Mark before the request so unknown IDs can't cause a refetch loop.
+    missing.forEach((id) => requestedFoodIdsRef.current.add(id))
+
+    let cancelled = false
+    fetchFoodsByIds(missing)
+      .then((fetched) => {
+        if (cancelled || fetched.length === 0) return
+        setHydratedFoods((prev) => {
+          const known = new Set(prev.map((food) => food.id))
+          const additions = fetched.filter((food) => !known.has(food.id))
+          return additions.length > 0 ? [...prev, ...additions] : prev
+        })
+      })
+      .catch((error) => {
+        console.error("Failed to hydrate referenced meal plan foods:", error)
+        // Allow a retry on the next change.
+        missing.forEach((id) => requestedFoodIdsRef.current.delete(id))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [allPlans, recipeMap, hydratedFoods])
 
   const {
     pendingIntent: pendingAllergenIntent,

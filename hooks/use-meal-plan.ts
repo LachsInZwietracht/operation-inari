@@ -695,6 +695,7 @@ export function useMealPlan(
   return {
     currentDate,
     currentPlan: getCurrentPlan(),
+    allPlans: plans,
     getPlanForDate,
     getPlansInRange,
     addEntry,
