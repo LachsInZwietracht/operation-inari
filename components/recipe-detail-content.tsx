@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Clock, Users, Pencil, Flame, Drumstick, Droplet, Wheat, Leaf, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { RecipeImage } from "@/components/recipe-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -143,17 +144,11 @@ export function RecipeDetailContent({ recipe, patientAllergens }: RecipeDetailCo
 
   return (
     <div className="space-y-6">
-      <div
-        className="bg-muted relative h-56 w-full overflow-hidden rounded-xl"
-        style={
-          recipe.imageUrl
-            ? {
-                backgroundImage: `url(${recipe.imageUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : undefined
-        }
+      <RecipeImage
+        imageUrl={recipe.imageUrl}
+        alt={recipe.name}
+        sizes="(max-width: 1024px) 100vw, 66vw"
+        className="h-56 rounded-xl"
       />
 
       <PageHeader title={recipe.name}>

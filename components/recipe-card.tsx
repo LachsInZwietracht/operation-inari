@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { calculateRecipeNutrients, getNutrientValue } from "@/lib/nutrients";
+import { RecipeImage } from "@/components/recipe-image";
 import type { Recipe, Food } from "@/lib/types";
 
 interface RecipeCardProps {
@@ -33,17 +34,11 @@ export function RecipeCard({ recipe, foods, onImport }: RecipeCardProps) {
   return (
     <Link href={`/rezepte/${recipe.id}`} className="group block">
       <Card className="h-full overflow-hidden transition-shadow group-hover:shadow-md">
-        <div
-          className="bg-muted relative h-32 w-full overflow-hidden"
-          style={
-            recipe.imageUrl
-              ? {
-                  backgroundImage: `url(${recipe.imageUrl})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : undefined
-          }
+        <RecipeImage
+          imageUrl={recipe.imageUrl}
+          alt={recipe.name}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          className="h-32"
         />
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
