@@ -42,6 +42,24 @@ Phase 1 = correctness, Phase 2 = performance. Every perf item ships with a befor
 - The 7 remaining `use client` pages are mostly forms (patient create/edit, counseling) — little data to server-load; skip unless one shows up slow.
 - `lib/mock-data` trim: only 3 app imports left, ETL/tests still depend on it; low value, nonzero risk.
 
+## Status 2026-07-04 (end of session)
+
+Done and merged: **#25** item 1 + two real plan-sync data-loss bugs · **#26** item 2 (ESLint 10 blocked upstream by eslint-config-next) · **#27** items 3+4+5 (lint 84→57 warnings) · **#28** item 6 (/rezepte images 952→127 KB) · **#29** item 7 (planner food fetch 40→1 IDs) · **#30** item 8 (middleware TTFB −50…−140 ms). Open: items 9 and 10.
+
+### New follow-up: stale-spec repair (discovered 2026-07-04)
+
+Playwright 1.61.0 silently excluded specs importing `@/` modules, and several other specs assert against long-gone UI — the suite was never as green as it looked. On a clean DB, 44 tests fail from stale expectations (not from app bugs). Known classes:
+- `navigation.spec.ts` sidebar walk asserts pre-PR-#20 nav labels/routes (title `/Prodi/` → fixed to `/Inari/` in this commit).
+- `reference-values.spec.ts` targets `data-testid="reference-standard-*"` cards that never existed in any commit; page now has Vergleich/Eigene-Profile tabs.
+- `smart-match.spec.ts`, `protocols.spec.ts`, `counseling.spec.ts` (previously never collected) assert old protocol/counseling flows.
+- `onboarding.spec.ts` (6), `food-search.spec.ts` fuzzy/synonym cases, `invoices.spec.ts` "mock data" wording, `exchange-tables.spec.ts`, `sfk-foods.spec.ts`, parts of `institution.spec.ts`, `digital-protocol.spec.ts`, `responsive-layout.spec.ts`, `ops-surfaces.spec.ts`, `allergen-management.spec.ts`.
+Repair the same way patients/meal-plan were repaired in #25: read the current UI, update expectations, harden flakes.
+
+### Test-infra follow-ups
+
+- **Fixture leak**: interrupted runs skip `finally` cleanup; 339 orphaned patients had accumulated on test@prodi.local and were purged 2026-07-04. Add a global-teardown/cleanup script keyed on fixture markers (`TEST-`/`PLAN-`/`INST-` insurance numbers, plan dates ≥ 2040).
+- **Never run the speed-audit/performance specs concurrently with functional specs** — they trigger Supabase statement timeouts that cascade into false failures. Split them into a separate Playwright project or tag.
+
 ## Working rules for this job
 
 - All work in `~/Developer/Inari`, branch-then-PR, never push to main (Vercel deploys from PRs on LachsInZwietracht's account).
