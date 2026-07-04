@@ -238,7 +238,8 @@ async function openPatientDetail(page: Page, patient: CreatedPatient) {
 }
 
 async function openAssessmentSection(page: Page, section: string) {
-  await page.getByRole("tab", { name: "Assessment" }).click();
+  // Assessment sections now live as sub-tabs under the "Profil" tab.
+  await page.getByRole("tab", { name: "Profil" }).first().click();
   await page.getByRole("tab", { name: section }).click();
 }
 
@@ -248,6 +249,10 @@ async function openNutritionSection(page: Page, section: string) {
 }
 
 test.describe("Patient Management", () => {
+  // Parallel workers share one dev server; cold compiles push slower runs past
+  // the default 30s budget (same override as meal-plan.spec.ts).
+  test.setTimeout(60_000);
+
   test("displays patient list with backend data", async ({ page }) => {
     const primary = await createPatientFixture({ firstName: "Maria", lastName: "Schneider", indications: ["Adipositas"] });
     const secondary = await createPatientFixture({ firstName: "Thomas", lastName: "Weber", indications: ["Diabetes mellitus Typ 2"] });
@@ -344,6 +349,8 @@ test.describe("Patient Management", () => {
     try {
       await openPatientList(page);
 
+      // The mail-merge card lives on the "Workflows" tab of the patient list.
+      await page.getByRole("tab", { name: "Workflows" }).click();
       const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
       await mailMergeCard.getByRole("button", { name: /Öffnen/i }).click();
       const templateSelect = mailMergeCard.getByRole("combobox").first();
@@ -397,9 +404,9 @@ test.describe("Patient Management", () => {
 
       await expect(page.getByRole("tab", { name: "Workflow" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Assessment" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Ernährung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Beratung" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Statistiken" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
       await expect(page.getByText("Behandlungspfad")).toBeVisible();
       await page.getByRole("button", { name: "Löschen" }).click();
@@ -424,10 +431,10 @@ test.describe("Patient Management", () => {
       await openPatientDetail(page, patient);
 
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText("3/5 Schritte abgeschlossen")).toBeVisible();
+      await expect(page.getByText("3/4 Schritte abgeschlossen")).toBeVisible();
       await expect(page.getByText("Ein patientenbezogener Kontrolltermin ist bereits im Kalender hinterlegt.")).toBeVisible();
-      await expect(page.getByText("Digitale Einreichung", { exact: true })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Plan anlegen" })).toHaveAttribute("href", `/ernaehrungsplan?patientId=${patient.id}`);
+      await expect(page.getByText("Digitale Einreichung wurde in ein internes Protokoll übernommen.")).toBeVisible();
+      await expect(page.getByRole("link", { name: "Plan anlegen" }).first()).toHaveAttribute("href", `/ernaehrungsplan?patientId=${patient.id}`);
       await expect(page.getByText("Quick Links")).toHaveCount(0);
     } finally {
       await deleteWorkflowFixture(patient.id, fixture);
@@ -682,6 +689,8 @@ test.describe("Patient Management", () => {
       await openPatientList(page);
       await expect(patientCard(page, patient)).toBeVisible();
 
+      // The mail-merge card lives on the "Workflows" tab of the patient list.
+      await page.getByRole("tab", { name: "Workflows" }).click();
       const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
       await mailMergeCard.getByRole("button", { name: /Öffnen/i }).click();
       const download = page.waitForEvent("download");

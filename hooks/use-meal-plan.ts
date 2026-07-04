@@ -129,6 +129,7 @@ export function useMealPlan(
   const migrationDone = useRef(false)
   const plansRef = useRef(plans)
   const dirtyDatesRef = useRef(new Set<string>())
+  const syncChainsRef = useRef(new Map<string, Promise<unknown>>())
 
   useEffect(() => {
     plansRef.current = plans
@@ -232,91 +233,74 @@ export function useMealPlan(
   )
 
   const syncPlanToSupabase = useCallback(
-    async (plan: DailyMealPlan, options: { snapshotReason?: MealPlanSnapshotReason } = {}) => {
-      if (!isAuthenticated) return null
+    (plan: DailyMealPlan, options: { snapshotReason?: MealPlanSnapshotReason } = {}) => {
+      if (!isAuthenticated) return Promise.resolve(null)
 
-      try {
-        const persistedPlan = await persistMealPlan(plan)
-        setPlans((prev) => ({
-          ...prev,
-          [getPlanKey(persistedPlan.date, persistedPlan.patientId)]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
-        }))
+      // Serialize syncs per plan: rapid edits (add entry, then approve) fire
+      // overlapping upserts, and an earlier request resolving last would
+      // overwrite both the DB row and local state with stale data.
+      const chainKey = getPlanKey(plan.date, plan.patientId)
+      const previousSync = syncChainsRef.current.get(chainKey) ?? Promise.resolve()
 
-        if (options.snapshotReason && isUuid(persistedPlan.id)) {
-          try {
-            await snapshotMealPlanVersion(persistedPlan, { reason: options.snapshotReason })
-          } catch (snapErr) {
-            console.error(`Failed to snapshot meal plan ${persistedPlan.id}:`, snapErr)
+      const run = previousSync.then(async () => {
+        try {
+          const persistedPlan = await persistMealPlan(plan)
+          setPlans((prev) => ({
+            ...prev,
+            [getPlanKey(persistedPlan.date, persistedPlan.patientId)]: ensureAllSlots(normalizeMealPlanFoodReferences(persistedPlan, foods)),
+          }))
+
+          if (options.snapshotReason && isUuid(persistedPlan.id)) {
+            try {
+              await snapshotMealPlanVersion(persistedPlan, { reason: options.snapshotReason })
+            } catch (snapErr) {
+              console.error(`Failed to snapshot meal plan ${persistedPlan.id}:`, snapErr)
+            }
           }
-        }
 
-        return persistedPlan
-      } catch (err) {
-        console.error(`Failed to sync meal plan for ${plan.date}:`, err)
-        return null
-      }
+          return persistedPlan
+        } catch (err) {
+          console.error(`Failed to sync meal plan for ${plan.date}:`, err)
+          return null
+        }
+      })
+
+      syncChainsRef.current.set(chainKey, run)
+      return run
     },
     [foods, isAuthenticated]
   )
 
-  const updateCurrentPlan = useCallback(
-    (updater: (plan: DailyMealPlan) => DailyMealPlan) => {
-      let updatedPlan: DailyMealPlan | null = null
-      let snapshotReason: MealPlanSnapshotReason | undefined
-
-      setPlans((prev) => {
-        const key = getPlanKey(currentDate, contextPatientId)
-        dirtyDatesRef.current.add(key)
-        const currentPlan = prev[key]
-          ? ensureAllSlots(prev[key])
-          : createEmptyPlan(currentDate, defaultMetadata)
-        updatedPlan = updater(currentPlan)
-        snapshotReason =
-          currentPlan.status !== "approved" && updatedPlan.status === "approved"
-            ? "approved"
-            : undefined
-
-        return {
-          ...prev,
-          [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
-        }
-      })
-
-      if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan, { snapshotReason })
-      }
-    },
-    [contextPatientId, currentDate, defaultMetadata, syncPlanToSupabase]
-  )
-
   const updatePlanForDate = useCallback(
     (date: string, updater: (plan: DailyMealPlan) => DailyMealPlan) => {
-      let updatedPlan: DailyMealPlan | null = null
-      let snapshotReason: MealPlanSnapshotReason | undefined
+      // Apply the updater outside setPlans: React only runs state updaters
+      // eagerly as an optimization, so a plan captured inside the updater is
+      // not reliably available afterwards — which used to silently skip the
+      // Supabase sync.
+      const key = getPlanKey(date, contextPatientId)
+      dirtyDatesRef.current.add(key)
+      const basePlan = getPlanForDate(date)
+      const updatedPlan = updater(basePlan)
+      const snapshotReason: MealPlanSnapshotReason | undefined =
+        basePlan.status !== "approved" && updatedPlan.status === "approved"
+          ? "approved"
+          : undefined
 
-      setPlans((prev) => {
-        const key = getPlanKey(date, contextPatientId)
-        dirtyDatesRef.current.add(key)
-        const basePlan = prev[key]
-          ? ensureAllSlots(prev[key])
-          : createEmptyPlan(date, defaultMetadata)
-        updatedPlan = updater(basePlan)
-        snapshotReason =
-          basePlan.status !== "approved" && updatedPlan.status === "approved"
-            ? "approved"
-            : undefined
+      setPlans((prev) => ({
+        ...prev,
+        [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
+      }))
 
-        return {
-          ...prev,
-          [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
-        }
-      })
-
-      if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan, { snapshotReason })
-      }
+      void syncPlanToSupabase(updatedPlan, { snapshotReason })
     },
-    [contextPatientId, defaultMetadata, syncPlanToSupabase],
+    [contextPatientId, getPlanForDate, syncPlanToSupabase],
+  )
+
+  const updateCurrentPlan = useCallback(
+    (updater: (plan: DailyMealPlan) => DailyMealPlan) => {
+      updatePlanForDate(currentDate, updater)
+    },
+    [currentDate, updatePlanForDate],
   )
 
   const isPlanLocked = useCallback(
@@ -616,28 +600,22 @@ export function useMealPlan(
       date: string,
       metadata: Pick<DailyMealPlan, "approvedAt" | "approvedBy"> = {},
     ) => {
-      let approvedPlan: DailyMealPlan | null = null
+      // Compute the approved plan outside the setPlans updater: React only
+      // runs updaters eagerly as an optimization, so values captured inside
+      // are not guaranteed to be available synchronously afterwards.
+      const basePlan = getPlanForDate(date)
+      const approvedPlan: DailyMealPlan = {
+        ...basePlan,
+        status: "approved",
+        approvedAt: metadata.approvedAt ?? basePlan.approvedAt ?? new Date().toISOString(),
+        approvedBy: metadata.approvedBy ?? basePlan.approvedBy,
+      }
+      dirtyDatesRef.current.add(getPlanKey(date, contextPatientId))
 
-      setPlans((prev) => {
-        const key = getPlanKey(date, contextPatientId)
-        dirtyDatesRef.current.add(key)
-        const basePlan = prev[key]
-          ? ensureAllSlots(prev[key])
-          : createEmptyPlan(date, defaultMetadata)
-        approvedPlan = {
-          ...basePlan,
-          status: "approved",
-          approvedAt: metadata.approvedAt ?? basePlan.approvedAt ?? new Date().toISOString(),
-          approvedBy: metadata.approvedBy ?? basePlan.approvedBy,
-        }
-
-        return {
-          ...prev,
-          [getPlanKey(approvedPlan.date, approvedPlan.patientId)]: approvedPlan,
-        }
-      })
-
-      if (!approvedPlan) return false
+      setPlans((prev) => ({
+        ...prev,
+        [getPlanKey(approvedPlan.date, approvedPlan.patientId)]: approvedPlan,
+      }))
 
       const persistedPlan = await syncPlanToSupabase(approvedPlan)
       if (!persistedPlan || !isUuid(persistedPlan.id)) return false
@@ -649,38 +627,29 @@ export function useMealPlan(
         return false
       }
     },
-    [contextPatientId, defaultMetadata, syncPlanToSupabase],
+    [contextPatientId, getPlanForDate, syncPlanToSupabase],
   )
 
   const reopenPlan = useCallback(
     (date: string) => {
-      let updatedPlan: DailyMealPlan | null = null
-      let snapshotReason: MealPlanSnapshotReason | undefined
-
-      setPlans((prev) => {
-        const key = getPlanKey(date, contextPatientId)
-        const basePlan = prev[key]
-          ? ensureAllSlots(prev[key])
-          : createEmptyPlan(date, defaultMetadata)
-        snapshotReason = basePlan.status === "approved" ? "reopened" : undefined
-        updatedPlan = {
-          ...basePlan,
-          status: "draft",
-          approvedAt: undefined,
-          approvedBy: undefined,
-        }
-
-        return {
-          ...prev,
-          [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
-        }
-      })
-
-      if (updatedPlan) {
-        void syncPlanToSupabase(updatedPlan, { snapshotReason })
+      const basePlan = getPlanForDate(date)
+      const snapshotReason: MealPlanSnapshotReason | undefined =
+        basePlan.status === "approved" ? "reopened" : undefined
+      const updatedPlan: DailyMealPlan = {
+        ...basePlan,
+        status: "draft",
+        approvedAt: undefined,
+        approvedBy: undefined,
       }
+
+      setPlans((prev) => ({
+        ...prev,
+        [getPlanKey(updatedPlan.date, updatedPlan.patientId)]: updatedPlan,
+      }))
+
+      void syncPlanToSupabase(updatedPlan, { snapshotReason })
     },
-    [contextPatientId, defaultMetadata, syncPlanToSupabase],
+    [getPlanForDate, syncPlanToSupabase],
   )
 
   const restorePlanVersion = useCallback(

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 const TEST_EMAIL = "test@prodi.local";
@@ -29,7 +29,7 @@ async function createPatientFixture(firstName: string, lastName: string) {
       last_name: `${lastName} ${suffix}`,
       date_of_birth: "1990-01-01",
       gender: "w",
-      indication: "Adipositas",
+      indications: ["Adipositas"],
       insurance_number: `PLAN-${suffix}`,
     })
     .select("id, first_name, last_name")
@@ -55,21 +55,65 @@ function uniquePlannerDate(offset = 0) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * The planner only renders meal slots once a patient is selected, so every
+ * test opens the page with an explicit patientId and a fresh plan date.
+ */
+async function openPlannerWithFreshPlan(page: Page, patientId: string, planDate: string) {
+  await page.goto(`/ernaehrungsplan?patientId=${patientId}&date=${planDate}`);
+  await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
+  await page.reload();
+}
+
+async function addFoodEntry(page: Page, query = "Hafer") {
+  await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
+  const searchInput = page.locator("[cmdk-input]");
+  await expect(searchInput).toBeVisible();
+  await searchInput.fill(query);
+
+  const option = page.getByRole("option").filter({ hasText: new RegExp(query, "i") }).first();
+  await option.click();
+  try {
+    // Selecting hydrates the food from Supabase before the dialog closes.
+    await expect(searchInput).toBeHidden({ timeout: 10_000 });
+  } catch {
+    // The result list can re-render mid-click and swallow the selection — retry once.
+    await option.click();
+    await expect(searchInput).toBeHidden({ timeout: 15_000 });
+  }
+
+  // The entry must land in a meal slot card, not just anywhere on the page.
+  await expect(
+    page
+      .locator("[data-slot='card']")
+      .filter({ hasText: "Frühstück" })
+      .first()
+      .getByText(new RegExp(query, "i"))
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
+}
+
 test.describe("Ernährungsplan", () => {
   test.setTimeout(60_000);
 
   test("displays meal slots and allows date navigation", async ({ page }) => {
-    await page.goto("/ernaehrungsplan");
+    const patient = await createPatientFixture("Plan", "Slots");
 
-    await expect(page.locator("main").getByRole("heading", { name: "Ernährungsplan" })).toBeVisible();
+    try {
+      await page.goto(`/ernaehrungsplan?patientId=${patient.id}`);
 
-    // Should show meal slot card titles (use data-slot to avoid strict mode violations)
-    await expect(page.locator('[data-slot="card-title"]', { hasText: "Frühstück" })).toBeVisible();
-    await expect(page.locator('[data-slot="card-title"]', { hasText: "Mittagessen" })).toBeVisible();
-    await expect(page.locator('[data-slot="card-title"]', { hasText: "Abendessen" })).toBeVisible();
+      await expect(page.locator("main").getByRole("heading", { name: "Ernährungsplan" })).toBeVisible();
 
-    // Just verify date is displayed (any German date format)
-    await expect(page.locator("text=/\\d{1,2}\\./").first()).toBeVisible();
+      // Should show meal slot card titles (use data-slot to avoid strict mode violations)
+      await expect(page.locator('[data-slot="card-title"]', { hasText: "Frühstück" })).toBeVisible();
+      await expect(page.locator('[data-slot="card-title"]', { hasText: "Mittagessen" })).toBeVisible();
+      await expect(page.locator('[data-slot="card-title"]', { hasText: "Abendessen" })).toBeVisible();
+
+      // Just verify date is displayed (any German date format)
+      await expect(page.locator("text=/\\d{1,2}\\./").first()).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
   });
 
   test("switches patient context from the Planakte patient selector", async ({ page }) => {
@@ -96,115 +140,110 @@ test.describe("Ernährungsplan", () => {
 
   test("adds food entry to a meal slot", async ({ page }) => {
     const planDate = uniquePlannerDate(1000);
-    // Clear localStorage to start fresh
-    await page.goto(`/ernaehrungsplan?date=${planDate}`);
-    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
-    await page.reload();
+    const patient = await createPatientFixture("Plan", "Entry");
 
-    // Click "Hinzufügen" on the first slot (Frühstück)
-    const addButtons = page.getByRole("button", { name: /Hinzufügen/i });
-    await addButtons.first().click();
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await addFoodEntry(page);
 
-    // Search dialog should open — use the cmdk search input specifically
-    const searchInput = page.locator('[cmdk-input]');
-    await expect(searchInput).toBeVisible();
+      // The Supabase sync runs in the background — wait for the plan row
+      // before wiping localStorage, otherwise the reload races the write.
+      await expect
+        .poll(
+          async () => {
+            const { data } = await admin
+              .from("daily_meal_plans")
+              .select("id")
+              .eq("patient_id", patient.id)
+              .eq("date", planDate);
+            return (data ?? []).length;
+          },
+          { timeout: 20_000 },
+        )
+        .toBeGreaterThan(0);
 
-    // Search for a food
-    await searchInput.fill("Hafer");
+      await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
+      await page.reload();
 
-    // Select a food from results
-    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
-
-    // The entry should now appear in the slot
-    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
-
-    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
-    await page.reload();
-
-    await expect(page.getByText(/Hafer/i).first()).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Hafer/i).first()).toBeVisible({ timeout: 30_000 });
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
   });
 
   test("exports the current plan as a clinical PDF", async ({ page }) => {
     const planDate = uniquePlannerDate(2000);
-    await page.goto(`/ernaehrungsplan?date=${planDate}`);
-    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
-    await page.reload();
+    const patient = await createPatientFixture("Plan", "Export");
 
-    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
-    const searchInput = page.locator("[cmdk-input]");
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill("Hafer");
-    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
-    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await addFoodEntry(page);
 
-    await page.getByRole("button", { name: "Export" }).click();
-    const pdfDownload = page.waitForEvent("download");
-    await page.getByRole("menuitem", { name: /Klinischer Bericht/ }).click();
-    const pdf = await pdfDownload;
+      await page.getByRole("button", { name: "Export" }).click();
+      const pdfDownload = page.waitForEvent("download");
+      await page.getByRole("menuitem", { name: /Klinischer Bericht/ }).click();
+      const pdf = await pdfDownload;
 
-    expect(await pdf.suggestedFilename()).toMatch(/ernaehrungsplan-klinik-.*\.pdf/);
+      expect(await pdf.suggestedFilename()).toMatch(/ernaehrungsplan-klinik-.*\.pdf/);
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
   });
 
   test("stores a manual checkpoint in the version history", async ({ page }) => {
     const planDate = uniquePlannerDate(3000);
-    await page.goto(`/ernaehrungsplan?date=${planDate}`);
-    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
-    await page.reload();
+    const patient = await createPatientFixture("Plan", "Checkpoint");
 
-    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
-    const searchInput = page.locator("[cmdk-input]");
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill("Hafer");
-    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
-    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await addFoodEntry(page);
 
-    const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-    await planRecord.getByRole("button", { name: "Checkpoint speichern" }).click();
+      const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
+      await planRecord.getByRole("button", { name: "Checkpoint speichern" }).click();
 
-    await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
-    await expect(planRecord.getByText(/Einträge · Checkpoint/)).toBeVisible();
-    await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeEnabled();
+      await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
+      await expect(planRecord.getByText(/Einträge · Checkpoint/)).toBeVisible();
+      await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeEnabled();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
   });
 
   test("applies a nutrient optimization suggestion", async ({ page }) => {
     const planDate = uniquePlannerDate(3500);
-    await page.goto(`/ernaehrungsplan?date=${planDate}`);
-    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
-    await page.reload();
+    const patient = await createPatientFixture("Plan", "Optimize");
 
-    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
-    const searchInput = page.locator("[cmdk-input]");
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill("Hafer");
-    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
-    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await addFoodEntry(page);
 
-    const assistant = page.locator("[data-slot='card']").filter({ hasText: "Optimierungsassistent" }).first();
-    await expect(assistant).toBeVisible();
-    await expect(assistant.getByRole("button", { name: "Einfügen" }).first()).toBeVisible({ timeout: 30_000 });
-    await assistant.getByRole("button", { name: "Einfügen" }).first().click();
+      const assistant = page.locator("[data-slot='card']").filter({ hasText: "Optimierungsassistent" }).first();
+      await expect(assistant).toBeVisible();
+      await expect(assistant.getByRole("button", { name: "Einfügen" }).first()).toBeVisible({ timeout: 30_000 });
+      await assistant.getByRole("button", { name: "Einfügen" }).first().click();
 
-    await expect(page.getByText(/vorgemerkt/)).toBeVisible();
+      await expect(page.getByText(/vorgemerkt/)).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
   });
 
   test("creates an immutable version when a plan is approved", async ({ page }) => {
     const planDate = uniquePlannerDate(4000);
-    await page.goto(`/ernaehrungsplan?date=${planDate}`);
-    await page.evaluate(() => localStorage.removeItem("prodi_meal_plans"));
-    await page.reload();
+    const patient = await createPatientFixture("Plan", "Approve");
 
-    await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
-    const searchInput = page.locator("[cmdk-input]");
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill("Hafer");
-    await page.getByRole("option").filter({ hasText: /Hafer/i }).first().click();
-    await expect(page.getByText(/Hafer/i).first()).toBeVisible();
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await addFoodEntry(page);
 
-    const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-    await planRecord.getByRole("button", { name: "Freigeben" }).click();
+      const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
+      await planRecord.getByRole("button", { name: "Freigeben" }).click();
 
-    await expect(planRecord.getByText("Bearbeitung")).toBeVisible();
-    await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
-    await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeDisabled();
+      await expect(planRecord.getByText("Bearbeitung gesperrt")).toBeVisible({ timeout: 15_000 });
+      await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
+      await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeDisabled();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
   });
 });
