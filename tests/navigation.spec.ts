@@ -5,7 +5,7 @@ test.describe("Navigation", () => {
     await page.goto("/", { waitUntil: "domcontentloaded", timeout: 30_000 });
     await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
-    await expect(page).toHaveTitle(/Prodi/);
+    await expect(page).toHaveTitle(/Inari/);
   });
 
   test("sidebar navigates to all main routes", async ({ page }) => {
