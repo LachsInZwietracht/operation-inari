@@ -1,9 +1,12 @@
 import type { CounselingSession, InvoiceEntry, Patient, PracticeAppointment } from "@/lib/types"
 import { createClient } from "@/lib/supabase/server"
+import { createLogger } from "@/lib/log"
 import { fetchPatients } from "@/lib/data/patients"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchInvoicesClient } from "@/lib/data/invoices-client"
 import { fetchCounselingSessionsClient } from "@/lib/data/counseling-client"
+
+const log = createLogger("data/practice-overview")
 
 export interface PracticeDashboardActivity {
   id: string
@@ -148,7 +151,7 @@ async function orEmpty<T>(promise: Promise<T[]>, label: string): Promise<T[]> {
     return await promise
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.warn(`Failed to load ${label} for practice overview:`, message)
+    log.warn("Failed to load data for practice overview", { label, error: message })
     return []
   }
 }
@@ -215,7 +218,7 @@ export async function fetchPracticeDashboardSummary(): Promise<PracticeDashboard
   } = await supabase.auth.getUser()
 
   if (authError) {
-    console.warn("Failed to resolve user for practice dashboard summary:", authError.message)
+    log.warn("Failed to resolve user for practice dashboard summary", { error: authError.message })
     return null
   }
 
@@ -226,12 +229,12 @@ export async function fetchPracticeDashboardSummary(): Promise<PracticeDashboard
   const { data, error } = await supabase.rpc("get_practice_dashboard_summary")
 
   if (error) {
-    console.warn("Falling back from practice dashboard summary RPC:", error.message)
+    log.warn("Falling back from practice dashboard summary RPC", { error: error.message })
     return null
   }
 
   if (!isPracticeDashboardSummary(data)) {
-    console.warn("Falling back from practice dashboard summary RPC: unexpected response shape")
+    log.warn("Falling back from practice dashboard summary RPC: unexpected response shape")
     return null
   }
 
@@ -253,7 +256,7 @@ export async function fetchPracticeStatisticsSummary(): Promise<PracticeStatisti
   } = await supabase.auth.getUser()
 
   if (authError) {
-    console.warn("Failed to resolve user for practice statistics summary:", authError.message)
+    log.warn("Failed to resolve user for practice statistics summary", { error: authError.message })
     return null
   }
 
@@ -264,12 +267,12 @@ export async function fetchPracticeStatisticsSummary(): Promise<PracticeStatisti
   const { data, error } = await supabase.rpc("get_practice_statistics_summary")
 
   if (error) {
-    console.warn("Falling back from practice statistics summary RPC:", error.message)
+    log.warn("Falling back from practice statistics summary RPC", { error: error.message })
     return null
   }
 
   if (!isPracticeStatisticsSummary(data)) {
-    console.warn("Falling back from practice statistics summary RPC: unexpected response shape")
+    log.warn("Falling back from practice statistics summary RPC: unexpected response shape")
     return null
   }
 
@@ -291,7 +294,7 @@ export async function fetchPracticeOverviewData(): Promise<PracticeOverviewData 
   } = await supabase.auth.getUser()
 
   if (error) {
-    console.warn("Failed to resolve user for practice overview:", error.message)
+    log.warn("Failed to resolve user for practice overview", { error: error.message })
     return null
   }
 

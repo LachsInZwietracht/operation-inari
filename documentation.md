@@ -60,6 +60,8 @@ Agent quick index:
 - **Scientific Integrity:** 
   - All nutrient calculations are mathematically validated against the BLS 4.0 ground truth via `scripts/validate-nutrient-math.ts`.
 - **Cached Recipe Nutrients:** Recipes store their calculated totals in the database (`cached_kcal_per_portion`, etc.) to allow for instant rendering in lists without ingredient hydration.
+- **Logging convention:** Use `createLogger(scope)` from `lib/log.ts` instead of raw `console.*` — server output is one JSON line per entry (filterable by level/scope), error details go into `meta`. `lib/data/foods.ts` and `lib/data/practice-overview.ts` are migrated; remaining `console.*` call sites migrate opportunistically when files are touched.
+- **localStorage fallback layer:** `lib/data/local-*.ts` persists meal plans, protocols, recipes, and clinical records in browser `localStorage` as an offline/auth-optional fallback and as the source for login-time migration (`lib/data/local-records.ts` matches local vs. remote identity). **Privacy note:** this stores unencrypted health-related data in the browser profile; on a shared clinic PC any OS user of the same browser profile can read it, and it is not wiped on logout. Open decision (follow-up): keep write-path only for auth-optional mode, switch to session-only storage, or remove the fallback entirely once Supabase auth is mandatory.
 
 ## 4. Feature Reference
 Each subsection includes route, core components, important hooks/utilities, and extension notes.
@@ -371,7 +373,7 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Plan handoff:** `/ernaehrungsplan` accepts `patientId` and `date` query params so patient workflow links can open or create the exact patient plan date.
 
 ## 5. Supporting Modules
-- **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
+- **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` (authenticated, catalog-only) on first use; the user's own custom foods are merged in `FoodSearchProvider` via the RLS-scoped client fetch.
 - **Nutrient utilities (`@/lib/nutrients.ts`):** Mathematically validated core logic. Handles ingredient scaling and summing.
 - **Fuzzy Search (`@/lib/search/fuzzy-search.ts`):** Optimized client-side search over the food index using Trigram similarity and Cologne phonetics.
 - **Exports (`lib/exports/*`):**
