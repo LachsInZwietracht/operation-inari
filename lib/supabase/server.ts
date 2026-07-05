@@ -42,13 +42,11 @@ export async function createServiceClient() {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("❌ ERROR: Missing Supabase Service Role configuration for server-side cache. This will result in empty data states.");
-    
-    // Return a placeholder client that will fail gracefully if actually used, 
-    // rather than throwing immediately and crashing the whole page/request.
-    return createServerClient(supabaseUrl || "https://placeholder.supabase.co", "placeholder", {
-      cookies: { getAll() { return [] }, setAll() { } },
-    });
+    // Fail fast: a placeholder client would silently produce empty data states
+    // that look like "database is empty" instead of a deployment misconfig.
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY for the service-role client.",
+    );
   }
 
   return createServerClient(supabaseUrl, supabaseServiceKey, {
