@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
+import { requireApiUser } from "@/lib/api/auth";
+import { toErrorResponse } from "@/lib/api/errors";
 import { matchSmartInput, matchSmartInputMulti } from "@/lib/nlp-matching";
 import { fetchFoodSearchIndex } from "@/lib/data/foods";
 import type { Food } from "@/lib/types";
 
 export async function POST(request: Request) {
+  try {
+    await requireApiUser();
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+
   try {
     const body = await request.json();
     const { queries, returnCandidates, splitCompounds } = body;

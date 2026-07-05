@@ -3,6 +3,7 @@ import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { createLogger } from "@/lib/log";
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { fetchOrganizationDisabledSourceIds } from "@/lib/data/data-source-activations";
 import { getBlockedSourceIds } from "@/lib/data/entitlements";
@@ -18,6 +19,12 @@ import type {
 import type { NutrientValue } from "@/lib/types/nutrients";
 import { createClient as createServerSupabaseClient, createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
+
+const log = createLogger("data/foods");
+
+function toErrorMeta(error: unknown) {
+  return { error: error instanceof Error ? error.message : String(error) };
+}
 
 const FALLBACK_CATEGORY_ID = "cat_unbekannt";
 const FOOD_BASE_COLUMNS = [
@@ -225,7 +232,7 @@ export async function fetchFoods(options: FoodQueryOptions = {}, isAdmin = false
       count: count ?? null,
     };
   } catch (error) {
-    console.error("fetchFoods error:", error);
+    log.error("fetchFoods failed", toErrorMeta(error));
     return { foods: [], count: 0 };
   }
 }
@@ -300,7 +307,7 @@ export async function fetchFoodsByIds(
       .map(mapFoodRow)
       .filter((food, index, self) => self.findIndex((item) => item.id === food.id) === index);
   } catch (error) {
-    console.error("fetchFoodsByIds error:", error);
+    log.error("fetchFoodsByIds failed", toErrorMeta(error));
     return [];
   }
 }
@@ -364,7 +371,7 @@ export async function fetchFoodById(
     const row = data as unknown as FoodRowWithRelations | null;
     return row ? mapFoodRow(row) : null;
   } catch (error) {
-    console.error(`fetchFoodById(${id}) error:`, error);
+    log.error("fetchFoodById failed", { id, ...toErrorMeta(error) });
     return null;
   }
 }
@@ -419,7 +426,7 @@ export const fetchBrandedFoods = cache(async () => {
 
     return rows.map(mapFoodRow);
   } catch (error) {
-    console.error("fetchBrandedFoods error:", error);
+    log.error("fetchBrandedFoods failed", toErrorMeta(error));
     return BRANDED_FOODS;
   }
 });
@@ -625,7 +632,7 @@ export async function fetchFoodsViaRpc(options: FetchFoodsViaRpcOptions = {}): P
 
     return ((data ?? []) as RpcFoodRow[]).map(mapRpcFoodRow);
   } catch (error) {
-    console.error("fetchFoodsViaRpc error, falling back to direct fetch:", error);
+    log.error("fetchFoodsViaRpc failed, falling back to direct fetch", toErrorMeta(error));
     const { foods } = await fetchFoods(
       {
         includeNutrients: true,
@@ -722,9 +729,9 @@ async function fetchFoodsBrowserPageByName(
       );
 
       if (fallback.error) {
-        console.error(
-          `Food browser name search RPCs failed; falling back to direct query: ${fallback.error.message}`,
-        );
+        log.error("Food browser name search RPCs failed; falling back to direct query", {
+          error: fallback.error.message,
+        });
         return fetchFoodsBrowserPageByQuery(query, client, excludedSources);
       }
 
@@ -766,7 +773,7 @@ async function fetchFoodsBrowserPageByName(
       hasMore: query.offset + orderedFoods.length < totalCount,
     };
   } catch (error) {
-    console.error("fetchFoodsBrowserPageByName error:", error);
+    log.error("fetchFoodsBrowserPageByName failed", toErrorMeta(error));
     return {
       foods: [],
       totalCount: 0,
@@ -829,7 +836,7 @@ async function fetchFoodsBrowserPageByQuery(
     );
 
     if (error) {
-      console.error(`Food browser query failed: ${error.message}`);
+      log.error("Food browser query failed", { error: error.message });
       return {
         foods: [],
         totalCount: 0,
@@ -850,7 +857,7 @@ async function fetchFoodsBrowserPageByQuery(
       hasMore: count == null ? foods.length === query.pageSize : query.offset + foods.length < totalCount,
     };
   } catch (error) {
-    console.error("fetchFoodsBrowserPageByQuery error:", error);
+    log.error("fetchFoodsBrowserPageByQuery failed", toErrorMeta(error));
     return {
       foods: [],
       totalCount: 0,
@@ -915,9 +922,9 @@ async function fetchFoodsBrowserPageByNutrient(
     );
 
     if (error) {
-      console.error(
-        `Food browser nutrient sort RPC failed; falling back to direct query: ${error.message}`,
-      );
+      log.error("Food browser nutrient sort RPC failed; falling back to direct query", {
+        error: error.message,
+      });
       return fetchFoodsBrowserPageByQuery(query, client, excludedSources);
     }
 
@@ -955,7 +962,7 @@ async function fetchFoodsBrowserPageByNutrient(
       hasMore: query.offset + orderedFoods.length < totalCount,
     };
   } catch (error) {
-    console.error("fetchFoodsBrowserPageByNutrient error:", error);
+    log.error("fetchFoodsBrowserPageByNutrient failed", toErrorMeta(error));
     return {
       foods: [],
       totalCount: 0,
@@ -1055,7 +1062,7 @@ async function fetchFoodsChunked(options: ChunkedFetchOptions): Promise<Food[]> 
             offset: idx * chunkSize,
           });
         } catch (error) {
-          console.error(`${options.cacheKeyPrefix} chunk ${idx} error:`, error);
+          log.error("Food chunk fetch failed", { cacheKeyPrefix: options.cacheKeyPrefix, chunk: idx, ...toErrorMeta(error) });
           // Return [] to avoid crashing the entire page. 
           // Stale-while-revalidate will try again later.
           return [];
@@ -1183,47 +1190,51 @@ export const fetchFoodsForInstitution = cache(async () => {
   return fetchFoodsChunked({ cacheKeyPrefix: "foods-institution" });
 });
 
+/**
+ * Catalog-only search index (custom foods are excluded): it is built with the
+ * service-role client, cached once for ALL users via unstable_cache, and must
+ * therefore never contain tenant-scoped rows. The current user's own custom
+ * foods are merged client-side from the RLS-scoped fetchCustomFoodsClient()
+ * (see FoodSearchProvider). Errors throw instead of returning [] so a failed
+ * fetch is never cached for the full revalidate window.
+ */
 export const fetchFoodSearchIndex = cache(async (): Promise<FoodSearchItem[]> => {
   return unstable_cache(
     async () => {
-      try {
-        const client = await resolveClient(undefined, true);
-        const { data, error } = await withTimeout(
-          client
-            .from("foods")
-            .select("id,name,category_id,data_source_id,is_custom")
-            .order("name", { ascending: true })
-            .limit(10000),
-          10000,
-          "Supabase food search index request timed out"
-        );
+      const client = await resolveClient(undefined, true);
+      const { data, error } = await withTimeout(
+        client
+          .from("foods")
+          .select("id,name,category_id,data_source_id,is_custom")
+          .eq("is_custom", false)
+          .order("name", { ascending: true })
+          .limit(10000),
+        10000,
+        "Supabase food search index request timed out"
+      );
 
-        if (error) {
-          throw new Error(`Failed to load food search index: ${error.message}`);
-        }
-
-        type SearchRow = {
-          id: string;
-          name: string;
-          category_id: string | null;
-          data_source_id: string;
-          is_custom: boolean;
-        };
-
-        const blocked = new Set(getBlockedSourceIds());
-        return ((data ?? []) as SearchRow[])
-          .filter((row) => !blocked.has(row.data_source_id as FoodSourceId))
-          .map((row) => ({
-            id: row.id,
-            name: row.name,
-            categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
-            sourceId: row.data_source_id as FoodSourceId,
-            isCustom: row.is_custom,
-          }));
-      } catch (error) {
-        console.error("fetchFoodSearchIndex error:", error);
-        return [];
+      if (error) {
+        throw new Error(`Failed to load food search index: ${error.message}`);
       }
+
+      type SearchRow = {
+        id: string;
+        name: string;
+        category_id: string | null;
+        data_source_id: string;
+        is_custom: boolean;
+      };
+
+      const blocked = new Set(getBlockedSourceIds());
+      return ((data ?? []) as SearchRow[])
+        .filter((row) => !blocked.has(row.data_source_id as FoodSourceId))
+        .map((row) => ({
+          id: row.id,
+          name: row.name,
+          categoryId: row.category_id ?? FALLBACK_CATEGORY_ID,
+          sourceId: row.data_source_id as FoodSourceId,
+          isCustom: row.is_custom,
+        }));
     },
     ["food-search-index"],
     { revalidate: 3600, tags: [CACHE_TAGS.FOODS, CACHE_TAGS.BLS, CACHE_TAGS.SEARCH] }

@@ -114,8 +114,9 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 The app uses a tiered data delivery pattern to balance payload size vs. functionality:
 
 **Tier 1 — Search index (~100 KB, always loaded):**
-- `fetchFoodSearchIndex()` in `lib/data/foods.ts` fetches only `id`, `name`, `category_id`, `data_source_id`, `is_custom` from Supabase
-- `app/(app)/layout.tsx` provides an empty `FoodSearchProvider`; consumers call `loadIndex()` to fetch `/api/foods/search-index` on demand
+- `fetchFoodSearchIndex()` in `lib/data/foods.ts` fetches only `id`, `name`, `category_id`, `data_source_id`, `is_custom` from Supabase. It is catalog-only (`is_custom = false`): it runs with the service-role client and is cached globally via `unstable_cache`, so tenant-scoped rows must never enter it. Errors throw instead of caching an empty index.
+- `/api/foods/search-index` requires an authenticated session and responds with `Cache-Control: private` (licensed BLS/SFK data must not sit on shared caches)
+- `app/(app)/layout.tsx` provides an empty `FoodSearchProvider`; consumers call `loadIndex()` to fetch `/api/foods/search-index` on demand. `loadIndex()` also merges the current user's own custom foods via the RLS-scoped `fetchCustomFoodsClient()` so they stay searchable. Known limitation: `/api/foods/smart-match` matches against the catalog-only index, so custom foods are not smart-matched (follow-up: merge client-side before calling smart-match).
 - Consumed by the Cmd+K search palette (`useFoodSearch()`) and pages that only need food names/categories
 - Type: `FoodSearchItem[]`
 
@@ -873,7 +874,7 @@ Rules going forward:
 ## 7. Search Architecture
 
 ### Current: Hybrid Search Architecture
-- Layout loads a lightweight search index (`FoodSearchItem[]` — id, name, categoryId only, ~100 KB) via `fetchFoodSearchIndex()`
+- Layout loads a lightweight search index (`FoodSearchItem[]` — id, name, categoryId, sourceId, isCustom, ~100 KB) via `fetchFoodSearchIndex()`; the server index is catalog-only, own custom foods are merged client-side in `FoodSearchProvider`
 - Cmd+K palette calls the `search_foods()` Postgres RPC for typed queries; falls back to the lightweight `FoodSearchProvider` list while idle
 - `/lebensmittel` calls `/api/foods/browser`, which uses paginated server queries and only merges local custom foods into page 1 on the client
 - Cologne phonetics for German sound matching ("Karotte" ↔ "Garotte")

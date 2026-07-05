@@ -10,7 +10,8 @@ export default async function RezeptBearbeitenPage({
 }) {
   const { id } = await params;
   const [foods, recipe] = await Promise.all([
-    fetchFoodSearchIndex(),
+    // An empty initial index lets FoodSearchProvider lazily re-fetch on demand.
+    fetchFoodSearchIndex().catch(() => []),
     fetchRecipeById(id),
   ]);
   return (

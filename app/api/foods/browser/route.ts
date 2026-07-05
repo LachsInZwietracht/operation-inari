@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApiUser } from "@/lib/api/auth";
+import { toErrorResponse } from "@/lib/api/errors";
 import { fetchFoodsBrowserPage } from "@/lib/data/foods";
 import type { FoodBrowserQuery } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
+  try {
+    await requireApiUser();
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+
   const { searchParams } = request.nextUrl;
 
   const nutrientMinParam = searchParams.get("nutrientMin");
@@ -34,7 +42,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load foods";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return toErrorResponse(error);
   }
 }
