@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { ReportExportRequest } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/exports/csv";
+import { reportExportRequestSchema } from "@/lib/exports/report-request-schema";
 import { renderReportPdfBuffer } from "@/lib/exports/pdf";
 import { buildFileResponse, createExportJob } from "@/lib/exports/server";
 import { writeAccessAuditLog } from "@/lib/audit/access-audit";
@@ -67,11 +68,29 @@ function buildReportCsv(request: ReportExportRequest) {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const body = (await request.json()) as ReportExportRequest;
 
-  if (!body?.title || !body?.fileBaseName) {
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 1_000_000) {
+    return NextResponse.json({ error: "EXPORT_REQUEST_TOO_LARGE" }, { status: 413 });
+  }
+
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
     return NextResponse.json({ error: "INVALID_EXPORT_REQUEST" }, { status: 400 });
   }
+
+  const parsed = reportExportRequestSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "INVALID_EXPORT_REQUEST", details: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+
+  // Schema drift against the interface fails typecheck here.
+  const body: ReportExportRequest = parsed.data;
 
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id;
