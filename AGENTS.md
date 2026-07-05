@@ -33,7 +33,7 @@ Start with `docs/README.md` when you need to decide which documentation to read.
 
 ## Stack
 
-- Next.js 15 App Router with React 19.
+- Next.js 16 App Router with React 19.
 - TypeScript with strict checking.
 - Tailwind CSS 4.
 - shadcn/ui with Radix primitives and `lucide-react`.

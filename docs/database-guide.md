@@ -474,7 +474,10 @@ BLS 4.0 provides ~138 nutrients total. The ETL currently maps 34 (28 original + 
 **Parser security:** `xlsx` is pinned to the current SheetJS Community Edition
 release from the vendor's authoritative CDN and is development-only. Process
 only official or contractually supplied trusted workbooks. Do not expose this
-parser through a public upload endpoint.
+parser through a public upload endpoint. Because the dependency resolves to a
+CDN tarball (SheetJS stopped publishing to npm), `npm audit` does not cover
+it — check the SheetJS security advisories manually when bumping the pinned
+version (0.20.x fixed CVE-2023-30533 and CVE-2024-22363).
 
 **Local run checklist:**
 - Start Supabase locally with Docker (`supabase start` once; rerun if Docker restarts).
