@@ -82,6 +82,7 @@ import {
 } from "@/lib/allergen-constants"
 import { AlertTriangle, Trash2 } from "lucide-react"
 import { BeratungenTab } from "@/components/patient-tabs/beratungen-tab"
+import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
 
 const PATIENT_STATUS_LABELS: Record<PatientStatus, string> = {
@@ -156,12 +157,6 @@ const ReferenceProfileSelector = dynamic(
   () => import("@/components/reference-profile-selector").then((mod) => mod.ReferenceProfileSelector),
   { ssr: false },
 )
-
-function complianceBadge(value: number, min?: number, max?: number): "ok" | "low" | "high" {
-  if (typeof min === "number" && value < min) return "low"
-  if (typeof max === "number" && value > max) return "high"
-  return "ok"
-}
 
 interface PatientTabsProps {
   patient: Patient
@@ -283,7 +278,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const labEntries = getLabValuesForPatient(patient.id)
   const activities = getActivitiesForPatient(patient.id)
   const screenings = getScreeningsForPatient(patient.id)
-  const selectedLabParameter = LAB_PARAMETERS.find((param) => param.id === labParameterId)
   const entriesForSelectedLab = labEntries.filter((entry) => entry.parameterId === labParameterId)
   const anthropometricPending = isLoadingAnthropometric && anthroEntries.length === 0
   const diagnosesPending = isLoadingDiagnoses && diagnoses.length === 0
@@ -1458,201 +1452,21 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
       </TabsContent>
 
       <TabsContent value="laborwerte" className="space-y-4">
-        {profileSubNav}
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <FlaskConical className="h-4 w-4" /> Laborpanel
-              </CardTitle>
-              <CardDescription>
-                {selectedLabParameter?.description ?? "Parameter wählen und neue Messung erfassen."}
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form className="grid gap-3 md:grid-cols-4" onSubmit={handleLabSubmit}>
-              <div className="md:col-span-2">
-                <Label>Parameter</Label>
-                <Select value={labParameterId} onValueChange={setLabParameterId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Parameter wählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LAB_PARAMETERS.map((param) => (
-                      <SelectItem key={param.id} value={param.id}>
-                        {param.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>
-                  Wert {selectedLabParameter ? `(${selectedLabParameter.unit})` : ""}
-                </Label>
-                <Input
-                  value={labValueInput}
-                  onChange={(event) => setLabValueInput(event.target.value)}
-                  required
-                  placeholder="z. B. 5.6"
-                />
-              </div>
-              <div>
-                <Label>Datum</Label>
-                <Input
-                  type="date"
-                  value={labDateInput}
-                  onChange={(event) => setLabDateInput(event.target.value)}
-                />
-              </div>
-              <div className="md:col-span-4">
-                <Label>Notiz</Label>
-                <Textarea
-                  rows={2}
-                  value={labNotesInput}
-                  onChange={(event) => setLabNotesInput(event.target.value)}
-                  placeholder="z. B. nüchtern, Labor Praxis X"
-                />
-              </div>
-              <div className="md:col-span-4 flex flex-wrap justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (!selectedLabParameter || entriesForSelectedLab.length === 0) {
-                      toast.error("Keine Messungen für Export vorhanden")
-                      return
-                    }
-                    const rows = [
-                      ["Datum", "Wert", "Einheit", "Notiz"],
-                      ...entriesForSelectedLab.map((entry) => [
-                        formatDate(entry.date),
-                        entry.value.toString(),
-                        selectedLabParameter.unit,
-                        entry.notes ?? "",
-                      ]),
-                    ]
-                    downloadCsv(`${patient.lastName}_${selectedLabParameter.shortName}`, rows)
-                    toast.success("CSV exportiert")
-                  }}
-                >
-                  CSV Export
-                </Button>
-                <Button type="submit">Messung speichern</Button>
-              </div>
-            </form>
-
-            {selectedLabParameter && (
-              <div className="rounded-lg border p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold">{selectedLabParameter.name}</p>
-                    <p className="text-muted-foreground text-xs">
-                      Referenz {selectedLabParameter.referenceMin}–{selectedLabParameter.referenceMax}{' '}
-                      {selectedLabParameter.unit}
-                    </p>
-                  </div>
-                  {entriesForSelectedLab.length > 0 && (
-                    <Badge
-                      variant="outline"
-                      className={
-                        complianceBadge(
-                          entriesForSelectedLab[entriesForSelectedLab.length - 1].value,
-                          selectedLabParameter.referenceMin,
-                          selectedLabParameter.referenceMax,
-                        ) === "ok"
-                          ? "border-emerald-200 text-emerald-700"
-                          : "border-amber-200 text-amber-700"
-                      }
-                    >
-                      {entriesForSelectedLab[entriesForSelectedLab.length - 1].value}
-                      {selectedLabParameter.unit}
-                    </Badge>
-                  )}
-                </div>
-                <div className="mt-3 flex items-end gap-1">
-                  {entriesForSelectedLab.slice(-16).map((entry) => {
-                    const percent = selectedLabParameter.referenceMax
-                      ? Math.min(100, (entry.value / selectedLabParameter.referenceMax) * 100)
-                      : 0
-                    return (
-                      <span
-                        key={entry.id}
-                        className="w-2 rounded-full bg-primary/60"
-                        style={{ height: `${Math.max(15, percent)}px` }}
-                        title={`${formatDate(entry.date)} · ${entry.value} ${selectedLabParameter.unit}`}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Verlauf</CardTitle>
-            <CardDescription>Chronologische Auflistung für den gewählten Parameter.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {entriesForSelectedLab.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Datum</TableHead>
-                    <TableHead>Wert</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Notiz</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...entriesForSelectedLab].reverse().map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>{formatDate(entry.date)}</TableCell>
-                      <TableCell>
-                        {entry.value} {selectedLabParameter?.unit}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            selectedLabParameter &&
-                            complianceBadge(
-                              entry.value,
-                              selectedLabParameter.referenceMin,
-                              selectedLabParameter.referenceMax,
-                            ) !== "ok"
-                              ? "border-amber-200 text-amber-700"
-                              : "border-emerald-200 text-emerald-700"
-                          }
-                        >
-                          {selectedLabParameter
-                            ? complianceBadge(
-                                entry.value,
-                                selectedLabParameter.referenceMin,
-                                selectedLabParameter.referenceMax,
-                              ) === "ok"
-                                ? "im Referenzbereich"
-                                : "außerhalb"
-                            : "–"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entry.notes ?? "–"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : labValuesPending ? (
-              <p className="text-sm text-muted-foreground">Laborwerte werden synchronisiert.</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Noch keine Werte dokumentiert.</p>
-            )}
-          </CardContent>
-        </Card>
+        <LaborwerteTab
+          patient={patient}
+          profileSubNav={profileSubNav}
+          labParameterId={labParameterId}
+          setLabParameterId={setLabParameterId}
+          labValueInput={labValueInput}
+          setLabValueInput={setLabValueInput}
+          labDateInput={labDateInput}
+          setLabDateInput={setLabDateInput}
+          labNotesInput={labNotesInput}
+          setLabNotesInput={setLabNotesInput}
+          entriesForSelectedLab={entriesForSelectedLab}
+          labValuesPending={labValuesPending}
+          onSubmit={handleLabSubmit}
+        />
       </TabsContent>
 
       <TabsContent value="aktivitaet" className="space-y-4">
