@@ -29,6 +29,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useRecipes } from "@/hooks/use-recipes";
 import { ALLERGEN_DEFINITIONS } from "@/lib/allergen-constants";
+import { toCsv } from "@/lib/exports/csv";
 import { parseMealMaster, type ParsedMealMasterRecipe } from "@/lib/meal-master-parser";
 import { RecipeImportReviewDialog } from "@/components/recipe-import-review-dialog";
 
@@ -250,7 +251,7 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
   }
 
   function handleExport() {
-    const payload = exportFormat === "json" ? JSON.stringify(filtered, null, 2) : toCsv(filtered);
+    const payload = exportFormat === "json" ? JSON.stringify(filtered, null, 2) : recipesToCsv(filtered);
     const blob = new Blob([payload], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -262,12 +263,16 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
     setExportDialogOpen(false);
   }
 
-  function toCsv(recipes: Recipe[]) {
+  function recipesToCsv(recipes: Recipe[]) {
     const headers = ["name", "category", "servings", "prepTime", "cookTime"];
-    const rows = recipes.map((recipe) =>
-      [recipe.name, recipe.category, recipe.servings, recipe.prepTime, recipe.cookTime].join(","),
-    );
-    return [headers.join(","), ...rows].join("\n");
+    const rows = recipes.map((recipe) => [
+      recipe.name,
+      recipe.category,
+      String(recipe.servings),
+      String(recipe.prepTime),
+      String(recipe.cookTime),
+    ]);
+    return toCsv([headers, ...rows]);
   }
 
   async function handleImportSubmit() {
