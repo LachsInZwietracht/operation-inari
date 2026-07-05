@@ -81,6 +81,7 @@ import {
   type AllergenSeverity,
 } from "@/lib/allergen-constants"
 import { AlertTriangle, Trash2 } from "lucide-react"
+import { BeratungenTab } from "@/components/patient-tabs/beratungen-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
 
 const PATIENT_STATUS_LABELS: Record<PatientStatus, string> = {
@@ -2150,56 +2151,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
       </TabsContent>
 
       <TabsContent value="beratungen" className="space-y-4">
-        <div className="flex justify-end">
-          <Button asChild>
-            <Link href={`/patienten/${patient.id}/beratungen/neu`}>
-              <Plus className="mr-2 h-4 w-4" />
-              Neue Beratung
-            </Link>
-          </Button>
-        </div>
-
-        {sessions.length > 0 ? (
-          <div className="grid gap-4">
-            {sessions
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .map((session) => (
-                <Link
-                  key={session.id}
-                  href={`/patienten/${patient.id}/beratungen/${session.id}`}
-                >
-                  <Card className="transition-colors hover:bg-muted/50">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-base">
-                          {session.type} – {session.indication}
-                        </CardTitle>
-                        <Badge variant="outline">{session.duration} Min.</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      <p>{formatDate(session.date)}</p>
-                      {session.goals && (
-                        <p className="mt-1 line-clamp-1">{session.goals}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-          </div>
-        ) : counselingPending ? (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              Beratungssitzungen werden synchronisiert.
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              Noch keine Beratungssitzungen vorhanden.
-            </CardContent>
-          </Card>
-        )}
+        <BeratungenTab patient={patient} sessions={sessions} counselingPending={counselingPending} />
       </TabsContent>
 
       <TabsContent value="statistiken" className="space-y-4">
