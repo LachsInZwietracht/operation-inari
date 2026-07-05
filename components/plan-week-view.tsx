@@ -6,7 +6,6 @@ import { de } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react"
 
 import {
-  MealPlanLibrary,
   MealPlanWeekBoard,
   type WeekBoardTarget,
 } from "@/components/meal-plan-week-board"
@@ -37,7 +36,6 @@ import type {
   DailyMealPlan,
   DietLinePreset,
   Food,
-  FoodSearchItem,
   MealEntry,
   MealSlotType,
   Recipe,
@@ -52,10 +50,7 @@ interface PlanWeekViewProps {
   dietLineCompliance: DietLineComplianceItem[]
   foods: Food[]
   foodMap: Map<string, Food>
-  recipes: Recipe[]
   recipeMap: Map<string, Recipe>
-  libraryFoods: FoodSearchItem[]
-  categoryLabels: Map<string, string>
   activeDate: string
   activeDayLabel: string
   energyValue: number
@@ -86,10 +81,7 @@ export function PlanWeekView({
   dietLineCompliance,
   foods,
   foodMap,
-  recipes,
   recipeMap,
-  libraryFoods,
-  categoryLabels,
   activeDate,
   activeDayLabel,
   energyValue,
@@ -161,33 +153,25 @@ export function PlanWeekView({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <MealPlanLibrary
-          foods={libraryFoods}
-          fullFoods={foods}
-          recipes={recipes}
-          categoryLabels={categoryLabels}
-        />
-        <MealPlanWeekBoard
-          days={weekSummaries.map(({ plan, totals }) => ({
-            plan,
-            kcal: getNutrientValue(totals, "energie"),
-          }))}
-          activeDate={activeDate}
-          activeDayLabel={activeDayLabel}
-          energyValue={energyValue}
-          energyTarget={energyTarget}
-          barTargets={barTargets}
-          getEntryLabel={weekEntryLabel}
-          onSelectDay={onSelectDay}
-          onOpenDay={onOpenDay}
-          onCopyCurrentToDay={onCopyCurrentToDay}
-          onCopyToNextDay={onCopyToNextDay}
-          onClearDay={onClearDay}
-          onDrop={onDrop}
-          onRemoveEntry={onRemoveEntry}
-        />
-      </div>
+      <MealPlanWeekBoard
+        days={weekSummaries.map(({ plan, totals }) => ({
+          plan,
+          kcal: getNutrientValue(totals, "energie"),
+        }))}
+        activeDate={activeDate}
+        activeDayLabel={activeDayLabel}
+        energyValue={energyValue}
+        energyTarget={energyTarget}
+        barTargets={barTargets}
+        getEntryLabel={weekEntryLabel}
+        onSelectDay={onSelectDay}
+        onOpenDay={onOpenDay}
+        onCopyCurrentToDay={onCopyCurrentToDay}
+        onCopyToNextDay={onCopyToNextDay}
+        onClearDay={onClearDay}
+        onDrop={onDrop}
+        onRemoveEntry={onRemoveEntry}
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>

@@ -66,7 +66,11 @@ async function openPlannerWithFreshPlan(page: Page, patientId: string, planDate:
 }
 
 async function addFoodEntry(page: Page, query = "Hafer") {
-  await page.getByRole("button", { name: /Hinzufügen/i }).first().click();
+  // First add-row in the day workspace table belongs to Frühstück.
+  await page
+    .getByRole("button", { name: /Lebensmittel oder Rezept hinzufügen/i })
+    .first()
+    .click();
   const searchInput = page.locator("[cmdk-input]");
   await expect(searchInput).toBeVisible();
   await searchInput.fill(query);
@@ -82,10 +86,10 @@ async function addFoodEntry(page: Page, query = "Hafer") {
     await expect(searchInput).toBeHidden({ timeout: 15_000 });
   }
 
-  // The entry must land in a meal slot card, not just anywhere on the page.
+  // The entry must land in the Frühstück section of the day table.
   await expect(
     page
-      .locator("[data-slot='card']")
+      .locator("tbody")
       .filter({ hasText: "Frühstück" })
       .first()
       .getByText(new RegExp(query, "i"))
@@ -104,10 +108,10 @@ test.describe("Ernährungsplan", () => {
 
       await expect(page.locator("main").getByRole("heading", { name: "Ernährungsplan" })).toBeVisible();
 
-      // Should show meal slot card titles (use data-slot to avoid strict mode violations)
-      await expect(page.locator('[data-slot="card-title"]', { hasText: "Frühstück" })).toBeVisible();
-      await expect(page.locator('[data-slot="card-title"]', { hasText: "Mittagessen" })).toBeVisible();
-      await expect(page.locator('[data-slot="card-title"]', { hasText: "Abendessen" })).toBeVisible();
+      // Should show the meal sections of the day workspace table
+      await expect(page.getByRole("cell", { name: /Frühstück/ }).first()).toBeVisible();
+      await expect(page.getByRole("cell", { name: /Mittagessen/ }).first()).toBeVisible();
+      await expect(page.getByRole("cell", { name: /Abendessen/ }).first()).toBeVisible();
 
       // Just verify date is displayed (any German date format)
       await expect(page.locator("text=/\\d{1,2}\\./").first()).toBeVisible();
@@ -217,10 +221,10 @@ test.describe("Ernährungsplan", () => {
       await openPlannerWithFreshPlan(page, patient.id, planDate);
       await addFoodEntry(page);
 
-      const assistant = page.locator("[data-slot='card']").filter({ hasText: "Optimierungsassistent" }).first();
+      const assistant = page.locator("[data-slot='card']").filter({ hasText: "Vorschläge zum Auffüllen" }).first();
       await expect(assistant).toBeVisible();
-      await expect(assistant.getByRole("button", { name: "Einfügen" }).first()).toBeVisible({ timeout: 30_000 });
-      await assistant.getByRole("button", { name: "Einfügen" }).first().click();
+      await expect(assistant.getByRole("button", { name: "Übernehmen" }).first()).toBeVisible({ timeout: 30_000 });
+      await assistant.getByRole("button", { name: "Übernehmen" }).first().click();
 
       await expect(page.getByText(/vorgemerkt/)).toBeVisible();
     } finally {

@@ -1,11 +1,10 @@
 "use client"
 
-import { useMemo, useState, type DragEvent } from "react"
+import { useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { Copy, FolderOpen, GripVertical, Lock, MoreHorizontal, Plus, Search, Trash2, X } from "lucide-react"
+import { Copy, FolderOpen, Lock, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -14,26 +13,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  MEAL_PLAN_DRAG_TYPE,
-  MEAL_PLAN_DRAG_ID,
-} from "@/components/meal-slot"
-import {
-  calculateRecipeNutrients,
-  calculatePerServing,
-  getNutrientValue,
-} from "@/lib/nutrients"
+  readMealPlanDragPayload,
+  type MealPlanDragPayload,
+} from "@/components/meal-plan-library"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type {
   DailyMealPlan,
-  Food,
-  FoodSearchItem,
   MealEntry,
   MealSlotType,
-  Recipe,
 } from "@/lib/types"
 
-type DragPayload = { type: MealEntry["type"]; referenceId: string }
+type DragPayload = MealPlanDragPayload
 
 const SLOT_ROW_LABELS: Record<MealSlotType, string> = {
   fruehstueck: "Frühstück",
@@ -50,157 +41,6 @@ const SLOT_ORDER: MealSlotType[] = [
   "snack_nachmittag",
   "abendessen",
 ]
-
-function setDragPayload(event: DragEvent, payload: DragPayload) {
-  event.dataTransfer.setData(MEAL_PLAN_DRAG_TYPE, payload.type)
-  event.dataTransfer.setData(MEAL_PLAN_DRAG_ID, payload.referenceId)
-  event.dataTransfer.effectAllowed = "copy"
-}
-
-function readDragPayload(event: DragEvent): DragPayload | null {
-  const type = event.dataTransfer.getData(MEAL_PLAN_DRAG_TYPE) as MealEntry["type"] | ""
-  const referenceId = event.dataTransfer.getData(MEAL_PLAN_DRAG_ID)
-  if (!type || !referenceId) return null
-  return { type, referenceId }
-}
-
-interface MealPlanLibraryProps {
-  foods: FoodSearchItem[]
-  fullFoods: Food[]
-  recipes: Recipe[]
-  categoryLabels: Map<string, string>
-}
-
-export function MealPlanLibrary({ foods, fullFoods, recipes, categoryLabels }: MealPlanLibraryProps) {
-  const [query, setQuery] = useState("")
-  const [tab, setTab] = useState<"foods" | "recipes">("recipes")
-
-  const normalizedQuery = query.trim().toLowerCase()
-
-  const filteredFoods = useMemo(() => {
-    return foods
-      .filter((food) => !normalizedQuery || food.name.toLowerCase().includes(normalizedQuery))
-      .slice(0, 30)
-  }, [foods, normalizedQuery])
-
-  const filteredRecipes = useMemo(() => {
-    return recipes
-      .filter(
-        (recipe) =>
-          !normalizedQuery ||
-          recipe.name.toLowerCase().includes(normalizedQuery) ||
-          recipe.tags?.some((tag) => tag.toLowerCase().includes(normalizedQuery)),
-      )
-      .slice(0, 30)
-  }, [normalizedQuery, recipes])
-
-  const recipeKcal = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const recipe of filteredRecipes) {
-      const kcal =
-        recipe.cachedKcalPerPortion ??
-        getNutrientValue(
-          calculatePerServing(calculateRecipeNutrients(recipe, fullFoods), recipe.servings),
-          "energie",
-        )
-      map.set(recipe.id, kcal)
-    }
-    return map
-  }, [filteredRecipes, fullFoods])
-
-  return (
-    <Card className="self-start">
-      <CardContent className="space-y-3 p-4">
-        <div className="text-sm font-semibold">Bibliothek</div>
-        <div className="relative">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Lebensmittel oder Rezept …"
-            className="h-9 pl-8 text-sm"
-          />
-        </div>
-        <div className="flex gap-4 border-b text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setTab("recipes")}
-            className={cn(
-              "border-b-2 pb-2 transition-colors",
-              tab === "recipes"
-                ? "border-primary text-foreground"
-                : "text-muted-foreground border-transparent",
-            )}
-          >
-            Rezepte
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("foods")}
-            className={cn(
-              "border-b-2 pb-2 transition-colors",
-              tab === "foods"
-                ? "border-primary text-foreground"
-                : "text-muted-foreground border-transparent",
-            )}
-          >
-            Lebensmittel
-          </button>
-        </div>
-        <div className="flex max-h-[520px] flex-col gap-1.5 overflow-y-auto">
-          {tab === "recipes" &&
-            filteredRecipes.map((recipe) => (
-              <div
-                key={recipe.id}
-                draggable
-                onDragStart={(event) => setDragPayload(event, { type: "recipe", referenceId: recipe.id })}
-                className="hover:bg-accent flex cursor-grab items-center gap-2 rounded-md border p-2 active:cursor-grabbing"
-              >
-                <GripVertical className="text-muted-foreground h-4 w-4 flex-none" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{recipe.name}</div>
-                  <div className="text-muted-foreground text-[11px]">
-                    {recipe.category ?? "Rezept"} · 1 Portion
-                  </div>
-                </div>
-                <span className="text-muted-foreground flex-none font-mono text-[11px]">
-                  {formatNumber(Math.round(recipeKcal.get(recipe.id) ?? 0))} kcal
-                </span>
-              </div>
-            ))}
-          {tab === "recipes" && filteredRecipes.length === 0 && (
-            <p className="text-muted-foreground py-4 text-center text-xs">Keine Rezepte gefunden.</p>
-          )}
-          {tab === "foods" &&
-            filteredFoods.map((food) => (
-              <div
-                key={food.id}
-                draggable
-                onDragStart={(event) => setDragPayload(event, { type: "food", referenceId: food.id })}
-                className="hover:bg-accent flex cursor-grab items-center gap-2 rounded-md border p-2 active:cursor-grabbing"
-              >
-                <GripVertical className="text-muted-foreground h-4 w-4 flex-none" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{food.name}</div>
-                  <div className="text-muted-foreground truncate text-[11px]">
-                    {categoryLabels.get(food.categoryId) ?? "Lebensmittel"} · 120 g
-                  </div>
-                </div>
-              </div>
-            ))}
-          {tab === "foods" && filteredFoods.length === 0 && (
-            <p className="text-muted-foreground py-4 text-center text-xs">
-              Keine Lebensmittel gefunden.
-            </p>
-          )}
-        </div>
-        <p className="text-muted-foreground text-[11px]">
-          Einträge per Drag &amp; Drop auf einen Tag ziehen.
-        </p>
-      </CardContent>
-    </Card>
-  )
-}
 
 export interface WeekBoardTarget {
   nutrientId: string
@@ -291,7 +131,7 @@ export function MealPlanWeekBoard({
     event.preventDefault()
     setDropTarget(null)
     if (plan.status === "approved") return
-    const payload = readDragPayload(event)
+    const payload = readMealPlanDragPayload(event)
     if (!payload) return
     onDrop(plan.date, slotType, payload)
   }

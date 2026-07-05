@@ -20,7 +20,6 @@ import {
   BookmarkPlus,
   CheckCircle2,
   ClipboardCheck,
-  ChefHat,
   Download,
   FileText,
   FolderOpen,
@@ -32,15 +31,11 @@ import {
   RotateCcw,
   Save,
   Settings2,
-  Sparkles,
-  Target,
   UserPlus,
   Users,
   Utensils,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { MealSlotCard } from "@/components/meal-slot"
-import { NutrientBar } from "@/components/nutrient-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
@@ -57,7 +52,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +70,7 @@ import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { getNutrientValue } from "@/lib/nutrients"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
-import { formatNumber, formatNutrient } from "@/lib/format"
+import { formatNumber } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import type {
   MealSlotType,
@@ -100,7 +94,8 @@ import { PlanApplyTemplateDialog } from "@/components/plan-apply-template-dialog
 import { PlanAssignPatientDialog } from "@/components/plan-assign-patient-dialog"
 import { PlanDietLineDialog, type DietLineDraft } from "@/components/plan-diet-line-dialog"
 import { PlanExchangeDialog } from "@/components/plan-exchange-dialog"
-import { PlanRecipePalette } from "@/components/plan-recipe-palette"
+import { MealPlanLibrary } from "@/components/meal-plan-library"
+import { PlanDayWorkspace } from "@/components/plan-day-workspace"
 import { PlanSaveTemplateDialog, type SaveTemplateDraft } from "@/components/plan-save-template-dialog"
 import { toast } from "sonner"
 
@@ -130,19 +125,6 @@ import {
   type MealPlanReportVariant,
 } from "@/lib/exports/report-builder"
 import { cn, downloadResponseFile } from "@/lib/utils"
-
-const KEY_NUTRIENT_IDS = [
-  "energie",
-  "eiweiss",
-  "fett",
-  "kohlenhydrate",
-  "ballaststoffe",
-  "vitamin_c",
-  "vitamin_d",
-  "calcium",
-  "eisen",
-  "magnesium",
-]
 
 const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> = {
   draft: "Entwurf",
@@ -287,7 +269,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [activeSlot, setActiveSlot] = useState<MealSlotType>("fruehstueck")
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [view, setView] = useState("day")
-  const [paletteOpen, setPaletteOpen] = useState(false)
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
@@ -314,12 +295,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   }, [serverFoods])
 
   useEffect(() => {
-    // The week board's library needs the search index too, so load it lazily
-    // for both the command palette and the week view.
-    if (commandOpen || view === "week") {
-      void loadFoodSearchIndex()
-    }
-  }, [commandOpen, loadFoodSearchIndex, view])
+    // The shared library sits next to both planner views, so the food search
+    // index is needed as soon as the page mounts.
+    void loadFoodSearchIndex()
+  }, [loadFoodSearchIndex])
 
   useEffect(() => {
     if (currentPlan.status !== "approved") return
@@ -506,19 +485,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
   }
 
-  const handleQuickAddRecipe = (recipeId: string, slotType: MealSlotType) => {
-    const recipe = recipeMap.get(recipeId)
-    guardedAddEntry(
-      slotType,
-      { type: "recipe", referenceId: recipeId, amount: 1 },
-      {
-        itemKind: "recipe",
-        itemName: recipe?.name ?? "Rezept",
-        allergens: recipe?.allergens,
-      },
-    )
-  }
-
   const handleOpenExchange = (slotType: MealSlotType, entryId?: string) => {
     setExchangeSlot(slotType)
     setExchangeEntryId(entryId ?? null)
@@ -577,9 +543,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     totalBE,
     planSustainability,
     refConfig,
-    referenceMap,
-    nutrientDefMap,
-    slotCompliance,
     dietLineCompliance,
     energyTargetValue,
     weekBoardTargets,
@@ -603,6 +566,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const computedWeekStart = addWeeks(baseWeekStart, weekOffset)
   const computedWeekStartIso = format(computedWeekStart, "yyyy-MM-dd")
   const weekPlans = useMemo(() => getPlansInRange(computedWeekStartIso, 7), [computedWeekStartIso, getPlansInRange])
+  // Day view weekday chips always show the week containing the active date,
+  // independent of the week view's offset navigation.
+  const baseWeekStartIso = format(baseWeekStart, "yyyy-MM-dd")
+  const dayWeekPlans = useMemo(() => getPlansInRange(baseWeekStartIso, 7), [baseWeekStartIso, getPlansInRange])
   const weekRangeLabel = `${format(computedWeekStart, "d. MMM", { locale: de })} – ${format(
     addDays(computedWeekStart, 6),
     "d. MMM yyyy",
@@ -1387,6 +1354,28 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           <TabsTrigger value="einzelanalyse">Einzelanalyse</TabsTrigger>
         </TabsList>
 
+        {/* The library is the shared build source for the day and week views:
+            the same items can be dragged (or click-added) into either view. */}
+        <div
+          className={cn(
+            "mt-2 grid items-start gap-4",
+            (view === "day" || view === "week") && "xl:grid-cols-[290px_minmax(0,1fr)]",
+          )}
+        >
+          {(view === "day" || view === "week") && (
+            <MealPlanLibrary
+              foods={foodCommandSource}
+              fullFoods={foods}
+              recipes={recipes}
+              templates={mealPlanTemplates}
+              categoryLabels={foodCategoryLabels}
+              isLocked={currentPlan.status === "approved"}
+              onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
+              onApplyTemplate={handleApplyTemplate}
+            />
+          )}
+          <div className="min-w-0">
+
         <TabsContent value="day" className="space-y-4">
           <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur">
             <div className="flex items-center gap-1">
@@ -1483,19 +1472,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </Button>
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPaletteOpen(true)}
-                disabled={currentPlan.status === "approved"}
-              >
-                <ChefHat className="mr-1.5 h-4 w-4" />
-                Rezepte
-                <span className="text-muted-foreground ml-1 text-xs">
-                  ({recipes.length})
-                </span>
-              </Button>
-
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -1590,178 +1566,34 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             <PlanAllergenBanner summary={planAllergenSummary} />
           )}
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="space-y-4">
-              {currentPlan.slots.map((slot) => (
-                <MealSlotCard
-                  key={slot.type}
-                  slot={slot}
-                  onAddEntry={handleAddEntry}
-                  onRemoveEntry={removeEntry}
-                  onUpdateAmount={updateEntryAmount}
-                  onDropPayload={handleDropPayload}
-                  onMoveEntry={moveEntry}
-                  complianceIndicators={slotCompliance[slot.type]}
-                  onOpenExchange={handleOpenExchange}
-                  foods={foods}
-                  recipes={recipes}
-                  allergenWarnings={entryAllergenWarnings}
-                  isLocked={currentPlan.status === "approved"}
-                />
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              <Card>
-                <Tabs defaultValue="ziele">
-                  <CardHeader className="space-y-2 pb-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-base">Nährstoffanalyse</CardTitle>
-                      <Badge variant="outline" className="font-normal">
-                        {dietLine?.name ?? "Kein Profil"}
-                      </Badge>
-                    </div>
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="ziele" className="gap-1.5 text-xs">
-                        <Target className="h-3.5 w-3.5" />
-                        Zielprofil
-                      </TabsTrigger>
-                      <TabsTrigger value="dge" className="gap-1.5 text-xs">
-                        <Activity className="h-3.5 w-3.5" />
-                        DGE-Referenz
-                      </TabsTrigger>
-                    </TabsList>
-                  </CardHeader>
-                  <CardContent>
-                    <TabsContent value="ziele" className="mt-0 space-y-2.5">
-                      {dietLineCompliance.length === 0 && (
-                        <p className="text-muted-foreground text-sm">
-                          {dietLinesLoading
-                            ? "Zielprofile werden geladen …"
-                            : "Noch keine Zielwerte gepflegt."}
-                        </p>
-                      )}
-                      {dietLineCompliance.map((target) => {
-                        const ratio =
-                          typeof target.max === "number" && target.max > 0
-                            ? Math.min((target.value / target.max) * 100, 120)
-                            : typeof target.min === "number" && target.min > 0
-                              ? Math.min((target.value / target.min) * 100, 120)
-                              : 0
-                        return (
-                          <div key={target.label} className="space-y-1">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="font-medium">{target.label}</span>
-                              <span
-                                className={cn(
-                                  "text-xs font-semibold",
-                                  target.status === "ok"
-                                    ? "text-emerald-700"
-                                    : target.status === "low"
-                                      ? "text-amber-700"
-                                      : "text-rose-700",
-                                )}
-                              >
-                                {formatNumber(target.value, 0)} {target.unit}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Progress
-                                value={Math.min(ratio, 100)}
-                                className={cn(
-                                  "h-1.5 flex-1",
-                                  target.status === "ok"
-                                    ? "[&>div]:bg-emerald-500"
-                                    : target.status === "low"
-                                      ? "[&>div]:bg-amber-500"
-                                      : "[&>div]:bg-rose-500",
-                                )}
-                              />
-                              <span className="text-muted-foreground w-20 text-right text-[11px]">
-                                {target.min != null ? formatNumber(target.min, 0) : "–"}–
-                                {target.max != null ? formatNumber(target.max, 0) : "–"}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </TabsContent>
-                    <TabsContent value="dge" className="mt-0 space-y-3">
-                      {KEY_NUTRIENT_IDS.map((nutrientId) => {
-                        const def = nutrientDefMap.get(nutrientId)
-                        if (!def) return null
-                        const value = getNutrientValue(dailyNutrients, nutrientId)
-                        const refValue = referenceMap.get(nutrientId) ?? 0
-
-                        return (
-                          <NutrientBar
-                            key={nutrientId}
-                            label={def.shortName}
-                            value={value}
-                            unit={def.unit}
-                            referenceValue={refValue}
-                          />
-                        )
-                      })}
-                    </TabsContent>
-                  </CardContent>
-                </Tabs>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Sparkles className="text-primary h-4 w-4" />
-                    Optimierungsassistent
-                  </CardTitle>
-                  <CardDescription>
-                    {optimizationSuggestions.length > 0
-                      ? "Vorschläge für unterversorgte Zielwerte"
-                      : "Profil-Konformität wird laufend geprüft"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {optimizationSuggestions.length > 0 ? (
-                    optimizationSuggestions.slice(0, 3).map((suggestion) => (
-                      <div
-                        key={suggestion.id}
-                        className="hover:bg-muted/40 flex items-start justify-between gap-3 rounded-md border p-2.5 transition"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{suggestion.name}</p>
-                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
-                            {MEAL_SLOT_LABELS[suggestion.slotType]} · {suggestion.targetLabel} +
-                            {formatNutrient(suggestion.contribution, suggestion.unit)}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 shrink-0"
-                          disabled={currentPlan.status === "approved"}
-                          onClick={() => applyOptimizationSuggestion(suggestion)}
-                        >
-                          Einfügen
-                        </Button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-                      {dietLineCompliance.some((target) => target.status === "low")
-                        ? "Keine geeigneten Vorschläge aus den geladenen Daten."
-                        : "Alle Zielwerte sind im Bereich – keine Vorschläge nötig."}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <PlanAdditiveSummary
-                plan={currentPlan}
-                foodMap={foodMap}
-                recipeMap={recipeMap}
-              />
-            </div>
-          </div>
+          <PlanDayWorkspace
+            plan={currentPlan}
+            weekPlans={dayWeekPlans}
+            activeDate={currentDate}
+            onSelectDay={setDate}
+            onDuplicateDay={() => copyPlanToNextDay(currentDate)}
+            foods={foods}
+            foodMap={foodMap}
+            recipeMap={recipeMap}
+            compliance={dietLineCompliance}
+            dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
+            suggestions={optimizationSuggestions}
+            onApplySuggestion={applyOptimizationSuggestion}
+            onAddEntry={handleAddEntry}
+            onRemoveEntry={removeEntry}
+            onUpdateAmount={updateEntryAmount}
+            onMoveEntry={moveEntry}
+            onOpenExchange={handleOpenExchange}
+            onDropPayload={(slotType, payload) => void handleDropPayload(slotType, payload)}
+            allergenWarnings={entryAllergenWarnings}
+            isLocked={currentPlan.status === "approved"}
+          >
+            <PlanAdditiveSummary
+              plan={currentPlan}
+              foodMap={foodMap}
+              recipeMap={recipeMap}
+            />
+          </PlanDayWorkspace>
         </TabsContent>
 
         <TabsContent value="week" className="space-y-4">
@@ -1774,10 +1606,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             dietLineCompliance={dietLineCompliance}
             foods={foods}
             foodMap={foodMap}
-            recipes={recipes}
             recipeMap={recipeMap}
-            libraryFoods={foodCommandSource}
-            categoryLabels={foodCategoryLabels}
             activeDate={currentDate}
             activeDayLabel={formattedDate}
             energyValue={getNutrientValue(dailyNutrients, "energie")}
@@ -1818,6 +1647,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             bodyWeightKg={latestPatientWeightKg}
           />
         </TabsContent>
+          </div>
+        </div>
       </Tabs>
         </>
       )}
@@ -1928,17 +1759,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         versionsLoading={mealPlanVersionsLoading}
         onSaveNotes={saveCurrentPlanNotes}
         onRestoreVersion={restoreVersion}
-      />
-
-      <PlanRecipePalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        recipes={recipes}
-        foods={foods}
-        patientIndications={patientIndications}
-        patientAllergens={patientAllergens}
-        isLocked={currentPlan.status === "approved"}
-        onQuickAdd={handleQuickAddRecipe}
       />
     </div>
   )
