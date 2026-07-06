@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type DragEvent, type ReactNode } from "react"
+import { useMemo, useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
 import {
@@ -11,22 +11,13 @@ import {
   Moon,
   Plus,
   Replace,
-  Sparkles,
   Sunrise,
   UtensilsCrossed,
   X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import {
   Tooltip,
   TooltipContent,
@@ -41,10 +32,9 @@ import {
   type MealPlanDragPayload,
 } from "@/components/meal-plan-library"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import { calculateEntryNutrients, type DietLineComplianceItem } from "@/lib/meal-plan-calc"
-import type { OptimizationSuggestion } from "@/hooks/use-plan-analysis"
+import { calculateEntryNutrients } from "@/lib/meal-plan-calc"
 import { getNutrientValue, sumNutrients } from "@/lib/nutrients"
-import { formatNumber, formatNutrient } from "@/lib/format"
+import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type {
   DailyMealPlan,
@@ -80,10 +70,6 @@ interface PlanDayWorkspaceProps {
   foods: Food[]
   foodMap: Map<string, Food>
   recipeMap: Map<string, Recipe>
-  compliance: DietLineComplianceItem[]
-  dietLineName?: string
-  suggestions: OptimizationSuggestion[]
-  onApplySuggestion: (suggestion: OptimizationSuggestion) => void
   onAddEntry: (slotType: MealSlotType) => void
   onRemoveEntry: (slotType: MealSlotType, entryId: string) => void
   onUpdateAmount: (slotType: MealSlotType, entryId: string, amount: number) => void
@@ -96,8 +82,6 @@ interface PlanDayWorkspaceProps {
   onDropPayload: (slotType: MealSlotType, payload: MealPlanDragPayload) => void
   allergenWarnings?: Map<string, string[]>
   isLocked?: boolean
-  /** Extra sidebar cards (e.g. additives summary) rendered below Tagesbilanz. */
-  children?: ReactNode
 }
 
 function getEntryName(
@@ -119,10 +103,6 @@ export function PlanDayWorkspace({
   foods,
   foodMap,
   recipeMap,
-  compliance,
-  dietLineName,
-  suggestions,
-  onApplySuggestion,
   onAddEntry,
   onRemoveEntry,
   onUpdateAmount,
@@ -131,7 +111,6 @@ export function PlanDayWorkspace({
   onDropPayload,
   allergenWarnings,
   isLocked,
-  children,
 }: PlanDayWorkspaceProps) {
   const [dropSlot, setDropSlot] = useState<MealSlotType | null>(null)
 
@@ -191,8 +170,7 @@ export function PlanDayWorkspace({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="min-w-0 space-y-3">
+    <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             {weekPlans.map((dayPlan) => {
@@ -406,54 +384,6 @@ export function PlanDayWorkspace({
             })}
           </table>
         </div>
-      </div>
-
-      <div className="space-y-4 self-start lg:sticky lg:top-28">
-        <PlanBalanceRail compliance={compliance} dietLineName={dietLineName} />
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="text-primary h-4 w-4" />
-              Vorschläge zum Auffüllen
-            </CardTitle>
-            <CardDescription>
-              {suggestions.length > 0
-                ? "Schließt offene Ziele automatisch"
-                : "Alle Zielwerte im Bereich – keine Vorschläge nötig."}
-            </CardDescription>
-          </CardHeader>
-          {suggestions.length > 0 && (
-            <CardContent className="space-y-2 text-sm">
-              {suggestions.slice(0, 3).map((suggestion) => (
-                <div
-                  key={suggestion.id}
-                  className="hover:bg-muted/40 flex items-start justify-between gap-3 rounded-md border p-2.5 transition"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{suggestion.name}</p>
-                    <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
-                      {MEAL_SLOT_LABELS[suggestion.slotType]} · {suggestion.targetLabel} +
-                      {formatNutrient(suggestion.contribution, suggestion.unit)}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 shrink-0"
-                    disabled={isLocked}
-                    onClick={() => onApplySuggestion(suggestion)}
-                  >
-                    Übernehmen
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          )}
-        </Card>
-
-        {children}
-      </div>
     </div>
   )
 }

@@ -177,8 +177,8 @@ export function MealPlanLibrary({
   ]
 
   return (
-    <Card className={cn("self-start", className)}>
-      <CardContent className="space-y-3 p-4">
+    <Card className={cn("flex flex-col", className)}>
+      <CardContent className="flex flex-1 flex-col gap-3 p-4 xl:min-h-0">
         <div className="text-sm font-semibold">Bibliothek</div>
         <div className="relative">
           <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
@@ -206,7 +206,7 @@ export function MealPlanLibrary({
             </button>
           ))}
         </div>
-        <div className="flex max-h-[520px] flex-col gap-1.5 overflow-y-auto">
+        <div className="flex max-h-[520px] flex-col gap-1.5 overflow-y-auto xl:max-h-none xl:min-h-0 xl:flex-1">
           {tab === "recipes" &&
             filteredRecipes.map((recipe) => (
               <div

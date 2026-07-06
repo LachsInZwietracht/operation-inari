@@ -79,6 +79,9 @@ import { PlanDietLineDialog, type DietLineDraft } from "@/components/plan-diet-l
 import { PlanExchangeDialog } from "@/components/plan-exchange-dialog"
 import { MealPlanLibrary } from "@/components/meal-plan-library"
 import { PlanDayWorkspace } from "@/components/plan-day-workspace"
+import { PlanFillSuggestions } from "@/components/plan-fill-suggestions"
+import { PlanBalanceRail } from "@/components/plan-balance-rail"
+import { PlanWeekSummaryCards } from "@/components/plan-week-summary-cards"
 import { toast } from "sonner"
 
 // Secondary views load lazily so the (default) day view ships less code
@@ -762,12 +765,16 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             the same items can be dragged (or click-added) into either view. */}
         <div
           className={cn(
-            "mt-2 grid items-start gap-4",
+            "mt-2 grid gap-4",
             (view === "day" || view === "week") && "xl:grid-cols-[290px_minmax(0,1fr)]",
           )}
         >
+          {/* Row 1, left: the shared library fills the same height as the planner
+              beside it. Row 1, right: the planner (scrolls internally). The
+              Tagesbilanz and helper cards below span both columns (col-span-2). */}
           {(view === "day" || view === "week") && (
             <MealPlanLibrary
+              className="min-h-0 xl:h-[calc(100vh-17.5rem)]"
               foods={foodCommandSource}
               fullFoods={foods}
               recipes={recipes}
@@ -778,10 +785,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               onApplyTemplate={handleApplyTemplate}
             />
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 xl:h-[calc(100vh-14rem)] xl:min-h-0 xl:overflow-y-auto">
 
         <TabsContent value="day" className="space-y-4">
-          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur">
+          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur xl:top-0">
             <div className="flex items-center gap-1">
               <Button variant="outline" size="icon" onClick={goToPreviousDay}>
                 <ChevronLeft className="h-4 w-4" />
@@ -947,10 +954,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
-            compliance={dietLineCompliance}
-            dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
-            suggestions={optimizationSuggestions}
-            onApplySuggestion={applyOptimizationSuggestion}
             onAddEntry={handleAddEntry}
             onRemoveEntry={removeEntry}
             onUpdateAmount={updateEntryAmount}
@@ -959,13 +962,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             onDropPayload={(slotType, payload) => void handleDropPayload(slotType, payload)}
             allergenWarnings={entryAllergenWarnings}
             isLocked={currentPlan.status === "approved"}
-          >
-            <PlanAdditiveSummary
-              plan={currentPlan}
-              foodMap={foodMap}
-              recipeMap={recipeMap}
-            />
-          </PlanDayWorkspace>
+          />
         </TabsContent>
 
         <TabsContent value="week" className="space-y-4">
@@ -975,7 +972,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
             onNextWeek={() => setWeekOffset((prev) => prev + 1)}
             dietLine={dietLine}
-            dietLineCompliance={dietLineCompliance}
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
@@ -991,10 +987,42 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             onClearDay={clearPlan}
             onDrop={(date, slotType, payload) => void handleWeekDropPayload(date, slotType, payload)}
             onRemoveEntry={removeEntryForDate}
-            isExporting={exportingVariant !== null}
-            onExportLehrkueche={() => void handleExportPlan("lehrkueche")}
           />
         </TabsContent>
+          </div>
+
+          {/* Full-width Tagesbilanz — spans under both the library and the
+              planner so the daily yardstick reads as the primary reference. */}
+          <div className="xl:col-span-2">
+            <PlanBalanceRail
+              compliance={dietLineCompliance}
+              dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
+            />
+          </div>
+
+          {/* View-specific helper cards, also full-width below the Tagesbilanz. */}
+          <div className="xl:col-span-2">
+            {view === "day" ? (
+              <div className="grid items-start gap-4 md:grid-cols-2">
+                <PlanFillSuggestions
+                  suggestions={optimizationSuggestions}
+                  onApplySuggestion={applyOptimizationSuggestion}
+                  isLocked={currentPlan.status === "approved"}
+                />
+                <PlanAdditiveSummary plan={currentPlan} foodMap={foodMap} recipeMap={recipeMap} />
+              </div>
+            ) : (
+              <PlanWeekSummaryCards
+                weekPlans={weekPlans}
+                dietLine={dietLine}
+                dietLineCompliance={dietLineCompliance}
+                foods={foods}
+                foodMap={foodMap}
+                recipeMap={recipeMap}
+                isExporting={exportingVariant !== null}
+                onExportLehrkueche={() => void handleExportPlan("lehrkueche")}
+              />
+            )}
           </div>
         </div>
       </Tabs>

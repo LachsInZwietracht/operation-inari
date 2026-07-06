@@ -92,8 +92,8 @@ export function MealPlanWeekBoard({
   return (
     <div className="min-w-0 space-y-4">
       <div className="overflow-x-auto">
-        <div className="min-w-[980px] space-y-2">
-          <div className="grid grid-cols-[86px_repeat(7,1fr)] gap-2">
+        <div className="min-w-[788px] space-y-2">
+          <div className="grid grid-cols-[72px_repeat(7,1fr)] gap-2">
             <div />
             {days.map(({ plan, kcal }) => {
               const isActive = plan.date === activeDate
@@ -167,9 +167,9 @@ export function MealPlanWeekBoard({
           </div>
 
           {SLOT_ORDER.map((slotType) => (
-            <div key={slotType} className="grid grid-cols-[86px_repeat(7,1fr)] gap-2">
+            <div key={slotType} className="grid grid-cols-[72px_repeat(7,1fr)] gap-2">
               <div className="flex items-center justify-end pr-1">
-                <span className="text-muted-foreground text-right text-[10px] leading-tight font-semibold tracking-wide uppercase">
+                <span className="text-muted-foreground text-right text-[10px] leading-tight font-semibold uppercase">
                   {SLOT_ROW_LABELS[slotType]}
                 </span>
               </div>
