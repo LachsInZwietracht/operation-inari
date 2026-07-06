@@ -52,6 +52,7 @@ Playwright 1.61.0 silently excluded specs importing `@/` modules, and several ot
 - `navigation.spec.ts` sidebar walk asserts pre-PR-#20 nav labels/routes (title `/Prodi/` → fixed to `/Inari/` in this commit).
 - `reference-values.spec.ts` targets `data-testid="reference-standard-*"` cards that never existed in any commit; page now has Vergleich/Eigene-Profile tabs.
 - `smart-match.spec.ts`, `protocols.spec.ts`, `counseling.spec.ts` (previously never collected) assert old protocol/counseling flows.
+- `recipe-crud.spec.ts` "creates a new recipe" (verified stale on f25123c, 2026-07-06).
 - `onboarding.spec.ts` (6), `food-search.spec.ts` fuzzy/synonym cases, `invoices.spec.ts` "mock data" wording, `exchange-tables.spec.ts`, `sfk-foods.spec.ts`, parts of `institution.spec.ts`, `digital-protocol.spec.ts`, `responsive-layout.spec.ts`, `ops-surfaces.spec.ts`, `allergen-management.spec.ts`.
 Repair the same way patients/meal-plan were repaired in #25: read the current UI, update expectations, harden flakes.
 
