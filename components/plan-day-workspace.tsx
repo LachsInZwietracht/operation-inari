@@ -276,11 +276,6 @@ export function PlanDayWorkspace({
                       <span className="flex items-center gap-2 font-semibold">
                         <Icon className="text-muted-foreground h-3.5 w-3.5" />
                         {MEAL_SLOT_LABELS[slot.type]}
-                        <span className="text-muted-foreground text-xs font-normal">
-                          {slot.entries.length === 0
-                            ? "leer"
-                            : `${slot.entries.length} ${slot.entries.length === 1 ? "Eintrag" : "Einträge"}`}
-                        </span>
                       </span>
                     </td>
                     <td />
