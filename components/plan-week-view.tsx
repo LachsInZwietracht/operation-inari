@@ -5,10 +5,8 @@ import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
 import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react"
 
-import {
-  MealPlanWeekBoard,
-  type WeekBoardTarget,
-} from "@/components/meal-plan-week-board"
+import { MealPlanWeekBoard } from "@/components/meal-plan-week-board"
+import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -52,10 +50,7 @@ interface PlanWeekViewProps {
   foodMap: Map<string, Food>
   recipeMap: Map<string, Recipe>
   activeDate: string
-  activeDayLabel: string
-  energyValue: number
   energyTarget?: number
-  barTargets: WeekBoardTarget[]
   onSelectDay: (date: string) => void
   onOpenDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
@@ -83,10 +78,7 @@ export function PlanWeekView({
   foodMap,
   recipeMap,
   activeDate,
-  activeDayLabel,
-  energyValue,
   energyTarget,
-  barTargets,
   onSelectDay,
   onOpenDay,
   onCopyCurrentToDay,
@@ -137,7 +129,8 @@ export function PlanWeekView({
   }, [aggregatePlanNutrients, foodMap, recipeMap, weekPlans])
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="icon" onClick={onPrevWeek}>
           <ChevronLeft className="h-4 w-4" />
@@ -159,10 +152,7 @@ export function PlanWeekView({
           kcal: getNutrientValue(totals, "energie"),
         }))}
         activeDate={activeDate}
-        activeDayLabel={activeDayLabel}
-        energyValue={energyValue}
         energyTarget={energyTarget}
-        barTargets={barTargets}
         getEntryLabel={weekEntryLabel}
         onSelectDay={onSelectDay}
         onOpenDay={onOpenDay}
@@ -253,6 +243,14 @@ export function PlanWeekView({
             Tippe auf einen Slot im Tagesmodus, um Alternativen einzufügen.
           </CardContent>
         </Card>
+      </div>
+      </div>
+
+      <div className="self-start lg:sticky lg:top-28">
+        <PlanBalanceRail
+          compliance={dietLineCompliance}
+          dietLineName={dietLine?.name}
+        />
       </div>
     </div>
   )

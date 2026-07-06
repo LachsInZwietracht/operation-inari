@@ -56,7 +56,6 @@ import {
   type OptimizationSuggestion,
 } from "@/hooks/use-plan-analysis"
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
-import { getNutrientValue } from "@/lib/nutrients"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import type {
@@ -467,11 +466,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const {
     planAllergenSummary,
     entryAllergenWarnings,
-    dailyNutrients,
     refConfig,
     dietLineCompliance,
     energyTargetValue,
-    weekBoardTargets,
     optimizationSuggestions,
   } = usePlanAnalysis({
     plan: currentPlan,
@@ -983,10 +980,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             foodMap={foodMap}
             recipeMap={recipeMap}
             activeDate={currentDate}
-            activeDayLabel={formattedDate}
-            energyValue={getNutrientValue(dailyNutrients, "energie")}
             energyTarget={energyTargetValue}
-            barTargets={weekBoardTargets}
             onSelectDay={setDate}
             onOpenDay={(date) => {
               setDate(date)

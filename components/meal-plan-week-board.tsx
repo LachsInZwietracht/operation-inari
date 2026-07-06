@@ -4,7 +4,6 @@ import { useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
 import { Copy, FolderOpen, Lock, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -54,10 +53,8 @@ export interface WeekBoardTarget {
 interface MealPlanWeekBoardProps {
   days: { plan: DailyMealPlan; kcal: number }[]
   activeDate: string
-  activeDayLabel: string
-  energyValue: number
+  /** Drives the per-day kcal progress bars in the board header. */
   energyTarget?: number
-  barTargets: WeekBoardTarget[]
   getEntryLabel: (entry: MealEntry) => string
   onSelectDay: (date: string) => void
   onOpenDay: (date: string) => void
@@ -68,54 +65,10 @@ interface MealPlanWeekBoardProps {
   onRemoveEntry: (date: string, slotType: MealSlotType, entryId: string) => void
 }
 
-function KcalRing({ value, target }: { value: number; target?: number }) {
-  const size = 92
-  const stroke = 10
-  const radius = size / 2 - stroke - 2
-  const circumference = 2 * Math.PI * radius
-  const pct = target && target > 0 ? Math.min(1, value / target) : 0
-
-  return (
-    <div className="relative h-[92px] w-[92px] flex-none">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          strokeWidth={stroke}
-          className="stroke-muted"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={`${(pct * circumference).toFixed(1)} ${circumference.toFixed(1)}`}
-          className="stroke-primary"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono text-lg leading-none font-semibold">
-          {formatNumber(Math.round(value))}
-        </span>
-        <span className="text-muted-foreground mt-0.5 text-[10px]">
-          {target ? `von ${formatNumber(Math.round(target))} kcal` : "kcal"}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 export function MealPlanWeekBoard({
   days,
   activeDate,
-  activeDayLabel,
-  energyValue,
   energyTarget,
-  barTargets,
   getEntryLabel,
   onSelectDay,
   onOpenDay,
@@ -138,56 +91,6 @@ export function MealPlanWeekBoard({
 
   return (
     <div className="min-w-0 space-y-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-6 p-4">
-          <KcalRing value={energyValue} target={energyTarget} />
-          <div className="min-w-[220px] flex-1 space-y-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-sm font-semibold capitalize">{activeDayLabel}</span>
-              <span className="text-muted-foreground text-xs">· Tagesziel</span>
-            </div>
-            {barTargets.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                Zielprofil auswählen, um Live-Zieltracking zu aktivieren.
-              </p>
-            ) : (
-              <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
-                {barTargets.map((target) => {
-                  const pct =
-                    target.target && target.target > 0
-                      ? Math.min(100, Math.round((target.value / target.target) * 100))
-                      : 0
-                  return (
-                    <div key={target.nutrientId} className="min-w-0">
-                      <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
-                        <span className="text-muted-foreground truncate font-medium">
-                          {target.label}
-                        </span>
-                        <span className="font-mono">
-                          {formatNumber(target.value, 0)}
-                          {target.target != null && `/${formatNumber(target.target, 0)}`} {target.unit}
-                        </span>
-                      </div>
-                      <div className="bg-muted h-1.5 overflow-hidden rounded-full">
-                        <div
-                          className={cn(
-                            "h-full rounded-full",
-                            target.status === "ok" && "bg-primary",
-                            target.status === "low" && "bg-amber-500",
-                            target.status === "high" && "bg-destructive",
-                          )}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="overflow-x-auto">
         <div className="min-w-[980px] space-y-2">
           <div className="grid grid-cols-[86px_repeat(7,1fr)] gap-2">
