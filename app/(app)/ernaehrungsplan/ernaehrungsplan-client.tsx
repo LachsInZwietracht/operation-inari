@@ -67,7 +67,6 @@ import {
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { getNutrientValue } from "@/lib/nutrients"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
-import { formatNumber } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import type {
   MealSlotType,
@@ -523,7 +522,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     energyTargetValue,
     weekBoardTargets,
     optimizationSuggestions,
-    clinicalReview,
   } = usePlanAnalysis({
     plan: currentPlan,
     foods,
@@ -647,11 +645,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const approveCurrentPlan = async () => {
     if (currentPlan.status === "approved") return
-
-    if (clinicalReview.blockingItems.length > 0) {
-      toast.error("Freigabe blockiert: Bitte kritische Prüfpunkte klären.")
-      return
-    }
 
     setIsApprovingPlan(true)
     try {
@@ -891,11 +884,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         toast.error("Export nicht möglich: Der aktuelle Plan enthält noch keine Einträge.")
         return
       }
-      if (variant === "patient" && !clinicalReview.canApprove) {
-        toast.error("Patientenhandout erst nach geklärter Freigabeprüfung exportieren.")
-        return
-      }
-
       const patientName = patient ? `${patient.firstName} ${patient.lastName}` : undefined
       const planContext = {
         patientId: currentPlan.patientId ?? patientId,
@@ -904,12 +892,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         planId: currentPlan.id,
         dietLineName: dietLine?.name,
       }
-      const reviewNote = clinicalReview.canApprove
-        ? clinicalReview.warningItems.length > 0
-          ? `Freigabeprüfung: ${clinicalReview.warningItems.length} Hinweise ohne kritische Blocker.`
-          : "Freigabeprüfung: keine kritischen Blocker oder Hinweise."
-        : `Freigabeprüfung: ${clinicalReview.blockingItems.length} kritische Blocker.`
-      const notes = [currentPlan.notes, reviewNote].filter(Boolean).join("\n\n")
+      const notes = currentPlan.notes ?? undefined
 
       const reportRequest =
         variant === "lehrkueche"
@@ -946,9 +929,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       }
     },
     [
-      clinicalReview.blockingItems.length,
-      clinicalReview.canApprove,
-      clinicalReview.warningItems.length,
       currentPlan,
       dietLine?.name,
       exportingVariant,
@@ -1005,57 +985,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   {patientAllergens.length} Allergene
                 </Badge>
               )}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "h-7 gap-1.5 px-2 text-xs",
-                      clinicalReview.canApprove
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                        : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
-                    )}
-                  >
-                    {clinicalReview.canApprove ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    )}
-                    {clinicalReview.canApprove
-                      ? clinicalReview.warningItems.length > 0
-                        ? `${clinicalReview.warningItems.length} Hinweise`
-                        : "freigabereif"
-                      : `${clinicalReview.blockingItems.length} Blocker`}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-[28rem] p-3">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Klinische Freigabeprüfung</p>
-                    <div className="grid gap-2">
-                      {clinicalReview.items.map((item) => (
-                        <div key={item.id} className="rounded-md border p-2 text-xs">
-                          <div className="flex items-center gap-2">
-                            {item.severity === "ok" ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                            ) : (
-                              <AlertTriangle
-                                className={
-                                  item.severity === "critical"
-                                    ? "h-3.5 w-3.5 text-red-600"
-                                    : "h-3.5 w-3.5 text-amber-600"
-                                }
-                              />
-                            )}
-                            <span className="font-medium">{item.label}</span>
-                          </div>
-                          <p className="text-muted-foreground mt-1">{item.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
               <Badge
                 variant={currentPlan.status === "approved" ? "secondary" : "outline"}
                 className={cn(
@@ -1165,7 +1094,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                   <Button
                     size="sm"
                     onClick={() => void approveCurrentPlan()}
-                    disabled={!clinicalReview.canApprove || isSavingPlan || isApprovingPlan}
+                    disabled={isSavingPlan || isApprovingPlan}
                   >
                     {isApprovingPlan ? (
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -1436,17 +1365,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                       </span>
                     </div>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={!clinicalReview.canApprove}
-                    onSelect={() => void handleExportPlan("patient")}
-                  >
+                  <DropdownMenuItem onSelect={() => void handleExportPlan("patient")}>
                     <Users className="mr-2 h-4 w-4" />
                     <div className="flex flex-col">
                       <span>Patientenhandout</span>
                       <span className="text-muted-foreground text-xs">
-                        {clinicalReview.canApprove
-                          ? "Mahlzeiten & Hinweise, ohne klinische Tabellen"
-                          : "erst nach geklärter Freigabeprüfung"}
+                        Mahlzeiten & Hinweise, ohne klinische Tabellen
                       </span>
                     </div>
                   </DropdownMenuItem>

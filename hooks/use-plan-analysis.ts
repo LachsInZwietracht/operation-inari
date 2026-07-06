@@ -6,7 +6,7 @@ import type { WeekBoardTarget } from "@/components/meal-plan-week-board"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { checkAllergenConflicts } from "@/lib/allergen-warnings"
 import { summarizePlanAllergenConflicts } from "@/lib/allergen-warnings"
-import { MEAL_SLOT_LABELS, MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
+import { MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
 import {
   calculateEntryNutrients,
@@ -33,15 +33,6 @@ import type {
   PatientAllergenEntry,
   Recipe,
 } from "@/lib/types"
-
-export type PlanReviewSeverity = "critical" | "warning" | "ok"
-
-export interface PlanReviewItem {
-  id: string
-  label: string
-  description: string
-  severity: PlanReviewSeverity
-}
 
 export interface OptimizationSuggestion {
   id: string
@@ -323,91 +314,6 @@ export function usePlanAnalysis({
       .slice(0, 4)
   }, [plan, dietLine, dietLineCompliance, foods, patientAllergens, recipes])
 
-  const clinicalReview = useMemo(() => {
-    const totalEntries = plan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
-    const allergenConflictCount = Array.from(entryAllergenWarnings.values()).reduce(
-      (sum, warnings) => sum + warnings.length,
-      0,
-    )
-    const missingCoreSlots = plan.slots
-      .filter((slot) => ["fruehstueck", "mittagessen", "abendessen"].includes(slot.type))
-      .filter((slot) => slot.entries.length === 0)
-      .map((slot) => MEAL_SLOT_LABELS[slot.type])
-    const offTargetItems = dietLineCompliance.filter((target) => target.status !== "ok")
-    const items: PlanReviewItem[] = []
-
-    items.push({
-      id: "entries",
-      label: "Planinhalt",
-      description:
-        totalEntries > 0
-          ? `${totalEntries} Einträge geplant.`
-          : "Der Tagesplan enthält noch keine Mahlzeiten.",
-      severity: totalEntries > 0 ? "ok" : "critical",
-    })
-
-    items.push({
-      id: "patient",
-      label: "Patientenkontext",
-      description:
-        patientId && plan.patientId !== patientId
-          ? "Der geöffnete Patientenkontext ist noch nicht am Plan gespeichert."
-          : plan.patientId
-            ? "Patientenkontext ist am Plan gespeichert."
-            : "Allgemeiner Plan ohne Patientenzuordnung.",
-      severity: patientId && plan.patientId !== patientId ? "critical" : "ok",
-    })
-
-    items.push({
-      id: "targets",
-      label: "Zielprofil",
-      description: dietLine
-        ? `${dietLine.name}: ${offTargetItems.length === 0 ? "alle Zielwerte im Bereich." : `${offTargetItems.length} Zielwerte außerhalb des Bereichs.`}`
-        : "Es ist kein Kostform-/Zielprofil ausgewählt.",
-      severity: dietLine ? (offTargetItems.length === 0 ? "ok" : "warning") : "critical",
-    })
-
-    items.push({
-      id: "allergens",
-      label: "Allergenprüfung",
-      description:
-        allergenConflictCount > 0
-          ? `${allergenConflictCount} Konflikthinweise im aktuellen Plan.`
-          : patientAllergens.length > 0
-            ? "Keine Konflikte gegen die hinterlegten Allergen-/Intoleranzhinweise."
-            : "Keine patientenspezifischen Allergenhinweise hinterlegt.",
-      severity: allergenConflictCount > 0 ? "critical" : "ok",
-    })
-
-    items.push({
-      id: "meal-structure",
-      label: "Mahlzeitenstruktur",
-      description:
-        missingCoreSlots.length > 0
-          ? `Noch offen: ${missingCoreSlots.join(", ")}.`
-          : "Frühstück, Mittagessen und Abendessen sind belegt.",
-      severity: missingCoreSlots.length > 0 ? "warning" : "ok",
-    })
-
-    const blockingItems = items.filter((item) => item.severity === "critical")
-    const warningItems = items.filter((item) => item.severity === "warning")
-
-    return {
-      items,
-      blockingItems,
-      warningItems,
-      canApprove: blockingItems.length === 0,
-    }
-  }, [
-    plan.patientId,
-    plan.slots,
-    dietLine,
-    dietLineCompliance,
-    entryAllergenWarnings,
-    patientAllergens.length,
-    patientId,
-  ])
-
   return {
     planAllergenSummary,
     entryAllergenWarnings,
@@ -426,6 +332,5 @@ export function usePlanAnalysis({
     energyTargetValue,
     weekBoardTargets,
     optimizationSuggestions,
-    clinicalReview,
   }
 }
