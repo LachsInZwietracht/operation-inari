@@ -12,7 +12,6 @@ import {
 } from "date-fns"
 import { de } from "date-fns/locale"
 import {
-  Activity,
   ChevronLeft,
   ChevronRight,
   CalendarIcon,
@@ -25,7 +24,6 @@ import {
   FolderOpen,
   History,
   LayoutTemplate,
-  Leaf,
   Loader2,
   Lock,
   RotateCcw,
@@ -69,7 +67,6 @@ import {
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { getNutrientValue } from "@/lib/nutrients"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
-import { useAnthropometric } from "@/hooks/use-anthropometric"
 import { formatNumber } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import type {
@@ -100,18 +97,10 @@ import { PlanSaveTemplateDialog, type SaveTemplateDraft } from "@/components/pla
 import { toast } from "sonner"
 
 // Secondary views load lazily so the (default) day view ships less code
-// and the week/cycle/analysis computations only run when their tab opens.
+// and the week computations only run when their tab opens.
 const viewFallback = () => <div className="h-[420px] rounded-md bg-muted/40" />
 const PlanWeekView = dynamic(
   () => import("@/components/plan-week-view").then((mod) => mod.PlanWeekView),
-  { ssr: false, loading: viewFallback },
-)
-const PlanCycleView = dynamic(
-  () => import("@/components/plan-cycle-view").then((mod) => mod.PlanCycleView),
-  { ssr: false, loading: viewFallback },
-)
-const PlanEinzelanalyseView = dynamic(
-  () => import("@/components/plan-einzelanalyse-view").then((mod) => mod.PlanEinzelanalyseView),
   { ssr: false, loading: viewFallback },
 )
 import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
@@ -183,14 +172,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     () => (patientId ? getAllergensForPatient(patientId) : []),
     [patientId, getAllergensForPatient],
   )
-  const { getForPatient: getAnthropometricsForPatient } = useAnthropometric()
-  // Einzelanalyse needs the most recent weight measurement; if no patient is
-  // linked or no entries exist the per-kg toggle stays disabled.
-  const latestPatientWeightKg = useMemo(() => {
-    if (!patientId) return undefined
-    const entries = getAnthropometricsForPatient(patientId)
-    return entries.length > 0 ? entries[entries.length - 1].weight : undefined
-  }, [patientId, getAnthropometricsForPatient])
   const {
     currentDate,
     currentPlan,
@@ -536,11 +517,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     planAllergenSummary,
     entryAllergenWarnings,
     dailyNutrients,
-    totalKcal,
-    totalProtein,
-    totalFat,
-    totalCarbs,
-    totalBE,
     planSustainability,
     refConfig,
     dietLineCompliance,
@@ -1277,81 +1253,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
       {hasSelectedPatient && (
         <>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-muted-foreground text-xs uppercase tracking-wide">CO₂-Bilanz</p>
-                <p className="mt-1 text-3xl font-semibold leading-none">
-                  {formatNumber(planSustainability.totalCo2, 2)}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">kg</span>
-                </p>
-                <p className="text-muted-foreground mt-1.5 text-xs">
-                  <span className="font-medium text-emerald-700">
-                    {formatNumber(planSustainability.plantShare * 100, 0)}%
-                  </span>{" "}
-                  pflanzlich · {formatNumber(planSustainability.animalShare * 100, 0)}% tierisch
-                </p>
-              </div>
-              <Leaf className="h-5 w-5 shrink-0 text-emerald-500" />
-            </div>
-            <div className="bg-muted mt-3 flex h-1.5 overflow-hidden rounded-full">
-              <div
-                className="bg-emerald-500"
-                style={{ width: `${planSustainability.plantShare * 100}%` }}
-              />
-              <div
-                className="bg-orange-300"
-                style={{ width: `${planSustainability.animalShare * 100}%` }}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-muted-foreground text-xs uppercase tracking-wide">Tagessumme</p>
-                <p className="mt-1 text-3xl font-semibold leading-none">
-                  {formatNumber(Math.round(totalKcal))}
-                  <span className="text-muted-foreground ml-1 text-sm font-normal">kcal</span>
-                </p>
-                <p className="text-muted-foreground mt-1.5 line-clamp-1 text-xs">
-                  Energie · Eiweiß · Fett · KH · BE
-                </p>
-              </div>
-              <Activity className="text-muted-foreground h-5 w-5 shrink-0" />
-            </div>
-            <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-              <div>
-                <p className="font-semibold">{formatNumber(totalProtein, 0)} g</p>
-                <p className="text-muted-foreground text-[11px]">Eiweiß</p>
-              </div>
-              <div>
-                <p className="font-semibold">{formatNumber(totalFat, 0)} g</p>
-                <p className="text-muted-foreground text-[11px]">Fett</p>
-              </div>
-              <div>
-                <p className="font-semibold">{formatNumber(totalCarbs, 0)} g</p>
-                <p className="text-muted-foreground text-[11px]">KH</p>
-              </div>
-              <div>
-                <p className="font-semibold">{formatNumber(totalBE, 1)}</p>
-                <p className="text-muted-foreground text-[11px]">BE</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <Tabs value={view} onValueChange={setView}>
         <TabsList>
           <TabsTrigger value="day">Tag</TabsTrigger>
           <TabsTrigger value="week">Woche</TabsTrigger>
-          <TabsTrigger value="cycle">4-Wochen-Zyklus</TabsTrigger>
-          <TabsTrigger value="einzelanalyse">Einzelanalyse</TabsTrigger>
         </TabsList>
 
         {/* The library is the shared build source for the day and week views:
@@ -1624,27 +1529,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             onRemoveEntry={removeEntryForDate}
             isExporting={exportingVariant !== null}
             onExportLehrkueche={() => void handleExportPlan("lehrkueche")}
-          />
-        </TabsContent>
-
-        <TabsContent value="cycle" className="space-y-4">
-          <PlanCycleView
-            baseWeekStart={baseWeekStart}
-            getPlansInRange={getPlansInRange}
-            dietLine={dietLine}
-            foods={foods}
-            foodMap={foodMap}
-            recipeMap={recipeMap}
-          />
-        </TabsContent>
-
-        <TabsContent value="einzelanalyse" className="space-y-4">
-          <PlanEinzelanalyseView
-            plan={currentPlan}
-            foods={foods}
-            foodMap={foodMap}
-            recipeMap={recipeMap}
-            bodyWeightKg={latestPatientWeightKg}
           />
         </TabsContent>
           </div>
