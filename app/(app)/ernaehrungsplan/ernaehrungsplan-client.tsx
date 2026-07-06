@@ -16,26 +16,19 @@ import {
   ChevronRight,
   CalendarIcon,
   AlertTriangle,
-  BookmarkPlus,
-  CheckCircle2,
-  ClipboardCheck,
+  ArrowUpRight,
   Download,
   FileText,
-  FolderOpen,
-  History,
   LayoutTemplate,
   Loader2,
-  Lock,
-  RotateCcw,
-  Save,
   Settings2,
   UserPlus,
+  UserRound,
   Users,
   Utensils,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -47,8 +40,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -74,7 +65,6 @@ import type {
   DailyMealPlan,
   Food,
   MealPlanTemplate,
-  MealPlanVersion,
   Patient,
   Recipe,
 } from "@/lib/types"
@@ -84,15 +74,12 @@ import type { FoodSearchItem } from "@/lib/types"
 import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import { PlanAllergenBanner } from "@/components/plan-allergen-banner"
 import { PlanAddEntryCommand } from "@/components/plan-add-entry-command"
-import { PlanAkteSheet } from "@/components/plan-akte-sheet"
 import { PlanAllergenWarningDialog } from "@/components/plan-allergen-warning-dialog"
 import { PlanApplyTemplateDialog } from "@/components/plan-apply-template-dialog"
-import { PlanAssignPatientDialog } from "@/components/plan-assign-patient-dialog"
 import { PlanDietLineDialog, type DietLineDraft } from "@/components/plan-diet-line-dialog"
 import { PlanExchangeDialog } from "@/components/plan-exchange-dialog"
 import { MealPlanLibrary } from "@/components/meal-plan-library"
 import { PlanDayWorkspace } from "@/components/plan-day-workspace"
-import { PlanSaveTemplateDialog, type SaveTemplateDraft } from "@/components/plan-save-template-dialog"
 import { toast } from "sonner"
 
 // Secondary views load lazily so the (default) day view ships less code
@@ -106,20 +93,12 @@ import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
-import { useMealPlanVersions } from "@/hooks/use-meal-plan-versions"
 import {
   buildDefaultReportExportRequest,
   buildTeachingKitchenExportRequest,
   type MealPlanReportVariant,
 } from "@/lib/exports/report-builder"
 import { cn, downloadResponseFile } from "@/lib/utils"
-
-const PLAN_STATUS_LABELS: Record<NonNullable<DailyMealPlan["status"]>, string> = {
-  draft: "Entwurf",
-  active: "Aktiv",
-  approved: "Freigegeben",
-  archived: "Archiviert",
-}
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
 const CREATE_PATIENT_VALUE = "__create_patient__"
@@ -186,22 +165,11 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
-    savePlanForDate,
-    createPlanCheckpoint,
-    approvePlan,
-    reopenPlan,
-    restorePlanVersion,
     setDate,
     goToNextDay,
     goToPreviousDay,
     allPlans,
   } = useMealPlan(initialPlans, serverFoods, defaultPlanMetadata, initialDate)
-  const {
-    versions: mealPlanVersions,
-    isLoading: mealPlanVersionsLoading,
-    refresh: refreshMealPlanVersions,
-    recordVersion: recordMealPlanVersion,
-  } = useMealPlanVersions(currentPlan.id)
   const {
     presets: dietLines,
     isLoading: dietLinesLoading,
@@ -211,7 +179,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const {
     templates: mealPlanTemplates,
     isLoading: templatesLoading,
-    saveTemplate: saveMealPlanTemplateFromHook,
   } = useMealPlanTemplates({ initialTemplates })
 
   // Planvorlagen deep-link handler. Applies a template once when the
@@ -255,13 +222,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
   const [exportingVariant, setExportingVariant] = useState<MealPlanReportVariant | null>(null)
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
-  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
-  const [isCheckpointing, setIsCheckpointing] = useState(false)
-  const [isSavingPlan, setIsSavingPlan] = useState(false)
-  const [isApprovingPlan, setIsApprovingPlan] = useState(false)
-  const [pendingPatientAssignmentId, setPendingPatientAssignmentId] = useState<string | null>(null)
-  const [planAkteOpen, setPlanAkteOpen] = useState(false)
-  const planTitleInputRef = useRef<HTMLInputElement | null>(null)
   const [weekOffset, setWeekOffset] = useState(0)
 
   useEffect(() => {
@@ -279,14 +239,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     // index is needed as soon as the page mounts.
     void loadFoodSearchIndex()
   }, [loadFoodSearchIndex])
-
-  useEffect(() => {
-    if (currentPlan.status !== "approved") return
-    const timer = window.setTimeout(() => {
-      void refreshMealPlanVersions()
-    }, 1200)
-    return () => window.clearTimeout(timer)
-  }, [currentPlan.approvedAt, currentPlan.status, refreshMealPlanVersions])
 
   const hydrateFood = useCallback(
     async (foodId: string): Promise<Food | null> => {
@@ -516,7 +468,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     planAllergenSummary,
     entryAllergenWarnings,
     dailyNutrients,
-    planSustainability,
     refConfig,
     dietLineCompliance,
     energyTargetValue,
@@ -552,15 +503,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const assignedPatient = currentPlan.patientId ? getPatient(currentPlan.patientId) : undefined
   const visiblePatient = patient ?? assignedPatient
   const hasSelectedPatient = Boolean(patientId ?? currentPlan.patientId)
-  const pendingAssignmentPatient = pendingPatientAssignmentId
-    ? getPatient(pendingPatientAssignmentId)
-    : undefined
-  const visiblePatientIndications = useMemo(() => getPatientIndications(visiblePatient), [visiblePatient])
-  const pendingAssignmentPatientIndications = useMemo(
-    () => getPatientIndications(pendingAssignmentPatient),
-    [pendingAssignmentPatient],
-  )
-  const hasCurrentPlanEntries = currentPlan.slots.some((slot) => slot.entries.length > 0)
 
   const openPatientContext = useCallback(
     (nextPatientId?: string) => {
@@ -578,17 +520,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     }
 
     const nextPatientId = value === UNASSIGNED_PATIENT_VALUE ? undefined : value
-
-    if (!nextPatientId) {
-      openPatientContext()
-      return
-    }
-
-    if (!currentPlan.patientId && hasCurrentPlanEntries) {
-      setPendingPatientAssignmentId(nextPatientId)
-      return
-    }
-
     openPatientContext(nextPatientId)
   }
 
@@ -606,138 +537,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const clearPlan = (date: string) => {
     clearPlanForDate(date)
     toast.success("Tagesplan wurde geleert.")
-  }
-
-  const saveCurrentPlanTitle = (title: string) => {
-    const trimmed = title.trim()
-    updatePlanMetadata(currentDate, { title: trimmed || undefined })
-    toast.success("Plantitel gespeichert.")
-  }
-
-  const saveCurrentPlanNotes = (notes: string) => {
-    const trimmed = notes.trim()
-    updatePlanMetadata(currentDate, { notes: trimmed || undefined })
-    toast.success("Planhinweise gespeichert.")
-  }
-
-  const saveCurrentPlan = async () => {
-    setIsSavingPlan(true)
-    try {
-      const title = planTitleInputRef.current?.value.trim()
-      const savedPlan = await savePlanForDate(currentDate, {
-        title: title || undefined,
-      })
-      if (!savedPlan) {
-        toast.error("Ernährungsplan konnte nicht gespeichert werden.")
-        return
-      }
-
-      toast.success("Ernährungsplan gespeichert.", {
-        action: {
-          label: "Als Vorlage speichern",
-          onClick: openSaveTemplateDialog,
-        },
-      })
-    } finally {
-      setIsSavingPlan(false)
-    }
-  }
-
-  const approveCurrentPlan = async () => {
-    if (currentPlan.status === "approved") return
-
-    setIsApprovingPlan(true)
-    try {
-      const version = await approvePlan(currentDate, {
-        approvedAt: currentPlan.approvedAt ?? new Date().toISOString(),
-        approvedBy: currentPlan.approvedBy,
-      })
-      if (version) {
-        recordMealPlanVersion(version)
-      }
-      toast.success("Ernährungsplan freigegeben.")
-    } finally {
-      setIsApprovingPlan(false)
-    }
-  }
-
-  const cancelCurrentPlan = () => {
-    if (patientId) {
-      router.push(`/patienten/${patientId}`)
-      return
-    }
-
-    router.back()
-  }
-
-  const attachCurrentPatient = () => {
-    if (!patientId) return
-    updatePlanMetadata(currentDate, {
-      patientId,
-      title: currentPlan.title ?? (patient ? `Ernährungsplan ${patient.firstName} ${patient.lastName}` : undefined),
-    })
-    toast.success("Patientenkontext am Plan gespeichert.")
-  }
-
-  const assignCurrentPlanToPatient = (nextPatientId: string) => {
-    if (currentPlan.status === "approved") {
-      toast.error("Freigegebene Pläne können nicht neu zugeordnet werden.")
-      return
-    }
-
-    const nextPatient = getPatient(nextPatientId)
-    updatePlanMetadata(currentDate, {
-      patientId: nextPatientId,
-      title: currentPlan.title ?? (nextPatient ? `Ernährungsplan ${nextPatient.firstName} ${nextPatient.lastName}` : undefined),
-    })
-    setPendingPatientAssignmentId(null)
-    toast.success("Plan wurde dem Patienten zugeordnet.")
-    openPatientContext(nextPatientId)
-  }
-
-  const reopenCurrentPlan = () => {
-    reopenPlan(currentDate)
-    toast.success("Plan wurde als Entwurf wieder geöffnet.")
-    window.setTimeout(() => {
-      void refreshMealPlanVersions()
-    }, 800)
-  }
-
-  const saveManualCheckpoint = async () => {
-    if (currentPlan.status === "approved") {
-      toast.error("Freigegebene Pläne sind bereits versioniert.")
-      return
-    }
-
-    const hasEntries = currentPlan.slots.some((slot) => slot.entries.length > 0)
-    if (!hasEntries) {
-      toast.error("Leere Pläne können nicht als Version gespeichert werden.")
-      return
-    }
-
-    setIsCheckpointing(true)
-    try {
-      const version = await createPlanCheckpoint(currentDate, "manual")
-      if (!version) {
-        toast.error("Checkpoint konnte nicht gespeichert werden.")
-        return
-      }
-
-      recordMealPlanVersion(version)
-      toast.success("Checkpoint wurde in der Versionshistorie gespeichert.")
-    } finally {
-      setIsCheckpointing(false)
-    }
-  }
-
-  const restoreVersion = (version: MealPlanVersion) => {
-    if (currentPlan.status === "approved") {
-      toast.error("Freigegebene Pläne vor dem Wiederherstellen als Entwurf öffnen.")
-      return
-    }
-
-    restorePlanVersion(currentDate, version.snapshot)
-    toast.success(`Version ${version.versionNumber} wurde als Entwurf übernommen.`)
   }
 
   const applyOptimizationSuggestion = (suggestion: OptimizationSuggestion) => {
@@ -833,48 +632,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     ],
   )
 
-  // Prefill values the save-template dialog seeds from each time it opens.
-  const saveTemplateDefaults = useMemo<SaveTemplateDraft>(
-    () => ({
-      name: currentPlan.title ?? "",
-      description: "",
-      indication: patientIndications[0] ?? "",
-      dietLineId: dietLineId || "",
-    }),
-    [currentPlan.title, dietLineId, patientIndications],
-  )
-
-  const openSaveTemplateDialog = useCallback(() => {
-    const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
-    if (totalEntries === 0) {
-      toast.error("Speichern nicht möglich: Der aktuelle Plan enthält keine Einträge.")
-      return
-    }
-    setSaveTemplateDialogOpen(true)
-  }, [currentPlan.slots])
-
-  const handleSaveTemplate = useCallback(
-    async (draft: SaveTemplateDraft): Promise<boolean> => {
-      try {
-        await saveMealPlanTemplateFromHook({
-          name: draft.name,
-          description: draft.description || undefined,
-          indication: draft.indication || undefined,
-          dietLineId: draft.dietLineId || undefined,
-          slots: currentPlan.slots,
-          notes: currentPlan.notes,
-        })
-        toast.success("Vorlage gespeichert.")
-        return true
-      } catch (error) {
-        console.error("Failed to save meal plan template:", error)
-        toast.error("Vorlage konnte nicht gespeichert werden.")
-        return false
-      }
-    },
-    [currentPlan.notes, currentPlan.slots, saveMealPlanTemplateFromHook],
-  )
-
   const handleExportPlan = useCallback(
     async (variant: MealPlanReportVariant) => {
       if (exportingVariant) return
@@ -949,236 +706,52 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         title="Ernährungsplan"
         description={formattedDate}
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen und vergleichen Sie die Nährstoffzufuhr mit Zielprofilen und DGE-Referenzwerten."
-      />
+      >
+        <Select
+          value={patientId ?? currentPlan.patientId ?? UNASSIGNED_PATIENT_VALUE}
+          onValueChange={handlePlanPatientChange}
+        >
+          <SelectTrigger aria-label="Patient" className="w-full min-w-0 sm:w-[260px]">
+            <span className="flex min-w-0 items-center gap-2">
+              <UserRound className="text-muted-foreground h-4 w-4 shrink-0" />
+              <SelectValue placeholder="Patient wählen" />
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNASSIGNED_PATIENT_VALUE}>Kein Patient zugeordnet</SelectItem>
+            {patients.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                {item.lastName}, {item.firstName}
+                {getPatientIndications(item).length ? ` · ${getPatientIndications(item).join(" · ")}` : ""}
+              </SelectItem>
+            ))}
+            <SelectSeparator />
+            <SelectItem value={CREATE_PATIENT_VALUE}>
+              <UserPlus className="h-4 w-4" />
+              Neuen Patienten anlegen
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        {visiblePatient && (
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/patienten/${visiblePatient.id}`)}
+          >
+            <ArrowUpRight className="mr-1.5 h-4 w-4" />
+            Zum Patienten
+          </Button>
+        )}
+      </PageHeader>
 
-      <Card>
-        <CardHeader className="space-y-3 pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                <ClipboardCheck className="text-muted-foreground h-4 w-4 shrink-0" />
-                Planakte
-                {visiblePatient && (
-                  <span className="text-muted-foreground text-sm font-normal">
-                    · {visiblePatient.firstName} {visiblePatient.lastName}
-                  </span>
-                )}
-              </CardTitle>
-              <CardDescription className="line-clamp-1">
-                {currentPlan.title || "Ohne Titel"}
-                {visiblePatientIndications.length
-                  ? ` · ${visiblePatientIndications.join(" · ")}`
-                  : ""}
-                {currentPlan.approvedAt &&
-                  ` · Freigabe ${format(parseISO(currentPlan.approvedAt), "dd.MM.yyyy HH:mm")}`}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {patientId && (
-                <Badge variant="secondary" className="font-normal">
-                  {refConfig.standardId.toUpperCase()}
-                </Badge>
-              )}
-              {patientAllergens.length > 0 && (
-                <Badge variant="outline" className="gap-1 font-normal">
-                  <AlertTriangle className="h-3 w-3" />
-                  {patientAllergens.length} Allergene
-                </Badge>
-              )}
-              <Badge
-                variant={currentPlan.status === "approved" ? "secondary" : "outline"}
-                className={cn(
-                  "gap-1 font-normal",
-                  currentPlan.status === "approved" &&
-                    "border-emerald-200 bg-emerald-50 text-emerald-800",
-                )}
-              >
-                {currentPlan.status === "approved" && <Lock className="h-3 w-3" />}
-                {PLAN_STATUS_LABELS[currentPlan.status ?? "draft"]}
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-[minmax(200px,1fr)_minmax(220px,280px)]">
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="planakte-title"
-                className="text-muted-foreground text-xs uppercase tracking-wide"
-              >
-                Titel
-              </Label>
-              <Input
-                id="planakte-title"
-                ref={planTitleInputRef}
-                key={`title-${currentPlan.id}-${currentPlan.date}`}
-                defaultValue={currentPlan.title ?? ""}
-                placeholder="z. B. Reduktionskost Woche 1"
-                readOnly={currentPlan.status === "approved"}
-                onBlur={(event) => {
-                  if (event.currentTarget.value.trim() !== (currentPlan.title ?? "")) {
-                    saveCurrentPlanTitle(event.currentTarget.value)
-                  }
-                }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-                Patient
-              </Label>
-              <Select
-                value={patientId ?? currentPlan.patientId ?? UNASSIGNED_PATIENT_VALUE}
-                onValueChange={handlePlanPatientChange}
-              >
-                <SelectTrigger aria-label="Patient">
-                  <SelectValue placeholder="Patient wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED_PATIENT_VALUE}>
-                    Kein Patient zugeordnet
-                  </SelectItem>
-                  {patients.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.lastName}, {item.firstName}
-                      {getPatientIndications(item).length ? ` · ${getPatientIndications(item).join(" · ")}` : ""}
-                    </SelectItem>
-                  ))}
-                  <SelectSeparator />
-                  <SelectItem value={CREATE_PATIENT_VALUE}>
-                    <UserPlus className="h-4 w-4" />
-                    Neuen Patienten anlegen
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {patientId && currentPlan.patientId !== patientId && (
-                <Button size="sm" variant="outline" onClick={attachCurrentPatient}>
-                  Patient zuordnen
-                </Button>
-              )}
-              <Button size="sm" variant="outline" onClick={cancelCurrentPlan}>
-                Abbrechen
-              </Button>
-              {currentPlan.status === "approved" && (
-                <Button size="sm" variant="outline" onClick={reopenCurrentPlan}>
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                  Entwurf öffnen
-                </Button>
-              )}
-              {currentPlan.status !== "approved" && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void saveCurrentPlan()}
-                    disabled={isSavingPlan || isApprovingPlan}
-                  >
-                    {isSavingPlan ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    Ernährungsplan speichern
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={openSaveTemplateDialog}
-                    disabled={isSavingPlan || isApprovingPlan}
-                  >
-                    <BookmarkPlus className="mr-1.5 h-3.5 w-3.5" />
-                    Als Vorlage speichern
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => void approveCurrentPlan()}
-                    disabled={isSavingPlan || isApprovingPlan}
-                  >
-                    {isApprovingPlan ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    Freigeben
-                  </Button>
-                </>
-              )}
-              <Button size="sm" variant="outline" onClick={() => setPlanAkteOpen(true)}>
-                <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                Akte öffnen
-              </Button>
-          </div>
-          <div className="bg-muted/30 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <History className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-              {mealPlanVersionsLoading ? (
-                <span className="text-muted-foreground">Versionen werden geladen …</span>
-              ) : mealPlanVersions.length === 0 ? (
-                <span className="text-muted-foreground">Noch keine Versionen.</span>
-              ) : (
-                <span className="truncate font-medium">
-                  Version {mealPlanVersions[0].versionNumber} ·{" "}
-                  {format(parseISO(mealPlanVersions[0].createdAt), "dd.MM.yyyy HH:mm")} ·{" "}
-                  {mealPlanVersions[0].snapshot.slots.reduce(
-                    (sum, slot) => sum + slot.entries.length,
-                    0,
-                  )}{" "}
-                  Einträge ·{" "}
-                  {mealPlanVersions[0].reason === "approved"
-                    ? "Freigabe"
-                    : mealPlanVersions[0].reason === "manual"
-                      ? "Checkpoint"
-                      : "Wiederöffnung"}
-                </span>
-              )}
-              {mealPlanVersions.length > 1 && (
-                <Badge variant="outline" className="text-[10px] font-normal">
-                  +{mealPlanVersions.length - 1} weitere
-                </Badge>
-              )}
-              {currentPlan.status === "approved" && (
-                <span className="text-muted-foreground inline-flex items-center gap-1">
-                  <Lock className="h-3 w-3" />
-                  Bearbeitung gesperrt
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              {mealPlanVersions[0] && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7"
-                  disabled={currentPlan.status === "approved"}
-                  onClick={() => restoreVersion(mealPlanVersions[0])}
-                >
-                  Wiederherstellen
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7"
-                onClick={saveManualCheckpoint}
-                disabled={
-                  isCheckpointing ||
-                  currentPlan.status === "approved" ||
-                  !currentPlan.slots.some((slot) => slot.entries.length > 0)
-                }
-              >
-                {isCheckpointing ? (
-                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                ) : (
-                  <Save className="mr-1.5 h-3 w-3" />
-                )}
-                Checkpoint speichern
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {!hasSelectedPatient && (
+        <div className="rounded-lg border border-dashed px-6 py-16 text-center">
+          <UserRound className="text-muted-foreground mx-auto h-8 w-8" />
+          <p className="mt-3 text-sm font-medium">Kein Patient ausgewählt</p>
+          <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-sm">
+            Wählen Sie oben einen Patienten, um seinen Ernährungsplan zu bearbeiten.
+          </p>
+        </div>
+      )}
 
       {hasSelectedPatient && (
         <>
@@ -1306,41 +879,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 </Button>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <LayoutTemplate className="mr-1.5 h-4 w-4" />
-                    Vorlagen
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel>Planvorlagen</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={currentPlan.status === "approved"}
-                    onSelect={openApplyTemplateDialog}
-                  >
-                    <LayoutTemplate className="mr-2 h-4 w-4" />
-                    <div className="flex flex-col">
-                      <span>Plan aus Vorlage erzeugen</span>
-                      <span className="text-muted-foreground text-xs">
-                        {patientIndications.length
-                          ? `${mealPlanTemplates.length} Vorlagen, gefiltert nach Indikation`
-                          : `${mealPlanTemplates.length} Vorlagen verfügbar`}
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={openSaveTemplateDialog}>
-                    <BookmarkPlus className="mr-2 h-4 w-4" />
-                    <div className="flex flex-col">
-                      <span>Aktuellen Plan als Vorlage speichern</span>
-                      <span className="text-muted-foreground text-xs">
-                        Persönliche Vorlage für Wiederverwendung
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openApplyTemplateDialog}
+              >
+                <LayoutTemplate className="mr-1.5 h-4 w-4" />
+                Aus Vorlage
+              </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1515,58 +1061,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         onApply={handleApplyTemplate}
       />
 
-      <PlanSaveTemplateDialog
-        open={saveTemplateDialogOpen}
-        onOpenChange={setSaveTemplateDialogOpen}
-        dietLines={dietLines}
-        defaults={saveTemplateDefaults}
-        onSave={handleSaveTemplate}
-      />
-
-      <PlanAssignPatientDialog
-        open={pendingPatientAssignmentId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingPatientAssignmentId(null)
-        }}
-        patientName={
-          pendingAssignmentPatient
-            ? `${pendingAssignmentPatient.firstName} ${pendingAssignmentPatient.lastName}`
-            : undefined
-        }
-        patientIndications={pendingAssignmentPatientIndications}
-        entryCount={currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)}
-        dateLabel={format(parseISO(currentDate), "dd.MM.yyyy")}
-        isApproved={currentPlan.status === "approved"}
-        onOpenPlanOnly={() => {
-          const nextPatientId = pendingPatientAssignmentId
-          setPendingPatientAssignmentId(null)
-          if (nextPatientId) openPatientContext(nextPatientId)
-        }}
-        onAssign={() => {
-          if (pendingPatientAssignmentId) {
-            assignCurrentPlanToPatient(pendingPatientAssignmentId)
-          }
-        }}
-        onCancel={() => setPendingPatientAssignmentId(null)}
-      />
-
       <PlanAllergenWarningDialog
         open={pendingAllergenIntent !== null}
         itemName={pendingAllergenIntent?.itemName}
         warnings={pendingAllergenIntent?.warnings ?? []}
         onConfirm={confirmPendingAllergenIntent}
         onDismiss={dismissPendingAllergenIntent}
-      />
-
-      <PlanAkteSheet
-        open={planAkteOpen}
-        onOpenChange={setPlanAkteOpen}
-        plan={currentPlan}
-        sustainability={planSustainability}
-        versions={mealPlanVersions}
-        versionsLoading={mealPlanVersionsLoading}
-        onSaveNotes={saveCurrentPlanNotes}
-        onRestoreVersion={restoreVersion}
       />
     </div>
   )
