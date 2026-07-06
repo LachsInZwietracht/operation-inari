@@ -284,9 +284,10 @@ test.describe("SSO login routing", () => {
 
       await page.goto("/login");
       await page.getByLabel("E-Mail").fill(`diaetetik@${domain}`);
-      await page.getByRole("button", { name: "SSO pruefen" }).click();
 
-      await expect(page.getByText("Login Test SSO gefunden")).toBeVisible();
+      // Die Domain-Aufloesung laeuft automatisch (debounced) ohne expliziten Pruefen-Button.
+      await expect(page.getByText("Klinik-SSO verfuegbar")).toBeVisible();
+      await expect(page.getByText(/Login Test SSO/)).toBeVisible();
       await expect(page.getByRole("button", { name: "Mit SSO anmelden" })).toBeVisible();
     } finally {
       await admin.from("organizations").delete().eq("id", organization.id);

@@ -50,6 +50,8 @@ interface AuthFormProps {
   mode: "login" | "register"
 }
 
+const SSO_RESOLVE_DEBOUNCE_MS = 400
+
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -76,6 +78,38 @@ export function AuthForm({ mode }: AuthFormProps) {
       role: "ernaehrungsberater",
     },
   })
+
+  const email = form.watch("email")
+  const emailDomain = email?.trim().toLowerCase().split("@")[1] ?? ""
+
+  useEffect(() => {
+    if (isRegister) return
+    if (!emailDomain || !emailDomain.includes(".")) {
+      setSsoResolution(null)
+      return
+    }
+    if (emailDomain === ssoResolution?.domain) return
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/sso/resolve?email=${encodeURIComponent(`login@${emailDomain}`)}`, {
+          headers: { accept: "application/json" },
+          signal: controller.signal,
+        })
+        if (!response.ok) return
+        const resolution = (await response.json()) as SsoDomainResolution
+        setSsoResolution(resolution)
+      } catch {
+        // Auflösung ist Best-Effort; Passwortlogin bleibt immer verfügbar.
+      }
+    }, SSO_RESOLVE_DEBOUNCE_MS)
+
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [emailDomain, isRegister, ssoResolution?.domain])
 
   async function onSubmit(values: AuthFormValues) {
     setLoading(true)
@@ -119,32 +153,6 @@ export function AuthForm({ mode }: AuthFormProps) {
       }
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function resolveSso() {
-    const email = form.getValues("email").trim()
-    if (!email || !email.includes("@")) {
-      form.setError("email", { message: "Bitte zuerst eine gueltige E-Mail-Adresse eingeben." })
-      return
-    }
-
-    setSsoLoading(true)
-    setSsoResolution(null)
-    try {
-      const response = await fetch(`/api/sso/resolve?email=${encodeURIComponent(email)}`, {
-        headers: { accept: "application/json" },
-      })
-      if (!response.ok) throw new Error(await response.text())
-      const resolution = (await response.json()) as SsoDomainResolution
-      setSsoResolution(resolution)
-      if (!resolution.matched) {
-        toast.info("Fuer diese Domain ist noch kein aktiver SSO-Provider hinterlegt.")
-      }
-    } catch (error) {
-      toast.error((error as Error).message || "SSO-Pruefung fehlgeschlagen.")
-    } finally {
-      setSsoLoading(false)
     }
   }
 
@@ -220,33 +228,19 @@ export function AuthForm({ mode }: AuthFormProps) {
           )}
         />
 
-        {!isRegister && (
-          <div className="rounded-md border p-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm">
-                <p className="font-medium">Klinik-SSO</p>
-                <p className="text-xs text-muted-foreground">Domain pruefen und vorbereiteten OIDC-/SAML-Pfad anzeigen.</p>
-              </div>
-              <Button type="button" variant="outline" onClick={() => void resolveSso()} disabled={ssoLoading}>
-                {ssoLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                SSO pruefen
-              </Button>
+        {!isRegister && ssoResolution?.matched && (
+          <div className="rounded-md border bg-muted p-3 text-sm">
+            <div className="flex items-center gap-2 font-medium">
+              <ShieldCheck className="h-4 w-4" />
+              Klinik-SSO verfuegbar
             </div>
-            {ssoResolution?.matched ? (
-              <div className="mt-3 rounded-md bg-muted p-3 text-sm">
-                <p className="font-medium">{ssoResolution.displayName} gefunden</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {ssoResolution.organizationName ?? "Organisation"} · {ssoResolution.providerType?.toUpperCase()} · Domain {ssoResolution.domain}
-                </p>
-                <Button type="button" className="mt-3 w-full" variant="secondary" onClick={() => void handleSsoIntent()} disabled={ssoLoading}>
-                  Mit SSO anmelden
-                </Button>
-              </div>
-            ) : ssoResolution ? (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Fuer diese Domain ist kein aktiver SSO-Provider konfiguriert. Passwortlogin bleibt verfuegbar.
-              </p>
-            ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">
+              {ssoResolution.displayName} · {ssoResolution.organizationName ?? "Organisation"} · {ssoResolution.providerType?.toUpperCase()} · Domain {ssoResolution.domain}
+            </p>
+            <Button type="button" className="mt-3 w-full" variant="secondary" onClick={() => void handleSsoIntent()} disabled={ssoLoading}>
+              {ssoLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Mit SSO anmelden
+            </Button>
           </div>
         )}
 
