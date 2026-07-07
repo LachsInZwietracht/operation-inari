@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronUp } from "lucide-react"
+import { ChevronUp } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import type { DietLineComplianceItem } from "@/lib/meal-plan-calc"
@@ -14,12 +14,6 @@ interface PlanBalanceRailProps {
   /** Vitamin / mineral coverage against the DGE reference values. */
   micronutrients?: DietLineComplianceItem[]
   dietLineName?: string
-}
-
-const STATUS_TEXT: Record<DietLineComplianceItem["status"], string> = {
-  ok: "text-emerald-700 dark:text-emerald-400",
-  low: "text-amber-700 dark:text-amber-400",
-  high: "text-rose-700 dark:text-rose-400",
 }
 
 const STATUS_BAR: Record<DietLineComplianceItem["status"], string> = {
@@ -62,28 +56,17 @@ function GlanceItem({ target }: { target: DietLineComplianceItem }) {
   )
 }
 
-/** Full detail row used in the expanded panel: label + delta, figure, fill bar. */
+/** Full detail row used in the expanded panel: label, Ist/Soll figure, fill bar. */
 function NutrientCell({ target }: { target: DietLineComplianceItem }) {
   const goal = target.max ?? target.min
-  const delta = goal != null ? target.value - goal : undefined
   const pct = goal && goal > 0 ? Math.min(100, Math.round((target.value / goal) * 100)) : 0
   const decimals = decimalsFor(goal)
 
   return (
     <div className="min-w-0 space-y-1">
-      <div className="flex items-baseline justify-between gap-1">
-        <span className="text-muted-foreground truncate text-[11px] font-semibold tracking-wide uppercase">
-          {target.label}
-        </span>
-        {delta != null && (
-          <span
-            className={cn("font-mono text-[11px] font-semibold", STATUS_TEXT[target.status])}
-          >
-            {delta >= 0 ? "+" : "−"}
-            {formatNumber(Math.abs(delta), decimals)}
-          </span>
-        )}
-      </div>
+      <span className="text-muted-foreground block truncate text-[11px] font-semibold tracking-wide uppercase">
+        {target.label}
+      </span>
       <div className="font-mono text-sm leading-none">
         <span className="font-semibold">{formatNumber(target.value, decimals)}</span>
         {goal != null && (
@@ -122,35 +105,50 @@ export function PlanBalanceRail({
 
   return (
     <Card className="gap-0 rounded-b-none border-b-0 py-0 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.4)]">
-      {expanded && (
-        <div className="max-h-[60dvh] space-y-4 overflow-y-auto border-b px-4 py-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-semibold">Tagesziele</span>
-            <span className="text-muted-foreground text-xs">
-              Ist / Soll · {dietLineName ?? "Kein Zielprofil"}
-            </span>
-          </div>
-          {hasTargets && (
-            <div className={DETAIL_GRID}>
-              {compliance.map((target) => (
-                <NutrientCell key={target.nutrientId} target={target} />
-              ))}
-            </div>
-          )}
-          {micronutrients.length > 0 && (
-            <div className="space-y-3 border-t pt-3">
-              <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
-                Mikronährstoffe · Ist / DGE-Referenz
+      {/* Animated reveal: the row track eases 0fr → 1fr (height 0 → auto) while
+          the panel fades and slides in. Collapsed content is clipped, not
+          unmounted, so it can animate both ways. */}
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
+          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="overflow-hidden">
+          <div
+            className={cn(
+              "max-h-[60dvh] space-y-4 overflow-y-auto border-b px-4 py-3 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
+              expanded ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
+            )}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold">Tagesziele</span>
+              <span className="text-muted-foreground text-xs">
+                Ist / Soll · {dietLineName ?? "Kein Zielprofil"}
               </span>
+            </div>
+            {hasTargets && (
               <div className={DETAIL_GRID}>
-                {micronutrients.map((target) => (
+                {compliance.map((target) => (
                   <NutrientCell key={target.nutrientId} target={target} />
                 ))}
               </div>
-            </div>
-          )}
+            )}
+            {micronutrients.length > 0 && (
+              <div className="space-y-3 border-t pt-3">
+                <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+                  Mikronährstoffe · Ist / DGE-Referenz
+                </span>
+                <div className={DETAIL_GRID}>
+                  {micronutrients.map((target) => (
+                    <NutrientCell key={target.nutrientId} target={target} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       <div className="flex items-center gap-4 px-4 py-3">
         {hasTargets ? (
@@ -172,19 +170,15 @@ export function PlanBalanceRail({
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
             aria-expanded={expanded}
-            className="text-muted-foreground hover:text-foreground flex flex-none items-center gap-1 text-xs font-medium"
+            className="text-muted-foreground hover:text-foreground flex flex-none items-center gap-1 text-xs font-medium transition-colors"
           >
-            {expanded ? (
-              <>
-                Weniger
-                <ChevronDown className="h-4 w-4" />
-              </>
-            ) : (
-              <>
-                Mikronährstoffe
-                <ChevronUp className="h-4 w-4" />
-              </>
-            )}
+            {expanded ? "Weniger" : "Mikronährstoffe"}
+            <ChevronUp
+              className={cn(
+                "h-4 w-4 transition-transform duration-300 ease-out motion-reduce:transition-none",
+                expanded && "rotate-180",
+              )}
+            />
           </button>
         )}
       </div>
