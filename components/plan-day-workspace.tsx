@@ -93,7 +93,7 @@ function getEntryName(
   return recipeMap.get(entry.referenceId)?.name ?? "Rezept"
 }
 
-/** Day tab: dense data workspace — nutrient table per meal plus live Tagesbilanz. */
+/** Day tab: dense data workspace — nutrient table per meal plus live Tagesziele. */
 export function PlanDayWorkspace({
   plan,
   weekPlans,

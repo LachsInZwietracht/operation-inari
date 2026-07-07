@@ -471,6 +471,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     entryAllergenWarnings,
     refConfig,
     dietLineCompliance,
+    micronutrientCompliance,
     energyTargetValue,
     optimizationSuggestions,
   } = usePlanAnalysis({
@@ -763,32 +764,26 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
         {/* The library is the shared build source for the day and week views:
             the same items can be dragged (or click-added) into either view. */}
-        <div
-          className={cn(
-            "mt-2 grid gap-4",
-            (view === "day" || view === "week") && "xl:grid-cols-[290px_minmax(0,1fr)]",
-          )}
-        >
-          {/* Row 1, left: the shared library fills the same height as the planner
-              beside it. Row 1, right: the planner (scrolls internally). The
-              Tagesbilanz and helper cards below span both columns (col-span-2). */}
-          {(view === "day" || view === "week") && (
-            <MealPlanLibrary
-              className="min-h-0 xl:h-[calc(100vh-17.5rem)]"
-              foods={foodCommandSource}
-              fullFoods={foods}
-              recipes={recipes}
-              templates={mealPlanTemplates}
-              categoryLabels={foodCategoryLabels}
-              isLocked={currentPlan.status === "approved"}
-              onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
-              onApplyTemplate={handleApplyTemplate}
+        <div className="mt-2 grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]">
+          {/* Col 1: Tagesziele — the daily yardstick, always visible on the left
+              and sticky so it stays in view while the planner and library scroll. */}
+          <div className="xl:sticky xl:top-14 xl:self-start">
+            <PlanBalanceRail
+              compliance={dietLineCompliance}
+              micronutrients={micronutrientCompliance}
+              dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
             />
-          )}
-          <div className="min-w-0 xl:h-[calc(100vh-14rem)] xl:min-h-0 xl:overflow-y-auto">
+          </div>
+
+          {/* Col 2: the planner on top, with the shared library as a bar beneath
+              it. The library is the shared build source for day and week views.
+              The planner flows at its natural height so the library sits directly
+              under it; the page scrolls while the Tagesziele rail stays pinned. */}
+          <div className="flex min-w-0 flex-col gap-4">
+          <div className="min-w-0">
 
         <TabsContent value="day" className="space-y-4">
-          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur xl:top-0">
+          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-14 z-30 -mt-1 flex flex-wrap items-center gap-2 border-b py-2 backdrop-blur">
             <div className="flex items-center gap-1">
               <Button variant="outline" size="icon" onClick={goToPreviousDay}>
                 <ChevronLeft className="h-4 w-4" />
@@ -991,16 +986,22 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </TabsContent>
           </div>
 
-          {/* Full-width Tagesbilanz — spans under both the library and the
-              planner so the daily yardstick reads as the primary reference. */}
-          <div className="xl:col-span-2">
-            <PlanBalanceRail
-              compliance={dietLineCompliance}
-              dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
-            />
+          {/* Library bar beneath the plan — the shared build source, tucked
+              under the plan view while the Tagesziele stay pinned on the left. */}
+          <MealPlanLibrary
+            className="xl:h-80"
+            foods={foodCommandSource}
+            fullFoods={foods}
+            recipes={recipes}
+            templates={mealPlanTemplates}
+            categoryLabels={foodCategoryLabels}
+            isLocked={currentPlan.status === "approved"}
+            onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
+            onApplyTemplate={handleApplyTemplate}
+          />
           </div>
 
-          {/* View-specific helper cards, also full-width below the Tagesbilanz. */}
+          {/* View-specific helper cards, full-width below the plan + library. */}
           <div className="xl:col-span-2">
             {view === "day" ? (
               <div className="grid items-start gap-4 md:grid-cols-2">

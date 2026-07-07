@@ -194,6 +194,41 @@ export function usePlanAnalysis({
     })
   }, [dailyNutrients, dietLine])
 
+  // Vitamin / mineral coverage against the patient's resolved DGE reference
+  // values — the daily-aggregate micronutrient half of the Tagesziele. Driven
+  // by the reference profile (not the diet line), so it adapts to the patient
+  // and lists every micronutrient we have a reference for. Targets already
+  // shown as diet-line macros are skipped to avoid duplicate rows.
+  const micronutrientCompliance = useMemo(() => {
+    const shownIds = new Set(dietLine?.targets.map((target) => target.nutrientId) ?? [])
+    const items: DietLineComplianceItem[] = []
+
+    for (const ref of refConfig.values) {
+      if (shownIds.has(ref.nutrientId) || !(ref.amount > 0)) continue
+      const definition = nutrientDefMap.get(ref.nutrientId)
+      if (!definition) continue
+      if (definition.group !== "vitamine" && definition.group !== "mineralstoffe") continue
+
+      const value = getNutrientValue(dailyNutrients, ref.nutrientId)
+      items.push({
+        nutrientId: ref.nutrientId,
+        label: definition.name,
+        status: complianceBadge(value, ref.amount, undefined),
+        value,
+        unit: definition.unit,
+        min: ref.amount,
+        max: undefined,
+      })
+    }
+
+    items.sort(
+      (a, b) =>
+        (nutrientDefMap.get(a.nutrientId)?.sortOrder ?? 0) -
+        (nutrientDefMap.get(b.nutrientId)?.sortOrder ?? 0),
+    )
+    return items
+  }, [refConfig.values, dietLine, nutrientDefMap, dailyNutrients])
+
   const energyTargetValue = useMemo(() => {
     const target = dietLine?.targets.find((item) => item.nutrientId === "energie")
     return target?.min ?? target?.max
@@ -329,6 +364,7 @@ export function usePlanAnalysis({
     nutrientDefMap,
     slotCompliance,
     dietLineCompliance,
+    micronutrientCompliance,
     energyTargetValue,
     weekBoardTargets,
     optimizationSuggestions,
