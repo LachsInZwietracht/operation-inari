@@ -14,9 +14,13 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
 import {
   calculateRecipeNutrients,
   calculatePerServing,
@@ -64,11 +68,44 @@ export function readMealPlanDragPayload(event: DragEvent): MealPlanDragPayload |
 
 type LibraryTab = "recipes" | "foods" | "templates"
 
-/** "default" keeps the incoming (relevance/source) order; kcal only applies to recipes. */
-type SortMode = "default" | "name-asc" | "name-desc" | "kcal-desc" | "kcal-asc"
+/**
+ * "default" keeps the incoming (relevance/source) order; the nutrient sorts
+ * order by the currently selected `sortNutrient` and only apply to recipes,
+ * whose per-serving values we can compute from their ingredients.
+ */
+type SortMode = "default" | "name-asc" | "name-desc" | "nutrient-desc" | "nutrient-asc"
 
 const RESULT_LIMITS = [30, 60, 0] as const
 const DEFAULT_LIMIT = 30
+
+/**
+ * Nutrients offered for recipe sorting: the macros plus a few clinically
+ * relevant micros. Labels and units resolve through the shared catalog.
+ */
+const SORTABLE_NUTRIENT_IDS = [
+  "energie",
+  "eiweiss",
+  "fett",
+  "kohlenhydrate",
+  "ballaststoffe",
+  "zucker",
+  "gesaettigte_fettsaeuren",
+  "salz",
+  "calcium",
+  "eisen",
+  "kalium",
+  "magnesium",
+  "vitamin_c",
+  "vitamin_d",
+] as const
+
+const DEFAULT_SORT_NUTRIENT = "energie"
+
+const NUTRIENT_NAME_BY_ID = new Map(NUTRIENT_DEFINITIONS.map((def) => [def.id, def.name]))
+
+function nutrientName(nutrientId: string) {
+  return NUTRIENT_NAME_BY_ID.get(nutrientId) ?? nutrientId
+}
 
 /** Short badges for the source filter; falls back to the raw id for unmapped sources. */
 const SOURCE_SHORT_LABELS: Record<FoodSourceId, string> = {
@@ -154,6 +191,7 @@ export function MealPlanLibrary({
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState<LibraryTab>("recipes")
   const [sort, setSort] = useState<SortMode>("default")
+  const [sortNutrient, setSortNutrient] = useState<string>(DEFAULT_SORT_NUTRIENT)
   const [recipeCategory, setRecipeCategory] = useState<string>("all")
   const [foodCategory, setFoodCategory] = useState<string>("all")
   const [foodSource, setFoodSource] = useState<FoodSourceId | "all">("all")
@@ -177,6 +215,27 @@ export function MealPlanLibrary({
     }
     return map
   }, [recipes, fullFoods])
+
+  // Per-serving amount of the selected sort nutrient, computed only while a
+  // nutrient sort is active so the default path keeps the cheap kcal cache.
+  const recipeSortValue = useMemo(() => {
+    const map = new Map<string, number>()
+    if (sort !== "nutrient-desc" && sort !== "nutrient-asc") return map
+    for (const recipe of recipes) {
+      const value =
+        sortNutrient === "energie"
+          ? (recipeKcal.get(recipe.id) ?? 0)
+          : getNutrientValue(
+              calculatePerServing(
+                calculateRecipeNutrients(recipe, fullFoods),
+                recipe.servings,
+              ),
+              sortNutrient,
+            )
+      map.set(recipe.id, value)
+    }
+    return map
+  }, [sort, sortNutrient, recipes, fullFoods, recipeKcal])
 
   // Filter options are derived from the loaded data so we only ever offer
   // categories/sources that can actually return a hit.
@@ -225,12 +284,12 @@ export function MealPlanLibrary({
     )
     if (sort === "name-asc") result.sort((a, b) => byName(a, b, 1))
     else if (sort === "name-desc") result.sort((a, b) => byName(a, b, -1))
-    else if (sort === "kcal-desc")
-      result.sort((a, b) => (recipeKcal.get(b.id) ?? 0) - (recipeKcal.get(a.id) ?? 0))
-    else if (sort === "kcal-asc")
-      result.sort((a, b) => (recipeKcal.get(a.id) ?? 0) - (recipeKcal.get(b.id) ?? 0))
+    else if (sort === "nutrient-desc")
+      result.sort((a, b) => (recipeSortValue.get(b.id) ?? 0) - (recipeSortValue.get(a.id) ?? 0))
+    else if (sort === "nutrient-asc")
+      result.sort((a, b) => (recipeSortValue.get(a.id) ?? 0) - (recipeSortValue.get(b.id) ?? 0))
     return limit > 0 ? result.slice(0, limit) : result
-  }, [recipes, normalizedQuery, recipeCategory, sort, recipeKcal, limit])
+  }, [recipes, normalizedQuery, recipeCategory, sort, recipeSortValue, limit])
 
   const filteredTemplates = useMemo(() => {
     const result = templates.filter(
@@ -289,15 +348,44 @@ export function MealPlanLibrary({
                 <DropdownMenuRadioItem value="name-desc">Name (Z–A)</DropdownMenuRadioItem>
                 {tab === "recipes" && (
                   <>
-                    <DropdownMenuRadioItem value="kcal-desc">
-                      Kalorien (hoch → niedrig)
+                    <DropdownMenuRadioItem value="nutrient-desc">
+                      {nutrientName(sortNutrient)} (hoch → niedrig)
                     </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="kcal-asc">
-                      Kalorien (niedrig → hoch)
+                    <DropdownMenuRadioItem value="nutrient-asc">
+                      {nutrientName(sortNutrient)} (niedrig → hoch)
                     </DropdownMenuRadioItem>
                   </>
                 )}
               </DropdownMenuRadioGroup>
+
+              {tab === "recipes" && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    Nährstoff: {nutrientName(sortNutrient)}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
+                    <DropdownMenuRadioGroup
+                      value={sortNutrient}
+                      onValueChange={(value) => {
+                        setSortNutrient(value)
+                        // Picking a nutrient implies sorting by it — switch out
+                        // of a non-nutrient sort so the choice takes effect.
+                        setSort((current) =>
+                          current === "nutrient-asc" || current === "nutrient-desc"
+                            ? current
+                            : "nutrient-desc",
+                        )
+                      }}
+                    >
+                      {SORTABLE_NUTRIENT_IDS.map((id) => (
+                        <DropdownMenuRadioItem key={id} value={id}>
+                          {nutrientName(id)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
 
               {tab === "recipes" && recipeCategories.length > 0 && (
                 <>
