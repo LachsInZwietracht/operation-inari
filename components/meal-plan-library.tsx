@@ -1,15 +1,18 @@
 "use client"
 
 import { useMemo, useState, type DragEvent } from "react"
-import { GripVertical, LayoutTemplate, Plus, Search } from "lucide-react"
+import { GripVertical, LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -24,6 +27,7 @@ import { cn } from "@/lib/utils"
 import type {
   Food,
   FoodSearchItem,
+  FoodSourceId,
   MealEntry,
   MealPlanTemplate,
   MealSlotType,
@@ -59,6 +63,30 @@ export function readMealPlanDragPayload(event: DragEvent): MealPlanDragPayload |
 }
 
 type LibraryTab = "recipes" | "foods" | "templates"
+
+/** "default" keeps the incoming (relevance/source) order; kcal only applies to recipes. */
+type SortMode = "default" | "name-asc" | "name-desc" | "kcal-desc" | "kcal-asc"
+
+const RESULT_LIMITS = [30, 60, 0] as const
+const DEFAULT_LIMIT = 30
+
+/** Short badges for the source filter; falls back to the raw id for unmapped sources. */
+const SOURCE_SHORT_LABELS: Record<FoodSourceId, string> = {
+  bls: "BLS",
+  sfk: "SFK",
+  usda: "USDA",
+  afcd: "AFCD",
+  swiss: "Swiss",
+  ciqual: "Ciqual",
+  cofid: "CoFID",
+  off: "OFF",
+  hersteller: "Hersteller",
+  custom: "Eigene",
+}
+
+function byName(a: { name: string }, b: { name: string }, direction: 1 | -1) {
+  return direction * a.name.localeCompare(b.name, "de")
+}
 
 interface MealPlanLibraryProps {
   foods: FoodSearchItem[]
@@ -125,40 +153,20 @@ export function MealPlanLibrary({
 }: MealPlanLibraryProps) {
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState<LibraryTab>("recipes")
+  const [sort, setSort] = useState<SortMode>("default")
+  const [recipeCategory, setRecipeCategory] = useState<string>("all")
+  const [foodCategory, setFoodCategory] = useState<string>("all")
+  const [foodSource, setFoodSource] = useState<FoodSourceId | "all">("all")
+  const [customOnly, setCustomOnly] = useState(false)
+  const [limit, setLimit] = useState<number>(DEFAULT_LIMIT)
 
   const normalizedQuery = query.trim().toLowerCase()
 
-  const filteredFoods = useMemo(() => {
-    return foods
-      .filter((food) => !normalizedQuery || food.name.toLowerCase().includes(normalizedQuery))
-      .slice(0, 30)
-  }, [foods, normalizedQuery])
-
-  const filteredRecipes = useMemo(() => {
-    return recipes
-      .filter(
-        (recipe) =>
-          !normalizedQuery ||
-          recipe.name.toLowerCase().includes(normalizedQuery) ||
-          recipe.tags?.some((tag) => tag.toLowerCase().includes(normalizedQuery)),
-      )
-      .slice(0, 30)
-  }, [normalizedQuery, recipes])
-
-  const filteredTemplates = useMemo(() => {
-    return templates
-      .filter(
-        (template) =>
-          !normalizedQuery ||
-          template.name.toLowerCase().includes(normalizedQuery) ||
-          template.indication?.toLowerCase().includes(normalizedQuery),
-      )
-      .slice(0, 30)
-  }, [normalizedQuery, templates])
-
+  // kcal per portion for every recipe, so sorting and filtering can see the
+  // whole set before it is sliced down to the visible page.
   const recipeKcal = useMemo(() => {
     const map = new Map<string, number>()
-    for (const recipe of filteredRecipes) {
+    for (const recipe of recipes) {
       const kcal =
         recipe.cachedKcalPerPortion ??
         getNutrientValue(
@@ -168,7 +176,82 @@ export function MealPlanLibrary({
       map.set(recipe.id, kcal)
     }
     return map
-  }, [filteredRecipes, fullFoods])
+  }, [recipes, fullFoods])
+
+  // Filter options are derived from the loaded data so we only ever offer
+  // categories/sources that can actually return a hit.
+  const recipeCategories = useMemo(() => {
+    const set = new Set<string>()
+    for (const recipe of recipes) if (recipe.category) set.add(recipe.category)
+    return [...set].sort((a, b) => a.localeCompare(b, "de"))
+  }, [recipes])
+
+  const foodCategoryOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const food of foods) if (food.categoryId) set.add(food.categoryId)
+    return [...set]
+      .map((id) => ({ id, label: categoryLabels.get(id) ?? id }))
+      .sort((a, b) => a.label.localeCompare(b.label, "de"))
+  }, [foods, categoryLabels])
+
+  const foodSourceOptions = useMemo(() => {
+    const set = new Set<FoodSourceId>()
+    for (const food of foods) if (food.sourceId) set.add(food.sourceId)
+    return [...set].sort((a, b) =>
+      (SOURCE_SHORT_LABELS[a] ?? a).localeCompare(SOURCE_SHORT_LABELS[b] ?? b, "de"),
+    )
+  }, [foods])
+
+  const filteredFoods = useMemo(() => {
+    const result = foods.filter(
+      (food) =>
+        (!normalizedQuery || food.name.toLowerCase().includes(normalizedQuery)) &&
+        (foodCategory === "all" || food.categoryId === foodCategory) &&
+        (foodSource === "all" || food.sourceId === foodSource) &&
+        (!customOnly || food.isCustom),
+    )
+    if (sort === "name-asc") result.sort((a, b) => byName(a, b, 1))
+    else if (sort === "name-desc") result.sort((a, b) => byName(a, b, -1))
+    return limit > 0 ? result.slice(0, limit) : result
+  }, [foods, normalizedQuery, foodCategory, foodSource, customOnly, sort, limit])
+
+  const filteredRecipes = useMemo(() => {
+    const result = recipes.filter(
+      (recipe) =>
+        (!normalizedQuery ||
+          recipe.name.toLowerCase().includes(normalizedQuery) ||
+          recipe.tags?.some((tag) => tag.toLowerCase().includes(normalizedQuery))) &&
+        (recipeCategory === "all" || recipe.category === recipeCategory),
+    )
+    if (sort === "name-asc") result.sort((a, b) => byName(a, b, 1))
+    else if (sort === "name-desc") result.sort((a, b) => byName(a, b, -1))
+    else if (sort === "kcal-desc")
+      result.sort((a, b) => (recipeKcal.get(b.id) ?? 0) - (recipeKcal.get(a.id) ?? 0))
+    else if (sort === "kcal-asc")
+      result.sort((a, b) => (recipeKcal.get(a.id) ?? 0) - (recipeKcal.get(b.id) ?? 0))
+    return limit > 0 ? result.slice(0, limit) : result
+  }, [recipes, normalizedQuery, recipeCategory, sort, recipeKcal, limit])
+
+  const filteredTemplates = useMemo(() => {
+    const result = templates.filter(
+      (template) =>
+        !normalizedQuery ||
+        template.name.toLowerCase().includes(normalizedQuery) ||
+        template.indication?.toLowerCase().includes(normalizedQuery),
+    )
+    if (sort === "name-asc") result.sort((a, b) => byName(a, b, 1))
+    else if (sort === "name-desc") result.sort((a, b) => byName(a, b, -1))
+    return limit > 0 ? result.slice(0, limit) : result
+  }, [templates, normalizedQuery, sort, limit])
+
+  // Badge count on the kebab so an active filter set is visible while collapsed.
+  const activeFilterCount =
+    (sort !== "default" ? 1 : 0) +
+    (tab === "recipes" && recipeCategory !== "all" ? 1 : 0) +
+    (tab === "foods" && foodCategory !== "all" ? 1 : 0) +
+    (tab === "foods" && foodSource !== "all" ? 1 : 0) +
+    (tab === "foods" && customOnly ? 1 : 0) +
+    (limit !== DEFAULT_LIMIT ? 1 : 0)
 
   const tabs: Array<{ id: LibraryTab; label: string }> = [
     { id: "recipes", label: "Rezepte" },
@@ -179,7 +262,115 @@ export function MealPlanLibrary({
   return (
     <Card className={cn("flex flex-col", className)}>
       <CardContent className="flex flex-1 flex-col gap-3 p-4 xl:min-h-0">
-        <div className="text-sm font-semibold">Bibliothek</div>
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold">Bibliothek</div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground relative -mr-1 h-7 w-7"
+                aria-label="Filter & Sortierung"
+              >
+                <MoreVertical className="h-4 w-4" />
+                {activeFilterCount > 0 && (
+                  <span className="bg-primary absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Sortierung</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={sort}
+                onValueChange={(value) => setSort(value as SortMode)}
+              >
+                <DropdownMenuRadioItem value="default">Standard</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="name-asc">Name (A–Z)</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="name-desc">Name (Z–A)</DropdownMenuRadioItem>
+                {tab === "recipes" && (
+                  <>
+                    <DropdownMenuRadioItem value="kcal-desc">
+                      Kalorien (hoch → niedrig)
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="kcal-asc">
+                      Kalorien (niedrig → hoch)
+                    </DropdownMenuRadioItem>
+                  </>
+                )}
+              </DropdownMenuRadioGroup>
+
+              {tab === "recipes" && recipeCategories.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Kategorie</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={recipeCategory} onValueChange={setRecipeCategory}>
+                    <DropdownMenuRadioItem value="all">Alle Kategorien</DropdownMenuRadioItem>
+                    {recipeCategories.map((category) => (
+                      <DropdownMenuRadioItem key={category} value={category}>
+                        {category}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </>
+              )}
+
+              {tab === "foods" && foodCategoryOptions.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Kategorie</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={foodCategory} onValueChange={setFoodCategory}>
+                    <DropdownMenuRadioItem value="all">Alle Kategorien</DropdownMenuRadioItem>
+                    {foodCategoryOptions.map((option) => (
+                      <DropdownMenuRadioItem key={option.id} value={option.id}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </>
+              )}
+
+              {tab === "foods" && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Quelle</DropdownMenuLabel>
+                  {foodSourceOptions.length > 0 && (
+                    <DropdownMenuRadioGroup
+                      value={foodSource}
+                      onValueChange={(value) => setFoodSource(value as FoodSourceId | "all")}
+                    >
+                      <DropdownMenuRadioItem value="all">Alle Quellen</DropdownMenuRadioItem>
+                      {foodSourceOptions.map((source) => (
+                        <DropdownMenuRadioItem key={source} value={source}>
+                          {SOURCE_SHORT_LABELS[source] ?? source}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  )}
+                  <DropdownMenuCheckboxItem
+                    checked={customOnly}
+                    onCheckedChange={(checked) => setCustomOnly(checked === true)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    Nur eigene Lebensmittel
+                  </DropdownMenuCheckboxItem>
+                </>
+              )}
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Trefferanzahl</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={String(limit)}
+                onValueChange={(value) => setLimit(Number(value))}
+              >
+                {RESULT_LIMITS.map((value) => (
+                  <DropdownMenuRadioItem key={value} value={String(value)}>
+                    {value === 0 ? "Alle anzeigen" : `${value} Treffer`}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <div className="relative">
           <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
           <Input
