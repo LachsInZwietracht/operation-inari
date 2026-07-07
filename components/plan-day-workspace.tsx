@@ -250,7 +250,7 @@ export function PlanDayWorkspace({
                   )}
                 >
                   <tr className={cn("bg-muted/40 border-l-2", accent.border)}>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-3">
                       <span className="flex items-center gap-2 font-semibold">
                         <Icon className="text-muted-foreground h-3.5 w-3.5" />
                         {MEAL_SLOT_LABELS[slot.type]}
@@ -260,7 +260,7 @@ export function PlanDayWorkspace({
                     {NUTRIENT_COLUMNS.map((column) => (
                       <td
                         key={column.id}
-                        className="px-3 py-2 text-right font-mono text-xs font-semibold"
+                        className="px-3 py-3 text-right font-mono text-xs font-semibold"
                       >
                         {formatNumber(totals?.[column.id] ?? 0, column.decimals)}
                       </td>
@@ -283,7 +283,7 @@ export function PlanDayWorkspace({
                         }}
                         className="group hover:bg-accent/40 border-t border-dashed"
                       >
-                        <td className="px-3 py-1.5">
+                        <td className="px-3 py-2.5">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate">
                               {getEntryName(entry, foodMap, recipeMap)}
@@ -300,7 +300,7 @@ export function PlanDayWorkspace({
                             )}
                           </span>
                         </td>
-                        <td className="px-3 py-1.5 text-right">
+                        <td className="px-3 py-2.5 text-right">
                           <span className="inline-flex items-center justify-end gap-1">
                             <Input
                               key={`${entry.id}-${entry.amount}`}
@@ -327,12 +327,12 @@ export function PlanDayWorkspace({
                         {NUTRIENT_COLUMNS.map((column) => (
                           <td
                             key={column.id}
-                            className="text-muted-foreground px-3 py-1.5 text-right font-mono text-xs"
+                            className="text-muted-foreground px-3 py-2.5 text-right font-mono text-xs"
                           >
                             {formatNumber(getNutrientValue(nutrients, column.id), column.decimals)}
                           </td>
                         ))}
-                        <td className="px-2 py-1.5">
+                        <td className="px-2 py-2.5">
                           {!isLocked && (
                             <span className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                               <button
@@ -358,7 +358,7 @@ export function PlanDayWorkspace({
                     )
                   })}
                   <tr className="border-t border-dashed">
-                    <td colSpan={NUTRIENT_COLUMNS.length + 3} className="px-3 py-1">
+                    <td colSpan={NUTRIENT_COLUMNS.length + 3} className="px-3 py-2">
                       {isDropTarget ? (
                         <Badge
                           variant="outline"

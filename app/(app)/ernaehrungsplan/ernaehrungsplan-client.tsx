@@ -216,6 +216,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const [commandOpen, setCommandOpen] = useState(false)
   const [activeSlot, setActiveSlot] = useState<MealSlotType>("fruehstueck")
+  // When adding from the week board a target day is set; null means the active day.
+  const [activeAddDate, setActiveAddDate] = useState<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [view, setView] = useState("day")
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
@@ -332,6 +334,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
   const handleAddEntry = (slotType: MealSlotType) => {
     setActiveSlot(slotType)
+    setActiveAddDate(null)
+    setCommandOpen(true)
+  }
+
+  // Week board: open the same picker but remember which day the entry lands in.
+  const handleAddEntryForDate = (date: string, slotType: MealSlotType) => {
+    setActiveSlot(slotType)
+    setActiveAddDate(date === currentDate ? null : date)
     setCommandOpen(true)
   }
 
@@ -343,7 +353,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     guardedAddEntry(
       activeSlot,
       { type: "food", referenceId: food.id, amount: 100 },
-      { itemKind: "food", itemName: food.name, allergens: food.allergens },
+      {
+        itemKind: "food",
+        itemName: food.name,
+        allergens: food.allergens,
+        date: activeAddDate ?? undefined,
+      },
     )
   }
 
@@ -357,6 +372,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         itemKind: "recipe",
         itemName: recipe?.name ?? "Rezept",
         allergens: recipe?.allergens,
+        date: activeAddDate ?? undefined,
       },
     )
   }
@@ -981,6 +997,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             onCopyToNextDay={copyPlanToNextDay}
             onClearDay={clearPlan}
             onDrop={(date, slotType, payload) => void handleWeekDropPayload(date, slotType, payload)}
+            onAddEntry={handleAddEntryForDate}
             onRemoveEntry={removeEntryForDate}
           />
         </TabsContent>

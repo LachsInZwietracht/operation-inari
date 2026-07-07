@@ -40,6 +40,7 @@ interface PlanWeekViewProps {
     slotType: MealSlotType,
     payload: { type: MealEntry["type"]; referenceId: string },
   ) => void
+  onAddEntry: (date: string, slotType: MealSlotType) => void
   onRemoveEntry: (date: string, slotType: MealSlotType, entryId: string) => void
 }
 
@@ -61,6 +62,7 @@ export function PlanWeekView({
   onCopyToNextDay,
   onClearDay,
   onDrop,
+  onAddEntry,
   onRemoveEntry,
 }: PlanWeekViewProps) {
   const aggregatePlanNutrients = useCallback(
@@ -113,6 +115,7 @@ export function PlanWeekView({
         onCopyToNextDay={onCopyToNextDay}
         onClearDay={onClearDay}
         onDrop={onDrop}
+        onAddEntry={onAddEntry}
         onRemoveEntry={onRemoveEntry}
       />
     </div>

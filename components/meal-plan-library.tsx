@@ -411,9 +411,6 @@ export function MealPlanLibrary({
                 <GripVertical className="text-muted-foreground h-4 w-4 flex-none" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{recipe.name}</div>
-                  <div className="text-muted-foreground text-[11px]">
-                    {recipe.category ?? "Rezept"} · 1 Portion
-                  </div>
                 </div>
                 <span className="text-muted-foreground flex-none font-mono text-[11px]">
                   {formatNumber(Math.round(recipeKcal.get(recipe.id) ?? 0))} kcal
@@ -444,9 +441,6 @@ export function MealPlanLibrary({
                 <GripVertical className="text-muted-foreground h-4 w-4 flex-none" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{food.name}</div>
-                  <div className="text-muted-foreground truncate text-[11px]">
-                    {categoryLabels.get(food.categoryId) ?? "Lebensmittel"} · 120 g
-                  </div>
                 </div>
                 {onQuickAdd && (
                   <QuickAddMenu

@@ -62,6 +62,7 @@ interface MealPlanWeekBoardProps {
   onCopyToNextDay: (date: string) => void
   onClearDay: (date: string) => void
   onDrop: (date: string, slotType: MealSlotType, payload: DragPayload) => void
+  onAddEntry: (date: string, slotType: MealSlotType) => void
   onRemoveEntry: (date: string, slotType: MealSlotType, entryId: string) => void
 }
 
@@ -76,6 +77,7 @@ export function MealPlanWeekBoard({
   onCopyToNextDay,
   onClearDay,
   onDrop,
+  onAddEntry,
   onRemoveEntry,
 }: MealPlanWeekBoardProps) {
   const [dropTarget, setDropTarget] = useState<{ date: string; slot: MealSlotType } | null>(null)
@@ -194,7 +196,7 @@ export function MealPlanWeekBoard({
                     }
                     onDrop={(event) => handleCellDrop(event, plan, slotType)}
                     className={cn(
-                      "flex min-h-[64px] flex-col gap-1 rounded-lg border p-1.5 transition-colors",
+                      "flex min-h-[104px] flex-col gap-1 rounded-lg border p-1.5 transition-colors",
                       isDropTarget
                         ? "border-primary bg-primary/10 border-dashed"
                         : entries.length > 0
@@ -228,16 +230,36 @@ export function MealPlanWeekBoard({
                         )}
                       </div>
                     ))}
-                    {entries.length === 0 && (
+                    {entries.length === 0 ? (
                       <div className="flex flex-1 items-center justify-center">
                         {isDropTarget ? (
                           <Badge variant="outline" className="border-primary/50 text-primary text-[10px]">
                             Hier ablegen
                           </Badge>
-                        ) : (
+                        ) : isLocked ? (
                           <Plus className="text-muted-foreground/40 h-4 w-4" />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onAddEntry(plan.date, slotType)}
+                            className="text-muted-foreground/40 hover:text-foreground hover:bg-accent flex h-full w-full items-center justify-center rounded-md transition-colors"
+                            aria-label="Lebensmittel oder Rezept hinzufügen"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
                         )}
                       </div>
+                    ) : (
+                      !isLocked && (
+                        <button
+                          type="button"
+                          onClick={() => onAddEntry(plan.date, slotType)}
+                          className="text-muted-foreground/40 hover:text-foreground hover:bg-accent flex items-center justify-center rounded-md py-0.5 transition-colors"
+                          aria-label="Lebensmittel oder Rezept hinzufügen"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      )
                     )}
                   </div>
                 )
