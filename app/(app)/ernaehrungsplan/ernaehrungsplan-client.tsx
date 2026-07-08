@@ -81,6 +81,7 @@ import { MealPlanLibrary } from "@/components/meal-plan-library"
 import { PlanDayWorkspace } from "@/components/plan-day-workspace"
 import { PlanFillSuggestions } from "@/components/plan-fill-suggestions"
 import { PlanExchangeTool } from "@/components/plan-exchange-tool"
+import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { toast } from "sonner"
 
@@ -1019,6 +1020,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 isLocked={currentPlan.status === "approved"}
               />
               <PlanExchangeTool />
+              <PlanNutrientGapTool />
               <PlanAdditiveSummary plan={currentPlan} foodMap={foodMap} recipeMap={recipeMap} />
             </div>
           </div>
