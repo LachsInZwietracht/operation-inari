@@ -1,12 +1,26 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronUp } from "lucide-react"
+import { ChevronUp, Settings2 } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { DietLineComplianceItem } from "@/lib/meal-plan-calc"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
+
+export interface DietLineOption {
+  id: string
+  name: string
+  userId?: string | null
+}
 
 interface PlanBalanceRailProps {
   /** Selected day's macro target comparison, one row per tracked nutrient. */
@@ -14,6 +28,13 @@ interface PlanBalanceRailProps {
   /** Vitamin / mineral coverage against the DGE reference values. */
   micronutrients?: DietLineComplianceItem[]
   dietLineName?: string
+  /** Diet-line / reference profiles selectable from the expanded panel. */
+  dietLines?: DietLineOption[]
+  dietLineId?: string
+  onDietLineChange?: (id: string) => void
+  dietLineDisabled?: boolean
+  /** Opens the diet-line / reference-profile management dialog. */
+  onManageDietLine?: () => void
 }
 
 const STATUS_BAR: Record<DietLineComplianceItem["status"], string> = {
@@ -98,13 +119,19 @@ export function PlanBalanceRail({
   compliance,
   micronutrients = [],
   dietLineName,
+  dietLines,
+  dietLineId,
+  onDietLineChange,
+  dietLineDisabled,
+  onManageDietLine,
 }: PlanBalanceRailProps) {
   const [expanded, setExpanded] = useState(false)
   const hasTargets = compliance.length > 0
   const canExpand = hasTargets || micronutrients.length > 0
+  const canSelectDietLine = Boolean(onDietLineChange && dietLines && dietLines.length > 0)
 
   return (
-    <Card className="gap-0 rounded-b-none border-b-0 py-0 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.4)]">
+    <Card className="gap-0 rounded-b-none border-b-0 bg-[color-mix(in_oklab,var(--primary)_10%,var(--card))] py-0 shadow-[0_-10px_28px_-14px_rgba(0,0,0,0.45)]">
       {/* Animated reveal: the row track eases 0fr → 1fr (height 0 → auto) while
           the panel fades and slides in. Collapsed content is clipped, not
           unmounted, so it can animate both ways. */}
@@ -121,10 +148,47 @@ export function PlanBalanceRail({
               expanded ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
             )}
           >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm font-semibold">Tagesziele</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">Tagesziele</span>
+                {canSelectDietLine ? (
+                  <Select
+                    value={dietLineId}
+                    onValueChange={onDietLineChange}
+                    disabled={dietLineDisabled}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="bg-muted/40 h-7 w-[190px]"
+                      aria-label="Referenzernährung"
+                    >
+                      <SelectValue placeholder="Kostform/Zielprofil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dietLines!.map((line) => (
+                        <SelectItem key={line.id} value={line.id}>
+                          {line.name}
+                          {line.userId ? " (eigene)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                {onManageDietLine ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={onManageDietLine}
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                    <span className="sr-only">Zielprofil verwalten</span>
+                  </Button>
+                ) : null}
+              </div>
               <span className="text-muted-foreground text-xs">
-                Ist / Soll · {dietLineName ?? "Kein Zielprofil"}
+                Ist / Soll
+                {!canSelectDietLine && dietLineName ? ` · ${dietLineName}` : ""}
               </span>
             </div>
             {hasTargets && (

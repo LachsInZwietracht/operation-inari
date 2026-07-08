@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 
 import type { WeekBoardTarget } from "@/components/meal-plan-week-board"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
@@ -8,6 +8,7 @@ import { checkAllergenConflicts } from "@/lib/allergen-warnings"
 import { summarizePlanAllergenConflicts } from "@/lib/allergen-warnings"
 import { MEAL_SLOT_TARGET_FRACTIONS } from "@/lib/constants"
 import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
+import { REFERENCE_VALUES } from "@/lib/mock-data/reference-values"
 import {
   calculateEntryNutrients,
   chooseOptimizationSlot,
@@ -111,14 +112,36 @@ export function usePlanAnalysis({
     [plan, foods, recipes],
   )
 
-  const { getResolvedConfig } = useReferenceProfiles()
-  const refConfig = useMemo(() => {
-    return getResolvedConfig({
+  const { getResolvedConfig, officialRows, customProfiles, userPreference, patientAssignments } =
+    useReferenceProfiles()
+  // `getResolvedConfig` is a stable callback that reads the reference store at
+  // call time, so it never changes identity when the store's rows load
+  // asynchronously. Depend on the store snapshots directly so this memo
+  // re-resolves once the DGE rows / profiles / assignments arrive — otherwise
+  // an empty first-render resolve would freeze and the micronutrient targets
+  // (which are driven entirely by these reference values) would go missing.
+  const refConfig = useMemo(
+    () =>
+      getResolvedConfig({
+        patientId,
+        dateOfBirth: patient?.dateOfBirth ?? "1990-01-01",
+        gender: patient?.gender ?? "w",
+      }),
+    // getResolvedConfig reads these store snapshots internally, so they must
+    // stay in the dep list for the resolve to refresh when the reference data
+    // loads asynchronously — the linter can't see that call-time read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      getResolvedConfig,
+      officialRows,
+      customProfiles,
+      userPreference,
+      patientAssignments,
+      patient?.dateOfBirth,
+      patient?.gender,
       patientId,
-      dateOfBirth: patient?.dateOfBirth ?? "1990-01-01",
-      gender: patient?.gender ?? "w",
-    })
-  }, [getResolvedConfig, patient?.dateOfBirth, patient?.gender, patientId])
+    ],
+  )
 
   const referenceMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -194,20 +217,63 @@ export function usePlanAnalysis({
     })
   }, [dailyNutrients, dietLine])
 
+  // The Tagesziele glance/detail grid only shows the energy-yielding macros.
+  // Ballaststoffe and any minerals carried on the diet line (e.g. Natrium)
+  // are surfaced with the micronutrient coverage instead.
+  const isDockMacro = useCallback(
+    (nutrientId: string) =>
+      nutrientDefMap.get(nutrientId)?.group === "makronaehrstoffe" &&
+      nutrientId !== "ballaststoffe",
+    [nutrientDefMap],
+  )
+
+  const dietLineMacros = useMemo(
+    () => dietLineCompliance.filter((target) => isDockMacro(target.nutrientId)),
+    [dietLineCompliance, isDockMacro],
+  )
+
+  // Micronutrient reference amounts, with a guaranteed non-empty source. The
+  // resolved profile is preferred, but it comes back empty whenever the patient
+  // resolves to a demographic the bundled reference rows don't cover (e.g. an
+  // uncovered age group or standard). In that case fall back to the standard
+  // adult DGE values (gender-matched) so the micronutrient coverage never
+  // collapses to just the diet-line entries.
+  const microReferenceValues = useMemo(() => {
+    const hasResolvedMicros = refConfig.values.some((ref) => {
+      const definition = nutrientDefMap.get(ref.nutrientId)
+      return (
+        definition?.group === "vitamine" ||
+        definition?.group === "mineralstoffe" ||
+        ref.nutrientId === "ballaststoffe"
+      )
+    })
+    if (hasResolvedMicros) return refConfig.values
+    return REFERENCE_VALUES.filter((ref) => ref.gender === refConfig.gender).map((ref) => ({
+      nutrientId: ref.nutrientId,
+      amount: ref.amount,
+    }))
+  }, [refConfig.values, refConfig.gender, nutrientDefMap])
+
   // Vitamin / mineral coverage against the patient's resolved DGE reference
-  // values — the daily-aggregate micronutrient half of the Tagesziele. Driven
-  // by the reference profile (not the diet line), so it adapts to the patient
-  // and lists every micronutrient we have a reference for. Targets already
-  // shown as diet-line macros are skipped to avoid duplicate rows.
+  // values — the daily-aggregate micronutrient half of the Tagesziele. Non-macro
+  // targets tracked directly on the diet line (Natrium, Ballaststoffe, …) lead
+  // the list; the rest is driven by the reference profile so it adapts to the
+  // patient and lists every micronutrient we have a reference for.
   const micronutrientCompliance = useMemo(() => {
     const shownIds = new Set(dietLine?.targets.map((target) => target.nutrientId) ?? [])
-    const items: DietLineComplianceItem[] = []
+    const items: DietLineComplianceItem[] = dietLineCompliance.filter(
+      (target) => !isDockMacro(target.nutrientId),
+    )
 
-    for (const ref of refConfig.values) {
+    for (const ref of microReferenceValues) {
       if (shownIds.has(ref.nutrientId) || !(ref.amount > 0)) continue
       const definition = nutrientDefMap.get(ref.nutrientId)
       if (!definition) continue
-      if (definition.group !== "vitamine" && definition.group !== "mineralstoffe") continue
+      const isMicro =
+        definition.group === "vitamine" ||
+        definition.group === "mineralstoffe" ||
+        ref.nutrientId === "ballaststoffe"
+      if (!isMicro) continue
 
       const value = getNutrientValue(dailyNutrients, ref.nutrientId)
       items.push({
@@ -227,7 +293,7 @@ export function usePlanAnalysis({
         (nutrientDefMap.get(b.nutrientId)?.sortOrder ?? 0),
     )
     return items
-  }, [refConfig.values, dietLine, nutrientDefMap, dailyNutrients])
+  }, [microReferenceValues, dietLine, dietLineCompliance, isDockMacro, nutrientDefMap, dailyNutrients])
 
   const energyTargetValue = useMemo(() => {
     const target = dietLine?.targets.find((item) => item.nutrientId === "energie")
@@ -364,6 +430,7 @@ export function usePlanAnalysis({
     nutrientDefMap,
     slotCompliance,
     dietLineCompliance,
+    dietLineMacros,
     micronutrientCompliance,
     energyTargetValue,
     weekBoardTargets,

@@ -5,14 +5,9 @@ import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
 import {
   AlertTriangle,
-  Coffee,
-  Cookie,
   Copy,
-  Moon,
   Plus,
   Replace,
-  Sunrise,
-  UtensilsCrossed,
   X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -52,12 +47,12 @@ const NUTRIENT_COLUMNS: Array<{ id: string; label: string; decimals: number }> =
   { id: "ballaststoffe", label: "Ballast.", decimals: 0 },
 ]
 
-const SLOT_ACCENTS: Record<MealSlotType, { icon: typeof Sunrise; border: string }> = {
-  fruehstueck: { icon: Sunrise, border: "border-l-emerald-500" },
-  snack_vormittag: { icon: Coffee, border: "border-l-violet-500" },
-  mittagessen: { icon: UtensilsCrossed, border: "border-l-amber-500" },
-  snack_nachmittag: { icon: Cookie, border: "border-l-sky-500" },
-  abendessen: { icon: Moon, border: "border-l-indigo-500" },
+const SLOT_ACCENTS: Record<MealSlotType, { border: string }> = {
+  fruehstueck: { border: "border-l-emerald-500" },
+  snack_vormittag: { border: "border-l-violet-500" },
+  mittagessen: { border: "border-l-amber-500" },
+  snack_nachmittag: { border: "border-l-sky-500" },
+  abendessen: { border: "border-l-indigo-500" },
 }
 
 interface PlanDayWorkspaceProps {
@@ -229,7 +224,6 @@ export function PlanDayWorkspace({
             </thead>
             {plan.slots.map((slot) => {
               const accent = SLOT_ACCENTS[slot.type]
-              const Icon = accent.icon
               const totals = slotTotals.get(slot.type)
               const isDropTarget = dropSlot === slot.type
               return (
@@ -252,7 +246,6 @@ export function PlanDayWorkspace({
                   <tr className={cn("bg-muted/40 border-l-2", accent.border)}>
                     <td className="px-3 py-3">
                       <span className="flex items-center gap-2 font-semibold">
-                        <Icon className="text-muted-foreground h-3.5 w-3.5" />
                         {MEAL_SLOT_LABELS[slot.type]}
                       </span>
                     </td>

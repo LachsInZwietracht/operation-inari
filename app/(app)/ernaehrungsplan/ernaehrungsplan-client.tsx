@@ -21,7 +21,6 @@ import {
   FileText,
   LayoutTemplate,
   Loader2,
-  Settings2,
   UserPlus,
   UserRound,
   Users,
@@ -487,7 +486,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     planAllergenSummary,
     entryAllergenWarnings,
     refConfig,
-    dietLineCompliance,
+    dietLineMacros,
     micronutrientCompliance,
     energyTargetValue,
     optimizationSuggestions,
@@ -782,19 +781,23 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         {/* The library is the shared build source for the day and week views:
             the same items can be dragged (or click-added) into either view. */}
         <div className="mt-2 grid gap-4 pb-4 xl:grid-cols-[290px_minmax(0,1fr)]">
-          {/* Col 1: the shared library on the left as a full-height sidebar with
-              its own internal scroll. Shared build source for day and week views. */}
-          <MealPlanLibrary
-            className="min-h-0 xl:h-[calc(100vh-14rem)] xl:self-start"
-            foods={foodCommandSource}
-            fullFoods={foods}
-            recipes={recipes}
-            templates={mealPlanTemplates}
-            categoryLabels={foodCategoryLabels}
-            isLocked={currentPlan.status === "approved"}
-            onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
-            onApplyTemplate={handleApplyTemplate}
-          />
+          {/* Col 1: the shared library on the left. At xl it fills the planner
+              column's height (absolute inside a relative track cell) so it ends
+              level with the meal plan and scrolls internally rather than running
+              past it. Shared build source for day and week views. */}
+          <div className="relative min-w-0">
+            <MealPlanLibrary
+              className="min-h-0 xl:absolute xl:inset-0"
+              foods={foodCommandSource}
+              fullFoods={foods}
+              recipes={recipes}
+              templates={mealPlanTemplates}
+              categoryLabels={foodCategoryLabels}
+              isLocked={currentPlan.status === "approved"}
+              onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
+              onApplyTemplate={handleApplyTemplate}
+            />
+          </div>
 
           {/* Col 2: the planner. */}
           <div className="min-w-0">
@@ -866,35 +869,6 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <div className="bg-muted/40 hidden items-center rounded-md border p-0.5 md:flex">
-                <Select
-                  value={dietLineId}
-                  onValueChange={handleDietLineChange}
-                  disabled={currentPlan.status === "approved"}
-                >
-                  <SelectTrigger className="h-8 w-[180px] border-0 bg-transparent shadow-none focus:ring-0">
-                    <SelectValue placeholder="Kostform/Zielprofil" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dietLines.map((line) => (
-                      <SelectItem key={line.id} value={line.id}>
-                        {line.name}
-                        {line.userId ? " (eigene)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setDietLineDialogOpen(true)}
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  <span className="sr-only">Zielprofil verwalten</span>
-                </Button>
-              </div>
-
               <Button
                 variant="outline"
                 size="sm"
@@ -1029,9 +1003,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
               edge. The toggle expands it upward into the full micronutrient view. */}
           <div className="sticky bottom-0 z-40 xl:col-span-2">
             <PlanBalanceRail
-              compliance={dietLineCompliance}
+              compliance={dietLineMacros}
               micronutrients={micronutrientCompliance}
               dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
+              dietLines={dietLines}
+              dietLineId={dietLineId}
+              onDietLineChange={handleDietLineChange}
+              dietLineDisabled={currentPlan.status === "approved"}
+              onManageDietLine={() => setDietLineDialogOpen(true)}
             />
           </div>
         </div>

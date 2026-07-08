@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, type DragEvent } from "react"
-import { GripVertical, LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
+import { LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -464,7 +464,13 @@ export function MealPlanLibrary({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Lebensmittel, Rezept oder Vorlage …"
+            placeholder={
+              tab === "foods"
+                ? "Lebensmittel suchen …"
+                : tab === "templates"
+                  ? "Vorlagen suchen …"
+                  : "Rezepte suchen …"
+            }
             className="h-9 pl-8 text-sm"
           />
         </div>
@@ -485,7 +491,7 @@ export function MealPlanLibrary({
             </button>
           ))}
         </div>
-        <div className="flex max-h-[520px] flex-col gap-1.5 overflow-y-auto xl:max-h-none xl:min-h-0 xl:flex-1">
+        <div className="flex max-h-[520px] flex-col gap-2.5 overflow-y-auto xl:max-h-none xl:min-h-0 xl:flex-1">
           {tab === "recipes" &&
             filteredRecipes.map((recipe) => (
               <div
@@ -494,11 +500,10 @@ export function MealPlanLibrary({
                 onDragStart={(event) =>
                   setMealPlanDragPayload(event, { type: "recipe", referenceId: recipe.id })
                 }
-                className="hover:bg-accent group flex cursor-grab items-center gap-2 rounded-md border p-2 active:cursor-grabbing"
+                className="hover:bg-accent group flex cursor-grab items-center gap-2 rounded-md border px-3 py-3 active:cursor-grabbing"
               >
-                <GripVertical className="text-muted-foreground h-4 w-4 flex-none" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{recipe.name}</div>
+                  <div className="truncate text-sm font-medium">{recipe.name}</div>
                 </div>
                 <span className="text-muted-foreground flex-none font-mono text-[11px]">
                   {formatNumber(Math.round(recipeKcal.get(recipe.id) ?? 0))} kcal
@@ -524,11 +529,10 @@ export function MealPlanLibrary({
                 onDragStart={(event) =>
                   setMealPlanDragPayload(event, { type: "food", referenceId: food.id })
                 }
-                className="hover:bg-accent group flex cursor-grab items-center gap-2 rounded-md border p-2 active:cursor-grabbing"
+                className="hover:bg-accent group flex cursor-grab items-center gap-2 rounded-md border px-3 py-3 active:cursor-grabbing"
               >
-                <GripVertical className="text-muted-foreground h-4 w-4 flex-none" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{food.name}</div>
+                  <div className="truncate text-sm font-medium">{food.name}</div>
                 </div>
                 {onQuickAdd && (
                   <QuickAddMenu
@@ -554,11 +558,11 @@ export function MealPlanLibrary({
               return (
                 <div
                   key={template.id}
-                  className="hover:bg-accent flex items-center gap-2 rounded-md border p-2"
+                  className="hover:bg-accent flex items-center gap-2 rounded-md border px-3 py-3"
                 >
                   <LayoutTemplate className="text-muted-foreground h-4 w-4 flex-none" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-medium">{template.name}</div>
+                    <div className="truncate text-sm font-medium">{template.name}</div>
                     <div className="text-muted-foreground truncate text-[11px]">
                       {template.indication || template.description || "Tagesplan"} · {entryCount}{" "}
                       Einträge
