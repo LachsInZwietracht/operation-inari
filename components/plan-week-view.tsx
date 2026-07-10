@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { type ReactNode, useCallback, useMemo } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { MealPlanWeekBoard } from "@/components/meal-plan-week-board"
@@ -12,7 +12,6 @@ import {
 import { getNutrientValue, sumNutrients } from "@/lib/nutrients"
 import type {
   DailyMealPlan,
-  DietLinePreset,
   Food,
   MealEntry,
   MealSlotType,
@@ -24,7 +23,8 @@ interface PlanWeekViewProps {
   weekRangeLabel: string
   onPrevWeek: () => void
   onNextWeek: () => void
-  dietLine?: DietLinePreset
+  /** Actions rendered at the right edge of the week header (e.g. export). */
+  headerActions?: ReactNode
   foods: Food[]
   foodMap: Map<string, Food>
   recipeMap: Map<string, Recipe>
@@ -50,7 +50,7 @@ export function PlanWeekView({
   weekRangeLabel,
   onPrevWeek,
   onNextWeek,
-  dietLine,
+  headerActions,
   foods,
   foodMap,
   recipeMap,
@@ -96,9 +96,9 @@ export function PlanWeekView({
           <ChevronRight className="h-4 w-4" />
           <span className="sr-only">Nächste Woche</span>
         </Button>
-        <div className="ml-auto text-xs text-muted-foreground">
-          Bezug: {dietLine?.name ?? "Zielprofil auswählen"}
-        </div>
+        {headerActions ? (
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">{headerActions}</div>
+        ) : null}
       </div>
 
       <MealPlanWeekBoard

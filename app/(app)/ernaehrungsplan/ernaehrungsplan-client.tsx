@@ -717,11 +717,58 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     ],
   )
 
+  // Shared PDF-export menu — rendered in the day header and reused in the week
+  // header (week-relevant "Lehrküchenplan" variant covers all seven days).
+  const exportMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" disabled={exportingVariant !== null}>
+          {exportingVariant ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="mr-1.5 h-4 w-4" />
+          )}
+          Export
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel>PDF-Export</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void handleExportPlan("clinical")}>
+          <FileText className="mr-2 h-4 w-4" />
+          <div className="flex flex-col">
+            <span>Klinischer Bericht</span>
+            <span className="text-muted-foreground text-xs">
+              Soll-/Ist-Abgleich, Vitamine, Mineralstoffe
+            </span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void handleExportPlan("patient")}>
+          <Users className="mr-2 h-4 w-4" />
+          <div className="flex flex-col">
+            <span>Patientenhandout</span>
+            <span className="text-muted-foreground text-xs">
+              Mahlzeiten & Hinweise, ohne klinische Tabellen
+            </span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void handleExportPlan("lehrkueche")}>
+          <Utensils className="mr-2 h-4 w-4" />
+          <div className="flex flex-col">
+            <span>Lehrküchenplan (Woche)</span>
+            <span className="text-muted-foreground text-xs">
+              7-Tage-Aushang für Küche & Station
+            </span>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Ernährungsplan"
-        description={formattedDate}
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen und vergleichen Sie die Nährstoffzufuhr mit Zielprofilen und DGE-Referenzwerten."
       >
         <Select
@@ -780,7 +827,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
         {/* The library is the shared build source for the day and week views:
             the same items can be dragged (or click-added) into either view. */}
-        <div className="mt-2 grid gap-4 pb-4 xl:grid-cols-[290px_minmax(0,1fr)]">
+        <div className="mt-2 grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]">
           {/* Col 1: the shared library on the left. At xl it fills the planner
               column's height (absolute inside a relative track cell) so it ends
               level with the meal plan and scrolls internally rather than running
@@ -878,49 +925,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 Aus Vorlage
               </Button>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={exportingVariant !== null}>
-                    {exportingVariant ? (
-                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="mr-1.5 h-4 w-4" />
-                    )}
-                    Export
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel>PDF-Export</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => void handleExportPlan("clinical")}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    <div className="flex flex-col">
-                      <span>Klinischer Bericht</span>
-                      <span className="text-muted-foreground text-xs">
-                        Soll-/Ist-Abgleich, Vitamine, Mineralstoffe
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void handleExportPlan("patient")}>
-                    <Users className="mr-2 h-4 w-4" />
-                    <div className="flex flex-col">
-                      <span>Patientenhandout</span>
-                      <span className="text-muted-foreground text-xs">
-                        Mahlzeiten & Hinweise, ohne klinische Tabellen
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void handleExportPlan("lehrkueche")}>
-                    <Utensils className="mr-2 h-4 w-4" />
-                    <div className="flex flex-col">
-                      <span>Lehrküchenplan (Woche)</span>
-                      <span className="text-muted-foreground text-xs">
-                        7-Tage-Aushang für Küche & Station
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {exportMenu}
             </div>
           </div>
           <div className="text-muted-foreground -mt-2 text-xs capitalize sm:hidden">
@@ -957,7 +962,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             weekRangeLabel={weekRangeLabel}
             onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
             onNextWeek={() => setWeekOffset((prev) => prev + 1)}
-            dietLine={dietLine}
+            headerActions={exportMenu}
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
@@ -1001,7 +1006,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
           {/* Sticky bottom dock: a slim Tagesziele glance pinned to the screen
               edge. The toggle expands it upward into the full micronutrient view. */}
-          <div className="sticky bottom-0 z-40 xl:col-span-2">
+          {/* Pull the dock flush to the scroll bottom: cancel the trailing space
+              below it (page padding + tab wrapper gap) so it no longer lifts off
+              the bottom edge when scrolled all the way down. */}
+          <div className="sticky bottom-0 z-40 -mb-10 md:-mb-12 xl:col-span-2">
             <PlanBalanceRail
               compliance={dietLineMacros}
               micronutrients={micronutrientCompliance}
