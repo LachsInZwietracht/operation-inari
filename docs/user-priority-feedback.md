@@ -25,6 +25,7 @@ These are the user's "Was ich wichtig finde" points, treated as required product
 6. **Create and save custom recipes.** Optionally link/import an existing recipe database.
 7. **Timely data updates.** Guarantee that new BLS releases and changed DGE/ÖGE reference values reach the app promptly.
 8. **Sensible portion sizes alongside gram amounts.** Offer meaningful portion options per food/food group, not only grams. (Source for portion data is open.)
+   - _Status (2026-07-10):_ Data foundation fixed. `etl:portions` had two bugs (1000-row fetch cap, parent-vs-child food-group mismatch) that left `food_portions` empty; after the fix the import yields ~11k curated portion rows across the BLS catalog. Portions surface on food detail, in the Austauschtabellen, and as the realistic-portion cap of the planner's Nährstoff-Lückenfüller. Still open: offering portion options (instead of grams) directly in the meal-plan entry flows.
 9. **Export to Word, Excel, and other formats.** Export plans/results; research clinic cloud/software environments and consider API integration. DSGVO/GDPR is even more critical here.
 
 ## Requirement Checklist (high-interest, feasibility TBD)
