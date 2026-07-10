@@ -112,6 +112,10 @@ export interface FoodBrowserQuery {
   nutrientMin?: number | null;
   nutrientMax?: number | null;
   nutrientSort?: NutrientSortDirection | null;
+  /** Hydrate food_portions on the results (nutrient mode only). */
+  includePortions?: boolean;
+  /** Extra nutrient IDs to hydrate beyond the default browser subset. */
+  extraNutrientIds?: string[];
   page?: number;
   pageSize?: number;
 }

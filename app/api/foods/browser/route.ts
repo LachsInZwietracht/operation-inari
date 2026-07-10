@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api/auth";
 import { toErrorResponse } from "@/lib/api/errors";
 import { fetchFoodsBrowserPage } from "@/lib/data/foods";
+import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import type { FoodBrowserQuery } from "@/lib/types";
+
+const VALID_NUTRIENT_IDS = new Set(NUTRIENT_DEFINITIONS.map((definition) => definition.id));
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,6 +33,11 @@ export async function GET(request: NextRequest) {
       nutrientMaxParam != null && nutrientMaxParam !== "" ? Number(nutrientMaxParam) : null,
     nutrientSort:
       nutrientSortParam === "asc" || nutrientSortParam === "desc" ? nutrientSortParam : null,
+    includePortions: searchParams.get("includePortions") === "1",
+    extraNutrientIds: (searchParams.get("nutrientIds") ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => VALID_NUTRIENT_IDS.has(id)),
     page: searchParams.get("page") ? Number(searchParams.get("page")) : undefined,
     pageSize: searchParams.get("pageSize") ? Number(searchParams.get("pageSize")) : undefined,
   };

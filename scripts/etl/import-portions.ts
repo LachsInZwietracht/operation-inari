@@ -34,18 +34,32 @@ interface BlsFood {
 async function main() {
   console.log("=== Food Portion Size Import ===\n");
 
-  // 1. Fetch all BLS foods
+  // 1. Fetch all BLS foods (paginated — PostgREST caps a single select at
+  //    1000 rows regardless of the requested range, which previously silently
+  //    dropped ~6000 of the BLS foods)
   console.log("Fetching BLS foods...");
-  const { data: foods, error } = await supabase
-    .from("foods")
-    .select("id, source_food_id, food_group_id")
-    .eq("data_source_id", "bls");
+  const FETCH_PAGE_SIZE = 1000;
+  const foods: Array<{
+    id: string;
+    source_food_id: string | null;
+    food_group_id: string | null;
+  }> = [];
+  for (let offset = 0; ; offset += FETCH_PAGE_SIZE) {
+    const { data: page, error } = await supabase
+      .from("foods")
+      .select("id, source_food_id, food_group_id")
+      .eq("data_source_id", "bls")
+      .order("id")
+      .range(offset, offset + FETCH_PAGE_SIZE - 1);
 
-  if (error) {
-    throw new Error(`Failed to fetch BLS foods: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to fetch BLS foods: ${error.message}`);
+    }
+    foods.push(...(page ?? []));
+    if (!page || page.length < FETCH_PAGE_SIZE) break;
   }
 
-  if (!foods || foods.length === 0) {
+  if (foods.length === 0) {
     console.log("No BLS foods found. Run etl:bls first.");
     process.exit(0);
   }
@@ -83,10 +97,11 @@ async function main() {
       ) {
         matches = true;
       }
-      // Food group match (lowest priority)
+      // Food group match (lowest priority). Templates name parent groups
+      // (fg_G) while foods carry child groups (fg_G2), so match by prefix.
       else if (
         template.match.foodGroupId &&
-        food.food_group_id === template.match.foodGroupId
+        food.food_group_id?.startsWith(template.match.foodGroupId)
       ) {
         matches = true;
       }

@@ -57,6 +57,7 @@ import {
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
+import { formatNumber } from "@/lib/format"
 import type {
   MealSlotType,
   MealEntry,
@@ -487,6 +488,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     entryAllergenWarnings,
     refConfig,
     dietLineMacros,
+    dietLineCompliance,
     micronutrientCompliance,
     energyTargetValue,
     optimizationSuggestions,
@@ -577,6 +579,25 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     )
     toast.success(`${suggestion.name} für ${MEAL_SLOT_LABELS[suggestion.slotType]} vorgemerkt.`)
   }
+
+  const handleAddGapFood = useCallback(
+    ({ food, grams, slotType }: { food: Food; grams: number; slotType: MealSlotType }) => {
+      if (currentPlan.status === "approved") {
+        toast.error("Freigegebene Pläne vor der Bearbeitung als Entwurf öffnen.")
+        return
+      }
+
+      guardedAddEntry(
+        slotType,
+        { type: "food", referenceId: food.id, amount: grams },
+        { itemKind: "food", itemName: food.name, allergens: food.allergens },
+      )
+      toast.success(
+        `${food.name} (${formatNumber(grams, 0)} g) für ${MEAL_SLOT_LABELS[slotType]} vorgemerkt.`,
+      )
+    },
+    [currentPlan.status, guardedAddEntry],
+  )
 
   const handleSaveDietLine = useCallback(
     async (draft: DietLineDraft): Promise<boolean> => {
@@ -999,7 +1020,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 isLocked={currentPlan.status === "approved"}
               />
               <PlanExchangeTool />
-              <PlanNutrientGapTool />
+              <PlanNutrientGapTool
+                dietLineCompliance={dietLineCompliance}
+                micronutrientCompliance={micronutrientCompliance}
+                patientAllergens={patientAllergens}
+                plan={currentPlan}
+                isLocked={currentPlan.status === "approved"}
+                onAddFood={handleAddGapFood}
+              />
               <PlanAdditiveSummary plan={currentPlan} foodMap={foodMap} recipeMap={recipeMap} />
             </div>
           </div>

@@ -680,6 +680,8 @@ function normalizeFoodBrowserQuery(query: FoodBrowserQuery) {
     nutrientMin: normalizeNutrientBound(query.nutrientMin),
     nutrientMax: normalizeNutrientBound(query.nutrientMax),
     nutrientSort,
+    includePortions: query.includePortions ?? false,
+    extraNutrientIds: (query.extraNutrientIds ?? []).slice(0, 12),
     page,
     pageSize,
     offset: (page - 1) * pageSize,
@@ -945,8 +947,10 @@ async function fetchFoodsBrowserPageByNutrient(
       rows.map((row) => row.food_id),
       client,
       {
-        nutrientIds: Array.from(new Set([...FOOD_BROWSER_NUTRIENT_IDS, query.nutrientId])),
-        includePortions: false,
+        nutrientIds: Array.from(
+          new Set([...FOOD_BROWSER_NUTRIENT_IDS, query.nutrientId, ...query.extraNutrientIds]),
+        ),
+        includePortions: query.includePortions,
       },
     );
     const byId = new Map(foods.map((food) => [food.id, food]));
