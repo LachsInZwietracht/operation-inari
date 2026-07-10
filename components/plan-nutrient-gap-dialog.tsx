@@ -23,12 +23,17 @@ import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions"
 import { formatNumber, formatNutrient } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { chooseOptimizationSlot, type DietLineComplianceItem } from "@/lib/meal-plan-calc"
-import type { NutrientGapConstraint, NutrientGapSuggestion } from "@/lib/nutrient-gap"
+import type {
+  NutrientGapConstraint,
+  NutrientGapSortMode,
+  NutrientGapSuggestion,
+} from "@/lib/nutrient-gap"
 import type {
   DailyMealPlan,
   Food,
   MealSlotType,
   PatientAllergenEntry,
+  Recipe,
 } from "@/lib/types"
 
 const NUTRIENT_GROUP_LABELS: Record<string, string> = {
@@ -63,6 +68,14 @@ const MEAL_SLOT_TYPES = Object.keys(MEAL_SLOT_LABELS) as MealSlotType[]
 
 const RESULT_PAGE = 20
 
+const SORT_MODE_LABELS: Record<NutrientGapSortMode, string> = {
+  score: "Empfohlen",
+  kcal: "Wenigste kcal",
+  coverage: "Größte Abdeckung",
+}
+
+type GapTypeFilter = "all" | "food" | "recipe"
+
 interface ConstraintRow {
   id: string
   nutrientId: string
@@ -71,13 +84,25 @@ interface ConstraintRow {
   mode: "hard" | "soft"
 }
 
+export interface NutrientGapAddPayload {
+  type: "food" | "recipe"
+  referenceId: string
+  name: string
+  /** Grams for foods, servings for recipes — matches MealEntry.amount. */
+  amount: number
+  allergens?: string[]
+  slotType: MealSlotType
+}
+
 interface PlanNutrientGapDialogProps {
   dietLineCompliance: DietLineComplianceItem[]
   micronutrientCompliance: DietLineComplianceItem[]
   patientAllergens: PatientAllergenEntry[]
   plan: DailyMealPlan
+  recipes: Recipe[]
+  foods: Food[]
   isLocked: boolean
-  onAddFood: (payload: { food: Food; grams: number; slotType: MealSlotType }) => void
+  onAdd: (payload: NutrientGapAddPayload) => void
 }
 
 /** Accepts German decimal commas; returns null for empty/invalid input. */
@@ -92,17 +117,33 @@ function toInputValue(value: number): string {
   return String(rounded).replace(".", ",")
 }
 
+function formatServings(servings: number) {
+  const value = formatNumber(servings, Number.isInteger(servings) ? 0 : 1)
+  return `${value} ${servings === 1 ? "Portion" : "Portionen"}`
+}
+
 function suggestionSummary(suggestion: NutrientGapSuggestion, unit: string, hasGap: boolean) {
+  if (suggestion.type === "recipe") {
+    if (!hasGap) {
+      return `pro Portion: ${formatNutrient(suggestion.density, unit)}`
+    }
+    const label = formatServings(suggestion.amount)
+    const verb = suggestion.amount === 1 ? "deckt" : "decken"
+    if (suggestion.capped) {
+      return `max. ${label} · ${verb} ${formatNumber(suggestion.coverage * 100, 0)} %`
+    }
+    return `${label} ${verb} die Lücke`
+  }
   if (!hasGap) {
-    return `pro 100 g: ${formatNutrient(suggestion.densityPer100g, unit)}`
+    return `pro 100 g: ${formatNutrient(suggestion.density, unit)}`
   }
   if (suggestion.capped) {
-    return `max. ${formatNumber(suggestion.grams, 0)} g · deckt ${formatNumber(
+    return `max. ${formatNumber(suggestion.amount, 0)} g · deckt ${formatNumber(
       suggestion.coverage * 100,
       0,
     )} %`
   }
-  return `${formatNumber(suggestion.grams, 0)} g decken die Lücke`
+  return `${formatNumber(suggestion.amount, 0)} g decken die Lücke`
 }
 
 /**
@@ -115,13 +156,17 @@ export function PlanNutrientGapDialog({
   micronutrientCompliance,
   patientAllergens,
   plan,
+  recipes,
+  foods,
   isLocked,
-  onAddFood,
+  onAdd,
 }: PlanNutrientGapDialogProps) {
   const [nutrientId, setNutrientId] = useState<string | null>(null)
   const [amountInput, setAmountInput] = useState("")
   const [constraintRows, setConstraintRows] = useState<ConstraintRow[]>([])
   const [slotOverride, setSlotOverride] = useState<MealSlotType | null>(null)
+  const [typeFilter, setTypeFilter] = useState<GapTypeFilter>("all")
+  const [sortMode, setSortMode] = useState<NutrientGapSortMode>("score")
   const [visibleCount, setVisibleCount] = useState(RESULT_PAGE)
 
   const nutrientDef = nutrientId ? NUTRIENT_DEF_MAP.get(nutrientId) : undefined
@@ -170,6 +215,9 @@ export function PlanNutrientGapDialog({
     gapAmount,
     constraints,
     patientAllergens,
+    recipes,
+    foods,
+    sortMode,
     enabled: true,
   })
 
@@ -197,7 +245,11 @@ export function PlanNutrientGapDialog({
     setConstraintRows((rows) => rows.map((row) => (row.id === id ? { ...row, ...patch } : row)))
   }
 
-  const visibleSuggestions = suggestions.slice(0, visibleCount)
+  const filteredSuggestions =
+    typeFilter === "all"
+      ? suggestions
+      : suggestions.filter((suggestion) => suggestion.type === typeFilter)
+  const visibleSuggestions = filteredSuggestions.slice(0, visibleCount)
 
   return (
     <div className="space-y-5 text-sm">
@@ -381,9 +433,50 @@ export function PlanNutrientGapDialog({
       </section>
 
       <section className="space-y-2">
+        {nutrientId && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <ToggleGroup
+              type="single"
+              size="sm"
+              variant="outline"
+              value={typeFilter}
+              onValueChange={(value) => {
+                if (value === "all" || value === "food" || value === "recipe") {
+                  setTypeFilter(value)
+                  setVisibleCount(RESULT_PAGE)
+                }
+              }}
+            >
+              <ToggleGroupItem value="all" className="h-8 px-2.5 text-xs">
+                Beide
+              </ToggleGroupItem>
+              <ToggleGroupItem value="food" className="h-8 px-2.5 text-xs">
+                Lebensmittel
+              </ToggleGroupItem>
+              <ToggleGroupItem value="recipe" className="h-8 px-2.5 text-xs">
+                Rezepte
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <Select
+              value={sortMode}
+              onValueChange={(value) => setSortMode(value as NutrientGapSortMode)}
+            >
+              <SelectTrigger size="sm" className="h-8 w-[170px] text-xs" aria-label="Sortierung">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(SORT_MODE_LABELS) as NutrientGapSortMode[]).map((mode) => (
+                  <SelectItem key={mode} value={mode}>
+                    {SORT_MODE_LABELS[mode]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {!nutrientId ? (
           <p className="text-muted-foreground rounded-md border border-dashed p-4 text-center text-xs">
-            Nährstoff wählen, um passende Lebensmittel zu finden.
+            Nährstoff wählen, um passende Lebensmittel und Rezepte zu finden.
           </p>
         ) : isLoading ? (
           <div className="space-y-2">
@@ -393,27 +486,36 @@ export function PlanNutrientGapDialog({
           </div>
         ) : error ? (
           <p className="text-destructive rounded-md border p-4 text-center text-xs">{error}</p>
-        ) : suggestions.length === 0 ? (
+        ) : filteredSuggestions.length === 0 ? (
           <p className="text-muted-foreground rounded-md border border-dashed p-4 text-center text-xs">
-            Keine passenden Lebensmittel gefunden. Bedingungen lockern?
+            Keine passenden Treffer gefunden. Bedingungen lockern?
           </p>
         ) : (
           <>
             {visibleSuggestions.map((suggestion) => (
               <div
-                key={suggestion.food.id}
+                key={`${suggestion.type}-${suggestion.referenceId}`}
                 data-testid="gap-suggestion"
                 className="hover:bg-muted/40 flex items-start justify-between gap-3 rounded-md border p-2.5 transition"
               >
                 <div className="min-w-0">
                   <p data-testid="gap-suggestion-name" className="truncate text-sm font-medium">
-                    {suggestion.food.name}
+                    {suggestion.name}
+                    {suggestion.type === "recipe" && (
+                      <Badge variant="secondary" className="ml-1.5 align-middle text-[10px] font-normal">
+                        Rezept
+                      </Badge>
+                    )}
                   </p>
                   <p className="text-muted-foreground mt-0.5 text-xs">
                     {suggestionSummary(suggestion, nutrientDef?.unit ?? "", gapAmount != null)}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
-                    <Badge variant="outline" className="text-[10px] font-normal">
+                    <Badge
+                      variant="outline"
+                      data-testid="gap-suggestion-kcal"
+                      className="text-[10px] font-normal"
+                    >
                       +{formatNumber(suggestion.kcal, 0)} kcal
                     </Badge>
                     {suggestion.constraintResults.map(({ constraint, value, violated }) => {
@@ -449,14 +551,21 @@ export function PlanNutrientGapDialog({
                   className="h-7 shrink-0"
                   disabled={isLocked}
                   onClick={() =>
-                    onAddFood({ food: suggestion.food, grams: suggestion.grams, slotType })
+                    onAdd({
+                      type: suggestion.type,
+                      referenceId: suggestion.referenceId,
+                      name: suggestion.name,
+                      amount: suggestion.amount,
+                      allergens: suggestion.allergens,
+                      slotType,
+                    })
                   }
                 >
                   Übernehmen
                 </Button>
               </div>
             ))}
-            {suggestions.length > visibleCount && (
+            {filteredSuggestions.length > visibleCount && (
               <Button
                 type="button"
                 variant="ghost"
@@ -464,7 +573,7 @@ export function PlanNutrientGapDialog({
                 className="w-full"
                 onClick={() => setVisibleCount((count) => count + RESULT_PAGE)}
               >
-                Mehr anzeigen ({suggestions.length - visibleCount} weitere)
+                Mehr anzeigen ({filteredSuggestions.length - visibleCount} weitere)
               </Button>
             )}
           </>

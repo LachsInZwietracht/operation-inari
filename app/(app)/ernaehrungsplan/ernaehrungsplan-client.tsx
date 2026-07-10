@@ -82,6 +82,7 @@ import { PlanDayWorkspace } from "@/components/plan-day-workspace"
 import { PlanFillSuggestions } from "@/components/plan-fill-suggestions"
 import { PlanExchangeTool } from "@/components/plan-exchange-tool"
 import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
+import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { toast } from "sonner"
 
@@ -580,8 +581,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     toast.success(`${suggestion.name} für ${MEAL_SLOT_LABELS[suggestion.slotType]} vorgemerkt.`)
   }
 
-  const handleAddGapFood = useCallback(
-    ({ food, grams, slotType }: { food: Food; grams: number; slotType: MealSlotType }) => {
+  const handleAddGapSuggestion = useCallback(
+    ({ type, referenceId, name, amount, allergens, slotType }: NutrientGapAddPayload) => {
       if (currentPlan.status === "approved") {
         toast.error("Freigegebene Pläne vor der Bearbeitung als Entwurf öffnen.")
         return
@@ -589,12 +590,14 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
       guardedAddEntry(
         slotType,
-        { type: "food", referenceId: food.id, amount: grams },
-        { itemKind: "food", itemName: food.name, allergens: food.allergens },
+        { type, referenceId, amount },
+        { itemKind: type, itemName: name, allergens },
       )
-      toast.success(
-        `${food.name} (${formatNumber(grams, 0)} g) für ${MEAL_SLOT_LABELS[slotType]} vorgemerkt.`,
-      )
+      const amountLabel =
+        type === "food"
+          ? `${formatNumber(amount, 0)} g`
+          : `${formatNumber(amount, Number.isInteger(amount) ? 0 : 1)} ${amount === 1 ? "Portion" : "Portionen"}`
+      toast.success(`${name} (${amountLabel}) für ${MEAL_SLOT_LABELS[slotType]} vorgemerkt.`)
     },
     [currentPlan.status, guardedAddEntry],
   )
@@ -1025,8 +1028,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 micronutrientCompliance={micronutrientCompliance}
                 patientAllergens={patientAllergens}
                 plan={currentPlan}
+                recipes={recipes}
+                foods={foods}
                 isLocked={currentPlan.status === "approved"}
-                onAddFood={handleAddGapFood}
+                onAdd={handleAddGapSuggestion}
               />
               <PlanAdditiveSummary plan={currentPlan} foodMap={foodMap} recipeMap={recipeMap} />
             </div>

@@ -3,7 +3,10 @@
 import { useState } from "react"
 import { Target } from "lucide-react"
 
-import { PlanNutrientGapDialog } from "@/components/plan-nutrient-gap-dialog"
+import {
+  PlanNutrientGapDialog,
+  type NutrientGapAddPayload,
+} from "@/components/plan-nutrient-gap-dialog"
 import {
   Card,
   CardContent,
@@ -23,8 +26,8 @@ import type { DietLineComplianceItem } from "@/lib/meal-plan-calc"
 import type {
   DailyMealPlan,
   Food,
-  MealSlotType,
   PatientAllergenEntry,
+  Recipe,
 } from "@/lib/types"
 
 interface PlanNutrientGapToolProps {
@@ -32,8 +35,10 @@ interface PlanNutrientGapToolProps {
   micronutrientCompliance: DietLineComplianceItem[]
   patientAllergens: PatientAllergenEntry[]
   plan: DailyMealPlan
+  recipes: Recipe[]
+  foods: Food[]
   isLocked: boolean
-  onAddFood: (payload: { food: Food; grams: number; slotType: MealSlotType }) => void
+  onAdd: (payload: NutrientGapAddPayload) => void
 }
 
 /**
@@ -58,8 +63,8 @@ export function PlanNutrientGapTool(props: PlanNutrientGapToolProps) {
                 Nährstoff-Lückenfüller
               </CardTitle>
               <CardDescription>
-                Fehlmenge eines Nährstoffs eingeben und passende Lebensmittel finden, die genau
-                diese Lücke füllen.
+                Fehlmenge eines Nährstoffs eingeben und passende Lebensmittel oder Rezepte finden,
+                die genau diese Lücke füllen.
               </CardDescription>
             </CardHeader>
             <CardContent>

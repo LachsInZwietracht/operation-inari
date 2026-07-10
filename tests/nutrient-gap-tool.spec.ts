@@ -147,6 +147,53 @@ test.describe("Nährstoff-Lückenfüller", () => {
     }
   });
 
+  test("sorts results by fewest added calories", async ({ page }) => {
+    const planDate = uniquePlannerDate(8000);
+    const patient = await createPatientFixture("Gap", "Sort");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      const dialog = await openGapTool(page);
+      await searchCalciumGap(page, dialog);
+
+      await dialog.getByRole("combobox", { name: "Sortierung" }).click();
+      await page.getByRole("option", { name: "Wenigste kcal" }).click();
+
+      await expect(async () => {
+        const chips = await dialog.getByTestId("gap-suggestion-kcal").allInnerTexts();
+        const kcal = chips
+          .slice(0, 5)
+          .map((text) => Number(text.replace(/[^\d]/g, "")));
+        expect(kcal.length).toBeGreaterThan(1);
+        for (let i = 1; i < kcal.length; i++) {
+          expect(kcal[i]).toBeGreaterThanOrEqual(kcal[i - 1]);
+        }
+      }).toPass({ timeout: 15_000 });
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("type filter limits results to foods", async ({ page }) => {
+    const planDate = uniquePlannerDate(8500);
+    const patient = await createPatientFixture("Gap", "Filter");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      const dialog = await openGapTool(page);
+      await searchCalciumGap(page, dialog);
+
+      await dialog.getByRole("radio", { name: "Lebensmittel" }).click();
+
+      await expect(dialog.getByTestId("gap-suggestion").first()).toBeVisible();
+      await expect(
+        dialog.getByTestId("gap-suggestion-name").filter({ hasText: "Rezept" }),
+      ).toHaveCount(0);
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("adds the suggested portion to a meal slot", async ({ page }) => {
     const planDate = uniquePlannerDate(7500);
     const patient = await createPatientFixture("Gap", "Add");

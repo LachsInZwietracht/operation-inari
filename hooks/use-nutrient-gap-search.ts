@@ -2,18 +2,32 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { fetchFoodsByIds } from "@/lib/data/foods-client"
 import {
   computeGapSuggestions,
+  computeRecipeGapSuggestions,
+  sortGapSuggestions,
   type NutrientGapConstraint,
+  type NutrientGapSortMode,
   type NutrientGapSuggestion,
 } from "@/lib/nutrient-gap"
-import type { Food, FoodBrowserResult, PatientAllergenEntry } from "@/lib/types"
+import type {
+  Food,
+  FoodBrowserResult,
+  PatientAllergenEntry,
+  Recipe,
+} from "@/lib/types"
 
 interface UseNutrientGapSearchOptions {
   nutrientId: string | null
   gapAmount: number | null
   constraints: NutrientGapConstraint[]
   patientAllergens: PatientAllergenEntry[]
+  /** Recipe library candidates, scored locally per serving. */
+  recipes: Recipe[]
+  /** Hydrated foods used to resolve recipe ingredients. */
+  foods: Food[]
+  sortMode: NutrientGapSortMode
   /** Only fetch while the dialog is open. */
   enabled: boolean
 }
@@ -31,15 +45,19 @@ const MIN_USABLE_RESULTS = 15
 const DEBOUNCE_MS = 300
 
 /**
- * Fetches nutrient-density-ranked candidates from the food browser API and
- * turns them into gap suggestions. Only the nutrient/constraint IDs trigger a
- * refetch; gap amount and constraint bounds recompute over cached candidates.
+ * Fetches nutrient-density-ranked food candidates from the food browser API,
+ * scores the loaded recipe library alongside them, and merges both into gap
+ * suggestions. Only the nutrient/constraint IDs trigger a refetch; gap
+ * amount, constraint bounds, and sorting recompute over cached candidates.
  */
 export function useNutrientGapSearch({
   nutrientId,
   gapAmount,
   constraints,
   patientAllergens,
+  recipes,
+  foods,
+  sortMode,
   enabled,
 }: UseNutrientGapSearchOptions): UseNutrientGapSearchResult {
   const [candidates, setCandidates] = useState<Food[]>([])
@@ -53,6 +71,49 @@ export function useNutrientGapSearch({
   useEffect(() => {
     paramsRef.current = { gapAmount, constraints, patientAllergens }
   }, [gapAmount, constraints, patientAllergens])
+
+  // Recipe scoring needs the ingredient foods' nutrients, but the planner
+  // only hydrates foods referenced by plan entries. Fetch the missing
+  // ingredients once per dialog session (all nutrients, so nutrient/constraint
+  // changes never refetch them).
+  const [ingredientFoods, setIngredientFoods] = useState<Food[]>([])
+  useEffect(() => {
+    if (!enabled || recipes.length === 0) return
+    const known = new Set(foods.map((food) => food.id))
+    const missing = Array.from(
+      new Set(recipes.flatMap((recipe) => recipe.ingredients.map((i) => i.foodId))),
+    ).filter((id) => !known.has(id))
+    if (missing.length === 0) return
+
+    let cancelled = false
+    const batches: Promise<Food[]>[] = []
+    for (let i = 0; i < missing.length; i += 150) {
+      batches.push(fetchFoodsByIds(missing.slice(i, i + 150)))
+    }
+    Promise.all(batches)
+      .then((results) => {
+        if (!cancelled) setIngredientFoods(results.flat())
+      })
+      .catch((fetchError) => {
+        // Recipes silently score lower without their ingredients; food results
+        // are unaffected, so this is a degradation rather than an error state.
+        console.warn("Nutrient gap ingredient hydration failed:", fetchError)
+      })
+    return () => {
+      cancelled = true
+    }
+    // One-shot per dialog session: foods growing via plan hydration must not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, recipes])
+
+  const recipeFoods = useMemo(() => {
+    if (ingredientFoods.length === 0) return foods
+    const merged = new Map(foods.map((food) => [food.id, food]))
+    for (const food of ingredientFoods) {
+      if (!merged.has(food.id)) merged.set(food.id, food)
+    }
+    return Array.from(merged.values())
+  }, [foods, ingredientFoods])
 
   const constraintNutrientIds = useMemo(() => {
     const ids = new Set<string>(["energie"])
@@ -133,14 +194,12 @@ export function useNutrientGapSearch({
   }, [enabled, fetchKey, nutrientId])
 
   const suggestions = useMemo(() => {
-    if (!nutrientId || candidates.length === 0) return []
-    return computeGapSuggestions(candidates, {
-      nutrientId,
-      gapAmount,
-      constraints,
-      patientAllergens,
-    })
-  }, [candidates, nutrientId, gapAmount, constraints, patientAllergens])
+    if (!nutrientId) return []
+    const params = { nutrientId, gapAmount, constraints, patientAllergens }
+    const foodSuggestions = candidates.length > 0 ? computeGapSuggestions(candidates, params) : []
+    const recipeSuggestions = computeRecipeGapSuggestions(recipes, recipeFoods, params)
+    return sortGapSuggestions([...foodSuggestions, ...recipeSuggestions], sortMode)
+  }, [candidates, nutrientId, gapAmount, constraints, patientAllergens, recipes, recipeFoods, sortMode])
 
   return { suggestions, isLoading, error, totalCandidates }
 }
