@@ -18,13 +18,9 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Download,
-  FileText,
   LayoutTemplate,
-  Loader2,
   UserPlus,
   UserRound,
-  Users,
-  Utensils,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -40,14 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { useMealPlan } from "@/hooks/use-meal-plan"
 import { useAllergenGuard } from "@/hooks/use-allergen-guard"
 import {
@@ -97,12 +85,8 @@ import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
-import {
-  buildDefaultReportExportRequest,
-  buildTeachingKitchenExportRequest,
-  type MealPlanReportVariant,
-} from "@/lib/exports/report-builder"
-import { cn, downloadResponseFile } from "@/lib/utils"
+import { PlanExportDialog } from "@/components/plan-export-dialog"
+import { cn } from "@/lib/utils"
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
 const CREATE_PATIENT_VALUE = "__create_patient__"
@@ -226,7 +210,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
   const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
-  const [exportingVariant, setExportingVariant] = useState<MealPlanReportVariant | null>(null)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
 
@@ -523,6 +507,10 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const assignedPatient = currentPlan.patientId ? getPatient(currentPlan.patientId) : undefined
   const visiblePatient = patient ?? assignedPatient
   const hasSelectedPatient = Boolean(patientId ?? currentPlan.patientId)
+  const visiblePatientAllergens = useMemo(
+    () => (visiblePatient ? getAllergensForPatient(visiblePatient.id) : []),
+    [visiblePatient, getAllergensForPatient],
+  )
 
   const openPatientContext = useCallback(
     (nextPatientId?: string) => {
@@ -673,120 +661,26 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     ],
   )
 
-  const handleExportPlan = useCallback(
-    async (variant: MealPlanReportVariant) => {
-      if (exportingVariant) return
-
-      const totalEntries = currentPlan.slots.reduce((sum, slot) => sum + slot.entries.length, 0)
-      if (totalEntries === 0) {
-        toast.error("Export nicht möglich: Der aktuelle Plan enthält noch keine Einträge.")
-        return
-      }
-      const patientName = patient ? `${patient.firstName} ${patient.lastName}` : undefined
-      const planContext = {
-        patientId: currentPlan.patientId ?? patientId,
-        patientName,
-        patientIndication: patientIndications.length ? patientIndications.join(", ") : undefined,
-        planId: currentPlan.id,
-        dietLineName: dietLine?.name,
-      }
-      const notes = currentPlan.notes ?? undefined
-
-      const reportRequest =
-        variant === "lehrkueche"
-          ? buildTeachingKitchenExportRequest(weekPlans, recipes, foods, refConfig, {
-              ...planContext,
-              rangeLabel: weekRangeLabel,
-            })
-          : buildDefaultReportExportRequest(currentPlan, recipes, foods, refConfig, {
-              ...planContext,
-              variant,
-              notes,
-            })
-
-      setExportingVariant(variant)
-      try {
-        const response = await fetch("/api/exports/report", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(reportRequest),
-        })
-        await downloadResponseFile(response, `${reportRequest.fileBaseName}.pdf`)
-        toast.success(
-          variant === "patient"
-            ? "Patientenhandout exportiert."
-            : variant === "lehrkueche"
-              ? "Lehrküchenplan exportiert."
-              : "Klinischer Bericht exportiert.",
-        )
-      } catch (error) {
-        console.error("Failed to export meal plan:", error)
-        toast.error((error as Error).message || "Export ist fehlgeschlagen.")
-      } finally {
-        setExportingVariant(null)
-      }
-    },
-    [
-      currentPlan,
-      dietLine?.name,
-      exportingVariant,
-      foods,
-      patient,
-      patientIndications,
-      patientId,
-      recipes,
-      refConfig,
-      weekPlans,
-      weekRangeLabel,
-    ],
+  // Shared export trigger — rendered in the day header and reused in the week
+  // header. Opens the configurable export dialog (document type, days, contents).
+  const exportMenu = (
+    <Button variant="outline" size="sm" onClick={() => setExportDialogOpen(true)}>
+      <Download className="mr-1.5 h-4 w-4" />
+      Export
+    </Button>
   )
 
-  // Shared PDF-export menu — rendered in the day header and reused in the week
-  // header (week-relevant "Lehrküchenplan" variant covers all seven days).
-  const exportMenu = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={exportingVariant !== null}>
-          {exportingVariant ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="mr-1.5 h-4 w-4" />
-          )}
-          Export
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>PDF-Export</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void handleExportPlan("clinical")}>
-          <FileText className="mr-2 h-4 w-4" />
-          <div className="flex flex-col">
-            <span>Klinischer Bericht</span>
-            <span className="text-muted-foreground text-xs">
-              Soll-/Ist-Abgleich, Vitamine, Mineralstoffe
-            </span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void handleExportPlan("patient")}>
-          <Users className="mr-2 h-4 w-4" />
-          <div className="flex flex-col">
-            <span>Patientenhandout</span>
-            <span className="text-muted-foreground text-xs">
-              Mahlzeiten & Hinweise, ohne klinische Tabellen
-            </span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void handleExportPlan("lehrkueche")}>
-          <Utensils className="mr-2 h-4 w-4" />
-          <div className="flex flex-col">
-            <span>Lehrküchenplan (Woche)</span>
-            <span className="text-muted-foreground text-xs">
-              7-Tage-Aushang für Küche & Station
-            </span>
-          </div>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+  // The dialog exports the week the user is looking at: the week view follows
+  // its offset navigation, the day view the week around the active date.
+  const exportWeekPlans = view === "week" ? weekPlans : dayWeekPlans
+  const exportDefaultDates = useMemo(
+    () =>
+      view === "week"
+        ? weekPlans
+            .filter((plan) => plan.slots.some((slot) => slot.entries.length > 0))
+            .map((plan) => plan.date)
+        : [currentDate],
+    [view, weekPlans, currentDate],
   )
 
   return (
@@ -1058,6 +952,21 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       </Tabs>
         </>
       )}
+
+      <PlanExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        plans={exportWeekPlans}
+        defaultSelectedDates={exportDefaultDates}
+        recipes={recipes}
+        foods={foods}
+        refConfig={refConfig}
+        patient={visiblePatient}
+        patientAllergens={visiblePatientAllergens}
+        patientIndications={getPatientIndications(visiblePatient)}
+        dietLineName={dietLine?.name}
+        planId={currentPlan.id}
+      />
 
       <PlanDietLineDialog
         open={dietLineDialogOpen}

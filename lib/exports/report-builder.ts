@@ -1,4 +1,17 @@
-import type { DailyMealPlan, Food, ReportExportRequest, Recipe, ResolvedReferenceConfig } from "@/lib/types";
+import type {
+  DailyMealPlan,
+  Food,
+  NutrientValue,
+  PatientAllergenEntry,
+  Recipe,
+  ReportExportDayMeal,
+  ReportExportDayPage,
+  ReportExportMetric,
+  ReportExportRecipeCard,
+  ReportExportRequest,
+  ResolvedReferenceConfig,
+} from "@/lib/types";
+import { ALLERGEN_MAP, ALLERGEN_TYPE_LABELS } from "@/lib/allergen-constants";
 import {
   calculatePerServing,
   calculateRecipeNutrients,
@@ -76,6 +89,58 @@ function describeEntry(
   return `${name} · ${formatNumber(entry.amount, 0)} ${portionLabel}`;
 }
 
+function buildNutrientTableRows(
+  planNutrients: NutrientValue[],
+  refConfig: ResolvedReferenceConfig,
+): ReportExportMetric[] {
+  const rows = DEFAULT_NUTRIENT_IDS.map((id) => {
+    const def = NUTRIENT_DEFINITIONS.find((item) => item.id === id)!;
+    const value = getNutrientValue(planNutrients, id);
+    const reference = getReferenceAmount(refConfig, id);
+    return {
+      label: def.name,
+      value: `${formatNumber(value, 1)} ${def.unit}`,
+      reference: `${formatNumber(reference, 1)} ${def.unit}`,
+      coverage: formatPercent(percentOfReference(value, reference)),
+    };
+  });
+  // Broteinheiten: derived from carbs, no reference target by default —
+  // shown next to the carb row so clinicians can read both side-by-side.
+  const beValue = getBroteinheiten(getNutrientValue(planNutrients, "kohlenhydrate"));
+  const carbsIndex = rows.findIndex((row) => row.label === "Kohlenhydrate");
+  const beRow = {
+    label: "Broteinheiten",
+    value: `${formatNumber(beValue, 1)} BE`,
+    reference: "—",
+    coverage: "—",
+  };
+  if (carbsIndex >= 0) {
+    rows.splice(carbsIndex + 1, 0, beRow);
+  } else {
+    rows.push(beRow);
+  }
+  return rows;
+}
+
+function buildNutrientGroupRows(
+  group: "vitamine" | "mineralstoffe",
+  planNutrients: NutrientValue[],
+  refConfig: ResolvedReferenceConfig,
+): ReportExportMetric[] {
+  return NUTRIENT_DEFINITIONS.filter((item) => item.group === group)
+    .slice(0, 6)
+    .map((def) => {
+      const value = getNutrientValue(planNutrients, def.id);
+      const reference = getReferenceAmount(refConfig, def.id);
+      return {
+        label: def.name,
+        value: `${formatNumber(value, 1)} ${def.unit}`,
+        reference: `${formatNumber(reference, 1)} ${def.unit}`,
+        coverage: formatPercent(percentOfReference(value, reference)),
+      };
+    });
+}
+
 function buildVariantConfig(variant: MealPlanReportVariant, ctx: MealPlanReportContext) {
   const patientLabel = ctx.patientName ? ` – ${ctx.patientName}` : "";
   switch (variant) {
@@ -137,65 +202,15 @@ export function buildDefaultReportExportRequest(
     });
 
   const nutrientRows = variantConfig.selectedSections.table
-    ? (() => {
-        const rows = DEFAULT_NUTRIENT_IDS.map((id) => {
-          const def = NUTRIENT_DEFINITIONS.find((item) => item.id === id)!;
-          const value = getNutrientValue(planNutrients, id);
-          const reference = getReferenceAmount(effectiveRefConfig, id);
-          return {
-            label: def.name,
-            value: `${formatNumber(value, 1)} ${def.unit}`,
-            reference: `${formatNumber(reference, 1)} ${def.unit}`,
-            coverage: formatPercent(percentOfReference(value, reference)),
-          };
-        });
-        // Broteinheiten: derived from carbs, no reference target by default —
-        // shown next to the carb row so clinicians can read both side-by-side.
-        const beValue = getBroteinheiten(getNutrientValue(planNutrients, "kohlenhydrate"));
-        const carbsIndex = rows.findIndex((row) => row.label === "Kohlenhydrate");
-        const beRow = {
-          label: "Broteinheiten",
-          value: `${formatNumber(beValue, 1)} BE`,
-          reference: "—",
-          coverage: "—",
-        };
-        if (carbsIndex >= 0) {
-          rows.splice(carbsIndex + 1, 0, beRow);
-        } else {
-          rows.push(beRow);
-        }
-        return rows;
-      })()
+    ? buildNutrientTableRows(planNutrients, effectiveRefConfig)
     : [];
 
   const vitaminRows = variantConfig.selectedSections.table
-    ? NUTRIENT_DEFINITIONS.filter((item) => item.group === "vitamine")
-        .slice(0, 6)
-        .map((def) => {
-          const value = getNutrientValue(planNutrients, def.id);
-          const reference = getReferenceAmount(effectiveRefConfig, def.id);
-          return {
-            label: def.name,
-            value: `${formatNumber(value, 1)} ${def.unit}`,
-            reference: `${formatNumber(reference, 1)} ${def.unit}`,
-            coverage: formatPercent(percentOfReference(value, reference)),
-          };
-        })
+    ? buildNutrientGroupRows("vitamine", planNutrients, effectiveRefConfig)
     : [];
 
   const mineralRows = variantConfig.selectedSections.table
-    ? NUTRIENT_DEFINITIONS.filter((item) => item.group === "mineralstoffe")
-        .slice(0, 6)
-        .map((def) => {
-          const value = getNutrientValue(planNutrients, def.id);
-          const reference = getReferenceAmount(effectiveRefConfig, def.id);
-          return {
-            label: def.name,
-            value: `${formatNumber(value, 1)} ${def.unit}`,
-            reference: `${formatNumber(reference, 1)} ${def.unit}`,
-            coverage: formatPercent(percentOfReference(value, reference)),
-          };
-        })
+    ? buildNutrientGroupRows("mineralstoffe", planNutrients, effectiveRefConfig)
     : [];
 
   const energyValue = getNutrientValue(planNutrients, "energie");
@@ -477,5 +492,357 @@ export function buildTeachingKitchenExportRequest(
     patientIndication: context.patientIndication,
     planId: context.planId ?? firstPlan?.id,
     planDateLabel: context.rangeLabel,
+  };
+}
+
+const NUTRITION_PREFERENCE_LABELS: Record<string, string> = {
+  vegetarian: "Vegetarisch",
+  vegan: "Vegan",
+  keto: "Keto",
+  low_carb: "Low Carb",
+};
+
+const MACRO_PRESET_LABELS: Record<string, string> = {
+  balanced: "Ausgewogen (50 % KH · 30 % Fett · 20 % Eiweiß)",
+  lowcarb: "Low Carb (30 % KH · 40 % Fett · 30 % Eiweiß)",
+};
+
+export type MealPlanDaysVariant = "patient" | "clinical";
+
+export interface MealPlanPersonalization {
+  calorieGoalKcal?: number;
+  macroPreset?: string;
+  preferences?: string[];
+  allergens?: PatientAllergenEntry[];
+  goals?: string;
+}
+
+export interface MealPlanDaysExportContext {
+  variant: MealPlanDaysVariant;
+  patientId?: string;
+  patientName?: string;
+  patientIndication?: string;
+  planId?: string;
+  dietLineName?: string;
+  notes?: string;
+  includeRecipes?: boolean;
+  /**
+   * When set, the export carries the patient profile block and energy
+   * targets. Deliberately opt-in: clinicians must be able to hand out a plan
+   * without kcal figures (e.g. eating-disorder contexts).
+   */
+  personalization?: MealPlanPersonalization;
+}
+
+function formatShortDay(date: string) {
+  const dateObj = new Date(`${date}T00:00:00`);
+  const weekday = dateObj.toLocaleDateString("de-DE", { weekday: "short" });
+  const dayMonth = dateObj.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+  return `${weekday} ${dayMonth}`;
+}
+
+/**
+ * Day-selectable meal plan export: one PDF page per selected day, optional
+ * personalization cover block, and a deduplicated recipe appendix. Used by
+ * the "Patientenhandout" and "Klinischer Bericht" variants of the planner
+ * export dialog; the teaching-kitchen poster keeps its own builder above.
+ */
+export function buildMealPlanDaysExportRequest(
+  plans: DailyMealPlan[],
+  recipes: Recipe[],
+  foods: Food[],
+  refConfig: ResolvedReferenceConfig | undefined,
+  context: MealPlanDaysExportContext,
+): ReportExportRequest {
+  const variant = context.variant;
+  const includeRecipes = context.includeRecipes ?? false;
+  const personalization = context.personalization;
+  // Patient handouts hide kcal figures unless personalization is on; the
+  // clinical report always shows them.
+  const showEnergy = variant === "clinical" || Boolean(personalization);
+
+  const sortedPlans = [...plans].sort((a, b) => a.date.localeCompare(b.date));
+  const foodMap = new Map(foods.map((food) => [food.id, food]));
+  const recipeMap = createRecipeLookup(recipes);
+  const effectiveRefConfig =
+    refConfig ??
+    resolveReferenceForPatient({
+      dateOfBirth: "1990-01-01",
+      gender: "w",
+    });
+
+  const energyTarget =
+    personalization?.calorieGoalKcal ?? getReferenceAmount(effectiveRefConfig, "energie");
+
+  const appendixOrder: string[] = [];
+  const appendixEntries = new Map<string, { recipe: Recipe; plannedFor: string[] }>();
+
+  const dayPages: ReportExportDayPage[] = [];
+  const mealRows: ReportExportRequest["mealRows"] = [];
+  const dailyTotals: { kcal: number; protein: number; be: number }[] = [];
+
+  for (const plan of sortedPlans) {
+    const dateObj = new Date(`${plan.date}T00:00:00`);
+    const dateLabel = dateObj.toLocaleDateString("de-DE", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+    const dayShort = formatShortDay(plan.date);
+
+    const meals: ReportExportDayMeal[] = [];
+    for (const slot of plan.slots) {
+      if (slot.entries.length === 0) {
+        if (variant === "clinical") {
+          meals.push({ slot: MEAL_SLOT_LABELS[slot.type], items: ["noch offen"] });
+        }
+        continue;
+      }
+
+      const items = slot.entries.map((entry) => {
+        let label = describeEntry(entry, foodMap, recipeMap, variant);
+        if (entry.type === "recipe" && includeRecipes) {
+          const recipe = recipeMap.get(entry.referenceId);
+          if (recipe) {
+            const portionLabel = `${formatNumber(entry.amount, Number.isInteger(entry.amount) ? 0 : 1)} Port.`;
+            const occurrence = `${dayShort} (${portionLabel})`;
+            const existing = appendixEntries.get(recipe.id);
+            if (existing) {
+              existing.plannedFor.push(occurrence);
+            } else {
+              appendixEntries.set(recipe.id, { recipe, plannedFor: [occurrence] });
+              appendixOrder.push(recipe.id);
+            }
+            label = `${label} · Rezept im Anhang`;
+          }
+        }
+        return label;
+      });
+
+      const slotNutrients = sumNutrients(
+        slot.entries
+          .map((entry) => getEntryNutrients(entry, foodMap, recipeMap, foods))
+          .filter((values) => values.length > 0),
+      );
+      const slotKcal = getNutrientValue(slotNutrients, "energie");
+      meals.push({
+        slot: MEAL_SLOT_LABELS[slot.type],
+        items,
+        kcal: showEnergy ? `${formatNumber(slotKcal, 0)} kcal` : undefined,
+      });
+      mealRows.push({
+        slot: `${dayShort} · ${MEAL_SLOT_LABELS[slot.type]}`,
+        summary: items.join(", "),
+      });
+    }
+
+    const planNutrients = sumNutrients(
+      plan.slots
+        .flatMap((slot) => slot.entries.map((entry) => getEntryNutrients(entry, foodMap, recipeMap, foods)))
+        .filter((values) => values.length > 0),
+    );
+    const kcal = getNutrientValue(planNutrients, "energie");
+    const protein = getNutrientValue(planNutrients, "eiweiss");
+    const fat = getNutrientValue(planNutrients, "fett");
+    const carbs = getNutrientValue(planNutrients, "kohlenhydrate");
+    const be = getBroteinheiten(carbs);
+    dailyTotals.push({ kcal, protein, be });
+
+    dayPages.push({
+      dateLabel,
+      meals,
+      macroSummary: showEnergy
+        ? `Eiweiß ${formatNumber(protein, 0)} g · Fett ${formatNumber(fat, 0)} g · Kohlenhydrate ${formatNumber(carbs, 0)} g (${formatNumber(be, 1)} BE)`
+        : undefined,
+      energyBar:
+        showEnergy && energyTarget > 0
+          ? {
+              value: Math.round(kcal),
+              target: Math.round(energyTarget),
+              label: `${formatNumber(kcal, 0)} / ${formatNumber(energyTarget, 0)} kcal`,
+            }
+          : undefined,
+      nutrientRows:
+        variant === "clinical" ? buildNutrientTableRows(planNutrients, effectiveRefConfig) : undefined,
+      vitaminRows:
+        variant === "clinical"
+          ? buildNutrientGroupRows("vitamine", planNutrients, effectiveRefConfig)
+          : undefined,
+      mineralRows:
+        variant === "clinical"
+          ? buildNutrientGroupRows("mineralstoffe", planNutrients, effectiveRefConfig)
+          : undefined,
+    });
+  }
+
+  const firstPlan = sortedPlans[0];
+  const lastPlan = sortedPlans[sortedPlans.length - 1] ?? firstPlan;
+  const isMultiDay = sortedPlans.length > 1;
+  const periodLabel = !firstPlan
+    ? ""
+    : isMultiDay
+      ? `${sortedPlans.length} Tage · ${new Date(`${firstPlan.date}T00:00:00`).toLocaleDateString("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+        })} – ${new Date(`${lastPlan.date}T00:00:00`).toLocaleDateString("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })}`
+      : formatDate(firstPlan.date);
+
+  const dayCount = dailyTotals.length || 1;
+  const avgKcal = dailyTotals.reduce((sum, day) => sum + day.kcal, 0) / dayCount;
+  const avgProtein = dailyTotals.reduce((sum, day) => sum + day.protein, 0) / dayCount;
+  const avgBE = dailyTotals.reduce((sum, day) => sum + day.be, 0) / dayCount;
+
+  const summaryMetrics: ReportExportMetric[] = showEnergy
+    ? [
+        {
+          label: isMultiDay ? "Ø Energie / Tag" : "Energie",
+          value: `${formatNumber(avgKcal, 0)} kcal`,
+          reference: `${formatNumber(energyTarget, 0)} kcal`,
+          coverage: formatPercent(percentOfReference(avgKcal, energyTarget)),
+        },
+        {
+          label: isMultiDay ? "Ø Eiweiß / Tag" : "Eiweiß",
+          value: `${formatNumber(avgProtein, 1)} g`,
+        },
+        {
+          label: isMultiDay ? "Ø Broteinheiten / Tag" : "Broteinheiten",
+          value: `${formatNumber(avgBE, 1)} BE`,
+        },
+        ...(isMultiDay ? [{ label: "Tage im Plan", value: formatNumber(dayCount, 0) }] : []),
+      ]
+    : [];
+
+  const patientProfile = personalization
+    ? {
+        periodLabel,
+        calorieGoalLabel: personalization.calorieGoalKcal
+          ? `${formatNumber(personalization.calorieGoalKcal, 0)} kcal pro Tag`
+          : undefined,
+        macroLabel: personalization.macroPreset
+          ? MACRO_PRESET_LABELS[personalization.macroPreset]
+          : undefined,
+        preferences: personalization.preferences?.length
+          ? personalization.preferences.map((id) => NUTRITION_PREFERENCE_LABELS[id] ?? id)
+          : undefined,
+        allergies: personalization.allergens?.length
+          ? personalization.allergens.map((entry) => {
+              const label = ALLERGEN_MAP.get(entry.allergenId)?.label ?? entry.allergenId;
+              return `${label} (${ALLERGEN_TYPE_LABELS[entry.type]})`;
+            })
+          : undefined,
+        goals: personalization.goals?.trim() || undefined,
+      }
+    : undefined;
+
+  const recipeAppendix: ReportExportRecipeCard[] | undefined =
+    includeRecipes && appendixOrder.length > 0
+      ? appendixOrder.map((recipeId) => {
+          const { recipe, plannedFor } = appendixEntries.get(recipeId)!;
+          const perServing = calculatePerServing(
+            calculateRecipeNutrients(recipe, foods),
+            recipe.servings,
+          );
+          const kcalPerPortion = getNutrientValue(perServing, "energie");
+          const totalTime = (recipe.prepTime ?? 0) + (recipe.cookTime ?? 0);
+          return {
+            name: recipe.name,
+            plannedForLabel: `Geplant für ${plannedFor.join(", ")}`,
+            portionLabel: "Zutaten pro Portion",
+            kcalPerPortion:
+              showEnergy && kcalPerPortion > 0
+                ? `${formatNumber(kcalPerPortion, 0)} kcal / Portion`
+                : undefined,
+            timeLabel: totalTime > 0 ? `ca. ${formatNumber(totalTime, 0)} Min.` : undefined,
+            ingredients: recipe.ingredients.map((ingredient) => {
+              const food =
+                foodMap.get(ingredient.foodId) ??
+                foods.find((item) => item.legacyId === ingredient.foodId);
+              const perPortion =
+                recipe.servings > 0 ? ingredient.amount / recipe.servings : ingredient.amount;
+              return `${formatNumber(perPortion, 0)} g ${food?.name ?? "Zutat"}`;
+            }),
+            instructions: recipe.instructions ?? [],
+          };
+        })
+      : undefined;
+
+  const patientLabel = context.patientName ? ` – ${context.patientName}` : "";
+  const title =
+    variant === "patient"
+      ? `Ernährungsplan${patientLabel}`
+      : `Klinischer Ernährungsbericht${patientLabel}`;
+
+  const narrative =
+    variant === "patient"
+      ? showEnergy
+        ? `Ihr persönlicher Ernährungsplan für ${periodLabel}. Die Tagesbilanz auf jeder Seite zeigt, wie die geplanten Mahlzeiten zu Ihrem Energieziel von ${formatNumber(energyTarget, 0)} kcal beitragen.`
+        : `Ihr persönlicher Ernährungsplan für ${periodLabel}.`
+      : `Der Bericht umfasst ${formatNumber(dayCount, 0)} ${dayCount === 1 ? "Tag" : "Tage"} und erreicht im Mittel ${formatPercent(
+          percentOfReference(avgKcal, energyTarget),
+        )} des Energieziels (${formatNumber(avgKcal, 0)} kcal von ${formatNumber(energyTarget, 0)} kcal).`;
+
+  const badges = [
+    periodLabel,
+    context.dietLineName,
+    context.patientIndication,
+    variant === "patient" ? "Patientenhandout" : "Klinik",
+  ].filter((value): value is string => Boolean(value));
+
+  const patientSlug = context.patientName
+    ? `-${context.patientName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`
+    : "";
+  const dateSlug = !firstPlan
+    ? "plan"
+    : isMultiDay
+      ? `${firstPlan.date}_${lastPlan.date}`
+      : firstPlan.date;
+  const fileBaseNamePrefix =
+    variant === "patient" ? "ernaehrungsplan-handout" : "ernaehrungsplan-klinik";
+
+  return {
+    format: "PDF",
+    title,
+    fileBaseName: `${fileBaseNamePrefix}${patientSlug}-${dateSlug}`,
+    reportLength: variant === "patient" ? "short" : "full",
+    selectedSections: {
+      summary: showEnergy,
+      table: false,
+      charts: false,
+      meals: true,
+      notes: true,
+    },
+    activeSectionLabels:
+      variant === "patient"
+        ? ["Tagespläne", ...(includeRecipes ? ["Rezepte"] : []), "Hinweise"]
+        : ["Tagespläne", "Nährstofftabellen", ...(includeRecipes ? ["Rezepte"] : []), "Hinweise"],
+    summaryMetrics,
+    nutrientRows: [],
+    vitaminRows: [],
+    mineralRows: [],
+    mealRows,
+    notes:
+      context.notes?.trim() ||
+      (variant === "patient"
+        ? "Bei Fragen zum Plan sprechen Sie bitte Ihre Ernährungsfachkraft an."
+        : "Klinischer Plan – Soll-/Ist-Abgleich auf Basis der gewählten Referenzwerte."),
+    narrative,
+    badges,
+    specialNotes:
+      variant === "patient"
+        ? ["Bei Unverträglichkeiten oder Fragen melden Sie sich bitte in der Beratung."]
+        : undefined,
+    patientId: context.patientId,
+    patientName: context.patientName,
+    patientIndication: context.patientIndication,
+    planId: context.planId ?? firstPlan?.id,
+    planDateLabel: periodLabel,
+    patientProfile,
+    dayPages,
+    recipeAppendix,
   };
 }

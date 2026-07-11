@@ -13,6 +13,49 @@ const metricSchema = z.object({
 
 const metricRows = z.array(metricSchema).max(200);
 
+const patientProfileSchema = z.object({
+  periodLabel: shortText,
+  calorieGoalLabel: shortText.optional(),
+  macroLabel: shortText.optional(),
+  preferences: z.array(shortText).max(20).optional(),
+  allergies: z.array(shortText).max(50).optional(),
+  goals: z.string().max(1_000).optional(),
+});
+
+const dayPageSchema = z.object({
+  dateLabel: shortText,
+  meals: z
+    .array(
+      z.object({
+        slot: shortText,
+        items: z.array(z.string().max(500)).max(50),
+        kcal: shortText.optional(),
+      }),
+    )
+    .max(10),
+  macroSummary: shortText.optional(),
+  energyBar: z
+    .object({
+      value: z.number().finite().nonnegative(),
+      target: z.number().finite().nonnegative(),
+      label: shortText,
+    })
+    .optional(),
+  nutrientRows: metricRows.optional(),
+  vitaminRows: metricRows.optional(),
+  mineralRows: metricRows.optional(),
+});
+
+const recipeCardSchema = z.object({
+  name: shortText,
+  plannedForLabel: shortText,
+  portionLabel: shortText,
+  kcalPerPortion: shortText.optional(),
+  timeLabel: shortText.optional(),
+  ingredients: z.array(z.string().max(500)).max(80),
+  instructions: z.array(z.string().max(2_000)).max(50),
+});
+
 /**
  * Runtime validation for ReportExportRequest. Keep in sync with the interface
  * in lib/types/platform.ts — the route assigns the parsed result to a
@@ -60,4 +103,7 @@ export const reportExportRequestSchema = z.object({
   additiveDeclaration: z.array(shortText).max(50).optional(),
   retentionPolicyLabel: shortText.optional(),
   documentPackLabel: shortText.optional(),
+  patientProfile: patientProfileSchema.optional(),
+  dayPages: z.array(dayPageSchema).max(31).optional(),
+  recipeAppendix: z.array(recipeCardSchema).max(40).optional(),
 });

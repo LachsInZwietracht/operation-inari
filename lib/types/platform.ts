@@ -376,6 +376,50 @@ export interface ReportExportMealRow {
   summary: string;
 }
 
+/** Personalization block rendered on the first page of a patient handout. */
+export interface ReportExportPatientProfile {
+  periodLabel: string;
+  calorieGoalLabel?: string;
+  macroLabel?: string;
+  preferences?: string[];
+  allergies?: string[];
+  goals?: string;
+}
+
+export interface ReportExportDayMeal {
+  slot: string;
+  items: string[];
+  kcal?: string;
+}
+
+export interface ReportExportEnergyBar {
+  value: number;
+  target: number;
+  label: string;
+}
+
+/** One exported day — rendered as its own PDF page. */
+export interface ReportExportDayPage {
+  dateLabel: string;
+  meals: ReportExportDayMeal[];
+  macroSummary?: string;
+  energyBar?: ReportExportEnergyBar;
+  nutrientRows?: ReportExportMetric[];
+  vitaminRows?: ReportExportMetric[];
+  mineralRows?: ReportExportMetric[];
+}
+
+/** Deduplicated recipe card in the handout appendix. */
+export interface ReportExportRecipeCard {
+  name: string;
+  plannedForLabel: string;
+  portionLabel: string;
+  kcalPerPortion?: string;
+  timeLabel?: string;
+  ingredients: string[];
+  instructions: string[];
+}
+
 export interface ReportExportRequest {
   format: "CSV" | "PDF";
   title: string;
@@ -406,6 +450,14 @@ export interface ReportExportRequest {
   additiveDeclaration?: string[];
   retentionPolicyLabel?: string;
   documentPackLabel?: string;
+  /**
+   * Multi-day layout: when present the PDF renders one page per day plus an
+   * optional cover (patientProfile) and recipe appendix instead of the flat
+   * single-page report. mealRows stays populated as the CSV/fallback view.
+   */
+  patientProfile?: ReportExportPatientProfile;
+  dayPages?: ReportExportDayPage[];
+  recipeAppendix?: ReportExportRecipeCard[];
 }
 
 export interface PatientMailMergeDocumentRequest {

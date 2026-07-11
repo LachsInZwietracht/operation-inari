@@ -184,8 +184,10 @@ test.describe("Ernährungsplan", () => {
       await addFoodEntry(page);
 
       await page.getByRole("button", { name: "Export" }).click();
+      const exportDialog = page.getByRole("dialog", { name: "Ernährungsplan exportieren" });
+      await exportDialog.getByRole("radio", { name: /Klinischer Bericht/ }).click();
       const pdfDownload = page.waitForEvent("download");
-      await page.getByRole("menuitem", { name: /Klinischer Bericht/ }).click();
+      await exportDialog.getByRole("button", { name: "PDF exportieren" }).click();
       const pdf = await pdfDownload;
 
       expect(await pdf.suggestedFilename()).toMatch(/ernaehrungsplan-klinik-.*\.pdf/);
