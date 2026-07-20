@@ -604,10 +604,11 @@ ETL Pipeline:
    b. BLOCK if barcode is not a plausible GTIN/EAN (placeholder/ISBN/leading-zeros)
    c. BLOCK if macros exceed plausible 100g bounds, subnutrients exceed parents, or energy is implausible versus macro-derived kcal
    d. BLOCK if the payload reports nutriments per serving only
-   e. WARN if brand is missing
-   f. Score data quality 0-100 based on mapped nutrient completeness
+   e. BLOCK if the product name is junk (`isJunkName`: ≤2 or ≥55 chars, embedded barcode/4+ digit run, non-Latin script, or fully ALL-CAPS) — staged for review, not promoted
+   f. WARN if brand is missing
+   g. Score data quality 0-100 based on mapped nutrient completeness
 6. Promotion pass (strict):
-   a. Promote only validated rows at or above `OFF_MIN_QUALITY_SCORE` into foods + food_nutrients
+   a. Promote only validated rows at or above `OFF_MIN_QUALITY_SCORE` (default **90** since 2026-07) into foods + food_nutrients
    b. Set data_source_id = 'off' and is_branded = TRUE
    c. Persist data_quality_score on foods
    d. Map OFF nutrient keys to our nutrient_ids:
@@ -906,7 +907,9 @@ The paginated foods browser adds `search_foods_with_total()` in `supabase/migrat
 
 All three catalog RPCs (`search_foods_with_total`, `search_foods`, `filter_foods_by_nutrient`) additionally accept an `excluded_sources TEXT[]` argument (migration `20260628000065_search_exclude_sources.sql`). `fetchFoodsBrowserPage` resolves the blocked (tariff-gated) plus organization-disabled source list once and passes it in, so disabled sources are removed inside the `WHERE` clause — before the window count and pagination. This keeps `total_count` honest and prevents a large optional source (Open Food Facts) from crowding the default BLS-first candidate set. When an explicit single-source filter is set the exclusion list is omitted (the source filter already narrows the scan); the JS post-filter in `fetchFoodsBrowserPage` stays as a defense-in-depth safety net.
 
-**BLS-priority ranking (migration `20260629000066`).** OFF is default-visible (a source is active unless an org switches it off), so with ~220k branded German OFF products promoted, a generic query like "Milch" otherwise returns thousands of branded hits whose trigram similarity rivals the canonical BLS entries — branded products crowd the top. `search_foods_with_total` and `search_foods` therefore sort by `is_branded ASC` first (generic reference foods lead), then `sim_score DESC`, then name. BLS/SFK are `is_branded = FALSE`; promoted OFF foods are `is_branded = TRUE`. Net effect: branded products stay searchable (a brand-specific query like "Haribo" still surfaces OFF, since no BLS row competes) but never displace the reference catalog at the top. `filter_foods_by_nutrient` is intentionally left ordered by the nutrient amount — "sort foods by protein" must rank by the nutrient, not by source.
+**Catalog size (2026-07).** A one-off cleanup pruned the promoted OFF set from ~220k to ~93.8k to bring the hosted DB from 1.26 GB under the Supabase free-tier limit (final ~282 MB). Deletion criteria: `data_source_id='off'` AND (`data_quality_score < 90` OR junk name per `isJunkName`), excluding the handful of OFF foods referenced by demo plans/protocols/recipes (`recipe_ingredients`, `nutrition_protocol_entries`, `meal_entries` are `NO ACTION`, so referenced rows must be spared). Space was reclaimed with `VACUUM (FULL, ANALYZE)` on `foods`/`food_nutrients` and children — a plain `DELETE` does not shrink `pg_database_size`. The ETL now defaults to the same bar (`OFF_MIN_QUALITY_SCORE=90` + name gate) so a re-import reproduces the cleaned set rather than the old bulk.
+
+**BLS-priority ranking (migration `20260629000066`).** OFF is default-visible (a source is active unless an org switches it off), so with the branded German OFF products promoted, a generic query like "Milch" otherwise returns many branded hits whose trigram similarity rivals the canonical BLS entries — branded products crowd the top. `search_foods_with_total` and `search_foods` therefore sort by `is_branded ASC` first (generic reference foods lead), then `sim_score DESC`, then name. BLS/SFK are `is_branded = FALSE`; promoted OFF foods are `is_branded = TRUE`. Net effect: branded products stay searchable (a brand-specific query like "Haribo" still surfaces OFF, since no BLS row competes) but never displace the reference catalog at the top. `filter_foods_by_nutrient` is intentionally left ordered by the nutrient amount — "sort foods by protein" must rank by the nutrient, not by source.
 
 ### Search RPC Migration Path
 

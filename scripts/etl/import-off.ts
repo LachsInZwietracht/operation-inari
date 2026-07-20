@@ -82,7 +82,11 @@ const OFF_SOURCE_URL = process.env.OFF_SOURCE_URL;
 const OFF_SOURCE_FILE = process.env.OFF_SOURCE_FILE;
 const OFF_PAGE_SIZE = Number(process.env.OFF_PAGE_SIZE || "100");
 const OFF_LIMIT = Number(process.env.OFF_LIMIT || "500");
-const OFF_MIN_QUALITY_SCORE = Number(process.env.OFF_MIN_QUALITY_SCORE || "50");
+// Promotion floor. Raised to 90 (2026-07) so only products with near-complete
+// per-100g nutrition reach the shared catalog — a smaller, clinically usable
+// branded set instead of hundreds of thousands of skeleton rows. Overridable
+// via env for review/backfill runs.
+const OFF_MIN_QUALITY_SCORE = Number(process.env.OFF_MIN_QUALITY_SCORE || "90");
 const OFF_CHANGED_SINCE = Number(process.env.OFF_CHANGED_SINCE || "0");
 const OFF_COUNTRY_TAG = process.env.OFF_COUNTRY_TAG || "en:germany";
 const OFF_SKIP_EMPTY_NUTRITION = process.env.OFF_SKIP_EMPTY_NUTRITION !== "false";
@@ -419,6 +423,27 @@ function scoreProduct(nutriments: Record<string, number>) {
   return Math.round((presentCount / presentKeys.length) * 100);
 }
 
+// Non-Latin scripts that indicate a non-target-market product name
+// (Cyrillic, Greek, Hebrew, Arabic, CJK, Kana). Matched against the name only.
+const NON_LATIN_NAME = /[Ͱ-ϿЀ-ӿ֐-׿؀-ۿ぀-ヿ一-鿿]/;
+
+/**
+ * Flags obviously low-quality product names so they are staged for review but
+ * not auto-promoted. Mirrors the one-off catalog cleanup (2026-07) that removed
+ * ALL-CAPS, non-Latin, barcode-in-name, over-long dump, and stub names. False
+ * positives only land in the review queue, so the rules can be lenient-strict.
+ */
+function isJunkName(name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length <= 2) return true;
+  if (trimmed.length >= 55) return true;
+  if (/\d{4,}/.test(trimmed)) return true; // embedded barcode/EAN
+  if (NON_LATIN_NAME.test(trimmed)) return true;
+  // Fully upper-cased names with at least one cased letter ("SPAM", "MIX").
+  if (/[a-zA-ZÀ-ÿ]/.test(trimmed) && trimmed === trimmed.toUpperCase()) return true;
+  return false;
+}
+
 function selectProductName(product: OffProduct) {
   const candidates = [
     { value: product.product_name_de, locale: "de" },
@@ -539,6 +564,12 @@ function normalizeProduct(product: OffProduct): NormalizedProduct | null {
 
   const nutriments = normalizePer100g(product.nutriments, product.nutrition_data_per);
   const { validationErrors, dataQualityErrors } = validateNutrients(product, nutriments);
+
+  // A junk name blocks promotion but stays visible in the review list, matching
+  // how implausible barcodes are handled below.
+  if (isJunkName(selectedName.name)) {
+    validationErrors.push("Low-quality product name");
+  }
 
   // An implausible barcode blocks automatic promotion but should still be
   // visible in the review list with an explicit reason, not silently dropped.
