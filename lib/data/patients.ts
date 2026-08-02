@@ -34,6 +34,7 @@ interface PatientRow {
   macro_preset: string | null;
   nutrition_preferences: Patient["nutritionPreferences"] | null;
   nutrition_preference_notes: string | null;
+  diet_style: Patient["dietStyle"] | null;
   status: Patient["status"] | null;
   care_setting: Patient["careSetting"] | null;
   external_patient_number: string | null;
@@ -97,9 +98,13 @@ const PATIENT_BASE_COLUMNS = [
   "updated_at",
 ];
 
+// Diet columns are queried defensively: a deployment can reach production
+// before its migration has been applied, and the fallback keeps patient lists
+// readable instead of failing the whole query.
 const PATIENT_NUTRITION_PREFERENCE_COLUMNS = [
   "nutrition_preferences",
   "nutrition_preference_notes",
+  "diet_style",
 ];
 
 const PATIENT_COLUMNS = [
@@ -137,6 +142,7 @@ function mapPatientRow(row: PatientRow): Patient {
     macroPreset: row.macro_preset ?? undefined,
     nutritionPreferences: row.nutrition_preferences ?? undefined,
     nutritionPreferenceNotes: row.nutrition_preference_notes ?? undefined,
+    dietStyle: row.diet_style ?? undefined,
     status: row.status ?? undefined,
     careSetting: row.care_setting ?? undefined,
     externalPatientNumber: row.external_patient_number ?? undefined,

@@ -61,8 +61,9 @@ import { useProtocols } from "@/hooks/use-protocols"
 import { useCounseling } from "@/hooks/use-counseling"
 import type {
   AnthropometricEntry,
+  DietExclusion,
+  DietStyle,
   Food,
-  NutritionPreference,
   Patient,
   PatientCareSetting,
   PatientStatus,
@@ -80,6 +81,15 @@ import {
   type AllergenType,
   type AllergenSeverity,
 } from "@/lib/allergen-constants"
+import { PatientIntakePanel } from "@/components/patient-intake-panel"
+import {
+  DIET_EXCLUSIONS,
+  DIET_EXCLUSION_LABELS,
+  DIET_STYLES,
+  DIET_STYLE_DESCRIPTIONS,
+  DIET_STYLE_LABELS,
+  resolveDietStyle,
+} from "@/lib/diet-constants"
 import { AlertTriangle, Trash2 } from "lucide-react"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
 
@@ -103,12 +113,8 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
   none: "Keine Angabe",
 }
 
-const NUTRITION_PREFERENCE_OPTIONS: { id: NutritionPreference; label: string; description: string }[] = [
-  { id: "vegetarian", label: "Vegetarisch", description: "ohne Fleisch und Fisch" },
-  { id: "vegan", label: "Vegan", description: "ohne tierische Zutaten" },
-  { id: "keto", label: "Keto", description: "ketogene Auswahl bevorzugen" },
-  { id: "low_carb", label: "Low Carb", description: "kohlenhydratarm bevorzugen" },
-]
+/** Sentinel for "no style selected" — Radix Select rejects an empty value. */
+const DIET_STYLE_NONE = "__none__"
 
 const EMPTY_PROTOCOL_FOODS: Food[] = []
 
@@ -294,7 +300,13 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
-  const nutritionPreferences = currentPatient.nutritionPreferences ?? []
+  const dietExclusions = (currentPatient.nutritionPreferences ?? []).filter(
+    (entry): entry is DietExclusion => DIET_EXCLUSIONS.includes(entry as DietExclusion),
+  )
+  const dietStyle = resolveDietStyle(
+    currentPatient.dietStyle,
+    currentPatient.nutritionPreferences,
+  )
   const nutritionPreferenceAllergens = patientAllergens.filter(
     (entry) => entry.type === "allergy" || entry.type === "intolerance",
   )
@@ -459,15 +471,24 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     toast.success("Allergen gespeichert")
   }, [addAllergen, allergenForm, patient.id])
 
-  const handleNutritionPreferenceChange = useCallback(
-    (preference: NutritionPreference, checked: boolean) => {
+  const handleDietStyleChange = useCallback(
+    (style: string) => {
+      const next = style === DIET_STYLE_NONE ? undefined : (style as DietStyle)
+      updatePatient(patient.id, { dietStyle: next })
+      toast.success("Ernährungsform gespeichert")
+    },
+    [patient.id, updatePatient],
+  )
+
+  const handleDietExclusionChange = useCallback(
+    (exclusion: DietExclusion, checked: boolean) => {
       const current = currentPatient.nutritionPreferences ?? []
       const next = checked
-        ? Array.from(new Set([...current, preference]))
-        : current.filter((item) => item !== preference)
+        ? Array.from(new Set([...current, exclusion]))
+        : current.filter((item) => item !== exclusion)
 
       updatePatient(patient.id, { nutritionPreferences: next })
-      toast.success("Ernährungsvorlieben gespeichert")
+      toast.success("Ausschlüsse gespeichert")
     },
     [currentPatient.nutritionPreferences, patient.id, updatePatient],
   )
@@ -1814,23 +1835,56 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
             </Button>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div>
-              <p className="text-sm font-medium">Ernährungsform</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {NUTRITION_PREFERENCE_OPTIONS.map((option) => (
-                  <label key={option.id} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
-                    <Checkbox
-                      checked={nutritionPreferences.includes(option.id)}
-                      onCheckedChange={(checked) =>
-                        handleNutritionPreferenceChange(option.id, checked === true)
-                      }
-                    />
-                    <span>
-                      <span className="block font-medium">{option.label}</span>
-                      <span className="block text-xs text-muted-foreground">{option.description}</span>
-                    </span>
-                  </label>
-                ))}
+            <div className="grid gap-4 lg:grid-cols-[minmax(240px,0.4fr)_minmax(0,1fr)]">
+              <div>
+                <Label htmlFor="diet-style">Ernährungsform</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Eine Auswahl. Beschreibt, wie die Person grundsätzlich isst.
+                </p>
+                <Select
+                  value={dietStyle ?? DIET_STYLE_NONE}
+                  onValueChange={handleDietStyleChange}
+                >
+                  <SelectTrigger id="diet-style" className="mt-2">
+                    <SelectValue placeholder="Keine Angabe" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DIET_STYLE_NONE}>Keine Angabe</SelectItem>
+                    {DIET_STYLES.map((style) => (
+                      <SelectItem key={style} value={style}>
+                        {DIET_STYLE_LABELS[style]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {dietStyle ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {DIET_STYLE_DESCRIPTIONS[dietStyle]}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <p className="text-sm font-medium">Ausschlüsse</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Mehrfachauswahl. Nicht-medizinische Einschränkungen.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {DIET_EXCLUSIONS.map((exclusion) => (
+                    <label
+                      key={exclusion}
+                      className="flex items-center gap-3 rounded-lg border p-3 text-sm"
+                    >
+                      <Checkbox
+                        checked={dietExclusions.includes(exclusion)}
+                        onCheckedChange={(checked) =>
+                          handleDietExclusionChange(exclusion, checked === true)
+                        }
+                      />
+                      <span className="font-medium">{DIET_EXCLUSION_LABELS[exclusion]}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1876,6 +1930,11 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
             </div>
           </CardContent>
         </Card>
+
+        <PatientIntakePanel
+          patientId={patient.id}
+          defaultLabel={`${patient.firstName} ${patient.lastName}`}
+        />
       </TabsContent>
 
       <TabsContent value="protokolle" className="space-y-4">

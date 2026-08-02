@@ -370,6 +370,21 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
 - **Plan handoff:** `/ernaehrungsplan` accepts `patientId` and `date` query params so patient workflow links can open or create the exact patient plan date.
 
+### 4.25 Patient Onboarding via Invite Link (`/onboarding/[linkId]`)
+- **Purpose:** Let a practitioner collect goals, constraints, diet style, food preferences, and daily habits from a person before that person exists as a patient record. Advances `docs/user-priority-feedback.md` must-have #1 (low onboarding effort).
+- **Public surface:** `app/onboarding/[linkId]/page.tsx` (server guard) + `patient-intake-form.tsx` (client wizard) under a minimal, mobile-first layout. Unauthenticated; `/onboarding` is in `PUBLIC_PREFIXES` in `lib/supabase/middleware.ts`.
+- **Guard screens:** invalid UUID, unknown link, already submitted, expired, and non-active status each render their own message instead of the form.
+- **Wizard:** 11 steps (Person, Ziel, Körper, Bewegung, Gesundheit, Unverträglichkeiten, Ernährungsform, Lebensmittel, Alltag, Erfahrung, Einwilligung). Only Person, Ziel, Körper and the consent checkbox are required. Progress is persisted to `localStorage` under `inari_intake_draft_${linkId}` on each step transition and cleared on success.
+- **Food preference grid:** three-state (`gerne` / `geht` / `nie`) over the ~40-item catalog in `lib/intake-food-preferences.ts`, grouped by food group. This produces the per-patient whitelist that later drives swap suggestions.
+- **Invitations are not bound to a patient:** `patient_intake_links.patient_id` is nullable. A `NULL` value means the patient record is created on apply; a set value means an existing patient is being re-onboarded.
+- **APIs:**
+  - `POST /api/onboarding/submit` — public, service-role, zod-validated, 200 KB size guard. Verifies link state, auto-expires past `expires_at` (410), rejects non-pending links (409), inserts one submission (unique per link), flips the link to `received`, and writes an audit log that never contains payload contents.
+  - `POST /api/patient-intake-submissions/apply` — authenticated. Re-validates the stored payload, then creates or updates the patient, upserts `patient_allergens` and `patient_food_preferences`, records one `patient_anthropometrics` entry, and marks the submission `applied`. Applying twice returns 409.
+- **Apply semantics:** patient-reported values never overwrite a non-empty practitioner field (`mergePatientUpdate` in `lib/intake/apply-submission.ts`); identity fields always reflect what the person entered. Self-reported allergens are stored with a default severity and an explicit "nicht bestätigt" note.
+- **Practitioner surfaces:** `components/patient-intake-panel.tsx` (list, copy link, revoke, review, apply) mounted as the `Onboarding` tab on `/patienten` and inside the patient `Ernährung` tab for re-onboarding. `components/patient-intake-invite-dialog.tsx` creates an invitation and renders the link plus a QR code generated in the browser via `qrcode` — QR payloads are never persisted.
+- **Diet style vs exclusions:** `patients.diet_style` holds exactly one `DietStyle`; `patients.nutrition_preferences` holds many `DietExclusion` values. Vocabulary and the legacy-value reader live in `lib/diet-constants.ts`.
+- **Plan principles:** `lib/nutrition/principles.ts` derives up to five patient-readable rules from the calorie goal, macro preset (`lib/nutrition/macro-presets.ts`), diet line targets, and DGE fiber reference. Rendered by `components/plan-principles-card.tsx` above the day slots in `/ernaehrungsplan`, each rule checked against the current day's nutrient totals so a food swap visibly keeps or breaks it.
+
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` only on first use.
 - **Nutrient utilities (`@/lib/nutrients.ts`):** Mathematically validated core logic. Handles ingredient scaling and summing.

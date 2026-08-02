@@ -78,6 +78,8 @@ import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
 import { formatNumber, formatNutrient } from "@/lib/format"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
+import { resolveDietStyle } from "@/lib/diet-constants"
+import { PlanPrinciplesCard } from "@/components/plan-principles-card"
 import type {
   MealSlotType,
   MealEntry,
@@ -615,6 +617,19 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
     ? getPatient(pendingPatientAssignmentId)
     : undefined
   const visiblePatientIndications = useMemo(() => getPatientIndications(visiblePatient), [visiblePatient])
+
+  // Strategy layer inputs for the Prinzipien card.
+  const planDietStyle = useMemo(
+    () => resolveDietStyle(visiblePatient?.dietStyle, visiblePatient?.nutritionPreferences),
+    [visiblePatient?.dietStyle, visiblePatient?.nutritionPreferences],
+  )
+  const planDayTotals = useMemo(() => {
+    const totals: Record<string, number> = {}
+    for (const nutrient of dailyNutrients) {
+      totals[nutrient.nutrientId] = nutrient.amount
+    }
+    return totals
+  }, [dailyNutrients])
   const pendingAssignmentPatientIndications = useMemo(
     () => getPatientIndications(pendingAssignmentPatient),
     [pendingAssignmentPatient],
@@ -1592,6 +1607,16 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="space-y-4">
+              <PlanPrinciplesCard
+                calorieGoal={visiblePatient?.dailyCalorieGoal}
+                macroPreset={visiblePatient?.macroPreset}
+                dietStyle={planDietStyle}
+                exclusions={visiblePatient?.nutritionPreferences}
+                weightKg={latestPatientWeightKg}
+                dietLineTargets={dietLine?.targets}
+                dayTotals={planDayTotals}
+              />
+
               {currentPlan.slots.map((slot) => (
                 <MealSlotCard
                   key={slot.type}

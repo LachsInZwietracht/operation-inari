@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { PatientIntakePanel } from "@/components/patient-intake-panel"
 import {
   Collapsible,
   CollapsibleContent,
@@ -292,8 +293,9 @@ export function PatientenPageClient({ initialPatients, initialSessions }: Patien
       </PageHeader>
 
       <Tabs defaultValue="patienten" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 sm:w-[420px]">
+        <TabsList className="grid w-full grid-cols-3 sm:w-[560px]">
           <TabsTrigger value="patienten">Patienten</TabsTrigger>
+          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
         </TabsList>
 
@@ -357,6 +359,10 @@ export function PatientenPageClient({ initialPatients, initialSessions }: Patien
               Keine Patienten gefunden.
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="onboarding" className="space-y-4">
+          <PatientIntakePanel />
         </TabsContent>
 
         <TabsContent value="workflows" className="space-y-4">
