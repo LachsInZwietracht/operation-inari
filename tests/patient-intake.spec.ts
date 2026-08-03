@@ -45,7 +45,9 @@ test.describe("Onboarding intake — public entry", () => {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await expect(page.getByText("Link nicht gefunden")).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: "Link nicht gefunden" }),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test("unknown UUID shows not-found message", async ({ page }) => {
@@ -53,7 +55,9 @@ test.describe("Onboarding intake — public entry", () => {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await expect(page.getByText("Link nicht gefunden")).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: "Link nicht gefunden" }),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test("public route has no app shell", async ({ page }) => {
@@ -108,7 +112,9 @@ test.describe("Onboarding intake — expired and revoked links", () => {
         waitUntil: "domcontentloaded",
         timeout: 30_000,
       });
-      await expect(page.getByText("Link abgelaufen")).toBeVisible({ timeout: 10_000 });
+      await expect(
+        page.getByRole("heading", { name: "Link abgelaufen" }),
+      ).toBeVisible({ timeout: 10_000 });
     } finally {
       await deleteIntakeLink(link.id);
     }
@@ -144,7 +150,8 @@ test.describe("Onboarding intake — end to end", () => {
       // Step 3 — body
       await expect(page.getByRole("heading", { name: "Körper" })).toBeVisible();
       await page.getByLabel("Größe in cm").fill("172");
-      await page.getByLabel("Gewicht in kg").fill("78");
+      // Exact: "Gewicht in kg" is also a substring of "Wunschgewicht in kg".
+      await page.getByLabel("Gewicht in kg", { exact: true }).fill("78");
       await page.getByRole("button", { name: "Weiter" }).click();
 
       // Steps 4-10 are optional; click through to the consent step.
@@ -178,7 +185,9 @@ test.describe("Onboarding intake — end to end", () => {
 
       // Reopening shows the already-submitted guard.
       await page.goto(`/onboarding/${link.id}`, { waitUntil: "domcontentloaded" });
-      await expect(page.getByText("Bereits ausgefüllt")).toBeVisible({ timeout: 10_000 });
+      await expect(
+        page.getByRole("heading", { name: "Bereits ausgefüllt" }),
+      ).toBeVisible({ timeout: 10_000 });
 
       // Apply the submission as the practitioner.
       const { data: submission } = await admin

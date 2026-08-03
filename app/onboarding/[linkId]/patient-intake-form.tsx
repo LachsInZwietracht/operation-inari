@@ -428,6 +428,10 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
   const { reset, watch, setValue, getValues, formState } = form;
 
   // Restore a draft so a phone call mid-form does not cost eight minutes.
+  //
+  // The fields stay unmounted until this has run. `reset()` lands one tick after
+  // mount, and anything typed before then would be silently wiped — a real race
+  // on a slow phone, not just in tests.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(draftKey(linkId));
@@ -547,6 +551,20 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Hold the fields back until the draft restore has settled, so no keystroke
+  // can be overwritten by it.
+  if (!draftLoaded) {
+    return (
+      <div className="space-y-4 py-8" aria-busy="true">
+        <div className="h-4 w-32 rounded bg-muted" />
+        <div className="h-8 w-2/3 rounded bg-muted" />
+        <div className="h-2 w-full rounded bg-muted" />
+        <div className="h-10 w-full rounded bg-muted" />
+        <div className="h-10 w-full rounded bg-muted" />
+      </div>
+    );
   }
 
   if (submitted) {

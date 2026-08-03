@@ -54,6 +54,9 @@ const FALLBACK_PROTEIN_G_PER_KG = 1.5;
 
 const MAX_PRINCIPLES = 5;
 
+/** Diet line targets are a fallback, not the headline. */
+const MAX_DIET_LINE_PRINCIPLES = 2;
+
 function roundTo(value: number, step: number): number {
   return Math.round(value / step) * step;
 }
@@ -125,36 +128,47 @@ export function buildPrinciples(input: PrincipleInput): Principle[] {
     });
   }
 
-  // 4. Diet line targets take priority over the generic fiber rule.
+  // 4. Diet line targets fill the gaps the patient's own numbers left. Capped at
+  //    two: a wall of "Mindestens X g Y" reads like a lab report, not a rule
+  //    somebody can hold in their head.
+  let dietLineUsed = 0;
   for (const target of input.dietLineTargets ?? []) {
-    if (principles.some((principle) => principle.metricKey === target.nutrientId)) continue;
+    if (dietLineUsed >= MAX_DIET_LINE_PRINCIPLES) break;
     if (principles.length >= MAX_PRINCIPLES - 1) break;
+    if (principles.some((principle) => principle.metricKey === target.nutrientId)) continue;
+
+    // "1.800 kcal Energie" reads wrong; energy needs no noun after the unit.
+    const subject = target.nutrientId === "energie" ? "" : ` ${target.label}`;
 
     if (target.min !== undefined) {
       principles.push({
         id: `dietline_${target.nutrientId}`,
-        text: `Mindestens ${formatNumber(target.min)} ${target.unit} ${target.label} am Tag.`,
+        text: `Mindestens ${formatNumber(target.min)} ${target.unit}${subject} am Tag.`,
         metricKey: target.nutrientId,
         targetValue: target.min,
         unit: target.unit,
         comparison: "min",
         source: "Kostform-Zielwert",
       });
+      dietLineUsed += 1;
     } else if (target.max !== undefined) {
       principles.push({
         id: `dietline_${target.nutrientId}`,
-        text: `Höchstens ${formatNumber(target.max)} ${target.unit} ${target.label} am Tag.`,
+        text: `Höchstens ${formatNumber(target.max)} ${target.unit}${subject} am Tag.`,
         metricKey: target.nutrientId,
         targetValue: target.max,
         unit: target.unit,
         comparison: "max",
         source: "Kostform-Zielwert",
       });
+      dietLineUsed += 1;
     }
   }
 
-  // 5. Fiber, unless a diet line already speaks to it.
+  // 5. Fiber supports the rules above; on its own it is a generic DGE default,
+  //    not a strategy, so it never becomes the only principle shown.
   if (
+    principles.length > 0 &&
     principles.length < MAX_PRINCIPLES &&
     !principles.some((principle) => principle.metricKey === "ballaststoffe") &&
     input.dietStyle !== "keto" &&
