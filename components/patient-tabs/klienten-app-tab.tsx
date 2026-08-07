@@ -24,10 +24,18 @@ import { formatInviteCode, todayIsoDate } from "@/lib/client-mode"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client"
 import { fetchClientAdherence } from "@/lib/data/client-plan-client"
+import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client"
 import { fetchClientLinkForPatient } from "@/lib/data/client-links"
 import { getNutrientValue } from "@/lib/nutrients"
 import { createClient } from "@/lib/supabase/client"
-import type { ClientAdherenceDay, ClientFoodLogDay, ClientLink, Food, Patient } from "@/lib/types"
+import type {
+  ClientAdherenceDay,
+  ClientFoodLogDay,
+  ClientLink,
+  ClientWorkoutSession,
+  Food,
+  Patient,
+} from "@/lib/types"
 
 const LOG_WINDOW_DAYS = 7
 
@@ -38,6 +46,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
   const [days, setDays] = useState<ClientFoodLogDay[]>([])
   const [foods, setFoods] = useState<Map<string, Food>>(new Map())
   const [adherence, setAdherence] = useState<ClientAdherenceDay[]>([])
+  const [workouts, setWorkouts] = useState<ClientWorkoutSession[]>([])
   const [isPending, startTransition] = useTransition()
 
   const loadLink = useCallback(async () => {
@@ -70,6 +79,12 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
 
       if (isClientModuleEnabled("plan")) {
         setAdherence(await fetchClientAdherence(patient.id, clientUserId, range, supabase))
+      }
+
+      // Training rides on its own consent flag; without it RLS returns nothing
+      // and the section stays hidden rather than showing an empty shell.
+      if (isClientModuleEnabled("training")) {
+        setWorkouts(await fetchClientWorkoutSessions(clientUserId, 5, supabase))
       }
 
       const foodIds = [
@@ -125,6 +140,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
       setLink(null)
       setDays([])
       setAdherence([])
+      setWorkouts([])
     })
   }
 
@@ -235,6 +251,37 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
                       <span className="text-muted-foreground"> · {day.skipped} ausgelassen</span>
                     )}
                   </p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {link?.status === "active" && isClientModuleEnabled("training") && workouts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Letzte Trainingseinheiten</CardTitle>
+            <CardDescription>Vom Klienten selbst erfasst.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {workouts.map((session) => (
+                <li key={session.id} className="py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{session.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(parseISO(session.date), "d. MMMM", { locale: de })}
+                    </p>
+                  </div>
+                  {session.sets.length > 0 && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {session.sets.length} {session.sets.length === 1 ? "Satz" : "Sätze"} ·{" "}
+                      {[...new Set(session.sets.map((set) => set.exerciseName))]
+                        .slice(0, 3)
+                        .join(", ")}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

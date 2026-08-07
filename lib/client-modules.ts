@@ -1,4 +1,4 @@
-import { CalendarCheck, NotebookPen, UserRoundCheck } from "lucide-react";
+import { CalendarCheck, Dumbbell, NotebookPen, UserRoundCheck } from "lucide-react";
 
 /**
  * Registry of the client surface.
@@ -16,7 +16,7 @@ import { CalendarCheck, NotebookPen, UserRoundCheck } from "lucide-react";
  * operation: flip `enabled` to hide a module, or delete those five paths plus
  * the entry below to drop it for good. `rg <id>` then finds nothing.
  */
-export type ClientModuleId = "tagebuch" | "plan" | "betreuung";
+export type ClientModuleId = "tagebuch" | "plan" | "training" | "betreuung";
 
 export interface ClientModule {
   id: ClientModuleId;
@@ -42,6 +42,14 @@ export const CLIENT_MODULES: ClientModule[] = [
     label: "Plan",
     route: "/klient/plan",
     icon: CalendarCheck,
+    enabled: true,
+    counselorSection: true,
+  },
+  {
+    id: "training",
+    label: "Training",
+    route: "/klient/training",
+    icon: Dumbbell,
     enabled: true,
     counselorSection: true,
   },

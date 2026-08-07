@@ -83,6 +83,37 @@ export interface ClientPlanDay {
   entries: ClientPlanEntry[];
 }
 
+export interface ClientWorkoutSet {
+  id: ID;
+  sessionId: ID;
+  exerciseName: string;
+  setIndex: number;
+  reps?: number;
+  weightKg?: number;
+  notes?: string;
+}
+
+export interface ClientWorkoutSession {
+  id: ID;
+  date: string; // ISO date YYYY-MM-DD
+  title: string;
+  notes?: string;
+  sets: ClientWorkoutSet[];
+}
+
+/** Best set of an exercise in one week — the "did I get stronger" line. */
+export interface ClientExerciseProgressPoint {
+  weekStart: string; // ISO date of the Monday
+  bestWeightKg?: number;
+  bestReps?: number;
+  totalSets: number;
+}
+
+export interface ClientExerciseProgress {
+  exerciseName: string;
+  points: ClientExerciseProgressPoint[];
+}
+
 /** Per-day adherence for the counselor: how much of the plan was answered. */
 export interface ClientAdherenceDay {
   date: string;

@@ -1,6 +1,6 @@
 # Client Mode Plan
 
-Status: M1 shipped (`/klient` with the diary and plan modules, migrations `20260806000072` and `20260807000073`); barcode and training still open. The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
+Status: M1 shipped (`/klient` with the diary and plan modules, migrations `20260806000072` and `20260807000073`); barcode still open. The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
 
 ## Vision
 
@@ -188,7 +188,7 @@ both flags, redemption sets both).
 
 **M2 — Barcode**: PWA setup, scanner component, `food_barcodes`, OFF API fallback, review queue.
 
-**M3 — Training**: exercise catalog, session logging, weekly progression views, counselor read.
+**M3 — Training**: ✅ shipped without the exercise catalog — session logging, sets, derived weekly progression, counselor read under `consent_training`. A catalog remains optional and additive.
 
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 
