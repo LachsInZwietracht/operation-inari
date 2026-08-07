@@ -57,6 +57,36 @@ Do not assume `npm run supabase:*` scripts exist; check `package.json` first.
 - Do not seed authenticated runtime state from mock constants.
 - Merge local fallback records only as migration/offline candidates.
 
+## Test Environment
+
+The Playwright suite creates real users, patients, and links through the
+service-role client. `playwright.config.ts` loads `.env.test` in preference to
+`.env.local`, so those fixtures land in a local stack instead of the hosted
+project. Without `.env.test`, every test run writes to whatever `.env.local`
+points at — normally production.
+
+```bash
+npx supabase start      # needs Docker Desktop running
+npx supabase db reset   # applies every migration from scratch, then seed.sql
+```
+
+`.env.test` (gitignored via `.env*`) holds the local URL and keys from
+`npx supabase status -o env`.
+
+Two traps worth knowing:
+
+- **Use the `sb_publishable_` / `sb_secret_` keys, not the `ANON_KEY` /
+  `SERVICE_ROLE_KEY` that `status -o env` also prints.** The local stack signs
+  JWTs asymmetrically; GoTrue rejects the legacy HS256 keys with
+  `invalid JWT: ... signing method HS256 is invalid`. PostgREST still accepts
+  both, so the database half of a test can pass while `auth.admin.*` fails.
+- **Keep the CLI current** (`npx supabase@latest`). A CLI older than its
+  container images hands out keys the auth service no longer accepts, which
+  produces exactly the error above.
+
+If a run fails at `tests/auth.setup.ts` with a JWT error, check the local stack
+before touching the specs.
+
 ## Verification
 
 For schema/RLS changes:
