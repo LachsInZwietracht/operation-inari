@@ -24,7 +24,7 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-svh flex-col bg-muted/20">
       <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background px-4">
-        <BrandMark className="h-6" />
+        <BrandMark className="h-6 w-auto" />
         <span className="text-sm font-medium text-muted-foreground">Klient</span>
         <div className="ml-auto flex items-center gap-1">
           <ThemeToggle />
