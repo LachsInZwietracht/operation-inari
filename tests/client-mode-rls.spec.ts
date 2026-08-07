@@ -52,6 +52,9 @@ async function signedInClient(user: TestUser) {
   return client;
 }
 
+// Shared fixtures, and the last test revokes the link: keep them in one worker.
+test.describe.configure({ mode: "serial" });
+
 test.describe("client mode RLS", () => {
   let counselor: TestUser;
   let clientUser: TestUser;

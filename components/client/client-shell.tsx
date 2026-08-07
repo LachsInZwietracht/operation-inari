@@ -2,17 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { NotebookPen, UserRoundCheck } from "lucide-react"
-
 import { BrandMark } from "@/components/brand-mark"
 import { ModeSwitchButton } from "@/components/mode-switch-button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ENABLED_CLIENT_MODULES } from "@/lib/client-modules"
 import { cn } from "@/lib/utils"
-
-const NAV_ITEMS = [
-  { label: "Tagebuch", route: "/klient", icon: NotebookPen },
-  { label: "Betreuung", route: "/klient/betreuung", icon: UserRoundCheck },
-]
 
 /**
  * Mobile-first shell for the client surface. Deliberately not the counselor
@@ -36,14 +30,15 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
 
       <nav className="fixed inset-x-0 bottom-0 z-10 border-t bg-background">
         <div className="mx-auto flex max-w-2xl">
-          {NAV_ITEMS.map((item) => {
+          {ENABLED_CLIENT_MODULES.map((item) => {
+            // "/klient" is a prefix of every other route, so it only matches exactly.
             const isActive =
               item.route === "/klient" ? pathname === "/klient" : pathname.startsWith(item.route)
             const Icon = item.icon
 
             return (
               <Link
-                key={item.route}
+                key={item.id}
                 href={item.route}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(

@@ -1,6 +1,6 @@
 # Client Mode Plan
 
-Status: M1 foundation shipped (migration `20260806000072_client_mode.sql` and the `/klient` surface); plan check-off, barcode, and training still open. Owner decision record for the second product surface.
+Status: M1 shipped (`/klient` with the diary and plan modules, migrations `20260806000072` and `20260807000073`); barcode and training still open. The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
 
 ## Vision
 
@@ -177,7 +177,7 @@ Weekly progression (the "habe ich mich gesteigert" view) is a query over sets pe
 3. ✅ Counselor UI: invite and link status in the patient tab **Klienten-App**.
 4. ✅ `client_food_log_*` tables with the RLS shape above.
 5. ✅ Client UI: day view, food search, add/delete entries, daily macro totals.
-6. ⬜ Plan-of-the-day view with check-off + `client_meal_completions`.
+6. ✅ Plan-of-the-day view with check-off + `client_meal_completions`.
 7. ◐ Counselor UI: the client's last 7 logged days are visible; adherence and the
    import into `nutrition_protocols` are still open.
 

@@ -56,3 +56,37 @@ export interface ClientFoodLogDay {
   notes?: string;
   entries: ClientFoodLogEntry[];
 }
+
+/** A meal the client ticked off — or deliberately skipped. */
+export interface ClientMealCompletion {
+  id: ID;
+  mealPlanId: ID;
+  mealEntryId: ID;
+  skipped: boolean;
+  note?: string;
+  completedAt: string;
+}
+
+export interface ClientPlanEntry {
+  id: ID; // meal_entries.id
+  slotType: MealSlotType;
+  entryType: "food" | "recipe";
+  referenceId: ID;
+  amount: number;
+}
+
+/** The counselor's plan for one day, as the client sees it. */
+export interface ClientPlanDay {
+  id: ID; // daily_meal_plans.id
+  date: string;
+  title?: string;
+  entries: ClientPlanEntry[];
+}
+
+/** Per-day adherence for the counselor: how much of the plan was answered. */
+export interface ClientAdherenceDay {
+  date: string;
+  planned: number;
+  completed: number;
+  skipped: number;
+}

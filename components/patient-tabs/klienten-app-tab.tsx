@@ -21,11 +21,13 @@ import {
   calculateClientLogNutrients,
 } from "@/lib/client-food-log"
 import { formatInviteCode, todayIsoDate } from "@/lib/client-mode"
+import { isClientModuleEnabled } from "@/lib/client-modules"
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client"
+import { fetchClientAdherence } from "@/lib/data/client-plan-client"
 import { fetchClientLinkForPatient } from "@/lib/data/client-links"
 import { getNutrientValue } from "@/lib/nutrients"
 import { createClient } from "@/lib/supabase/client"
-import type { ClientFoodLogDay, ClientLink, Food, Patient } from "@/lib/types"
+import type { ClientAdherenceDay, ClientFoodLogDay, ClientLink, Food, Patient } from "@/lib/types"
 
 const LOG_WINDOW_DAYS = 7
 
@@ -35,6 +37,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
   const [isLoading, setIsLoading] = useState(true)
   const [days, setDays] = useState<ClientFoodLogDay[]>([])
   const [foods, setFoods] = useState<Map<string, Food>>(new Map())
+  const [adherence, setAdherence] = useState<ClientAdherenceDay[]>([])
   const [isPending, startTransition] = useTransition()
 
   const loadLink = useCallback(async () => {
@@ -57,16 +60,17 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
     if (!clientUserId) return
 
     const today = todayIsoDate()
+    const range = {
+      from: format(subDays(parseISO(today), LOG_WINDOW_DAYS - 1), "yyyy-MM-dd"),
+      to: today,
+    }
     try {
-      const loaded = await fetchClientFoodLogDays(
-        clientUserId,
-        {
-          from: format(subDays(parseISO(today), LOG_WINDOW_DAYS - 1), "yyyy-MM-dd"),
-          to: today,
-        },
-        supabase,
-      )
+      const loaded = await fetchClientFoodLogDays(clientUserId, range, supabase)
       setDays(loaded)
+
+      if (isClientModuleEnabled("plan")) {
+        setAdherence(await fetchClientAdherence(patient.id, clientUserId, range, supabase))
+      }
 
       const foodIds = [
         ...new Set(
@@ -90,7 +94,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
     } catch (error) {
       console.error("Failed to load client food log:", error)
     }
-  }, [clientUserId, supabase])
+  }, [clientUserId, supabase, patient.id])
 
   useEffect(() => {
     void loadDays()
@@ -120,6 +124,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
       toast.success("Verbindung beendet.")
       setLink(null)
       setDays([])
+      setAdherence([])
     })
   }
 
@@ -207,6 +212,35 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
           )}
         </CardContent>
       </Card>
+
+      {link?.status === "active" && isClientModuleEnabled("plan") && adherence.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Plan-Treue der letzten {LOG_WINDOW_DAYS} Tage</CardTitle>
+            <CardDescription>
+              Abgehakte Mahlzeiten gegen den freigegebenen Plan. Ohne Reaktion heißt weder
+              gegessen noch ausgelassen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {adherence.map((day) => (
+                <li key={day.date} className="flex items-center justify-between gap-2 py-2">
+                  <p className="text-sm font-medium">
+                    {format(parseISO(day.date), "EEEE, d. MMMM", { locale: de })}
+                  </p>
+                  <p className="text-sm tabular-nums">
+                    {day.completed}/{day.planned}
+                    {day.skipped > 0 && (
+                      <span className="text-muted-foreground"> · {day.skipped} ausgelassen</span>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {link?.status === "active" && (
         <Card>

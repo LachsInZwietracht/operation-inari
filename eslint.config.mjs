@@ -13,7 +13,17 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "warn",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "test-results/**", "next-env.d.ts"]),
+  // `supabase start` drops Deno edge-runtime sources into supabase/.temp. They
+  // are git-ignored but ESLint still walked them, drowning real findings in
+  // ~150 errors from vendored code nobody edits.
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "test-results/**",
+    "supabase/.temp/**",
+    "next-env.d.ts",
+  ]),
 ]);
 
 export default eslintConfig;
