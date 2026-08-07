@@ -371,6 +371,16 @@ Each subsection includes route, core components, important hooks/utilities, and 
 - **Route handoff:** `/termine` now accepts an optional `patientId` query param to prefilter the calendar for a patient-specific follow-up flow.
 - **Plan handoff:** `/ernaehrungsplan` accepts `patientId` and `date` query params so patient workflow links can open or create the exact patient plan date.
 
+### 4.25 Klientenmodus (`/klient`)
+Second product surface: the person being counseled uses the same app to keep their own food diary. Design record and roadmap in `docs/client-mode-plan.md`.
+- **One account, two surfaces:** any auth user can be the client of another user. The active surface lives in the `prodi_mode` cookie (`lib/client-mode.ts`), switched through `setAppModeAction` (`app/(client)/actions.ts`) from the counselor `UserNav` or the client header. `lib/supabase/middleware.ts` redirects counselor routes to `/klient` while the cookie says `client` — a UX guard only; authorization is RLS.
+- **Shell:** `app/(client)/layout.tsx` + `components/client/client-shell.tsx` — mobile-first, bottom nav (Tagebuch, Betreuung), deliberately not the counselor sidebar.
+- **Linking:** `client_links` binds a counselor-owned `patients` row to a client account. The counselor creates an invite in the patient tab **Klienten-App** (`components/patient-tabs/klienten-app-tab.tsx` → `createClientInviteAction`); the client redeems it at `/klient/einladung/[code]` or by typing the code under `/klient/betreuung`. Either side can revoke. Self-linking is allowed so one account can test both surfaces.
+- **Write model:** `client_links` is read-only through RLS; every mutation runs in a server action with the service-role client, which validates the caller. An unredeemed invite is not readable by its recipient, so redemption cannot go through RLS.
+- **Food diary:** `/klient` shows one day (`?datum=YYYY-MM-DD`, defaults to today in `Europe/Berlin`), the five standard meal slots, and kcal/EW/F/KH totals. Entries live in `client_food_log_days` / `client_food_log_entries`, owned by the client. Food search uses the existing `search_foods` RPC; nutrients hydrate through `/api/foods/by-ids`. Data access: `lib/data/client-food-log-client.ts`, math in `lib/client-food-log.ts`.
+- **Counselor view:** the **Klienten-App** patient tab shows link state plus the client's last 7 logged days with kcal per day — read-only, gated on an active consented link.
+- **Not built yet:** plan visibility and meal check-off, barcode scanning, training tracking, and importing a client log range into `nutrition_protocols`. See the milestones in `docs/client-mode-plan.md`.
+
 ## 5. Supporting Modules
 - **Food Search Command (`components/food-search-command.tsx`):** Global command palette. Lazy-loads the search index from `/api/foods/search-index` (authenticated, catalog-only) on first use; the user's own custom foods are merged in `FoodSearchProvider` via the RLS-scoped client fetch.
 - **Nutrient utilities (`@/lib/nutrients.ts`):** Mathematically validated core logic. Handles ingredient scaling and summing.

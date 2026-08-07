@@ -1,8 +1,11 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { LogOut } from "lucide-react"
+import { useTransition } from "react"
+import { ArrowLeftRight, LogOut } from "lucide-react"
 import { toast } from "sonner"
+
+import { setAppModeAction } from "@/app/(client)/actions"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +22,7 @@ import { useAuthContext } from "@/components/auth-provider"
 export function UserNav() {
   const router = useRouter()
   const { user } = useAuthContext()
+  const [isSwitching, startSwitching] = useTransition()
 
   if (!user) return null
 
@@ -59,6 +63,14 @@ export function UserNav() {
             <p className="text-xs text-muted-foreground">{email}</p>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={isSwitching}
+          onClick={() => startSwitching(() => void setAppModeAction("client"))}
+        >
+          <ArrowLeftRight className="mr-2 h-4 w-4" />
+          Zur Klienten-Ansicht
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" />

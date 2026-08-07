@@ -294,6 +294,9 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `organization_memberships` | Persisted user roles and invitations | `organization_id`, `user_id`, `email`, `role`, `status`, `invitation_sent_at`, `invitation_expires_at`, `revoked_at` |
 | `organization_sso_configs` | Admin-managed OIDC/SAML SSO routing config | `organization_id`, `provider_type`, `status`, `domains`, `issuer_url`, `metadata_url`, `metadata_xml`, `client_id`, `entity_id`, `sso_url` |
 | `access_audit_logs` | Foundation for access/security audit events | `organization_id`, `actor_user_id`, `action`, `target_type`, `metadata` |
+| `client_links` | Binds a counselor-owned patient record to the client's own account (client mode). SELECT-only under RLS for both participants; all writes go through server actions with the service role, because an unredeemed invite is not readable by its recipient | `patient_id`, `counselor_user_id`, `client_user_id` (NULL until redeemed), `invite_code`, `invite_expires_at`, `status` (invited/active/revoked), `consent_nutrition`, `consent_training` |
+| `client_food_log_days` | One diary day, owned by the client — not by the patient record, so history survives a counselor change | `client_user_id`, `log_date` (unique per client), `notes` |
+| `client_food_log_entries` | Diary items. `client_user_id` is denormalized from the day so entry policies need no join | `day_id`, `client_user_id`, `slot_type` (same five slots as `meal_entries`), `source_type` (food/custom), `food_id`, `custom_name`, `custom_nutrients` (per 100 g), `amount` |
 
 ### Auth & RBAC Notes
 
@@ -309,6 +312,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - Direct LDAP bind/sync is intentionally out of scope for v1; LDAP/AD groups should arrive through verified OIDC/SAML claims.
 - Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, report and dataset exports, export history, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
+- Client mode is not an RBAC role: a client has no `organization_memberships` row. Access to a client's own tables is `client_user_id = auth.uid()`; a counselor's read access runs through `client_link_grants_access(client_user_id, area)` (SECURITY DEFINER, `authenticated` only), which matches active links with the matching consent flag. Counselors never get write access to client-owned rows, and revoking a link cuts reads immediately. Covered by `tests/client-mode-rls.spec.ts`.
 - New authenticated users can be bootstrapped into a default organization/membership by the server access helper; Playwright setup creates an `owner` membership for the test user.
 
 ### Export Job Notes

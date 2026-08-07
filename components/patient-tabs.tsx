@@ -48,6 +48,7 @@ const KNOWN_TAB_VALUES = new Set<string>([
   "workflow",
   "beratungen",
   "statistiken",
+  "klienten-app",
   ...PROFILE_TAB_VALUES,
   ...NUTRITION_TAB_VALUES,
 ])
@@ -58,6 +59,10 @@ const PatientWorkflowTab = dynamic(
 )
 const PatientMealPlansTab = dynamic(
   () => import("@/components/patient-meal-plans-tab").then((mod) => mod.PatientMealPlansTab),
+  { ssr: false },
+)
+const KlientenAppTab = dynamic(
+  () => import("@/components/patient-tabs/klienten-app-tab").then((mod) => mod.KlientenAppTab),
   { ssr: false },
 )
 const PatientStatsTab = dynamic(
@@ -502,6 +507,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
         <TabsTrigger value={profileTriggerValue}>Profil</TabsTrigger>
         <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
         <TabsTrigger value="beratungen">Beratung</TabsTrigger>
+        <TabsTrigger value="klienten-app">Klienten-App</TabsTrigger>
         <TabsTrigger value="statistiken">Statistiken</TabsTrigger>
       </TabsList>
 
@@ -686,6 +692,10 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
 
       <TabsContent value="beratungen" className="space-y-4">
         <BeratungenTab patient={patient} sessions={sessions} counselingPending={counselingPending} />
+      </TabsContent>
+
+      <TabsContent value="klienten-app" className="space-y-4">
+        <KlientenAppTab patient={patient} />
       </TabsContent>
 
       <TabsContent value="statistiken" className="space-y-4">

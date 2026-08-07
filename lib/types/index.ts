@@ -6,6 +6,7 @@ export * from "./meal-plan";
 export * from "./patient";
 export * from "./protocol";
 export * from "./counseling";
+export * from "./client-mode";
 export * from "./lab-values";
 export * from "./auth";
 export * from "./platform";

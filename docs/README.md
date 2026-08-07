@@ -25,6 +25,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Supabase schema, RLS, migrations, ETL, food data | `docs/database-guide.md` | Migrations remain the schema source of truth. |
 | Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Strategy input only. |
 | Clinic IT integrations: LDAP/AD, FHIR | `docs/clinic-it-integration-plan.md` | P1 integration contracts and implementation boundaries. |
+| Client mode: client accounts, tracking, counselor/client linking | `docs/client-mode-plan.md` | Proposal, not implemented. Second product surface; own priority line next to the clinic-first roadmap. |
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
 | Public repository release | `docs/public-release.md` | Clean-snapshot release process, security settings, and history warning. |
 | Billing/subscription work | `.agent/docs/billing.md` | Billing is preview-only unless code proves otherwise. |

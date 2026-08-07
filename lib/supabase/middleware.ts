@@ -3,6 +3,13 @@ import type { JWK } from "@supabase/supabase-js"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { ADMIN_ROLES, INSTITUTION_ROLES, hasAnyRole, mapLegacyUserRole } from "@/lib/auth/rbac"
+import {
+  APP_MODE_COOKIE,
+  CLIENT_HOME_ROUTE,
+  homeRouteForMode,
+  isClientRoute,
+  parseAppMode,
+} from "@/lib/client-mode"
 import type { AppRole } from "@/lib/types"
 
 const PUBLIC_APP_PATHS = ["/login", "/registrieren", "/passwort-vergessen"]
@@ -108,15 +115,22 @@ export async function updateSession(request: NextRequest) {
   const userId = claims?.sub
 
   const { pathname } = request.nextUrl
+  const mode = parseAppMode(request.cookies.get(APP_MODE_COOKIE)?.value)
 
-  // Auth pages: redirect to dashboard if already authenticated
+  // Auth pages: redirect to the active surface if already authenticated
   if (userId && (pathname === "/login" || pathname === "/registrieren")) {
-    return redirectTo(request, "/dashboard")
+    return redirectTo(request, homeRouteForMode(mode))
   }
 
   // Protected pages: redirect to login if not authenticated
   if (!userId && !isPublicPath(pathname)) {
     return redirectTo(request, "/login")
+  }
+
+  // Surface boundary: in client mode the counselor app is out of view. This is
+  // a UX guard, not a security boundary — access control lives in RLS.
+  if (userId && mode === "client" && !isClientRoute(pathname) && !isPublicPath(pathname)) {
+    return redirectTo(request, CLIENT_HOME_ROUTE)
   }
 
   const needsRoleCheck = pathname.startsWith("/admin") || pathname.startsWith("/institution")
