@@ -4,7 +4,33 @@ export type Gender = "m" | "w" | "d";
 export type PatientStatus = "active" | "inactive" | "archived" | "deceased";
 export type PatientCareSetting = "ambulatory" | "inpatient" | "discharged";
 export type PreferredContactChannel = "phone" | "email" | "mail" | "none";
-export type NutritionPreference = "vegetarian" | "vegan" | "keto" | "low_carb";
+/**
+ * A single diet style. Exactly one applies per patient.
+ * Persisted as `patients.diet_style`.
+ */
+export type DietStyle =
+  | "omnivor"
+  | "vegetarisch"
+  | "vegan"
+  | "pescetarisch"
+  | "low_carb"
+  | "keto"
+  | "carnivore"
+  | "mediterran";
+
+/**
+ * Non-medical exclusions. Several may apply per patient.
+ * Persisted as `patients.nutrition_preferences`.
+ * Medical allergies and intolerances live in `patient_allergens` instead.
+ */
+export type DietExclusion =
+  | "no_dairy"
+  | "no_pork"
+  | "no_red_meat"
+  | "no_alcohol"
+  | "no_gluten_by_choice"
+  | "halal"
+  | "kosher";
 
 export interface Patient extends Timestamped {
   id: ID;
@@ -29,7 +55,10 @@ export interface Patient extends Timestamped {
   goalWeight?: number;
   /** Selected macro distribution preset id (e.g. "balanced", "lowcarb"). */
   macroPreset?: string;
-  nutritionPreferences?: NutritionPreference[];
+  /** Single diet style, e.g. "vegan" or "keto". */
+  dietStyle?: DietStyle;
+  /** Non-medical exclusions, e.g. "no_dairy". */
+  nutritionPreferences?: DietExclusion[];
   nutritionPreferenceNotes?: string;
   status?: PatientStatus;
   careSetting?: PatientCareSetting;
@@ -194,4 +223,124 @@ export interface DigitalProtocolLink extends Timestamped {
   status: "pending" | "received" | "expired";
   url: string;
   expiresAt?: string;
+}
+
+export type FoodPreferenceRating = "gerne" | "geht" | "nie";
+
+export interface PatientFoodPreference extends Timestamped {
+  id: ID;
+  patientId: ID;
+  /** Matches an `id` from `lib/intake-food-preferences.ts`. */
+  foodKey: string;
+  rating: FoodPreferenceRating;
+}
+
+export type PatientIntakeLinkStatus =
+  | "pending"
+  | "received"
+  | "expired"
+  | "revoked";
+
+export interface PatientIntakeLink extends Timestamped {
+  id: ID;
+  /** Practitioner-facing label, e.g. "Max - Freund". */
+  label: string;
+  /** Null until the submission is applied, or when inviting a new person. */
+  patientId?: ID;
+  status: PatientIntakeLinkStatus;
+  expiresAt?: string;
+  /** Derived from the current origin; never persisted. */
+  url: string;
+}
+
+export type PatientIntakeSubmissionStatus = "new" | "reviewed" | "applied";
+
+export interface PatientIntakeSubmission extends Timestamped {
+  id: ID;
+  linkId: ID;
+  patientId?: ID;
+  submittedAt: string;
+  payload: PatientIntakePayload;
+  status: PatientIntakeSubmissionStatus;
+  appliedPatientId?: ID;
+}
+
+export type IntakePrimaryGoal =
+  | "abnehmen"
+  | "gewicht_halten"
+  | "muskelaufbau"
+  | "gesuender_essen"
+  | "mehr_energie"
+  | "leistung_steigern"
+  | "beschwerden_lindern";
+
+/**
+ * Shape of `patient_intake_submissions.payload`. The authoritative runtime
+ * validation lives in `lib/intake/schema.ts`; this type is derived from it.
+ */
+export interface PatientIntakePayload {
+  person: {
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string;
+    gender: Gender;
+    email?: string;
+    phone?: string;
+  };
+  goal: {
+    primaryGoal: IntakePrimaryGoal;
+    motivation?: string;
+    timeframe?: string;
+  };
+  body: {
+    heightCm: number;
+    weightKg: number;
+    goalWeightKg?: number;
+  };
+  activity?: {
+    jobActivity?: "sitzend" | "stehend" | "koerperlich";
+    trainingDaysPerWeek?: number;
+    trainingType?: string;
+  };
+  health?: {
+    conditions?: string[];
+    medications?: string;
+    digestion?: string;
+    pregnantOrBreastfeeding?: boolean;
+  };
+  allergens?: Array<{
+    allergenId: string;
+    type: "allergy" | "intolerance";
+  }>;
+  diet?: {
+    style?: DietStyle;
+    exclusions?: DietExclusion[];
+  };
+  foodPreferences?: Array<{
+    foodKey: string;
+    rating: FoodPreferenceRating;
+  }>;
+  habits?: {
+    mealsPerDay?: number;
+    eatsBreakfast?: boolean;
+    cookingSkill?: "wenig" | "mittel" | "viel";
+    minutesPerMeal?: number;
+    eatsOutPerWeek?: number;
+    whoCooks?: string;
+    budget?: "niedrig" | "mittel" | "hoch";
+    snacking?: string;
+    alcoholPerWeek?: number;
+    coffeePerDay?: number;
+    sleepHours?: number;
+    waterLitersPerDay?: number;
+  };
+  history?: {
+    previousDiets?: string;
+    whatWorked?: string;
+    whatFailed?: string;
+  };
+  consent: {
+    dataProcessing: boolean;
+    notes?: string;
+  };
 }

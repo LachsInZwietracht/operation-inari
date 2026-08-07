@@ -350,6 +350,21 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/datenbank` reads the live `data_sources` catalog for source/version/license/current import metadata. Owners/admins can activate or deactivate each connected source for their organization via `organization_data_source_settings` (see the activate/deactivate flow in `documentation.md` §4.12).
 - The earlier database-lifecycle history (`data_source_events`) and food-reference replacement workflow (`replace_food_references()` RPC, `food_reference_replacements`, `/api/foods/replace`) were removed; the supporting objects are dropped in `20260610000057_drop_lifecycle_and_replacement.sql`.
 
+### Patient Onboarding Intake
+
+Three tables back the invite-link onboarding flow (see `documentation.md` §4.25):
+
+- `patient_intake_links` (`20260803000072`) — one invitation per person. `user_id` owns the row; **`patient_id` is nullable** because an invitation may be sent before any patient exists. All RLS policies key off `user_id`, never `patient_id`, or rows with a null patient would become unreadable. There is no `url` column (the URL is derived from the id) and no `qr_code` column (QR codes are generated on demand, consistent with `20260624000001` / `20260625000063`). No anon policy — the public page reads through the service role.
+- `patient_intake_submissions` (`20260803000073`) — the raw validated payload as JSONB, plus `status` (`new` / `reviewed` / `applied`) and `applied_patient_id`. A unique index on `link_id` enforces one submission per invitation, mirroring `20260608000055` for digital protocols. Practitioner RLS resolves ownership through `patient_intake_links`. No anon INSERT policy — inserts go through `/api/onboarding/submit` with the service role.
+- `patient_food_preferences` (`20260803000074`) — `food_key` (from `lib/intake-food-preferences.ts`) rated `gerne` / `geht` / `nie`, unique per `(patient_id, user_id, food_key)`, RLS mirroring `patient_allergens`.
+
+The same migration splits diet information that `nutrition_preferences` previously conflated:
+
+- `patients.diet_style` — exactly one style, `CHECK`-constrained to the eight values in `lib/diet-constants.ts`.
+- `patients.nutrition_preferences` — now the exclusions list (`no_dairy`, `halal`, …), unconstrained at the database level and validated in the app.
+
+The migration backfills `diet_style` from legacy array values (`vegan` > `vegetarian` > `keto` > `low_carb`, most restrictive first) and then removes those values from the array. `lib/data/patients.ts` and `lib/data/patients-client.ts` query the diet columns defensively — a deployment can reach production before its migration is applied, and the fallback keeps patient lists readable instead of failing the whole query.
+
 ### Why Normalized `food_nutrients` Instead of a JSON Array?
 
 The current mock data stores nutrients as `NutrientValue[]` on each food object. For the database, we split this into a junction table because:

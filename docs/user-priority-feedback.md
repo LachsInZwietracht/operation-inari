@@ -15,6 +15,7 @@ public repository.
 These are the user's "Was ich wichtig finde" points, treated as required product capabilities.
 
 1. **Intuitive design, low onboarding effort.** Keep workflows simple and motivating; minimize training time.
+   - _Status (2026-08-02):_ Partially addressed for patient intake. A practitioner can create a shareable invite link (plus QR) and the invited person completes an 11-step mobile questionnaire without logging in; applying the submission creates or updates the patient. This replaces the clinical admin form as the first touchpoint. See `documentation.md` section 4.25. The practitioner-side setup wizard and general workflow simplification remain open.
 2. **DGE/ÖGE reference values, individually adjustable, with selectable PAL values.** Built-in standards plus per-patient customization, including different activity (PAL) levels.
    - _Status (2026-06-01):_ Live. `/referenzwerte` supports custom profiles, per-nutrient adjustment, DGE/ÖGE/SGE/RDA comparison, and per-patient PAL assignment in the patient energy panel. Implementation details live in `documentation.md` sections 4.6 and 4.6.1; schema/ETL details live in `docs/database-guide.md`.
 3. **Selectable / clearly visible source database per food.** Let users choose which database is used (as PRODI does) or otherwise make the source clearly visible on each food, because available nutrients differ per database.

@@ -19,19 +19,28 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { formatDate } from "@/lib/format"
 import { ALLERGEN_MAP } from "@/lib/allergen-constants"
-import type { ActivityEntry, NutritionPreference, Patient, PatientAllergenEntry } from "@/lib/types"
+import {
+  DIET_EXCLUSIONS,
+  DIET_EXCLUSION_LABELS,
+  DIET_STYLES,
+  DIET_STYLE_DESCRIPTIONS,
+  DIET_STYLE_LABELS,
+} from "@/lib/diet-constants"
+import type {
+  ActivityEntry,
+  DietExclusion,
+  DietStyle,
+  Patient,
+  PatientAllergenEntry,
+} from "@/lib/types"
 
 const ReferenceProfileSelector = dynamic(
   () => import("@/components/reference-profile-selector").then((mod) => mod.ReferenceProfileSelector),
   { ssr: false },
 )
 
-const NUTRITION_PREFERENCE_OPTIONS: { id: NutritionPreference; label: string; description: string }[] = [
-  { id: "vegetarian", label: "Vegetarisch", description: "ohne Fleisch und Fisch" },
-  { id: "vegan", label: "Vegan", description: "ohne tierische Zutaten" },
-  { id: "keto", label: "Keto", description: "ketogene Auswahl bevorzugen" },
-  { id: "low_carb", label: "Low Carb", description: "kohlenhydratarm bevorzugen" },
-]
+/** Sentinel for "no style selected" — Radix Select rejects an empty value. */
+const DIET_STYLE_NONE = "__none__"
 
 export interface ActivityFormState {
   type: string
@@ -55,8 +64,10 @@ interface AktivitaetTabProps {
   onActivitySubmit: (event: FormEvent<HTMLFormElement>) => void
   activities: ActivityEntry[]
   activitiesPending: boolean
-  nutritionPreferences: NutritionPreference[]
-  onNutritionPreferenceChange: (preference: NutritionPreference, checked: boolean) => void
+  dietStyle?: DietStyle
+  onDietStyleChange: (value: string) => void
+  dietExclusions: DietExclusion[]
+  onDietExclusionChange: (exclusion: DietExclusion, checked: boolean) => void
   nutritionPreferenceNotes: string
   setNutritionPreferenceNotes: (value: string) => void
   onNutritionPreferenceNotesBlur: () => void
@@ -80,8 +91,10 @@ export function AktivitaetTab({
   onActivitySubmit,
   activities,
   activitiesPending,
-  nutritionPreferences,
-  onNutritionPreferenceChange,
+  dietStyle,
+  onDietStyleChange,
+  dietExclusions,
+  onDietExclusionChange,
   nutritionPreferenceNotes,
   setNutritionPreferenceNotes,
   onNutritionPreferenceNotesBlur,
@@ -250,23 +263,53 @@ export function AktivitaetTab({
           </Button>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div>
-            <p className="text-sm font-medium">Ernährungsform</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {NUTRITION_PREFERENCE_OPTIONS.map((option) => (
-                <label key={option.id} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
-                  <Checkbox
-                    checked={nutritionPreferences.includes(option.id)}
-                    onCheckedChange={(checked) =>
-                      onNutritionPreferenceChange(option.id, checked === true)
-                    }
-                  />
-                  <span>
-                    <span className="block font-medium">{option.label}</span>
-                    <span className="block text-xs text-muted-foreground">{option.description}</span>
-                  </span>
-                </label>
-              ))}
+          <div className="grid gap-4 lg:grid-cols-[minmax(240px,0.4fr)_minmax(0,1fr)]">
+            <div>
+              <Label htmlFor="diet-style">Ernährungsform</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Eine Auswahl. Beschreibt, wie die Person grundsätzlich isst.
+              </p>
+              <Select value={dietStyle ?? DIET_STYLE_NONE} onValueChange={onDietStyleChange}>
+                <SelectTrigger id="diet-style" className="mt-2">
+                  <SelectValue placeholder="Keine Angabe" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DIET_STYLE_NONE}>Keine Angabe</SelectItem>
+                  {DIET_STYLES.map((style) => (
+                    <SelectItem key={style} value={style}>
+                      {DIET_STYLE_LABELS[style]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {dietStyle ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {DIET_STYLE_DESCRIPTIONS[dietStyle]}
+                </p>
+              ) : null}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium">Ausschlüsse</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Mehrfachauswahl. Nicht-medizinische Einschränkungen.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {DIET_EXCLUSIONS.map((exclusion) => (
+                  <label
+                    key={exclusion}
+                    className="flex items-center gap-3 rounded-lg border p-3 text-sm"
+                  >
+                    <Checkbox
+                      checked={dietExclusions.includes(exclusion)}
+                      onCheckedChange={(checked) =>
+                        onDietExclusionChange(exclusion, checked === true)
+                      }
+                    />
+                    <span className="font-medium">{DIET_EXCLUSION_LABELS[exclusion]}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
 
