@@ -13,7 +13,7 @@ import {
 import type { AppRole } from "@/lib/types"
 
 const PUBLIC_APP_PATHS = ["/login", "/registrieren", "/passwort-vergessen"]
-const PUBLIC_PREFIXES = ["/_next", "/api", "/protokoll", "/auth"]
+const PUBLIC_PREFIXES = ["/_next", "/api", "/protokoll", "/onboarding", "/auth"]
 
 /**
  * Module-scoped JWKS cache so getClaims() verifies the JWT locally on every

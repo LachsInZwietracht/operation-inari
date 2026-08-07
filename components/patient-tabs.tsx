@@ -21,8 +21,9 @@ import { useProtocols } from "@/hooks/use-protocols"
 import { useCounseling } from "@/hooks/use-counseling"
 import type {
   AnthropometricEntry,
+  DietExclusion,
+  DietStyle,
   Food,
-  NutritionPreference,
   Patient,
 } from "@/lib/types"
 import { toast } from "sonner"
@@ -36,8 +37,13 @@ import { DiagnosenTab } from "@/components/patient-tabs/diagnosen-tab"
 import { ProtokolleTab } from "@/components/patient-tabs/protokolle-tab"
 import { StammdatenTab } from "@/components/patient-tabs/stammdaten-tab"
 import { AktivitaetTab } from "@/components/patient-tabs/aktivitaet-tab"
+import { PatientIntakePanel } from "@/components/patient-intake-panel"
+import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
 import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
+
+/** Sentinel for "no style selected" — Radix Select rejects an empty value. */
+const DIET_STYLE_NONE = "__none__"
 
 const EMPTY_PROTOCOL_FOODS: Food[] = []
 
@@ -200,7 +206,13 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
-  const nutritionPreferences = currentPatient.nutritionPreferences ?? []
+  const dietExclusions = (currentPatient.nutritionPreferences ?? []).filter(
+    (entry): entry is DietExclusion => DIET_EXCLUSIONS.includes(entry as DietExclusion),
+  )
+  const dietStyle = resolveDietStyle(
+    currentPatient.dietStyle,
+    currentPatient.nutritionPreferences,
+  )
   const nutritionPreferenceAllergens = patientAllergens.filter(
     (entry) => entry.type === "allergy" || entry.type === "intolerance",
   )
@@ -365,15 +377,24 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     toast.success("Allergen gespeichert")
   }, [addAllergen, allergenForm, patient.id])
 
-  const handleNutritionPreferenceChange = useCallback(
-    (preference: NutritionPreference, checked: boolean) => {
+  const handleDietStyleChange = useCallback(
+    (style: string) => {
+      const next = style === DIET_STYLE_NONE ? undefined : (style as DietStyle)
+      updatePatient(patient.id, { dietStyle: next })
+      toast.success("Ernährungsform gespeichert")
+    },
+    [patient.id, updatePatient],
+  )
+
+  const handleDietExclusionChange = useCallback(
+    (exclusion: DietExclusion, checked: boolean) => {
       const current = currentPatient.nutritionPreferences ?? []
       const next = checked
-        ? Array.from(new Set([...current, preference]))
-        : current.filter((item) => item !== preference)
+        ? Array.from(new Set([...current, exclusion]))
+        : current.filter((item) => item !== exclusion)
 
       updatePatient(patient.id, { nutritionPreferences: next })
-      toast.success("Ernährungsvorlieben gespeichert")
+      toast.success("Ausschlüsse gespeichert")
     },
     [currentPatient.nutritionPreferences, patient.id, updatePatient],
   )
@@ -561,6 +582,10 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           correctedWeight={correctedWeight}
           correctedBmi={correctedBmi}
         />
+        <PatientIntakePanel
+          patientId={patient.id}
+          defaultLabel={`${patient.firstName} ${patient.lastName}`}
+        />
       </TabsContent>
 
       <TabsContent value="anthropometrie" className="space-y-4">
@@ -653,8 +678,10 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           onActivitySubmit={handleActivitySubmit}
           activities={activities}
           activitiesPending={activitiesPending}
-          nutritionPreferences={nutritionPreferences}
-          onNutritionPreferenceChange={handleNutritionPreferenceChange}
+          dietStyle={dietStyle}
+          onDietStyleChange={handleDietStyleChange}
+          dietExclusions={dietExclusions}
+          onDietExclusionChange={handleDietExclusionChange}
           nutritionPreferenceNotes={nutritionPreferenceNotes}
           setNutritionPreferenceNotes={setNutritionPreferenceNotes}
           onNutritionPreferenceNotesBlur={handleNutritionPreferenceNotesBlur}

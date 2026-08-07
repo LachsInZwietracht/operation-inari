@@ -22,6 +22,7 @@ import {
   Save,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { MACRO_PRESETS } from "@/lib/nutrition/macro-presets";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -81,21 +82,6 @@ function activityIdForPal(pal: number): string {
   }
   return best.id;
 }
-
-interface MacroPreset {
-  id: string;
-  label: string;
-  carbs: number;
-  fat: number;
-  protein: number;
-}
-
-const MACRO_PRESETS: MacroPreset[] = [
-  { id: "balanced", label: "Ausgewogen", carbs: 50, fat: 30, protein: 20 },
-  { id: "lowcarb", label: "Low Carb", carbs: 30, fat: 40, protein: 30 },
-  { id: "protein", label: "Eiweißreich", carbs: 35, fat: 30, protein: 35 },
-  { id: "keto", label: "Ketogen", carbs: 5, fat: 70, protein: 25 },
-];
 
 const MACROS = [
   { key: "carbs" as const, label: "Kohlenhydrate", kcalPerGram: 4, color: "var(--chart-3)" },
