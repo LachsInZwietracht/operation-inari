@@ -1,6 +1,6 @@
 # Client Mode Plan
 
-Status: M1 shipped (`/klient` with the diary and plan modules, migrations `20260806000072` and `20260807000073`); barcode still open. The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
+Status: M1 shipped (`/klient` with the diary, plan and training modules, migrations `20260806000072`–`20260807000074`); barcode lookup shipped without a migration, the camera layer is still open. The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
 
 ## Vision
 
@@ -41,7 +41,7 @@ Verified against migrations and `app/` on 2026-08-06.
 | `organizations` / `organization_memberships` (roles `owner`, `admin`, `dietitian`, `assistant`, `institution_admin`) | Client is **not** an org role. A client has no org membership; the link table carries the relationship. |
 | `app/protokoll/[linkId]` | Existing precedent for a token-addressed flow outside the app shell. The invite redemption reuses this pattern. |
 | `app/(app)/layout.tsx` (sidebar shell, RBAC-aware) | Client mode gets its own route group and shell, not this one. |
-| `foods` has **no** barcode column; barcodes live only in `off_staging` | Barcode scanning needs its own lookup path plus an Open Food Facts API fallback. The local catalog is intentionally pruned. |
+| OFF imports store the barcode as `foods.source_food_id` (`import-off.ts`), covered by `UNIQUE(data_source_id, source_food_id)` | Barcode lookup needs **no** mapping table — the index answers it directly. An earlier version of this document claimed the opposite and proposed seeding a `food_barcodes` table from `off_staging`; that table is empty since the quota cleanup, so the plan was also unbuildable. |
 
 ## Architecture
 
@@ -146,15 +146,25 @@ Slot names deliberately match `meal_entries` and `nutrition_protocol_entries` so
 - Adherence for the counselor = completions against plan entries, per day and per week. This is the single most valuable signal in the whole feature for the counselor, and it is nearly free once the plan is visible.
 - Checking a meal off may optionally copy it into the food log, so plan-followers get a filled diary without double entry.
 
-### 7. Barcode scanning (milestone 2)
+### 7. Barcode (milestone 2)
 
-Three parts, none of which exist yet:
+**Stage 1 — lookup: shipped.** No migration was needed; nothing about the schema changed.
 
-- **Scanner**: `BarcodeDetector` where available, `zxing-wasm` fallback. Requires HTTPS and camera permission → client mode ships as an installable PWA.
-- **Lookup**: new `food_barcodes (barcode pk, food_id → foods)` mapping table, seeded from `off_staging` for the products that survived pruning.
-- **Fallback**: Open Food Facts API for unknown codes, normalized into a `custom` log entry and queued for review before anything enters `foods`. The local catalog stays curated — scans must never write to it directly.
+`GET /api/foods/barcode/[code]` resolves a code in three tiers, and the three outcomes stay distinct because the client has to treat them differently:
 
-Unknown-barcode capture (client photographs the label) is a later addition, not part of this milestone.
+| Tier | Source | Becomes |
+|---|---|---|
+| 1 | `foods` where `data_source_id='off'` and `source_food_id` matches | a normal `food` entry the counselor can trace |
+| 2 | Open Food Facts API, by code | a `custom` entry with its own per-100 g nutrients |
+| 3 | nothing | a short manual form (name + kcal, macros optional) producing the same `custom` entry |
+
+Tier 2 runs server-side (identifying User-Agent, no CORS, OFF outages degrade to tier 3 rather than throwing on someone's phone) and is gated on nutrition quality: energy plus all three macros, and the ETL's plausibility checks. That bar is deliberately **lower** than the catalog's `OFF_MIN_QUALITY_SCORE` of 90 — someone holding the product has better evidence it exists than any import heuristic — but strict enough that a nutrient-less OFF record cannot enter a diary as 0 kcal. Scans still never write to `foods`; the catalog stays curated.
+
+The OFF parsing is shared with `scripts/etl/import-off.ts` via `lib/off-product.ts` rather than duplicated. `isJunkName` is applied by the ETL only: an odd name should block silent catalog promotion, but not a product a person is looking at.
+
+**Stage 2 — camera: open.** `BarcodeDetector` does not exist in Safari, so `zxing-wasm` is the primary path on iPhone and not a fallback; load it via dynamic import and restrict formats to EAN-13/EAN-8/UPC-A. The PWA groundwork the earlier plan called for is already in place (`public/site.webmanifest`, `display: standalone`, wired in `app/layout.tsx`) — camera access needs HTTPS, not a service worker. The typed-code field stays regardless: a denied camera permission must not be a dead end, and it keeps the flow testable without a camera.
+
+Unknown-barcode capture (client photographs the label) remains a later addition.
 
 ### 8. Training tracking (milestone 3)
 

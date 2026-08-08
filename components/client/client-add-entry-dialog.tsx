@@ -15,6 +15,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ClientBarcodePanel } from "@/components/client/client-barcode-panel"
+import type { BarcodeCustomPick } from "@/components/client/client-barcode-panel"
+import { isClientCapabilityEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import {
   addClientFoodLogEntry,
@@ -27,6 +30,15 @@ interface FoodResult {
   id: string
   name: string
 }
+
+/**
+ * What is about to be logged, from either input path. Catalog foods keep their
+ * id so the counselor sees a traceable product; scanned or hand-entered ones
+ * carry their own per-100 g values.
+ */
+type EntryDraft =
+  | { kind: "food"; id: string; name: string }
+  | { kind: "custom"; name: string; nutrients: BarcodeCustomPick["nutrients"] }
 
 interface SearchRow {
   food_id: string
@@ -53,9 +65,12 @@ export function ClientAddEntryDialog({
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<FoodResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [selected, setSelected] = useState<FoodResult | null>(null)
+  const [selected, setSelected] = useState<EntryDraft | null>(null)
+  const [mode, setMode] = useState<"search" | "barcode">("search")
   const [amount, setAmount] = useState("100")
   const [isSaving, setIsSaving] = useState(false)
+
+  const barcodeEnabled = isClientCapabilityEnabled("barcode")
 
   // Stale results stay in state but are not rendered below the query
   // threshold, which keeps this effect free of a synchronous reset.
@@ -108,8 +123,13 @@ export function ClientAddEntryDialog({
       await addClientFoodLogEntry({
         dayId: resolvedDayId,
         slotType: slot,
-        sourceType: "food",
-        foodId: selected.id,
+        ...(selected.kind === "food"
+          ? { sourceType: "food" as const, foodId: selected.id }
+          : {
+              sourceType: "custom" as const,
+              customName: selected.name,
+              customNutrients: selected.nutrients,
+            }),
         amount: grams,
       })
 
@@ -127,8 +147,37 @@ export function ClientAddEntryDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{MEAL_SLOT_LABELS[slot]}</DialogTitle>
-          <DialogDescription>Suche ein Lebensmittel und trage die Menge ein.</DialogDescription>
+          <DialogDescription>
+            {mode === "barcode" && !selected
+              ? "Tipp den Barcode ein — wir suchen im Katalog und bei Open Food Facts."
+              : "Suche ein Lebensmittel und trage die Menge ein."}
+          </DialogDescription>
         </DialogHeader>
+
+        {barcodeEnabled && !selected && (
+          <div className="flex gap-1 rounded-md bg-muted p-1">
+            {(
+              [
+                ["search", "Suche"],
+                ["barcode", "Barcode"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={mode === value}
+                className={`flex-1 rounded-sm px-3 py-1.5 text-sm transition-colors ${
+                  mode === value
+                    ? "bg-background font-medium shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setMode(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {selected ? (
           <div className="space-y-4">
@@ -154,6 +203,11 @@ export function ClientAddEntryDialog({
               />
             </div>
           </div>
+        ) : mode === "barcode" ? (
+          <ClientBarcodePanel
+            onPickCatalogFood={(food) => setSelected({ kind: "food", ...food })}
+            onPickCustom={(product) => setSelected({ kind: "custom", ...product })}
+          />
         ) : (
           <div className="space-y-2">
             <div className="relative">
@@ -183,7 +237,7 @@ export function ClientAddEntryDialog({
                     <button
                       type="button"
                       className="w-full px-2 py-2 text-left text-sm hover:bg-muted"
-                      onClick={() => setSelected(result)}
+                      onClick={() => setSelected({ kind: "food", ...result })}
                     >
                       {result.name}
                     </button>

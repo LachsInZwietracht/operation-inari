@@ -70,3 +70,31 @@ export const ENABLED_CLIENT_MODULES = CLIENT_MODULES.filter((module) => module.e
 export function isClientModuleEnabled(id: ClientModuleId): boolean {
   return CLIENT_MODULES.some((module) => module.id === id && module.enabled);
 }
+
+/**
+ * Capabilities extend a module instead of being one.
+ *
+ * Barcode scanning is a way to fill the diary, not a place to navigate to —
+ * giving it a registry entry would mean inventing a route and a nav item that
+ * do not exist. It gets its own switch anyway, because it is the one part of
+ * the diary that depends on an external service and a camera permission, and
+ * that is exactly the kind of thing you want to be able to turn off on its own.
+ *
+ * Owned paths, same discipline as a module:
+ *
+ *   lib/barcode.ts                        GTIN rules and the lookup contract
+ *   lib/off-product.ts                    OFF parsing (shared with the ETL)
+ *   lib/data/barcode-client.ts            data access
+ *   app/api/foods/barcode/[code]/         lookup endpoint
+ *   components/client/client-barcode-*    UI
+ *   tests/client-barcode*.spec.ts         tests
+ */
+export type ClientCapabilityId = "barcode";
+
+const CLIENT_CAPABILITIES: Record<ClientCapabilityId, boolean> = {
+  barcode: true,
+};
+
+export function isClientCapabilityEnabled(id: ClientCapabilityId): boolean {
+  return CLIENT_CAPABILITIES[id];
+}

@@ -613,7 +613,9 @@ ETL Pipeline:
      countrySkipped, droppedMissingFields, droppedNoNutrients, staged, promotable,
      blockedForReview) is printed at the end so the true candidate count is visible.
 3. Parse each product:
-   a. Extract barcode → source_food_id
+   a. Extract barcode → source_food_id (this is what makes barcode lookup possible without
+      a mapping table: `UNIQUE(data_source_id, source_food_id)` doubles as the barcode index,
+      and `/api/foods/barcode/[code]` queries exactly that — see documentation.md §4.26)
    b. Extract product_name_de or product_name → name
    c. Extract brands → manufacturer
    d. Normalize nutriments to per-100g values where possible
