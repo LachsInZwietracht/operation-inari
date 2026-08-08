@@ -55,3 +55,4 @@ tests/.auth/
 
 # Agent workflow scratch files
 .agent/phase/
+public/zxing/

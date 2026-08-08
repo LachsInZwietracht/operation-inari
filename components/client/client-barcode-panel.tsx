@@ -1,13 +1,21 @@
 "use client"
 
-import { useState } from "react"
-import { Loader2, ScanBarcode } from "lucide-react"
+import { useCallback, useState } from "react"
+import dynamic from "next/dynamic"
+import { Camera, Loader2, ScanBarcode } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { lookupBarcode } from "@/lib/data/barcode-client"
 import type { NutrientValue } from "@/lib/types"
+
+// Loaded only when the camera is actually opened: the scanner pulls in a ~1 MB
+// wasm decoder that nobody typing a code should have to download.
+const ClientBarcodeScanner = dynamic(
+  () => import("@/components/client/client-barcode-scanner").then((m) => m.ClientBarcodeScanner),
+  { ssr: false },
+)
 
 /** Only what the diary needs; the panel never persists anything itself. */
 export interface BarcodeCustomPick {
@@ -34,11 +42,11 @@ function parseAmount(value: string): number | undefined {
 }
 
 /**
- * Barcode entry for the food diary.
+ * Barcode entry for the food diary: camera first, typed code always available.
  *
- * Typed codes only for now — the camera layer plugs in above this, and keeping
- * the manual field permanently means a denied camera permission is an
- * inconvenience rather than a dead end.
+ * The manual field is not a fallback that could be dropped later — a denied
+ * camera permission, a broken lens or a code the scanner cannot read all end
+ * here, and it is what makes the flow testable without a camera.
  */
 export function ClientBarcodePanel({
   onPickCatalogFood,
@@ -49,9 +57,10 @@ export function ClientBarcodePanel({
 }) {
   const [code, setCode] = useState("")
   const [state, setState] = useState<PanelState>({ kind: "idle" })
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
 
-  async function handleLookup() {
-    const trimmed = code.trim()
+  const handleLookup = useCallback(async (rawCode: string) => {
+    const trimmed = rawCode.trim()
     if (!trimmed) return
 
     setState({ kind: "searching" })
@@ -81,7 +90,18 @@ export function ClientBarcodePanel({
       console.error("Barcode lookup failed:", error)
       setState({ kind: "failed" })
     }
-  }
+  }, [onPickCatalogFood, onPickCustom])
+
+  // A scan is only worth anything once it has been looked up, so the camera
+  // hands straight over instead of just filling the field.
+  const handleDetected = useCallback(
+    (scanned: string) => {
+      setIsCameraOpen(false)
+      setCode(scanned)
+      void handleLookup(scanned)
+    },
+    [handleLookup],
+  )
 
   if (state.kind === "unknown") {
     return (
@@ -93,14 +113,34 @@ export function ClientBarcodePanel({
     )
   }
 
+  if (isCameraOpen) {
+    return (
+      <ClientBarcodeScanner
+        onDetected={handleDetected}
+        onClose={() => setIsCameraOpen(false)}
+      />
+    )
+  }
+
   return (
     <div className="space-y-3">
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={() => setIsCameraOpen(true)}
+      >
+        <Camera className="mr-2 h-4 w-4" />
+        Barcode scannen
+      </Button>
+
       <div className="space-y-2">
-        <Label htmlFor="client-barcode">Barcode</Label>
+        <Label htmlFor="client-barcode">oder eintippen</Label>
         <div className="flex gap-2">
           <Input
             id="client-barcode"
-            autoFocus
+            // No autofocus: on a phone that pops the keyboard over the scan
+            // button, which is the action most people want here.
             inputMode="numeric"
             placeholder="z. B. 4008400401027"
             value={code}
@@ -111,14 +151,14 @@ export function ClientBarcodePanel({
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault()
-                void handleLookup()
+                void handleLookup(code)
               }
             }}
           />
           <Button
             type="button"
             disabled={state.kind === "searching" || !code.trim()}
-            onClick={() => void handleLookup()}
+            onClick={() => void handleLookup(code)}
           >
             {state.kind === "searching" ? (
               <Loader2 className="h-4 w-4 animate-spin" />

@@ -1,6 +1,6 @@
 # Client Mode Plan
 
-Status: M1 shipped (`/klient` with the diary, plan and training modules, migrations `20260806000072`–`20260807000074`); barcode lookup shipped without a migration, the camera layer is still open. The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
+Status: M1 shipped (`/klient` with the diary, plan and training modules, migrations `20260806000072`–`20260807000074`); barcode shipped without a migration (lookup + camera). The surface is organized as modules — see `lib/client-modules.ts`. Owner decision record for the second product surface.
 
 ## Vision
 
@@ -162,7 +162,11 @@ Tier 2 runs server-side (identifying User-Agent, no CORS, OFF outages degrade to
 
 The OFF parsing is shared with `scripts/etl/import-off.ts` via `lib/off-product.ts` rather than duplicated. `isJunkName` is applied by the ETL only: an odd name should block silent catalog promotion, but not a product a person is looking at.
 
-**Stage 2 — camera: open.** `BarcodeDetector` does not exist in Safari, so `zxing-wasm` is the primary path on iPhone and not a fallback; load it via dynamic import and restrict formats to EAN-13/EAN-8/UPC-A. The PWA groundwork the earlier plan called for is already in place (`public/site.webmanifest`, `display: standalone`, wired in `app/layout.tsx`) — camera access needs HTTPS, not a service worker. The typed-code field stays regardless: a denied camera permission must not be a dead end, and it keeps the flow testable without a camera.
+**Stage 2 — camera: shipped.** Native `BarcodeDetector` where available, `zxing-wasm` otherwise; since Safari has none, the wasm path is the primary one on iPhone rather than a fallback. Dynamic import keeps the ~1 MB decoder out of the diary bundle, and the wasm is self-hosted under `/zxing/` — the library's default is a CDN fetch on every scan, which would leak scan activity to a third party and break whenever that CDN does.
+
+The PWA groundwork the earlier plan called for was already in place (`public/site.webmanifest`, `display: standalone`, wired in `app/layout.tsx`); camera access needs HTTPS, not a service worker. Offline support still does not exist — no service worker anywhere — which is the more useful next step for a diary than anything scanner-related.
+
+Verified without a device: `tests/client-barcode-camera.spec.ts` drives the real flow against Chromium's fake camera and asserts the streams end on close *and* on dialog dismissal, plus that the wasm is fetched from our own origin. Headless Chromium has no `BarcodeDetector`, so that run exercises the same branch an iPhone takes. Decoding itself is pinned by generating an EAN-13 from the symbology tables and reading it back. What no test can answer is whether it decodes a crumpled label in a badly lit aisle — that needs a real phone.
 
 Unknown-barcode capture (client photographs the label) remains a later addition.
 
