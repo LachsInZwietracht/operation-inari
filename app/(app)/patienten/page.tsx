@@ -1,12 +1,15 @@
 import { PatientenPageClient } from "./patienten-client"
 import { fetchPatients } from "@/lib/data/patients"
 import { fetchCounselingSessionsClient } from "@/lib/data/counseling-client"
+import { fetchPatientPlanSummaries } from "@/lib/data/meal-plans"
 import { createClient } from "@/lib/supabase/server"
+import type { PatientPlanSummary } from "@/lib/patient-status"
 import type { CounselingSession, Patient } from "@/lib/types"
 
 interface PatientenInitialData {
   patients: Patient[]
   sessions: CounselingSession[]
+  planSummaries: PatientPlanSummary[]
 }
 
 async function loadInitialData(): Promise<PatientenInitialData | null> {
@@ -29,11 +32,12 @@ async function loadInitialData(): Promise<PatientenInitialData | null> {
   }
 
   try {
-    const [patients, sessions] = await Promise.all([
+    const [patients, sessions, planSummaries] = await Promise.all([
       fetchPatients(supabase),
       fetchCounselingSessionsClient(supabase),
+      fetchPatientPlanSummaries({ supabase, userId: user.id }),
     ])
-    return { patients, sessions }
+    return { patients, sessions, planSummaries }
   } catch (fetchError) {
     console.warn("Failed to load initial patient data:", fetchError)
     return null
@@ -47,6 +51,7 @@ export default async function PatientenPage() {
     <PatientenPageClient
       initialPatients={initialData?.patients}
       initialSessions={initialData?.sessions}
+      initialPlanSummaries={initialData?.planSummaries}
     />
   )
 }

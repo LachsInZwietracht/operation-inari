@@ -233,15 +233,24 @@ test.describe("Onboarding intake — end to end", () => {
 });
 
 test.describe("Onboarding intake — practitioner surface", () => {
-  test("patients page exposes the onboarding tab", async ({ page }) => {
+  // Onboarding no longer lives behind its own tab: an invited person is just an
+  // earlier pipeline state, so inviting happens directly from the patient list.
+  test("patients page offers inviting without a separate tab", async ({ page }) => {
     await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
 
-    await page.getByRole("tab", { name: "Onboarding" }).click();
-    await expect(page.getByText("Onboarding-Einladungen")).toBeVisible({
+    await expect(page.getByRole("tab", { name: "Onboarding" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Einladung senden" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("patient list exposes pipeline status filters", async ({ page }) => {
+    await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+
+    await expect(page.getByRole("button", { name: /^Eingeladen/ })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      page.getByRole("button", { name: "Einladung erstellen" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Antwort da/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Bereit für Plan/ })).toBeVisible();
   });
 });
