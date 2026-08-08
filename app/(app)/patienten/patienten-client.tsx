@@ -64,6 +64,11 @@ export function PatientenPageClient({
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reviewRow, setReviewRow] = useState<PatientPipelineRow | null>(null)
   const [applying, setApplying] = useState(false)
+  // Set once a submission is applied, so the dialog can hand off to the plan
+  // instead of silently closing and leaving the user to re-navigate.
+  const [appliedPatient, setAppliedPatient] = useState<{ id: string; name: string } | null>(
+    null,
+  )
 
   const lastSessionByPatient = useMemo(() => {
     const map = new Map<string, string>()
@@ -115,16 +120,23 @@ export function PatientenPageClient({
 
     setApplying(true)
     try {
-      await applySubmission(submission.id)
-      toast.success("Angaben übernommen", {
-        description: "Der Patient wurde angelegt bzw. aktualisiert.",
-      })
-      setReviewRow(null)
+      const { patientId } = await applySubmission(submission.id)
+      toast.success("Angaben übernommen")
+      if (patientId) {
+        setAppliedPatient({ id: patientId, name: reviewRow?.displayName ?? "Patient" })
+      } else {
+        setReviewRow(null)
+      }
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Übernahme fehlgeschlagen")
     } finally {
       setApplying(false)
     }
+  }
+
+  function closeReview() {
+    setReviewRow(null)
+    setAppliedPatient(null)
   }
 
   return (
@@ -234,23 +246,52 @@ export function PatientenPageClient({
         onCreate={createLink}
       />
 
-      <Dialog open={Boolean(reviewRow)} onOpenChange={(open) => !open && setReviewRow(null)}>
+      <Dialog open={Boolean(reviewRow)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Angaben von {reviewRow?.displayName}</DialogTitle>
-            <DialogDescription>
-              Prüfen und übernehmen. Danach kannst du direkt den Plan starten.
-            </DialogDescription>
-          </DialogHeader>
-
-          {reviewRow?.pendingSubmission ? (
+          {appliedPatient ? (
+            // The handoff: applying used to save silently and abandon the user
+            // mid-workflow. The next step in the chain is always the plan.
             <>
-              <PatientIntakeReview submission={reviewRow.pendingSubmission} />
-              <Button type="button" disabled={applying} onClick={handleApply}>
-                {applying ? "Wird übernommen..." : "Übernehmen"}
-              </Button>
+              <DialogHeader>
+                <DialogTitle>Angaben übernommen</DialogTitle>
+                <DialogDescription>
+                  {appliedPatient.name} ist angelegt. Ziele, Vorlieben und Unverträglichkeiten
+                  sind hinterlegt — der Plan startet direkt damit.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button asChild className="sm:flex-1">
+                  <Link href={`/ernaehrungsplan?patientId=${appliedPatient.id}`}>
+                    Plan für {appliedPatient.name.split(",")[1]?.trim() || "Patient"} erstellen
+                  </Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href={`/patienten/${appliedPatient.id}`}>Zum Patienten</Link>
+                </Button>
+                <Button type="button" variant="ghost" onClick={closeReview}>
+                  Später
+                </Button>
+              </div>
             </>
-          ) : null}
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Angaben von {reviewRow?.displayName}</DialogTitle>
+                <DialogDescription>
+                  Prüfen und übernehmen. Danach kannst du direkt den Plan starten.
+                </DialogDescription>
+              </DialogHeader>
+
+              {reviewRow?.pendingSubmission ? (
+                <>
+                  <PatientIntakeReview submission={reviewRow.pendingSubmission} />
+                  <Button type="button" disabled={applying} onClick={handleApply}>
+                    {applying ? "Wird übernommen..." : "Übernehmen"}
+                  </Button>
+                </>
+              ) : null}
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

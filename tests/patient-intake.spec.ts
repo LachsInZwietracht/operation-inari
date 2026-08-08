@@ -237,6 +237,10 @@ test.describe("Onboarding intake — practitioner surface", () => {
   // earlier pipeline state, so inviting happens directly from the patient list.
   test("patients page offers inviting without a separate tab", async ({ page }) => {
     await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible({
+      timeout: 30_000,
+    });
 
     await expect(page.getByRole("tab", { name: "Onboarding" })).toHaveCount(0);
 
@@ -246,6 +250,7 @@ test.describe("Onboarding intake — practitioner surface", () => {
 
   test("patient list exposes pipeline status filters", async ({ page }) => {
     await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("button", { name: /^Eingeladen/ })).toBeVisible({
       timeout: 15_000,

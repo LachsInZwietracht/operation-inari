@@ -43,7 +43,7 @@ export function PatientPipelineListRow({ row, onReview }: PatientPipelineRowProp
     ? [
         patient.indications?.length ? patient.indications.join(" · ") : "Ohne Indikation",
         row.lastSessionDate
-          ? `Letzte Beratung ${formatDate(row.lastSessionDate)}`
+          ? `Letzte Beratung: ${formatDate(row.lastSessionDate)}`
           : "Noch keine Beratung",
       ].join(" · ")
     : row.link
@@ -96,11 +96,7 @@ export function PatientPipelineListRow({ row, onReview }: PatientPipelineRowProp
   }
 
   const nameNode = patient ? (
-    <Link
-      href={`/patienten/${patient.id}`}
-      data-patient-id={patient.id}
-      className="truncate font-medium hover:underline"
-    >
+    <Link href={`/patienten/${patient.id}`} className="truncate font-medium hover:underline">
       {row.displayName}
     </Link>
   ) : (
@@ -111,6 +107,9 @@ export function PatientPipelineListRow({ row, onReview }: PatientPipelineRowProp
     <div
       className="flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-muted/50"
       data-pipeline-status={row.status}
+      // Identifies the whole row, not just the name link, so assertions can read
+      // the status and meta line alongside the patient.
+      data-patient-id={patient?.id}
     >
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
