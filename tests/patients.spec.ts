@@ -272,7 +272,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientList(page);
-      const searchInput = page.getByPlaceholder("Patient suchen...");
+      const searchInput = page.getByPlaceholder("Patient oder Einladung suchen...");
       await expect(searchInput).toBeVisible();
       await searchInput.fill(primary.lastName);
       await expect(patientCard(page, primary)).toBeVisible();
@@ -343,12 +343,13 @@ test.describe("Patient Management", () => {
     });
 
     try {
-      await openPatientList(page);
+      // Mail merge is batch document generation, not a patient view, so it moved
+      // off /patienten and onto the "Serienbriefe" tab of /api-export.
+      await page.goto("/api-export", { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await page.getByRole("tab", { name: "Serienbriefe" }).click();
 
-      // The mail-merge card lives on the "Workflows" tab of the patient list.
-      await page.getByRole("tab", { name: "Workflows" }).click();
       const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
-      await mailMergeCard.getByRole("button", { name: /Öffnen/i }).click();
+      await expect(mailMergeCard).toBeVisible({ timeout: 15_000 });
       const templateSelect = mailMergeCard.getByRole("combobox").first();
       await expect(templateSelect).toContainText("Termin-Nachverfolgung");
       await templateSelect.click();
@@ -682,15 +683,19 @@ test.describe("Patient Management", () => {
     const patient = await createPatientFixture({ firstName: "Export", lastName: "Patient", indications: ["Adipositas"] });
 
     try {
-      await openPatientList(page);
-      await expect(patientCard(page, patient)).toBeVisible();
-
-      // The mail-merge card lives on the "Workflows" tab of the patient list.
-      await page.getByRole("tab", { name: "Workflows" }).click();
+      // Mail merge moved off /patienten to the "Serienbriefe" tab of /api-export.
+      await page.goto("/api-export", { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await page.getByRole("tab", { name: "Serienbriefe" }).click();
       const mailMergeCard = page.locator("[data-slot='card']").filter({ hasText: "Serienbriefe & Mailings" }).first();
-      await mailMergeCard.getByRole("button", { name: /Öffnen/i }).click();
+      await expect(mailMergeCard).toBeVisible({ timeout: 15_000 });
+      // Select just the fixture patient: "Alle" renders one PDF per patient in
+      // the shared database, so the runtime grew with unrelated fixtures.
+      await mailMergeCard.getByPlaceholder("Empfänger suchen...").fill(patient.lastName);
+      const recipient = mailMergeCard.getByRole("checkbox").first();
+      await expect(recipient).toBeVisible({ timeout: 15_000 });
+      await recipient.check();
+
       const download = page.waitForEvent("download");
-      await mailMergeCard.getByRole("button", { name: "Alle" }).click();
       await mailMergeCard.getByRole("button", { name: /Dokumente erzeugen/i }).click();
       const file = await download;
       expect(await file.suggestedFilename()).toMatch(/Serienbrief-.*\.pdf/);
