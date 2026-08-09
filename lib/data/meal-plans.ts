@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DailyMealPlan, MealEntry, MealSlot, MealSlotType } from "@/lib/types";
+import type { PatientPlanSummary } from "@/lib/patient-status";
 import { createClient as createServerSupabaseClient, createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
 
@@ -178,6 +179,55 @@ export const fetchMealPlans = cache(async (
     return (data ?? []).map((row) => mapMealPlanRow(row as MealPlanRow));
   } catch (error) {
     console.warn("Falling back to local meal plans:", error);
+    return [];
+  }
+});
+
+/**
+ * Slim per-patient plan projection for pipeline status derivation.
+ *
+ * `fetchMealPlans` joins `meal_entries`, which is the right shape for the plan
+ * editor and the wrong shape for a patient list — deriving a status only needs
+ * to know that a plan exists, whether it is archived, and how recent it is.
+ */
+export const fetchPatientPlanSummaries = cache(async (
+  options: { supabase?: SupabaseClient; userId?: string | null } = {}
+): Promise<PatientPlanSummary[]> => {
+  try {
+    const client = await resolveClient(options.supabase);
+    let query = client
+      .from("daily_meal_plans")
+      .select("patient_id,status,date")
+      .not("patient_id", "is", null)
+      .order("date", { ascending: false });
+
+    if (options.userId) {
+      query = query.eq("user_id", options.userId);
+    }
+
+    const { data, error } = await withTimeout(
+      query,
+      5000,
+      "Supabase plan summary request timed out",
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return (data ?? []).map((row) => {
+      const summary = row as {
+        patient_id: string | null;
+        status: DailyMealPlan["status"] | null;
+        date: string;
+      };
+      return {
+        patientId: summary.patient_id ?? undefined,
+        status: summary.status ?? undefined,
+        date: summary.date,
+      };
+    });
+  } catch (error) {
+    console.warn("Failed to load patient plan summaries:", error);
     return [];
   }
 });

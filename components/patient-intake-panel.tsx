@@ -80,7 +80,7 @@ export function PatientIntakePanel({ patientId, defaultLabel }: PatientIntakePan
     try {
       const { patientId: appliedPatientId } = await applySubmission(submissionId)
       toast.success("Angaben übernommen", {
-        description: "Der Patient wurde angelegt bzw. aktualisiert.",
+        description: "Weiter geht es mit dem Ernährungsplan.",
       })
       return appliedPatientId
     } catch (caught) {
@@ -215,17 +215,25 @@ export function PatientIntakePanel({ patientId, defaultLabel }: PatientIntakePan
               </div>
 
               {submission && submission.status === "applied" ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Übernommen.{" "}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-muted-foreground">Übernommen.</p>
                   {submission.appliedPatientId ? (
-                    <Link
-                      href={`/patienten/${submission.appliedPatientId}`}
-                      className="underline underline-offset-4"
-                    >
-                      Zum Patienten
-                    </Link>
+                    <>
+                      {/* The next step in the chain is the plan, so offer it here
+                          rather than making the user navigate back out. */}
+                      <Button type="button" size="sm" asChild>
+                        <Link href={`/ernaehrungsplan?patientId=${submission.appliedPatientId}`}>
+                          Plan starten
+                        </Link>
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" asChild>
+                        <Link href={`/patienten/${submission.appliedPatientId}`}>
+                          Zum Patienten
+                        </Link>
+                      </Button>
+                    </>
                   ) : null}
-                </p>
+                </div>
               ) : null}
 
               {submission && isExpanded ? (

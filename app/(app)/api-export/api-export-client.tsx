@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   FileText,
   Key,
+  Mails,
   ShieldCheck,
   Trash2,
   Upload,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react"
 
 import { PageHeader } from "@/components/page-header"
+import { PatientMailingsPanel } from "@/components/patient-mailings-panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -301,6 +303,10 @@ export function ApiExportPageClient({ initialExportJobs, initialApiKeys }: ApiEx
           <TabsTrigger value="api" className="gap-1.5">
             <Code className="h-4 w-4" />
             REST API
+          </TabsTrigger>
+          <TabsTrigger value="serienbriefe" className="gap-1.5">
+            <Mails className="h-4 w-4" />
+            Serienbriefe
           </TabsTrigger>
           <TabsTrigger value="verlauf" className="gap-1.5">
             <Clock className="h-4 w-4" />
@@ -616,6 +622,10 @@ export function ApiExportPageClient({ initialExportJobs, initialApiKeys }: ApiEx
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="serienbriefe" className="space-y-4">
+          <PatientMailingsPanel />
         </TabsContent>
 
         <TabsContent value="verlauf" className="space-y-4">
