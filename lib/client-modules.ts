@@ -1,4 +1,4 @@
-import { CalendarCheck, Dumbbell, NotebookPen, UserRoundCheck } from "lucide-react";
+import { CalendarCheck, ChartColumn, Dumbbell, NotebookPen, UserRoundCheck } from "lucide-react";
 
 /**
  * Registry of the client surface.
@@ -16,7 +16,7 @@ import { CalendarCheck, Dumbbell, NotebookPen, UserRoundCheck } from "lucide-rea
  * operation: flip `enabled` to hide a module, or delete those five paths plus
  * the entry below to drop it for good. `rg <id>` then finds nothing.
  */
-export type ClientModuleId = "tagebuch" | "plan" | "training" | "betreuung";
+export type ClientModuleId = "tagebuch" | "plan" | "training" | "statistik" | "betreuung";
 
 export interface ClientModule {
   id: ClientModuleId;
@@ -52,6 +52,18 @@ export const CLIENT_MODULES: ClientModule[] = [
     icon: Dumbbell,
     enabled: true,
     counselorSection: true,
+  },
+  {
+    // The one module that reads the others instead of owning data. It has no
+    // migration because it stores nothing, and each of its sections is guarded
+    // by `isClientModuleEnabled`, so the dependency runs one way only:
+    // switching a module off removes a section here rather than breaking it.
+    id: "statistik",
+    label: "Verlauf",
+    route: "/klient/statistik",
+    icon: ChartColumn,
+    enabled: true,
+    counselorSection: false,
   },
   {
     // Not a feature module: this is where the link to a counselor is made and
