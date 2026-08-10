@@ -9,6 +9,7 @@ import { useAnthropometric } from "@/hooks/use-anthropometric"
 import { LAB_PARAMETERS } from "@/lib/reference-data/lab-parameters"
 import { GROWTH_PERCENTILES } from "@/lib/reference-data/growth-percentiles"
 import { AMPUTATION_AREAS } from "@/lib/constants"
+import { estimateActivityEnergy, matchActivityByName } from "@/lib/energy-expenditure"
 import { useDiagnoses } from "@/hooks/use-diagnoses"
 import { useMedications } from "@/hooks/use-medications"
 import { useLabValues } from "@/hooks/use-lab-values"
@@ -478,7 +479,17 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const handleActivitySubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const duration = Number(activityForm.durationMinutes) || 30
-    const estimatedEnergy = Math.round((duration / 60) * weight * 5)
+    // Was a flat factor of 5 MET for everything from Yoga to interval running.
+    // The activity name and the intensity the form already collects pick a
+    // real MET value instead; net of resting metabolism, so the figure is the
+    // extra cost of the activity rather than the whole hour.
+    const estimatedEnergy =
+      estimateActivityEnergy({
+        activityId: matchActivityByName(activityForm.type).id,
+        intensity: activityForm.intensity,
+        minutes: duration,
+        weightKg: weight,
+      })?.netKcal ?? 0
     addActivity({
       patientId: patient.id,
       type: activityForm.type,

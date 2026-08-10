@@ -31,6 +31,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatDate, formatNumber } from "@/lib/format"
+import { estimateActivityEnergy, matchActivityByName } from "@/lib/energy-expenditure"
 import type { ActivityEntry, AnthropometricEntry, CounselingSession, Patient } from "@/lib/types"
 
 interface PatientStatsTabProps {
@@ -249,7 +250,18 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
         .slice(-8)
         .map((a) => ({
           date: formatDate(a.date),
-          energie: Math.round(a.energyKcal ?? a.durationMinutes * 4.5),
+          // Entries written before the MET estimate carry no energy figure; the
+          // fallback used to be a flat 4.5 kcal per minute for every activity.
+          energie: Math.round(
+            a.energyKcal ??
+              estimateActivityEnergy({
+                activityId: matchActivityByName(a.type).id,
+                intensity: a.intensity,
+                minutes: a.durationMinutes,
+                weightKg: allLatest?.weight,
+              })?.netKcal ??
+              0,
+          ),
         })),
     [activities, allLatest, selectedRange.days],
   )

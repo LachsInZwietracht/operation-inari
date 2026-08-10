@@ -98,6 +98,12 @@ export interface ClientWorkoutSession {
   date: string; // ISO date YYYY-MM-DD
   title: string;
   notes?: string;
+  /** Inputs of the energy estimate; the kcal figure itself is derived. */
+  durationMinutes?: number;
+  activityKind?: string;
+  intensity?: string;
+  /** Body weight at logging time — an old session keeps an old weight. */
+  bodyWeightKg?: number;
   sets: ClientWorkoutSet[];
 }
 
@@ -106,12 +112,37 @@ export interface ClientExerciseProgressPoint {
   weekStart: string; // ISO date of the Monday
   bestWeightKg?: number;
   bestReps?: number;
+  /** Epley estimate of the week's strongest set; absent for bodyweight work. */
+  bestOneRepMaxKg?: number;
+  /** Tonnage: Σ reps × kg. Sets without a weight contribute nothing. */
+  volumeKg: number;
   totalSets: number;
 }
 
 export interface ClientExerciseProgress {
   exerciseName: string;
   points: ClientExerciseProgressPoint[];
+}
+
+/** Which measure the progress chart plots. */
+export type ClientProgressMetric = "oneRepMax" | "volume" | "weight";
+
+/** The best set ever recorded for one exercise. */
+export interface ClientPersonalRecord {
+  exerciseName: string;
+  oneRepMaxKg: number;
+  reps?: number;
+  weightKg?: number;
+  setId: ID;
+  date: string;
+}
+
+/** One session's worth of a single exercise — the detail view's row. */
+export interface ClientExerciseHistoryEntry {
+  sessionId: ID;
+  date: string;
+  title: string;
+  sets: ClientWorkoutSet[];
 }
 
 /** Per-day adherence for the counselor: how much of the plan was answered. */

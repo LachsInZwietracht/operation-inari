@@ -53,6 +53,16 @@ const AXIS_PROPS = {
   tick: { fontSize: 11, fill: "var(--color-muted-foreground)" },
 } as const
 
+/**
+ * Strength is a level, not a quantity: an eight-kilo gain plotted from zero is
+ * a flat line. Lines carry no area and so no obligation to a zero baseline —
+ * pad the observed range instead. Bars keep their zero.
+ */
+const PADDED_DOMAIN = [
+  (min: number) => Math.max(0, Math.floor(min - Math.max(2, Math.abs(min) * 0.08))),
+  (max: number) => Math.ceil(max + Math.max(2, Math.abs(max) * 0.08)),
+] as const
+
 interface TooltipEntry {
   name?: string
   value?: number
@@ -149,11 +159,16 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
     )
   }
 
+  const burnedByDate = new Map((stats?.burnedByDay ?? []).map((day) => [day.date, day.kcal]))
   const kcalData = (stats?.kcalByDay ?? []).map((day) => ({
     label: shortDate(day.date),
     kcal: day.kcal,
+    verbrannt: burnedByDate.get(day.date) ?? 0,
   }))
   const hasKcal = kcalData.some((day) => day.kcal > 0)
+  // Only drawn once there is something to draw: an all-zero series next to the
+  // food would read as "you burned nothing", when it means "no duration logged".
+  const hasBurned = kcalData.some((day) => day.verbrannt > 0)
 
   const adherenceData = (stats?.adherence ?? []).map((day) => ({
     label: shortDate(day.date),
@@ -166,18 +181,26 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
   )
 
   const exercises = (stats?.progress ?? []).slice(0, MAX_EXERCISES)
+  // Bodyweight exercises have no 1RM to plot. Leaving them in would put a name
+  // and a colour in the legend with no line under it — they keep their place in
+  // the text list below, which can say "8 Wdh." where the chart cannot.
+  const plottedExercises = exercises.filter((exercise) =>
+    exercise.points.some((point) => point.bestOneRepMaxKg !== undefined),
+  )
   const weeks = [
-    ...new Set(exercises.flatMap((exercise) => exercise.points.map((p) => p.weekStart))),
+    ...new Set(plottedExercises.flatMap((exercise) => exercise.points.map((p) => p.weekStart))),
   ].sort()
   const trainingData = weeks.map((weekStart) => {
     const row: Record<string, string | number> = {
       label: `KW ${format(parseISO(weekStart), "I", { locale: de })}`,
     }
-    for (const exercise of exercises) {
+    for (const exercise of plottedExercises) {
       const point = exercise.points.find((p) => p.weekStart === weekStart)
-      // Weight is the axis; bodyweight exercises have none and stay absent
-      // rather than being drawn as zero.
-      if (point?.bestWeightKg !== undefined) row[exercise.exerciseName] = point.bestWeightKg
+      // Estimated 1RM rather than the heaviest set, so more reps at the same
+      // weight reads as progress instead of a flat line. Bodyweight exercises
+      // have no weight to estimate from and stay absent rather than zero.
+      if (point?.bestOneRepMaxKg !== undefined)
+        row[exercise.exerciseName] = point.bestOneRepMaxKg
     }
     return row
   })
@@ -208,7 +231,9 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!hasKcal ? (
+          {/* Training alone is enough to draw the chart: someone who logs
+              workouts but no food should not be told there is nothing here. */}
+          {!hasKcal && !hasBurned ? (
             <p className="text-sm text-muted-foreground">
               Sobald du etwas ins Tagebuch einträgst, siehst du hier deinen Verlauf.
             </p>
@@ -236,15 +261,36 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
                     }}
                   />
                 )}
+                {hasBurned && <Legend wrapperStyle={{ fontSize: 12 }} />}
                 <Bar
                   dataKey="kcal"
-                  name="Kalorien"
+                  name="Gegessen"
                   fill={SERIES_COLORS[0]}
                   radius={[4, 4, 0, 0]}
-                  maxBarSize={22}
+                  maxBarSize={hasBurned ? 14 : 22}
                 />
+                {/* Side by side, never stacked and never subtracted: these are
+                    two different measurements of two different things, and only
+                    one of them was actually counted rather than estimated. */}
+                {hasBurned && (
+                  <Bar
+                    dataKey="verbrannt"
+                    name="Training (geschätzt)"
+                    fill={SERIES_COLORS[1]}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={14}
+                  />
+                )}
               </BarChart>
             </ResponsiveContainer>
+          )}
+
+          {hasBurned && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Der Trainingswert ist eine Schätzung aus Art, Dauer und Körpergewicht — er zeigt, was
+              zusätzlich zum Grundumsatz verbraucht wurde, und wird nicht von deinen Kalorien
+              abgezogen.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -306,27 +352,37 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Training</CardTitle>
             <CardDescription>
-              Bestes Gewicht je Übung und Kalenderwoche
+              Geschätztes Einer-Maximum je Übung und Kalenderwoche
               {exercises.length === MAX_EXERCISES ? " · deine drei häufigsten Übungen" : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {hasTraining ? (
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={trainingData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                {/* No negative left margin here: the axis carries a unit, and
+                    pulling it out of the frame clipped the leading digit. */}
+                <LineChart data={trainingData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="var(--color-border)" strokeOpacity={0.6} />
                   <XAxis dataKey="label" {...AXIS_PROPS} />
-                  <YAxis unit=" kg" width={52} {...AXIS_PROPS} />
+                  <YAxis unit=" kg" width={60} domain={[...PADDED_DOMAIN]} {...AXIS_PROPS} />
                   <Tooltip content={<ChartTooltip unit="kg" />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {exercises.map((exercise, index) => (
+                  {plottedExercises.map((exercise, index) => (
                     <Line
                       key={exercise.exerciseName}
                       type="monotone"
                       dataKey={exercise.exerciseName}
                       stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
                       strokeWidth={2}
-                      dot={{ r: 4, strokeWidth: 2, stroke: "var(--color-card)" }}
+                      // The fill has to be named: recharts defaults a Line's
+                      // dots to white, which on a light card makes a series
+                      // with a single week invisible.
+                      dot={{
+                        r: 4,
+                        strokeWidth: 2,
+                        stroke: "var(--color-card)",
+                        fill: SERIES_COLORS[index % SERIES_COLORS.length],
+                      }}
                       connectNulls
                     />
                   ))}

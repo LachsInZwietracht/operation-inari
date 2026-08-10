@@ -10,6 +10,7 @@ import {
 } from "@/lib/client-stats";
 import { isClientModuleEnabled } from "@/lib/client-modules";
 import { summarizeExerciseProgress } from "@/lib/client-training";
+import { estimateActivityEnergy } from "@/lib/energy-expenditure";
 import { fetchActiveLinksForClient } from "@/lib/data/client-links";
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client";
 import { fetchClientAdherence } from "@/lib/data/client-plan-client";
@@ -31,6 +32,8 @@ import type { ClientAdherenceDay, ClientExerciseProgress, Food } from "@/lib/typ
 export interface ClientStats {
   kcalByDay: ClientKcalDay[];
   averageKcal: number;
+  /** Estimated energy spent training, same window and same unit as the food. */
+  burnedByDay: ClientKcalDay[];
   adherence: ClientAdherenceDay[];
   progress: ClientExerciseProgress[];
 }
@@ -117,9 +120,28 @@ export async function fetchClientStats(
     }
   }
 
-  const progress = isClientModuleEnabled("training")
-    ? summarizeExerciseProgress(await fetchClientWorkoutSessions(clientUserId, 60, client))
-    : [];
+  let progress: ClientExerciseProgress[] = [];
+  let burnedByDay: ClientKcalDay[] = [];
+  if (isClientModuleEnabled("training")) {
+    const sessions = await fetchClientWorkoutSessions(clientUserId, 60, client);
+    progress = summarizeExerciseProgress(sessions);
 
-  return { kcalByDay, averageKcal, adherence, progress };
+    // Derived here rather than stored on the session, from the weight recorded
+    // at the time. Sessions with no duration contribute nothing instead of a
+    // guess, so the series shows what was measured, not what was assumed.
+    const burnedByDate = new Map<string, number>();
+    for (const session of sessions) {
+      const energy = estimateActivityEnergy({
+        activityId: session.activityKind,
+        intensity: session.intensity,
+        minutes: session.durationMinutes,
+        weightKg: session.bodyWeightKg,
+      });
+      if (!energy) continue;
+      burnedByDate.set(session.date, (burnedByDate.get(session.date) ?? 0) + energy.netKcal);
+    }
+    burnedByDay = buildKcalSeries(burnedByDate, range.to);
+  }
+
+  return { kcalByDay, averageKcal, burnedByDay, adherence, progress };
 }

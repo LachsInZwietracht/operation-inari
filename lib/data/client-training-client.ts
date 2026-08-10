@@ -9,6 +9,10 @@ interface SessionRow {
   session_date: string;
   title: string;
   notes: string | null;
+  duration_minutes: number | null;
+  activity_kind: string | null;
+  intensity: string | null;
+  body_weight_kg: string | number | null;
   client_workout_sets: SetRow[] | null;
 }
 
@@ -23,7 +27,8 @@ interface SetRow {
 }
 
 const SESSION_COLUMNS =
-  "id,session_date,title,notes,client_workout_sets(id,session_id,exercise_name,set_index,reps,weight_kg,notes)";
+  "id,session_date,title,notes,duration_minutes,activity_kind,intensity,body_weight_kg," +
+  "client_workout_sets(id,session_id,exercise_name,set_index,reps,weight_kg,notes)";
 
 function resolveClient(supabase?: SupabaseClient) {
   return supabase ?? createBrowserSupabaseClient();
@@ -54,6 +59,10 @@ function mapSessionRow(row: SessionRow): ClientWorkoutSession {
     date: row.session_date,
     title: row.title,
     notes: row.notes ?? undefined,
+    durationMinutes: row.duration_minutes ?? undefined,
+    activityKind: row.activity_kind ?? undefined,
+    intensity: row.intensity ?? undefined,
+    bodyWeightKg: row.body_weight_kg === null ? undefined : Number(row.body_weight_kg),
     sets: (row.client_workout_sets ?? [])
       .map(mapSetRow)
       .sort((a, b) => a.setIndex - b.setIndex),
@@ -85,8 +94,18 @@ export async function fetchClientWorkoutSessions(
   return ((data ?? []) as unknown as SessionRow[]).map(mapSessionRow);
 }
 
+export interface ClientWorkoutSessionInput {
+  date: string;
+  title: string;
+  notes?: string;
+  durationMinutes?: number;
+  activityKind?: string;
+  intensity?: string;
+  bodyWeightKg?: number;
+}
+
 export async function createClientWorkoutSession(
-  input: { date: string; title: string; notes?: string },
+  input: ClientWorkoutSessionInput,
   supabase?: SupabaseClient,
 ): Promise<ClientWorkoutSession> {
   const client = resolveClient(supabase);
@@ -99,12 +118,44 @@ export async function createClientWorkoutSession(
       session_date: input.date,
       title: input.title,
       notes: input.notes ?? null,
+      duration_minutes: input.durationMinutes ?? null,
+      activity_kind: input.activityKind ?? null,
+      intensity: input.intensity ?? null,
+      body_weight_kg: input.bodyWeightKg ?? null,
     })
     .select(SESSION_COLUMNS)
     .single();
 
   if (error) throw new Error(error.message);
   return mapSessionRow(data as unknown as SessionRow);
+}
+
+/**
+ * Patches an existing session. Duration in particular is usually known only
+ * once the session is over, long after it was created to hold the first set.
+ */
+export async function updateClientWorkoutSession(
+  sessionId: string,
+  patch: Partial<Omit<ClientWorkoutSessionInput, "date">> & { date?: string },
+  supabase?: SupabaseClient,
+): Promise<void> {
+  const client = resolveClient(supabase);
+
+  const row: Record<string, unknown> = {};
+  if (patch.date !== undefined) row.session_date = patch.date;
+  if (patch.title !== undefined) row.title = patch.title;
+  if (patch.notes !== undefined) row.notes = patch.notes || null;
+  if (patch.durationMinutes !== undefined) row.duration_minutes = patch.durationMinutes || null;
+  if (patch.activityKind !== undefined) row.activity_kind = patch.activityKind || null;
+  if (patch.intensity !== undefined) row.intensity = patch.intensity || null;
+  if (patch.bodyWeightKg !== undefined) row.body_weight_kg = patch.bodyWeightKg || null;
+  if (Object.keys(row).length === 0) return;
+
+  const { error } = await client
+    .from("client_workout_sessions")
+    .update(row)
+    .eq("id", sessionId);
+  if (error) throw new Error(error.message);
 }
 
 export async function addClientWorkoutSet(

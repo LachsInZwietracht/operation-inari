@@ -204,6 +204,25 @@ both flags, redemption sets both).
 
 **M3 — Training**: ✅ shipped without the exercise catalog — session logging, sets, derived weekly progression, counselor read under `consent_training`. A catalog remains optional and additive.
 
+**M3.1 — Training, second pass**: ✅ shipped in three steps, in this order because
+the first decides whether the module is used at all and the third is the only one
+that needs a migration.
+
+1. *Logging speed* — prefill from the previous set, "Speichern & weiter", per-exercise
+   `+ Satz`, exercise chips read back out of the last session with the same title,
+   rest timer. No schema.
+2. *Progress* — estimated 1RM (Epley) and volume alongside the heaviest set,
+   personal records, a per-exercise detail view with a measure toggle. No schema.
+3. *Energy* — `duration_minutes`, `activity_kind`, `intensity`, `body_weight_kg`
+   (migration `20260810000077`) plus the shared MET table in
+   `lib/energy-expenditure.ts`, which also replaced the counselor's flat activity
+   factor. The kcal figure is derived, net of resting metabolism, carries a range,
+   and is never subtracted from the food total.
+
+Still deliberately absent: an exercise catalog with muscle groups, wearable import,
+supersets/RPE/tempo, and training plans as a stored entity — the exercise chips
+cover the repeat case without them.
+
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 
 ## Risks

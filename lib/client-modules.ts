@@ -46,6 +46,9 @@ export const CLIENT_MODULES: ClientModule[] = [
     counselorSection: true,
   },
   {
+    // One caveat for the delete-the-five-paths rule: the energy estimate reads
+    // `lib/energy-expenditure.ts`, which the counselor's activity form uses too.
+    // Removing this module leaves that file in place.
     id: "training",
     label: "Training",
     route: "/klient/training",
