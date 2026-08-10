@@ -34,9 +34,16 @@ import { formatDate, formatNumber } from "@/lib/format"
 import type { ActivityEntry, AnthropometricEntry, CounselingSession, Patient } from "@/lib/types"
 
 interface PatientStatsTabProps {
-  patient: Patient
+  /**
+   * Narrowed to what the charts actually read. The counselor passes a whole
+   * Patient (which satisfies this), while the client surface can pass the two
+   * fields it is allowed to see — the rest of the record, notes included,
+   * never has to cross into the client app to draw these charts.
+   */
+  patient: Pick<Patient, "firstName" | "goalWeight">
   entries: AnthropometricEntry[]
   activities: ActivityEntry[]
+  /** Counselor sessions are counted, never shown; empty in the client surface. */
   sessions: CounselingSession[]
 }
 
@@ -347,7 +354,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard icon={Scale} label="Aktuelles Gewicht" value={`${formatNumber(latest.weight, 1)} kg`}>
               {filtered.length > 1 ? (
                 <DeltaBadge delta={weightDelta} unit="kg" />
@@ -382,13 +389,17 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
             </StatCard>
             <StatCard icon={CalendarRange} label="Zeitraum" value={`${filtered.length} Messungen`}>
               <span className="text-xs text-muted-foreground">
-                {sessionsInRange.length} Beratungen · {spanDays > 0 ? `${spanDays} Tage` : "1 Tag"}
+                {/* Omitted rather than shown as zero: the client surface has no
+                    access to sessions, and "0 Beratungen" would be a claim,
+                    not a blank. */}
+                {sessionsInRange.length > 0 && `${sessionsInRange.length} Beratungen · `}
+                {spanDays > 0 ? `${spanDays} Tage` : "1 Tag"}
               </span>
             </StatCard>
           </div>
 
           {bodyCompositionLatest.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               {bodyCompositionLatest.map((metric) => (
                 <StatCard key={metric.label} icon={metric.icon} label={metric.label} value={metric.value}>
                   <span className="text-xs text-muted-foreground">Stand {formatDate(latest.date)}</span>
@@ -446,7 +457,14 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
                   y={goalWeight}
                   stroke="var(--color-chart-4)"
                   strokeDasharray="4 4"
-                  label={{ value: "Ziel", position: "right", fontSize: 11, fill: "var(--color-chart-4)" }}
+                  // Inside the plot: on a phone-width chart a label anchored
+                  // outside the axis gets clipped to "Zi".
+                  label={{
+                    value: "Ziel",
+                    position: "insideBottomRight",
+                    fontSize: 11,
+                    fill: "var(--color-chart-4)",
+                  }}
                 />
               )}
               <Area

@@ -28,8 +28,13 @@ import {
 import { todayIsoDate } from "@/lib/client-mode"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { formatSet } from "@/lib/client-training"
+import { PatientStatsTab } from "@/components/patient-stats-tab"
 import { CLIENT_STATS_WINDOW_DAYS } from "@/lib/client-stats"
 import { fetchClientStats, type ClientStats } from "@/lib/data/client-stats-client"
+import {
+  fetchClientPatientHistory,
+  type ClientPatientHistory,
+} from "@/lib/data/client-history-client"
 
 /**
  * Colors come from the app's chart tokens, in fixed order, never cycled. The
@@ -91,6 +96,7 @@ function shortDate(iso: string) {
 
 export function ClientStatsView({ clientUserId }: { clientUserId: string | null }) {
   const [stats, setStats] = useState<ClientStats | null>(null)
+  const [history, setHistory] = useState<ClientPatientHistory | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -99,9 +105,19 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
       return
     }
     try {
-      setStats(await fetchClientStats(clientUserId, todayIsoDate()))
-    } catch (error) {
-      console.error("Failed to load client stats:", error)
+      // Both sides of the picture, but independently: the measurement history
+      // only exists when a counselor keeps one, and its absence must not stop
+      // the client's own numbers from rendering.
+      const [ownStats, patientHistory] = await Promise.allSettled([
+        fetchClientStats(clientUserId, todayIsoDate()),
+        fetchClientPatientHistory(),
+      ])
+
+      if (ownStats.status === "fulfilled") setStats(ownStats.value)
+      else console.error("Failed to load client stats:", ownStats.reason)
+
+      if (patientHistory.status === "fulfilled") setHistory(patientHistory.value)
+      else console.error("Failed to load patient history:", patientHistory.reason)
     } finally {
       setIsLoading(false)
     }
@@ -170,6 +186,17 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Verlauf</h1>
+
+      {/* The measurement history your counselor keeps — the same charts they
+          see, over the whole record rather than a fixed window. */}
+      {history?.patient && history.measurements.length > 0 && (
+        <PatientStatsTab
+          patient={history.patient}
+          entries={history.measurements}
+          activities={history.activities}
+          sessions={[]}
+        />
+      )}
 
       <Card>
         <CardHeader className="pb-2">
