@@ -107,7 +107,7 @@ test("counselor invites, client redeems, logs a meal, counselor sees it", async 
   await breakfast.getByRole("button", { name: "Hinzufügen" }).click();
 
   const dialog = page.getByRole("dialog");
-  await dialog.getByPlaceholder("z. B. Haferflocken").fill("Smoketest Hafer");
+  await dialog.getByPlaceholder("Lebensmittel, Rezept oder Mahlzeit").fill("Smoketest Hafer");
   await dialog.getByRole("button", { name: FOOD_NAME }).click({ timeout: 15_000 });
 
   await dialog.getByLabel("Menge in Gramm").fill("200");

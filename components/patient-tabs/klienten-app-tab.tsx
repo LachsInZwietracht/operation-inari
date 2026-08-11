@@ -16,14 +16,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  CLIENT_LOG_NUTRIENT_IDS,
-  calculateClientLogNutrients,
-} from "@/lib/client-food-log"
+import { calculateClientLogNutrients } from "@/lib/client-food-log"
 import { formatInviteCode, todayIsoDate } from "@/lib/client-mode"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client"
+import { hydrateClientFoods } from "@/lib/data/client-custom-foods-client"
+import { fetchClientRecipeFacts } from "@/lib/data/client-plan-nutrition-client"
 import { fetchClientAdherence } from "@/lib/data/client-plan-client"
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client"
 import { fetchClientLinkForPatient } from "@/lib/data/client-links"
@@ -35,6 +34,7 @@ import type {
   ClientLink,
   ClientWorkoutSession,
   Food,
+  NutrientValue,
   Patient,
 } from "@/lib/types"
 
@@ -46,6 +46,9 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
   const [isLoading, setIsLoading] = useState(true)
   const [days, setDays] = useState<ClientFoodLogDay[]>([])
   const [foods, setFoods] = useState<Map<string, Food>>(new Map())
+  const [recipeFacts, setRecipeFacts] = useState<
+    Map<string, { name: string; perPortion: NutrientValue[] }>
+  >(new Map())
   const [adherence, setAdherence] = useState<ClientAdherenceSummary>({ byDay: [], bySlot: [] })
   const [workouts, setWorkouts] = useState<ClientWorkoutSession[]>([])
   const [isPending, startTransition] = useTransition()
@@ -88,25 +91,26 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
         setWorkouts(await fetchClientWorkoutSessions(clientUserId, 5, supabase))
       }
 
-      const foodIds = [
-        ...new Set(
+      // Includes the client's own products, which the by-ids endpoint strips —
+      // under an active consented link they are readable through RLS, and
+      // without them a scanned product would show as a nameless empty line.
+      setFoods(
+        await hydrateClientFoods(
           loaded.flatMap((day) =>
             day.entries.map((entry) => entry.foodId).filter((id): id is string => Boolean(id)),
           ),
+          supabase,
         ),
-      ]
+      )
 
-      if (foodIds.length > 0) {
-        const response = await fetch("/api/foods/by-ids", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: foodIds, nutrientIds: CLIENT_LOG_NUTRIENT_IDS }),
-        })
-        if (response.ok) {
-          const loadedFoods = (await response.json()) as Food[]
-          setFoods(new Map(loadedFoods.map((food) => [food.id, food])))
-        }
-      }
+      setRecipeFacts(
+        await fetchClientRecipeFacts(
+          loaded.flatMap((day) =>
+            day.entries.map((entry) => entry.recipeId).filter((id): id is string => Boolean(id)),
+          ),
+          supabase,
+        ),
+      )
     } catch (error) {
       console.error("Failed to load client food log:", error)
     }
@@ -342,7 +346,11 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
             ) : (
               <ul className="divide-y">
                 {days.map((day) => {
-                  const totals = calculateClientLogNutrients(day.entries, foods)
+                  const totals = calculateClientLogNutrients(
+                    day.entries,
+                    foods,
+                    new Map([...recipeFacts].map(([id, facts]) => [id, facts.perPortion])),
+                  )
                   return (
                     <li key={day.id} className="flex items-center justify-between gap-2 py-2">
                       <div>

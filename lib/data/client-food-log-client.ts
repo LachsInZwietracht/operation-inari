@@ -21,6 +21,7 @@ interface FoodLogEntryRow {
   food_id: string | null;
   custom_name: string | null;
   custom_nutrients: NutrientValue[] | null;
+  recipe_id: string | null;
   amount: number;
   notes: string | null;
   logged_at: string;
@@ -29,7 +30,7 @@ interface FoodLogEntryRow {
 
 const DAY_COLUMNS =
   "id,client_user_id,log_date,notes,water_ml," +
-  "client_food_log_entries(id,day_id,slot_type,source_type,food_id,custom_name,custom_nutrients,amount,notes,logged_at,sort_order)";
+  "client_food_log_entries(id,day_id,slot_type,source_type,food_id,custom_name,custom_nutrients,recipe_id,amount,notes,logged_at,sort_order)";
 
 function resolveClient(supabase?: SupabaseClient) {
   return supabase ?? createBrowserSupabaseClient();
@@ -51,6 +52,7 @@ function mapEntryRow(row: FoodLogEntryRow): ClientFoodLogEntry {
     foodId: row.food_id ?? undefined,
     customName: row.custom_name ?? undefined,
     customNutrients: row.custom_nutrients ?? undefined,
+    recipeId: row.recipe_id ?? undefined,
     amount: Number(row.amount ?? 0),
     notes: row.notes ?? undefined,
     loggedAt: row.logged_at,
@@ -153,6 +155,8 @@ export interface ClientFoodLogEntryInput {
   foodId?: string;
   customName?: string;
   customNutrients?: NutrientValue[];
+  recipeId?: string;
+  /** Grams, or portions when sourceType is "recipe". */
   amount: number;
   notes?: string;
   sortOrder?: number;
@@ -175,6 +179,7 @@ export async function addClientFoodLogEntry(
       food_id: input.foodId ?? null,
       custom_name: input.customName ?? null,
       custom_nutrients: input.customNutrients ?? null,
+      recipe_id: input.recipeId ?? null,
       amount: input.amount,
       notes: input.notes ?? null,
       sort_order: input.sortOrder ?? 0,

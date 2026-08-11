@@ -11,6 +11,7 @@ import type {
   ClientPlanDay,
   ClientPlanEntryFacts,
   Food,
+  NutrientValue,
   Recipe,
 } from "@/lib/types";
 
@@ -55,6 +56,55 @@ async function fetchFoodsByIds(ids: string[]): Promise<Food[]> {
  * Takes days rather than a single day so the statistics window resolves in one
  * round trip instead of fourteen.
  */
+/**
+ * Name and per-portion nutrients for recipes logged straight into the diary.
+ *
+ * The same pricing as a planned recipe, keyed by recipe id instead of by plan
+ * entry — a diary row points at the recipe itself.
+ */
+export async function fetchClientRecipeFacts(
+  recipeIds: string[],
+  supabase?: SupabaseClient,
+): Promise<Map<string, { name: string; perPortion: NutrientValue[] }>> {
+  const facts = new Map<string, { name: string; perPortion: NutrientValue[] }>();
+  const unique = [...new Set(recipeIds)];
+  if (unique.length === 0) return facts;
+
+  const client = resolveClient(supabase);
+  const { data, error } = await client
+    .from("recipes")
+    .select("id,name,servings,recipe_ingredients(food_id,amount)")
+    .in("id", unique);
+  if (error) throw new Error(error.message);
+
+  const recipes = (data ?? []) as unknown as RecipeRow[];
+  const foods = await fetchFoodsByIds(
+    recipes.flatMap((recipe) =>
+      (recipe.recipe_ingredients ?? []).map((ingredient) => ingredient.food_id),
+    ),
+  );
+
+  for (const recipe of recipes) {
+    const ingredients = (recipe.recipe_ingredients ?? []).map((ingredient) => ({
+      foodId: ingredient.food_id,
+      amount: Number(ingredient.amount ?? 0),
+    }));
+    const total =
+      ingredients.length === 0
+        ? []
+        : calculateRecipeNutrients(
+            { ingredients, servings: recipe.servings ?? 1 } as Recipe,
+            foods,
+          );
+    facts.set(recipe.id, {
+      name: recipe.name,
+      perPortion: calculatePerServing(total, recipe.servings ?? 1),
+    });
+  }
+
+  return facts;
+}
+
 export async function fetchClientPlanFacts(
   plans: ClientPlanDay[],
   supabase?: SupabaseClient,

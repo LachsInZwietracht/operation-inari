@@ -4,7 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { addDays, format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, CopyPlus, Loader2, Plus, Trash2 } from "lucide-react"
+import {
+  BookmarkPlus,
+  ChevronLeft,
+  ChevronRight,
+  CopyPlus,
+  Loader2,
+  Plus,
+  Trash2,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { ClientAddEntryDialog } from "@/components/client/client-add-entry-dialog"
@@ -24,11 +32,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import {
-  CLIENT_LOG_NUTRIENT_IDS,
   calculateClientDayNutrients,
   calculatePlannedNutrients,
   clientLogEntryLabel,
   collectFrequentEntries,
+  formatLogAmount,
   previousDayEntries,
 } from "@/lib/client-food-log"
 import { resolveClientDayTarget } from "@/lib/client-targets"
@@ -43,7 +51,15 @@ import {
   updateClientFoodLogDay,
   updateClientFoodLogEntryAmount,
 } from "@/lib/data/client-food-log-client"
-import { fetchClientPlanFacts } from "@/lib/data/client-plan-nutrition-client"
+import {
+  fetchClientPlanFacts,
+  fetchClientRecipeFacts,
+} from "@/lib/data/client-plan-nutrition-client"
+import { hydrateClientFoods } from "@/lib/data/client-custom-foods-client"
+import {
+  fetchClientSavedMeals,
+  saveClientMeal,
+} from "@/lib/data/client-saved-meals-client"
 import {
   clearClientMealCompletion,
   fetchClientMealCompletions,
@@ -54,11 +70,13 @@ import type {
   ClientFoodLogDay,
   ClientFoodLogEntry,
   ClientMealCompletion,
+  ClientSavedMeal,
   ClientPlanDay,
   ClientPlanEntry,
   ClientPlanEntryFacts,
   Food,
   MealSlotType,
+  NutrientValue,
 } from "@/lib/types"
 import type { ClientEnergyReference } from "@/lib/client-targets"
 
@@ -72,17 +90,6 @@ const SLOT_ORDER: MealSlotType[] = [
 
 /** Long enough for a habit to show, short enough to stay one query. */
 const SUGGESTION_WINDOW_DAYS = 14
-
-async function fetchFoodsByIds(ids: string[]): Promise<Food[]> {
-  if (ids.length === 0) return []
-  const response = await fetch("/api/foods/by-ids", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids, nutrientIds: CLIENT_LOG_NUTRIENT_IDS }),
-  })
-  if (!response.ok) return []
-  return (await response.json()) as Food[]
-}
 
 export function ClientFoodLogView({
   date,
@@ -108,6 +115,10 @@ export function ClientFoodLogView({
   const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
   const [energy, setEnergy] = useState<ClientEnergyReference | null>(null)
   const [recentDays, setRecentDays] = useState<ClientFoodLogDay[]>([])
+  const [savedMeals, setSavedMeals] = useState<ClientSavedMeal[]>([])
+  const [recipeFacts, setRecipeFacts] = useState<
+    Map<string, { name: string; perPortion: NutrientValue[] }>
+  >(new Map())
   const [editingEntry, setEditingEntry] = useState<ClientFoodLogEntry | null>(null)
 
   const planEnabled = isClientModuleEnabled("plan")
@@ -125,11 +136,13 @@ export function ClientFoodLogView({
     if (missing.length === 0) return
 
     let cancelled = false
-    void fetchFoodsByIds([...new Set(missing)]).then((loaded) => {
-      if (cancelled || loaded.length === 0) return
+    // Own products are read through RLS and merged in — the by-ids endpoint
+    // strips custom rows, so they would otherwise arrive nameless and free.
+    void hydrateClientFoods([...new Set(missing)]).then((loaded) => {
+      if (cancelled || loaded.size === 0) return
       setFoods((prev) => {
         const next = new Map(prev)
-        for (const food of loaded) next.set(food.id, food)
+        for (const [id, food] of loaded) next.set(id, food)
         return next
       })
     })
@@ -207,6 +220,51 @@ export function ClientFoodLogView({
     }
   }, [clientUserId, date])
 
+  useEffect(() => {
+    if (!clientUserId) return
+    let cancelled = false
+
+    void fetchClientSavedMeals()
+      .then((meals) => {
+        if (!cancelled) setSavedMeals(meals)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [clientUserId])
+
+  // Recipes logged straight into the diary need pricing, exactly like planned
+  // ones — the row points at the recipe, not at a copy of its numbers.
+  const loggedRecipeIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          (day?.entries ?? [])
+            .map((entry) => entry.recipeId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ].sort(),
+    [day],
+  )
+  const recipeIdKey = loggedRecipeIds.join(",")
+
+  useEffect(() => {
+    if (recipeIdKey === "") return
+    let cancelled = false
+
+    void fetchClientRecipeFacts(recipeIdKey.split(","))
+      .then((facts) => {
+        if (!cancelled) setRecipeFacts(facts)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [recipeIdKey])
+
   const refreshDay = useCallback(async () => {
     if (!clientUserId) return
     setIsRefreshing(true)
@@ -226,11 +284,14 @@ export function ClientFoodLogView({
       calculateClientDayNutrients({
         entries: day?.entries ?? [],
         foods,
+        recipeFacts: new Map(
+          [...recipeFacts].map(([id, facts]) => [id, facts.perPortion]),
+        ),
         planEntries,
         completions,
         planFacts,
       }),
-    [day, foods, planEntries, completions, planFacts],
+    [day, foods, recipeFacts, planEntries, completions, planFacts],
   )
 
   // The day's own prescription outranks a standing target: it is the most
@@ -242,6 +303,11 @@ export function ClientFoodLogView({
         energy,
       }),
     [planEntries, planFacts, energy],
+  )
+
+  const recipeNames = useMemo(
+    () => new Map([...recipeFacts].map(([id, facts]) => [id, facts.name])),
+    [recipeFacts],
   )
 
   const entriesBySlot = useMemo(() => {
@@ -387,6 +453,38 @@ export function ClientFoodLogView({
     [day, date],
   )
 
+  /** Saves a filled slot under a name, so tomorrow it is one tap. */
+  const saveSlotAsMeal = useCallback(
+    async (slot: MealSlotType, entries: ClientFoodLogEntry[]) => {
+      const suggested = MEAL_SLOT_LABELS[slot]
+      const name = window.prompt("Name der Mahlzeit", suggested)?.trim()
+      if (!name) return
+
+      try {
+        const meal = await saveClientMeal({
+          name,
+          // Recipe entries are left out: a saved meal is a set of foods, and a
+          // recipe inside one would need a unit this shape does not carry.
+          items: entries
+            .filter((entry) => entry.sourceType !== "recipe")
+            .map((entry) => ({
+              sourceType: entry.sourceType,
+              foodId: entry.foodId,
+              customName: entry.customName,
+              customNutrients: entry.customNutrients,
+              amount: entry.amount,
+            })),
+        })
+        setSavedMeals((prev) => [...prev.filter((row) => row.id !== meal.id), meal])
+        toast.success(`„${meal.name}" gespeichert.`)
+      } catch (error) {
+        console.error("Failed to save the meal:", error)
+        toast.error("Die Mahlzeit konnte nicht gespeichert werden.")
+      }
+    },
+    [],
+  )
+
   async function handleDelete(entryId: string) {
     try {
       await deleteClientFoodLogEntry(entryId)
@@ -465,6 +563,16 @@ export function ClientFoodLogView({
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{MEAL_SLOT_LABELS[slot]}</CardTitle>
               <div className="flex items-center">
+                {entries.some((entry) => entry.sourceType !== "recipe") && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Als Mahlzeit speichern"
+                    onClick={() => void saveSlotAsMeal(slot, entries)}
+                  >
+                    <BookmarkPlus className="h-4 w-4" />
+                  </Button>
+                )}
                 {repeatable && (
                   <Button variant="ghost" size="sm" onClick={() => void copyPreviousDay(slot)}>
                     <CopyPlus className="mr-1 h-4 w-4" />
@@ -503,10 +611,10 @@ export function ClientFoodLogView({
                         onClick={() => setEditingEntry(entry)}
                       >
                         <span className="block truncate text-sm">
-                          {clientLogEntryLabel(entry, foods)}
+                          {clientLogEntryLabel(entry, foods, recipeNames)}
                         </span>
                         <span className="text-xs text-muted-foreground underline underline-offset-2">
-                          {entry.amount} g
+                          {formatLogAmount(entry)}
                         </span>
                       </button>
                       <Button
@@ -550,6 +658,7 @@ export function ClientFoodLogView({
           dayId={day?.id ?? null}
           suggestions={collectFrequentEntries(recentDays, addSlot)}
           foods={foods}
+          savedMeals={savedMeals}
           onClose={() => setAddSlot(null)}
           onSaved={() => {
             setAddSlot(null)
@@ -560,7 +669,7 @@ export function ClientFoodLogView({
 
       {editingEntry && (
         <ClientEntryAmountDialog
-          label={clientLogEntryLabel(editingEntry, foods)}
+          label={clientLogEntryLabel(editingEntry, foods, recipeNames)}
           amount={editingEntry.amount}
           onClose={() => setEditingEntry(null)}
           onSave={(amount) => {

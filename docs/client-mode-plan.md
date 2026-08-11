@@ -237,8 +237,21 @@ cover the repeat case without them.
    water in `water_ml` (migration `20260811000080`), plus per-meal adherence for
    the counselor.
 
+**M5 — Finding things, and a training section**: ✅
+
+1. *Training in the Verlauf* — sessions and volume per week, personal records,
+   and section headings splitting the page into Ernährung and Training.
+2. *Hits identify themselves* — manufacturer and kcal per 100 g in the result
+   list, full macros on the picked item.
+3. *One search instead of tabs* — foods, recipes and saved meals in one list
+   with type badges and filter chips.
+4. *Custom products as real client-owned foods* (migration `…81`), *saved
+   meals* (`…82`) and *recipes logged as recipes* (`…83`).
+
 Still deliberately absent: photo recognition, micronutrient traffic lights in the
-client view (that is the counselor's work), client-authored recipes, streaks.
+client view (that is the counselor's work), client-authored recipes with
+ingredients and instructions — saved meals cover the case people actually have —
+and streaks.
 
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 

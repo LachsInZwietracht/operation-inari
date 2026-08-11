@@ -1,15 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { format, parseISO, subDays } from "date-fns";
 
-import { calculateClientDayNutrients, CLIENT_LOG_NUTRIENT_IDS } from "@/lib/client-food-log";
+import { calculateClientDayNutrients } from "@/lib/client-food-log";
 import {
   averageOfLoggedDays,
   buildKcalSeries,
   CLIENT_STATS_WINDOW_DAYS,
+  summarizeTrainingWeeks,
   type ClientKcalDay,
+  type ClientTrainingWeek,
 } from "@/lib/client-stats";
 import { isClientModuleEnabled } from "@/lib/client-modules";
-import { summarizeExerciseProgress } from "@/lib/client-training";
+import { findPersonalRecords, setVolumeKg, summarizeExerciseProgress } from "@/lib/client-training";
 import { estimateActivityEnergy } from "@/lib/energy-expenditure";
 import { fetchActiveLinksForClient } from "@/lib/data/client-links";
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client";
@@ -18,7 +20,11 @@ import {
   fetchClientMealCompletionsForPlans,
   fetchClientPlanDays,
 } from "@/lib/data/client-plan-client";
-import { fetchClientPlanFacts } from "@/lib/data/client-plan-nutrition-client";
+import {
+  fetchClientPlanFacts,
+  fetchClientRecipeFacts,
+} from "@/lib/data/client-plan-nutrition-client";
+import { hydrateClientFoods } from "@/lib/data/client-custom-foods-client";
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client";
 import { getNutrientValue } from "@/lib/nutrients";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -27,8 +33,8 @@ import type {
   ClientExerciseProgress,
   ClientMealCompletion,
   ClientPlanDay,
+  ClientPersonalRecord,
   ClientPlanEntryFacts,
-  Food,
 } from "@/lib/types";
 
 /**
@@ -48,6 +54,10 @@ export interface ClientStats {
   burnedByDay: ClientKcalDay[];
   adherence: ClientAdherenceDay[];
   progress: ClientExerciseProgress[];
+  /** Training by week — the grain people actually plan in. */
+  trainingWeeks: ClientTrainingWeek[];
+  /** Best set ever per exercise, newest first. */
+  records: ClientPersonalRecord[];
 }
 
 function resolveClient(supabase?: SupabaseClient) {
@@ -79,18 +89,22 @@ async function loadKcalByDay(
     ),
   ];
 
-  let foods = new Map<string, Food>();
-  if (foodIds.length > 0) {
-    const response = await fetch("/api/foods/by-ids", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: foodIds, nutrientIds: CLIENT_LOG_NUTRIENT_IDS }),
-    });
-    if (response.ok) {
-      const loaded = (await response.json()) as Food[];
-      foods = new Map(loaded.map((food) => [food.id, food]));
-    }
-  }
+  const foods = await hydrateClientFoods(foodIds, supabase);
+
+  // Recipes logged straight into the diary are priced the same way planned
+  // ones are; without this they would count as nothing.
+  const recipeFacts = new Map(
+    [
+      ...(
+        await fetchClientRecipeFacts(
+          days.flatMap((day) =>
+            day.entries.map((entry) => entry.recipeId).filter((id): id is string => Boolean(id)),
+          ),
+          supabase,
+        )
+      ).entries(),
+    ].map(([id, facts]) => [id, facts.perPortion]),
+  );
 
   // The plan side, guarded like every other cross-module read here.
   let plans: ClientPlanDay[] = [];
@@ -120,6 +134,7 @@ async function loadKcalByDay(
         calculateClientDayNutrients({
           entries: logByDate.get(date)?.entries ?? [],
           foods,
+          recipeFacts,
           planEntries: planByDate.get(date)?.entries ?? [],
           completions,
           planFacts,
@@ -168,9 +183,30 @@ export async function fetchClientStats(
 
   let progress: ClientExerciseProgress[] = [];
   let burnedByDay: ClientKcalDay[] = [];
+  let trainingWeeks: ClientTrainingWeek[] = [];
+  let records: ClientPersonalRecord[] = [];
   if (isClientModuleEnabled("training")) {
     const sessions = await fetchClientWorkoutSessions(clientUserId, 60, client);
     progress = summarizeExerciseProgress(sessions);
+    records = [...findPersonalRecords(sessions).values()].sort((a, b) =>
+      b.date.localeCompare(a.date),
+    );
+
+    trainingWeeks = summarizeTrainingWeeks(
+      sessions.map((session) => ({
+        date: session.date,
+        durationMinutes: session.durationMinutes,
+        volumeKg: session.sets.reduce((sum, set) => sum + setVolumeKg(set), 0),
+        kcal:
+          estimateActivityEnergy({
+            activityId: session.activityKind,
+            intensity: session.intensity,
+            minutes: session.durationMinutes,
+            weightKg: session.bodyWeightKg,
+          })?.netKcal ?? 0,
+      })),
+      today,
+    );
 
     // Derived here rather than stored on the session, from the weight recorded
     // at the time. Sessions with no duration contribute nothing instead of a
@@ -189,5 +225,5 @@ export async function fetchClientStats(
     burnedByDay = buildKcalSeries(burnedByDate, range.to);
   }
 
-  return { kcalByDay, averageKcal, burnedByDay, adherence, progress };
+  return { kcalByDay, averageKcal, burnedByDay, adherence, progress, trainingWeeks, records };
 }
