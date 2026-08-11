@@ -14,6 +14,7 @@ import {
   type FilterFieldDefinition,
 } from "@/components/list-filter-bar"
 import { ListPageShell } from "@/components/list-page-shell"
+import { ListRowSkeleton } from "@/components/list-row-skeleton"
 import { PageBreadcrumb } from "@/components/page-breadcrumb"
 import { PatientIntakeInviteDialog } from "@/components/patient-intake-invite-dialog"
 import { PatientIntakeReview } from "@/components/patient-intake-review"
@@ -70,6 +71,7 @@ const SORT_OPTIONS = [
 /** Every URL parameter this page owns, with the value that means "unset". */
 const URL_DEFAULTS = {
   view: "liste",
+  name: "",
   stufe: "",
   indikation: "",
   gruppierung: "stufe",
@@ -86,13 +88,23 @@ export function AufnahmenPageClient({
   const { patients } = usePatients({ initialPatients })
   const { sessions } = useCounseling({ initialSessions })
   const { appointments } = usePracticeAppointments({ initialAppointments })
-  const { links, submissions, createLink, applySubmission } = usePatientIntake()
+  const {
+    links,
+    submissions,
+    createLink,
+    applySubmission,
+    isLoading: intakeLoading,
+  } = usePatientIntake()
 
   const { values, setValue, clearValue } = useListUrlState({ defaults: URL_DEFAULTS })
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reviewRow, setReviewRow] = useState<IntakeRow | null>(null)
   const [applying, setApplying] = useState(false)
+  // Rows whose last action failed. The row stays exactly where it is with its
+  // action disabled — dropping it would lose the practitioner's place in a list
+  // they were working through.
+  const [failedRowIds, setFailedRowIds] = useState<ReadonlySet<string>>(new Set())
   // Set once a submission is applied, so the dialog can hand off to the plan
   // instead of silently closing and leaving the user to re-navigate.
   const [appliedPatient, setAppliedPatient] = useState<{ id: string; name: string } | null>(
@@ -116,10 +128,19 @@ export function AufnahmenPageClient({
   )
 
   const visibleRows = useMemo(() => {
+    const needle = values.name.trim().toLowerCase()
+
     const filtered = rows.filter((row) => {
       if (values.stufe && row.stage !== values.stufe) return false
       if (values.indikation && !row.patient?.indications?.includes(values.indikation)) {
         return false
+      }
+      if (needle) {
+        // Match either order, so "Schneider" and "Maria" both find the row.
+        const haystack = row.patient
+          ? `${row.patient.firstName} ${row.patient.lastName} ${row.patient.lastName} ${row.patient.firstName}`
+          : row.displayName
+        if (!haystack.toLowerCase().includes(needle)) return false
       }
       return true
     })
@@ -130,10 +151,16 @@ export function AufnahmenPageClient({
       return [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName, "de"))
     }
     return filtered
-  }, [rows, values.stufe, values.indikation, values.sortierung])
+  }, [rows, values.name, values.stufe, values.indikation, values.sortierung])
 
   const filterFields = useMemo<FilterFieldDefinition[]>(
     () => [
+      {
+        field: "name",
+        label: "Name",
+        kind: "text",
+        placeholder: "Name oder Einladung…",
+      },
       {
         field: "stufe",
         label: "Stufe",
@@ -156,6 +183,15 @@ export function AufnahmenPageClient({
 
   const activeFilters = useMemo<ActiveListFilter[]>(() => {
     const active: ActiveListFilter[] = []
+    if (values.name) {
+      active.push({
+        field: "name",
+        label: "Name",
+        operator: "enthält",
+        value: values.name,
+        valueLabel: values.name,
+      })
+    }
     if (values.stufe) {
       active.push({
         field: "stufe",
@@ -175,7 +211,7 @@ export function AufnahmenPageClient({
       })
     }
     return active
-  }, [values.stufe, values.indikation])
+  }, [values.name, values.stufe, values.indikation])
 
   const handleAddFilter = useCallback(
     (filter: ActiveListFilter) => setValue(filter.field, filter.value),
@@ -186,10 +222,17 @@ export function AufnahmenPageClient({
     const submission = reviewRow?.pendingSubmission
     if (!submission) return
 
+    const rowId = reviewRow.id
     setApplying(true)
     try {
       const { patientId } = await applySubmission(submission.id)
       toast.success("Angaben übernommen")
+      setFailedRowIds((previous) => {
+        if (!previous.has(rowId)) return previous
+        const next = new Set(previous)
+        next.delete(rowId)
+        return next
+      })
       if (patientId) {
         setAppliedPatient({ id: patientId, name: reviewRow?.displayName ?? "Patient" })
       } else {
@@ -197,6 +240,8 @@ export function AufnahmenPageClient({
       }
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Übernahme fehlgeschlagen")
+      setFailedRowIds((previous) => new Set(previous).add(rowId))
+      setReviewRow(null)
     } finally {
       setApplying(false)
     }
@@ -249,20 +294,32 @@ export function AufnahmenPageClient({
         />
       }
     >
-      {visibleRows.length === 0 ? (
+      {intakeLoading && rows.length === 0 ? (
+        <ListRowSkeleton rows={6} height={44} />
+      ) : visibleRows.length === 0 ? (
         <IntakeEmptyState
           hasAnyRows={rows.length > 0}
           onInvite={() => setInviteOpen(true)}
         />
       ) : values.view === "zeit" ? (
-        <IntakeTimelineView rows={visibleRows} onReview={setReviewRow} now={now} />
+        <IntakeTimelineView
+          rows={visibleRows}
+          onReview={setReviewRow}
+          now={now}
+          failedRowIds={failedRowIds}
+        />
       ) : values.view === "board" ? (
-        <IntakeBoardView rows={visibleRows} onReview={setReviewRow} />
+        <IntakeBoardView
+          rows={visibleRows}
+          onReview={setReviewRow}
+          failedRowIds={failedRowIds}
+        />
       ) : (
         <IntakeListView
           rows={visibleRows}
           onReview={setReviewRow}
           grouped={values.gruppierung === "stufe"}
+          failedRowIds={failedRowIds}
         />
       )}
 

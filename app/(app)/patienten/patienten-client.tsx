@@ -14,12 +14,12 @@ import {
   type FilterFieldDefinition,
 } from "@/components/list-filter-bar"
 import { ListPageShell } from "@/components/list-page-shell"
+import { ListRowSkeleton } from "@/components/list-row-skeleton"
 import { PageBreadcrumb } from "@/components/page-breadcrumb"
 import { Button } from "@/components/ui/button"
 
 import { useCounseling } from "@/hooks/use-counseling"
 import { useListUrlState } from "@/hooks/use-list-url-state"
-import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { usePatients } from "@/hooks/use-patients"
 import { usePracticeAppointments } from "@/hooks/use-practice"
 import { INDICATION_OPTIONS } from "@/lib/constants"
@@ -61,6 +61,7 @@ const URGENCY_ORDER: CareUrgency[] = ["overdue", "due", "ok"]
 
 const URL_DEFAULTS = {
   view: "liste",
+  name: "",
   status: "",
   indikation: "",
   sortierung: "status",
@@ -81,10 +82,9 @@ export function PatientenPageClient({
   initialAppointments,
   renderedAt,
 }: PatientenPageClientProps) {
-  const { patients } = usePatients({ initialPatients })
+  const { patients, isLoadingRemote } = usePatients({ initialPatients })
   const { sessions } = useCounseling({ initialSessions })
   const { appointments } = usePracticeAppointments({ initialAppointments })
-  const { links, submissions } = usePatientIntake()
 
   const { values, setValue, clearValue } = useListUrlState({ defaults: URL_DEFAULTS })
   const now = useMemo(() => new Date(renderedAt), [renderedAt])
@@ -93,14 +93,17 @@ export function PatientenPageClient({
     () =>
       buildCareRows({
         patients,
-        links,
-        submissions,
+        // Care urgency is derived from plans, sessions and appointments only.
+        // Invitations belong to the intake half of the journey, so this page
+        // does not fetch them at all.
+        links: [],
+        submissions: [],
         planSummaries: initialPlanSummaries,
         sessions,
         appointments,
         now,
       }),
-    [patients, links, submissions, initialPlanSummaries, sessions, appointments, now],
+    [patients, initialPlanSummaries, sessions, appointments, now],
   )
 
   const livePlanCount = useMemo(
@@ -112,10 +115,18 @@ export function PatientenPageClient({
   )
 
   const visibleRows = useMemo(() => {
+    const needle = values.name.trim().toLowerCase()
+
     const filtered = rows.filter((row) => {
       if (values.status && row.urgency !== values.status) return false
       if (values.indikation && !row.patient.indications?.includes(values.indikation)) {
         return false
+      }
+      if (needle) {
+        // Match either order, so "Schneider" and "Maria" both find the row.
+        const { firstName, lastName } = row.patient
+        const haystack = `${firstName} ${lastName} ${lastName} ${firstName}`
+        if (!haystack.toLowerCase().includes(needle)) return false
       }
       return true
     })
@@ -128,7 +139,7 @@ export function PatientenPageClient({
     }
     // buildCareRows already returns urgency-then-name order.
     return filtered
-  }, [rows, values.status, values.indikation, values.sortierung])
+  }, [rows, values.name, values.status, values.indikation, values.sortierung])
 
   // The panels describe the whole caseload, not the current filter — narrowing
   // the table should not hide someone who has gone quiet.
@@ -145,6 +156,12 @@ export function PatientenPageClient({
 
   const filterFields = useMemo<FilterFieldDefinition[]>(
     () => [
+      {
+        field: "name",
+        label: "Name",
+        kind: "text",
+        placeholder: "Patientenname…",
+      },
       {
         field: "status",
         label: "Status",
@@ -167,6 +184,15 @@ export function PatientenPageClient({
 
   const activeFilters = useMemo<ActiveListFilter[]>(() => {
     const active: ActiveListFilter[] = []
+    if (values.name) {
+      active.push({
+        field: "name",
+        label: "Name",
+        operator: "enthält",
+        value: values.name,
+        valueLabel: values.name,
+      })
+    }
     if (values.status) {
       active.push({
         field: "status",
@@ -186,7 +212,7 @@ export function PatientenPageClient({
       })
     }
     return active
-  }, [values.status, values.indikation])
+  }, [values.name, values.status, values.indikation])
 
   const handleAddFilter = useCallback(
     (filter: ActiveListFilter) => setValue(filter.field, filter.value),
@@ -232,7 +258,9 @@ export function PatientenPageClient({
 
         <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
-            {visibleRows.length === 0 ? (
+            {isLoadingRemote && rows.length === 0 ? (
+              <ListRowSkeleton rows={5} height={56} />
+            ) : visibleRows.length === 0 ? (
               <CareEmptyState hasAnyRows={rows.length > 0} />
             ) : values.view === "zeit" ? (
               <CareTimelineView rows={visibleRows} now={now} />

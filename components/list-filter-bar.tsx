@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { ChevronDown, Plus, X } from "lucide-react"
 
 import {
@@ -31,7 +32,16 @@ export interface FilterFieldDefinition {
   label: string
   /** Relation shown between field and value. Defaults to "ist". */
   operator?: string
-  options: FilterValueOption[]
+  /**
+   * "select" offers a fixed list; "text" takes free input. Free text is a
+   * filter like any other rather than a separate search box, so a narrowed
+   * list always reads back the same way: field, operator, value.
+   */
+  kind?: "select" | "text"
+  /** Required for "select". Ignored for "text". */
+  options?: FilterValueOption[]
+  /** Placeholder for "text" fields. */
+  placeholder?: string
 }
 
 export interface ActiveListFilter {
@@ -90,6 +100,14 @@ export function ListFilterBar({
   onSortChange,
 }: ListFilterBarProps) {
   const canFilter = filterFields.length > 0 && Boolean(onAddFilter)
+  // Controlled so that committing a free-text filter closes the menu too.
+  // Radix closes on its own only for menu items, and the text field is not one.
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+
+  function addFilter(filter: ActiveListFilter) {
+    onAddFilter?.(filter)
+    setFilterMenuOpen(false)
+  }
 
   return (
     <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-b px-[18px]">
@@ -123,7 +141,7 @@ export function ListFilterBar({
       </div>
 
       {canFilter ? (
-        <DropdownMenu>
+        <DropdownMenu open={filterMenuOpen} onOpenChange={setFilterMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
@@ -141,23 +159,38 @@ export function ListFilterBar({
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent className="w-52">
-                    {field.options.map((option) => (
-                      <DropdownMenuItem
-                        key={option.value}
-                        className="text-[13px]"
-                        onSelect={() =>
-                          onAddFilter?.({
+                    {field.kind === "text" ? (
+                      <TextFilterInput
+                        field={field}
+                        onSubmit={(value) =>
+                          addFilter({
                             field: field.field,
                             label: field.label,
-                            operator: field.operator ?? "ist",
-                            value: option.value,
-                            valueLabel: option.label,
+                            operator: field.operator ?? "enthält",
+                            value,
+                            valueLabel: value,
                           })
                         }
-                      >
-                        {option.label}
-                      </DropdownMenuItem>
-                    ))}
+                      />
+                    ) : (
+                      field.options?.map((option) => (
+                        <DropdownMenuItem
+                          key={option.value}
+                          className="text-[13px]"
+                          onSelect={() =>
+                            addFilter({
+                              field: field.field,
+                              label: field.label,
+                              operator: field.operator ?? "ist",
+                              value: option.value,
+                              valueLabel: option.label,
+                            })
+                          }
+                        >
+                          {option.label}
+                        </DropdownMenuItem>
+                      ))
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuPortal>
               </DropdownMenuSub>
@@ -203,6 +236,44 @@ export function ListFilterBar({
           onChange={onSortChange}
         />
       </div>
+    </div>
+  )
+}
+
+interface TextFilterInputProps {
+  field: FilterFieldDefinition
+  onSubmit: (value: string) => void
+}
+
+/**
+ * Free-text entry inside the filter menu.
+ *
+ * Committed on Enter rather than as you type: a filter that rewrites the URL on
+ * every keystroke fills the history and makes the list flicker while you are
+ * still deciding what to look for.
+ */
+function TextFilterInput({ field, onSubmit }: TextFilterInputProps) {
+  const [draft, setDraft] = useState("")
+
+  return (
+    <div className="p-1">
+      <input
+        type="search"
+        value={draft}
+        autoFocus
+        placeholder={field.placeholder ?? `${field.label}…`}
+        aria-label={field.label}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          // The menu treats printable keys as type-ahead navigation, which
+          // would steal every keystroke from this input.
+          event.stopPropagation()
+          if (event.key !== "Enter") return
+          const value = draft.trim()
+          if (value) onSubmit(value)
+        }}
+        className="h-8 w-full rounded-md border bg-transparent px-2 text-[13px] outline-none placeholder:text-fg-3 focus-visible:ring-2 focus-visible:ring-muted-foreground"
+      />
     </div>
   )
 }

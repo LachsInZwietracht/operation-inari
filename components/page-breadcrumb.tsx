@@ -45,7 +45,19 @@ export function PageBreadcrumb({ items, children }: PageBreadcrumbProps) {
               // breaks hydration.
               <Fragment key={`${item.label}-${index}`}>
                 <BreadcrumbItem className="min-w-0">
-                  {isLast || !item.href ? (
+                  {isLast ? (
+                    // The trail's last item *is* the page's name, so it doubles
+                    // as the h1. Without it the page would have no heading at
+                    // all — the handoff replaces the old title block entirely.
+                    // BreadcrumbPage is skipped here on purpose: it carries
+                    // role="link", which would override the heading role.
+                    <h1
+                      aria-current="page"
+                      className="truncate text-[13px] font-medium text-foreground"
+                    >
+                      {item.label}
+                    </h1>
+                  ) : !item.href ? (
                     <BreadcrumbPage className="truncate text-[13px] font-medium">
                       {item.label}
                     </BreadcrumbPage>
