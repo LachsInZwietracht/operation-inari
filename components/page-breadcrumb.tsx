@@ -1,3 +1,4 @@
+import { Fragment } from "react"
 import Link from "next/link"
 
 import {
@@ -39,13 +40,16 @@ export function PageBreadcrumb({ items, children }: PageBreadcrumbProps) {
             const isLast = index === items.length - 1
 
             return (
-              <BreadcrumbItem key={`${item.label}-${index}`} className="min-w-0">
-                {isLast || !item.href ? (
-                  <BreadcrumbPage className="truncate text-[13px] font-medium">
-                    {item.label}
-                  </BreadcrumbPage>
-                ) : (
-                  <>
+              // The separator renders its own <li>, so it has to sit beside the
+              // item rather than inside it — nesting them is invalid HTML and
+              // breaks hydration.
+              <Fragment key={`${item.label}-${index}`}>
+                <BreadcrumbItem className="min-w-0">
+                  {isLast || !item.href ? (
+                    <BreadcrumbPage className="truncate text-[13px] font-medium">
+                      {item.label}
+                    </BreadcrumbPage>
+                  ) : (
                     <BreadcrumbLink asChild>
                       <Link
                         href={item.href}
@@ -55,10 +59,10 @@ export function PageBreadcrumb({ items, children }: PageBreadcrumbProps) {
                         {item.label}
                       </Link>
                     </BreadcrumbLink>
-                    <BreadcrumbSeparator className="text-fg-4" />
-                  </>
-                )}
-              </BreadcrumbItem>
+                  )}
+                </BreadcrumbItem>
+                {isLast ? null : <BreadcrumbSeparator className="text-fg-4" />}
+              </Fragment>
             )
           })}
         </BreadcrumbList>

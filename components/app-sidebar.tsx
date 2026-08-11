@@ -35,8 +35,20 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
   const pathname = usePathname()
   const [showMore, setShowMore] = useState(false)
 
-  const isItemActive = (route: string) =>
-    pathname === route || pathname.startsWith(`${route}/`)
+  /*
+   * Only the most specific matching route lights up. `/patienten` is a prefix
+   * of `/patienten/aufnahmen`, so a plain prefix test would highlight both
+   * entries at once and leave the practitioner unsure which page they are on.
+   */
+  const activeRoute = NAV_SECTIONS.flatMap((section) => section.items)
+    .map((item) => item.route)
+    .filter((route) => pathname === route || pathname.startsWith(`${route}/`))
+    .reduce<string | null>(
+      (longest, route) => (!longest || route.length > longest.length ? route : longest),
+      null,
+    )
+
+  const isItemActive = (route: string) => route === activeRoute
 
   // Keep secondary sections visible whenever the current page lives in one of them.
   const activeInSecondary = SECONDARY_SECTIONS.some((section) =>

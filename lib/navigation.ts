@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ShieldCheck as ClipboardCheck,
   ShoppingBasket,
+  UserPlus,
   Users,
 } from "lucide-react"
 
@@ -42,6 +43,10 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Arbeitsbereich",
     items: [
       { label: "Dashboard", icon: LayoutDashboard, route: "/dashboard" },
+      // The two halves of the patient chain, split at the seam where a plan
+      // starts: Aufnahmen is everyone still being taken on, Patienten is
+      // everyone already under care. See lib/patient-journey.ts.
+      { label: "Aufnahmen", icon: UserPlus, route: "/patienten/aufnahmen" },
       { label: "Patienten", icon: Users, route: "/patienten" },
       { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplaene" },
       { label: "Datenbank", icon: Database, route: "/datenbank" },
