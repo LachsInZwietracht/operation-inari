@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { ClientEnergyReference } from "@/lib/client-targets";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type { ActivityEntry, AnthropometricEntry, Patient } from "@/lib/types";
 
@@ -17,17 +18,25 @@ import type { ActivityEntry, AnthropometricEntry, Patient } from "@/lib/types";
 export interface ClientPatientHistory {
   /** Only the fields the charts read; there is no fuller patient object here. */
   patient: Pick<Patient, "firstName" | "goalWeight"> | null;
+  /** The counselor's energy target, already reduced to answers not inputs. */
+  energy: ClientEnergyReference | null;
   measurements: AnthropometricEntry[];
   activities: ActivityEntry[];
 }
 
 interface HistoryPayload {
   patient: { firstName: string; goalWeight: number | null } | null;
+  energy: Record<string, unknown> | null;
   measurements: Array<Record<string, unknown>> | null;
   activities: Array<Record<string, unknown>> | null;
 }
 
-const EMPTY: ClientPatientHistory = { patient: null, measurements: [], activities: [] };
+const EMPTY: ClientPatientHistory = {
+  patient: null,
+  energy: null,
+  measurements: [],
+  activities: [],
+};
 
 /** JSON numerics arrive as numbers or strings depending on the driver path. */
 function num(value: unknown): number | undefined {
@@ -86,6 +95,16 @@ export async function fetchClientPatientHistory(
       ? {
           firstName: payload.patient.firstName,
           goalWeight: payload.patient.goalWeight ?? undefined,
+        }
+      : null,
+    energy: payload.energy
+      ? {
+          dailyCalorieGoal: num(payload.energy.dailyCalorieGoal),
+          macroPreset: payload.energy.macroPreset
+            ? String(payload.energy.macroPreset)
+            : undefined,
+          pal: num(payload.energy.pal),
+          basalKcal: num(payload.energy.basalKcal),
         }
       : null,
     measurements: (payload.measurements ?? []).map(mapMeasurement),

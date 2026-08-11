@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
-  ClientAdherenceDay,
+  ClientAdherenceSlot,
+  ClientAdherenceSummary,
   ClientMealCompletion,
   ClientPlanDay,
   ClientPlanEntry,
@@ -31,13 +32,15 @@ interface CompletionRow {
   meal_plan_id: string;
   meal_entry_id: string;
   skipped: boolean;
+  amount: string | number | null;
   note: string | null;
   completed_at: string;
 }
 
 const PLAN_COLUMNS =
   "id,date,title,meal_entries(id,slot_type,entry_type,reference_id,amount,sort_order)";
-const COMPLETION_COLUMNS = "id,meal_plan_id,meal_entry_id,skipped,note,completed_at";
+const COMPLETION_COLUMNS =
+  "id,meal_plan_id,meal_entry_id,skipped,amount,note,completed_at";
 
 function resolveClient(supabase?: SupabaseClient) {
   return supabase ?? createBrowserSupabaseClient();
@@ -75,6 +78,7 @@ function mapCompletionRow(row: CompletionRow): ClientMealCompletion {
     mealPlanId: row.meal_plan_id,
     mealEntryId: row.meal_entry_id,
     skipped: row.skipped,
+    amount: row.amount === null ? undefined : Number(row.amount),
     note: row.note ?? undefined,
     completedAt: row.completed_at,
   };
@@ -108,6 +112,27 @@ export async function fetchClientPlanDay(
   return data ? mapPlanRow(data as unknown as PlanRow) : null;
 }
 
+/** The client's own plans over a range — the statistics window's reference. */
+export async function fetchClientPlanDays(
+  range: { from: string; to: string },
+  supabase?: SupabaseClient,
+): Promise<ClientPlanDay[]> {
+  const client = resolveClient(supabase);
+  const { data, error } = await withTimeout(
+    client
+      .from("daily_meal_plans")
+      .select(PLAN_COLUMNS)
+      .gte("date", range.from)
+      .lte("date", range.to)
+      .order("date", { ascending: true }),
+    8000,
+    "Supabase client plan range request timed out",
+  );
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as PlanRow[]).map(mapPlanRow);
+}
+
 export async function fetchClientMealCompletions(
   clientUserId: string,
   mealPlanId: string,
@@ -124,13 +149,31 @@ export async function fetchClientMealCompletions(
   return ((data ?? []) as unknown as CompletionRow[]).map(mapCompletionRow);
 }
 
+/** Completions across several plans — the range counterpart of the above. */
+export async function fetchClientMealCompletionsForPlans(
+  clientUserId: string,
+  mealPlanIds: string[],
+  supabase?: SupabaseClient,
+): Promise<ClientMealCompletion[]> {
+  if (mealPlanIds.length === 0) return [];
+  const client = resolveClient(supabase);
+  const { data, error } = await client
+    .from("client_meal_completions")
+    .select(COMPLETION_COLUMNS)
+    .eq("client_user_id", clientUserId)
+    .in("meal_plan_id", mealPlanIds);
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as CompletionRow[]).map(mapCompletionRow);
+}
+
 /**
  * Marks a planned meal as eaten or skipped. Upserts on the unique
  * (client_user_id, meal_entry_id) pair so tapping twice corrects the answer
  * instead of stacking rows.
  */
 export async function setClientMealCompletion(
-  input: { mealPlanId: string; mealEntryId: string; skipped: boolean },
+  input: { mealPlanId: string; mealEntryId: string; skipped: boolean; amount?: number },
   supabase?: SupabaseClient,
 ): Promise<ClientMealCompletion> {
   const client = resolveClient(supabase);
@@ -144,6 +187,9 @@ export async function setClientMealCompletion(
         meal_plan_id: input.mealPlanId,
         meal_entry_id: input.mealEntryId,
         skipped: input.skipped,
+        // NULL means "as planned", which is the ordinary case and must not be
+        // forced to carry a number.
+        amount: input.amount ?? null,
         completed_at: new Date().toISOString(),
       },
       { onConflict: "client_user_id,meal_entry_id" },
@@ -170,16 +216,21 @@ export async function clearClientMealCompletion(
 }
 
 /**
- * Adherence per day for the counselor: planned meals against the client's
- * answers. Runs from the counselor session — the plans are theirs, the
- * completions come through the consented link.
+ * Adherence for the counselor: planned meals against the client's answers.
+ *
+ * Cut two ways from one pass. By day answers "did they follow it"; by meal
+ * answers "which meal is the problem", which is the one a counselor can act
+ * on — a client can be at 80 % overall and still be skipping every dinner.
+ *
+ * Runs from the counselor session: the plans are theirs, the completions come
+ * through the consented link.
  */
 export async function fetchClientAdherence(
   patientId: string,
   clientUserId: string,
   range: { from: string; to: string },
   supabase?: SupabaseClient,
-): Promise<ClientAdherenceDay[]> {
+): Promise<ClientAdherenceSummary> {
   const client = resolveClient(supabase);
 
   const { data: planData, error: planError } = await withTimeout(
@@ -197,7 +248,7 @@ export async function fetchClientAdherence(
 
   if (planError) throw new Error(planError.message);
   const plans = ((planData ?? []) as unknown as PlanRow[]).map(mapPlanRow);
-  if (plans.length === 0) return [];
+  if (plans.length === 0) return { byDay: [], bySlot: [] };
 
   const { data: completionData, error: completionError } = await client
     .from("client_meal_completions")
@@ -215,15 +266,36 @@ export async function fetchClientAdherence(
     byEntry.set(row.meal_entry_id, mapCompletionRow(row));
   }
 
-  return plans.map((plan) => {
+  const bySlot = new Map<MealSlotType, ClientAdherenceSlot>();
+
+  const byDay = plans.map((plan) => {
     let completed = 0;
     let skipped = 0;
+
     for (const entry of plan.entries) {
+      const slot = bySlot.get(entry.slotType) ?? {
+        slotType: entry.slotType,
+        planned: 0,
+        completed: 0,
+        skipped: 0,
+      };
+      slot.planned += 1;
+
       const completion = byEntry.get(entry.id);
-      if (!completion) continue;
-      if (completion.skipped) skipped += 1;
-      else completed += 1;
+      if (completion) {
+        if (completion.skipped) {
+          skipped += 1;
+          slot.skipped += 1;
+        } else {
+          completed += 1;
+          slot.completed += 1;
+        }
+      }
+      bySlot.set(entry.slotType, slot);
     }
+
     return { date: plan.date, planned: plan.entries.length, completed, skipped };
   });
+
+  return { byDay, bySlot: [...bySlot.values()] };
 }

@@ -223,6 +223,23 @@ Still deliberately absent: an exercise catalog with muscle groups, wearable impo
 supersets/RPE/tempo, and training plans as a stored entity — the exercise chips
 cover the repeat case without them.
 
+**M4 — Nutrition, second pass**: ✅ shipped in four steps.
+
+1. *Connection* — the plan's meals appear inside the diary and count once ticked
+   off; `client_meal_completions.amount` plus a recipe-ingredient read policy
+   (migration `20260811000078`). Read-side join, never a copy.
+2. *Reference* — a day target from plan > `daily_calorie_goal` > basal × PAL,
+   delivered through `client_patient_history()` (migration `20260811000079`).
+   No target at all stays a valid outcome; the bars have no red state.
+3. *Speed* — `food_portions` chips, per-slot frequent entries, "wie gestern",
+   editable amounts. No schema.
+4. *Context* — the day note (the column had existed unused since the start) and
+   water in `water_ml` (migration `20260811000080`), plus per-meal adherence for
+   the counselor.
+
+Still deliberately absent: photo recognition, micronutrient traffic lights in the
+client view (that is the counselor's work), client-authored recipes, streaks.
+
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 
 ## Risks

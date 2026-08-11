@@ -54,7 +54,22 @@ export interface ClientFoodLogDay {
   id: ID;
   date: string; // ISO date YYYY-MM-DD
   notes?: string;
+  /** Fluid intake in millilitres. Undefined is "not tracked", not zero. */
+  waterMl?: number;
   entries: ClientFoodLogEntry[];
+}
+
+/**
+ * What a plan entry costs and how it reads, resolved once per day.
+ *
+ * `perUnit` is deliberately per *one* unit — one gram for a food, one portion
+ * for a recipe — so the same value serves the planned amount and whatever the
+ * client actually ate.
+ */
+export interface ClientPlanEntryFacts {
+  perUnit: NutrientValue[];
+  label: string;
+  unit: "g" | "portion";
 }
 
 /** A meal the client ticked off — or deliberately skipped. */
@@ -63,6 +78,8 @@ export interface ClientMealCompletion {
   mealPlanId: ID;
   mealEntryId: ID;
   skipped: boolean;
+  /** Amount actually eaten, in the plan entry's unit. Undefined = as planned. */
+  amount?: number;
   note?: string;
   completedAt: string;
 }
@@ -151,4 +168,22 @@ export interface ClientAdherenceDay {
   planned: number;
   completed: number;
   skipped: number;
+}
+
+/**
+ * The same answers cut by meal instead of by day.
+ *
+ * "80 % Adhärenz" is a number to nod at; "the evening meal has been skipped
+ * eleven times in a fortnight" is something to talk about in a session.
+ */
+export interface ClientAdherenceSlot {
+  slotType: MealSlotType;
+  planned: number;
+  completed: number;
+  skipped: number;
+}
+
+export interface ClientAdherenceSummary {
+  byDay: ClientAdherenceDay[];
+  bySlot: ClientAdherenceSlot[];
 }

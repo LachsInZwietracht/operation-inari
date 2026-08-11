@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
+import { formatPlanAmount } from "@/lib/client-food-log"
 import { todayIsoDate } from "@/lib/client-mode"
 import {
   clearClientMealCompletion,
@@ -126,6 +127,9 @@ export function ClientPlanView({
           mealPlanId: plan.id,
           mealEntryId: entry.id,
           skipped,
+          // The diary is where a corrected amount is entered; answering here
+          // must not silently reset it back to "as planned".
+          amount: skipped ? undefined : current?.amount,
         })
         setCompletions((prev) => new Map(prev).set(entry.id, saved))
       } catch (error) {
@@ -256,8 +260,18 @@ export function ClientPlanView({
                             (entry.entryType === "recipe" ? "Rezept" : "Lebensmittel")}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {entry.amount}
-                          {entry.entryType === "recipe" ? " Portion(en)" : " g"}
+                          {formatPlanAmount(
+                            completion && !completion.skipped
+                              ? (completion.amount ?? entry.amount)
+                              : entry.amount,
+                            entry.entryType === "recipe" ? "portion" : "g",
+                          )}
+                          {completion?.amount !== undefined && !completion.skipped
+                            ? ` statt ${formatPlanAmount(
+                                entry.amount,
+                                entry.entryType === "recipe" ? "portion" : "g",
+                              )}`
+                            : ""}
                         </p>
                       </div>
 

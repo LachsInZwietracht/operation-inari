@@ -9,6 +9,7 @@ interface FoodLogDayRow {
   client_user_id: string;
   log_date: string;
   notes: string | null;
+  water_ml: number | null;
   client_food_log_entries: FoodLogEntryRow[] | null;
 }
 
@@ -27,7 +28,8 @@ interface FoodLogEntryRow {
 }
 
 const DAY_COLUMNS =
-  "id,client_user_id,log_date,notes,client_food_log_entries(id,day_id,slot_type,source_type,food_id,custom_name,custom_nutrients,amount,notes,logged_at,sort_order)";
+  "id,client_user_id,log_date,notes,water_ml," +
+  "client_food_log_entries(id,day_id,slot_type,source_type,food_id,custom_name,custom_nutrients,amount,notes,logged_at,sort_order)";
 
 function resolveClient(supabase?: SupabaseClient) {
   return supabase ?? createBrowserSupabaseClient();
@@ -65,6 +67,7 @@ function mapDayRow(row: FoodLogDayRow): ClientFoodLogDay {
     id: row.id,
     date: row.log_date,
     notes: row.notes ?? undefined,
+    waterMl: row.water_ml ?? undefined,
     entries,
   };
 }
@@ -194,6 +197,58 @@ export async function updateClientFoodLogEntryAmount(
     .update({ amount })
     .eq("id", entryId);
 
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Household measures for the given foods, keyed by food id.
+ *
+ * `food_portions` is filled by a curated ETL for the German catalog and has so
+ * far only been read on the counselor side. A client does not weigh their
+ * bread — they eat a slice — so the diary offers the slice.
+ */
+export async function fetchFoodPortions(
+  foodIds: string[],
+  supabase?: SupabaseClient,
+): Promise<Map<string, { label: string; amountGrams: number }[]>> {
+  const byFood = new Map<string, { label: string; amountGrams: number }[]>();
+  if (foodIds.length === 0) return byFood;
+
+  const client = resolveClient(supabase);
+  const { data, error } = await client
+    .from("food_portions")
+    .select("food_id,label,amount_grams")
+    .in("food_id", [...new Set(foodIds)]);
+
+  if (error) throw new Error(error.message);
+
+  for (const row of (data ?? []) as { food_id: string; label: string; amount_grams: number }[]) {
+    const list = byFood.get(row.food_id) ?? [];
+    list.push({ label: row.label, amountGrams: Number(row.amount_grams) });
+    byFood.set(row.food_id, list);
+  }
+  return byFood;
+}
+
+/**
+ * The day's own context — how it went, and how much was drunk.
+ *
+ * `null` clears a value; leaving a key out leaves it alone. The distinction
+ * matters for water, where 0 ml is a statement and "not tracked" is not.
+ */
+export async function updateClientFoodLogDay(
+  dayId: string,
+  patch: { notes?: string | null; waterMl?: number | null },
+  supabase?: SupabaseClient,
+): Promise<void> {
+  const client = resolveClient(supabase);
+
+  const row: Record<string, unknown> = {};
+  if (patch.notes !== undefined) row.notes = patch.notes?.trim() ? patch.notes.trim() : null;
+  if (patch.waterMl !== undefined) row.water_ml = patch.waterMl;
+  if (Object.keys(row).length === 0) return;
+
+  const { error } = await client.from("client_food_log_days").update(row).eq("id", dayId);
   if (error) throw new Error(error.message);
 }
 

@@ -75,11 +75,23 @@ test.describe("client patient history", () => {
         goal_weight: 68,
         notes: PRIVATE_PATIENT_NOTE,
         insurance_number: "A123456789",
+        daily_calorie_goal: 1900,
+        macro_preset: "lowcarb",
       })
       .select("id")
       .single();
     if (patientError) throw new Error(patientError.message);
     patientId = patient.id;
+
+    const { error: assignmentError } = await admin
+      .from("patient_reference_assignments")
+      .insert({
+        patient_id: patientId,
+        user_id: counselor.id,
+        standard_id: "dge",
+        pal_value: 1.4,
+      });
+    if (assignmentError) throw new Error(assignmentError.message);
 
     const { error: measurementError } = await admin.from("patient_anthropometrics").insert([
       {
@@ -163,6 +175,27 @@ test.describe("client patient history", () => {
     expect(serialized).not.toContain(PRIVATE_MEASUREMENT_NOTE);
     expect(serialized).not.toContain("A123456789");
     expect(Object.keys(data.measurements[0])).not.toContain("notes");
+    // Date of birth and sex go into the basal rate and stay behind it.
+    expect(serialized).not.toContain("1988-04-04");
+    expect(Object.keys(data.energy)).toEqual([
+      "pal",
+      "basalKcal",
+      "macroPreset",
+      "dailyCalorieGoal",
+    ]);
+  });
+
+  test("the energy target arrives as answers, not as inputs", async () => {
+    const client = await signedInClient(clientUser);
+    const { data } = await client.rpc("client_patient_history");
+
+    expect(Number(data.energy.dailyCalorieGoal)).toBe(1900);
+    expect(data.energy.macroPreset).toBe("lowcarb");
+    expect(Number(data.energy.pal)).toBe(1.4);
+    // Mifflin-St Jeor on the latest measurement: 74.5 kg, 170 cm, female.
+    // 10×74.5 + 6.25×170 − 5×age − 161, with age taken at query time.
+    expect(Number(data.energy.basalKcal)).toBeGreaterThan(1200);
+    expect(Number(data.energy.basalKcal)).toBeLessThan(1500);
   });
 
   test("the underlying tables stay closed to the client", async () => {

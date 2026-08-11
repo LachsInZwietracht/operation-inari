@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Loader2, Search } from "lucide-react"
 import { toast } from "sonner"
 
@@ -19,12 +19,14 @@ import { ClientBarcodePanel } from "@/components/client/client-barcode-panel"
 import type { BarcodeCustomPick } from "@/components/client/client-barcode-panel"
 import { isClientCapabilityEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
+import { clientLogEntryLabel, type ClientLogSuggestion } from "@/lib/client-food-log"
 import {
   addClientFoodLogEntry,
   ensureClientFoodLogDay,
+  fetchFoodPortions,
 } from "@/lib/data/client-food-log-client"
 import { createClient } from "@/lib/supabase/client"
-import type { MealSlotType } from "@/lib/types"
+import type { Food, MealSlotType } from "@/lib/types"
 
 interface FoodResult {
   id: string
@@ -52,12 +54,17 @@ export function ClientAddEntryDialog({
   slot,
   date,
   dayId,
+  suggestions,
+  foods,
   onClose,
   onSaved,
 }: {
   slot: MealSlotType
   date: string
   dayId: string | null
+  /** What this person usually eats in this slot, most frequent first. */
+  suggestions: ClientLogSuggestion[]
+  foods: Map<string, Food>
   onClose: () => void
   onSaved: () => void
 }) {
@@ -68,6 +75,13 @@ export function ClientAddEntryDialog({
   const [selected, setSelected] = useState<EntryDraft | null>(null)
   const [mode, setMode] = useState<"search" | "barcode">("search")
   const [amount, setAmount] = useState("100")
+  // Keyed by food rather than reset per selection: clearing it synchronously in
+  // the effect would fire on every render that starts without a food picked.
+  const [portionsByFood, setPortionsByFood] = useState<
+    Map<string, { label: string; amountGrams: number }[]>
+  >(new Map())
+  // A suggestion brings its own amount; the portion default must not overwrite it.
+  const keepAmountRef = useRef(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const barcodeEnabled = isClientCapabilityEnabled("barcode")
@@ -105,6 +119,35 @@ export function ClientAddEntryDialog({
       setIsSearching(false)
     }
   }, [query, supabase])
+
+  // Household measures for the picked food, and the default that follows from
+  // them: a typical portion is a better opening bid than a flat 100 g.
+  useEffect(() => {
+    if (selected?.kind !== "food") return
+    const foodId = selected.id
+
+    let cancelled = false
+    void fetchFoodPortions([foodId])
+      .then((byFood) => {
+        if (cancelled) return
+        const list = byFood.get(foodId) ?? []
+        setPortionsByFood((prev) => new Map(prev).set(foodId, list))
+
+        if (keepAmountRef.current) {
+          keepAmountRef.current = false
+          return
+        }
+        if (list.length > 0) setAmount(String(list[0].amountGrams))
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  const portions =
+    selected?.kind === "food" ? (portionsByFood.get(selected.id) ?? []) : []
 
   async function handleSave() {
     if (!selected) return
@@ -201,6 +244,26 @@ export function ClientAddEntryDialog({
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
+              {portions.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {portions.map((portion) => (
+                    <Button
+                      key={`${portion.label}-${portion.amountGrams}`}
+                      type="button"
+                      variant={
+                        Number(amount.replace(",", ".")) === portion.amountGrams
+                          ? "secondary"
+                          : "outline"
+                      }
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setAmount(String(portion.amountGrams))}
+                    >
+                      {portion.label} · {portion.amountGrams} g
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : mode === "barcode" ? (
@@ -220,6 +283,45 @@ export function ClientAddEntryDialog({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
+
+            {/* Before anything is typed: the things this person actually eats
+                at this time of day. Most diaries are twenty foods on repeat. */}
+            {trimmedQuery.length < 2 && suggestions.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Zuletzt oft</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.map((suggestion) => (
+                    <Button
+                      key={suggestion.key}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 max-w-full px-2 text-xs"
+                      onClick={() => {
+                        const entry = suggestion.entry
+                        keepAmountRef.current = true
+                        setAmount(String(entry.amount))
+                        if (entry.sourceType === "custom") {
+                          setSelected({
+                            kind: "custom",
+                            name: entry.customName ?? "Eigener Eintrag",
+                            nutrients: entry.customNutrients ?? [],
+                          })
+                        } else if (entry.foodId) {
+                          setSelected({
+                            kind: "food",
+                            id: entry.foodId,
+                            name: clientLogEntryLabel(entry, foods),
+                          })
+                        }
+                      }}
+                    >
+                      <span className="truncate">{clientLogEntryLabel(suggestion.entry, foods)}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="max-h-64 overflow-y-auto">
               {isSearching && (

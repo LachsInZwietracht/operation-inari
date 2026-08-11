@@ -22,6 +22,7 @@ import {
 } from "@/lib/client-food-log"
 import { formatInviteCode, todayIsoDate } from "@/lib/client-mode"
 import { isClientModuleEnabled } from "@/lib/client-modules"
+import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client"
 import { fetchClientAdherence } from "@/lib/data/client-plan-client"
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client"
@@ -29,7 +30,7 @@ import { fetchClientLinkForPatient } from "@/lib/data/client-links"
 import { getNutrientValue } from "@/lib/nutrients"
 import { createClient } from "@/lib/supabase/client"
 import type {
-  ClientAdherenceDay,
+  ClientAdherenceSummary,
   ClientFoodLogDay,
   ClientLink,
   ClientWorkoutSession,
@@ -45,7 +46,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
   const [isLoading, setIsLoading] = useState(true)
   const [days, setDays] = useState<ClientFoodLogDay[]>([])
   const [foods, setFoods] = useState<Map<string, Food>>(new Map())
-  const [adherence, setAdherence] = useState<ClientAdherenceDay[]>([])
+  const [adherence, setAdherence] = useState<ClientAdherenceSummary>({ byDay: [], bySlot: [] })
   const [workouts, setWorkouts] = useState<ClientWorkoutSession[]>([])
   const [isPending, startTransition] = useTransition()
 
@@ -139,7 +140,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
       toast.success("Verbindung beendet.")
       setLink(null)
       setDays([])
-      setAdherence([])
+      setAdherence({ byDay: [], bySlot: [] })
       setWorkouts([])
     })
   }
@@ -229,7 +230,7 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
         </CardContent>
       </Card>
 
-      {link?.status === "active" && isClientModuleEnabled("plan") && adherence.length > 0 && (
+      {link?.status === "active" && isClientModuleEnabled("plan") && adherence.byDay.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Plan-Treue der letzten {LOG_WINDOW_DAYS} Tage</CardTitle>
@@ -239,8 +240,41 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* By meal first: "which meal is the problem" is the question a
+                counselor can act on. A client at 80 % overall can still be
+                skipping every dinner, and the per-day list hides that. */}
+            {adherence.bySlot.length > 0 && (
+              <div className="mb-4 grid gap-2 sm:grid-cols-2">
+                {adherence.bySlot.map((slot) => {
+                  const unanswered = slot.planned - slot.completed - slot.skipped
+                  return (
+                    <div
+                      key={slot.slotType}
+                      className="flex items-baseline justify-between gap-2 rounded-lg border px-3 py-2"
+                    >
+                      <span className="text-sm font-medium">
+                        {MEAL_SLOT_LABELS[slot.slotType]}
+                      </span>
+                      <span className="text-sm tabular-nums">
+                        {slot.completed}/{slot.planned}
+                        {slot.skipped > 0 && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · {slot.skipped} ausgelassen
+                          </span>
+                        )}
+                        {unanswered > 0 && (
+                          <span className="text-muted-foreground"> · {unanswered} offen</span>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             <ul className="divide-y">
-              {adherence.map((day) => (
+              {adherence.byDay.map((day) => (
                 <li key={day.date} className="flex items-center justify-between gap-2 py-2">
                   <p className="text-sm font-medium">
                     {format(parseISO(day.date), "EEEE, d. MMMM", { locale: de })}

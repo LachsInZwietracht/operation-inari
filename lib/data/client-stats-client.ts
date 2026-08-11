@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { format, parseISO, subDays } from "date-fns";
 
-import { calculateClientLogNutrients, CLIENT_LOG_NUTRIENT_IDS } from "@/lib/client-food-log";
+import { calculateClientDayNutrients, CLIENT_LOG_NUTRIENT_IDS } from "@/lib/client-food-log";
 import {
   averageOfLoggedDays,
   buildKcalSeries,
@@ -13,11 +13,23 @@ import { summarizeExerciseProgress } from "@/lib/client-training";
 import { estimateActivityEnergy } from "@/lib/energy-expenditure";
 import { fetchActiveLinksForClient } from "@/lib/data/client-links";
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client";
-import { fetchClientAdherence } from "@/lib/data/client-plan-client";
+import {
+  fetchClientAdherence,
+  fetchClientMealCompletionsForPlans,
+  fetchClientPlanDays,
+} from "@/lib/data/client-plan-client";
+import { fetchClientPlanFacts } from "@/lib/data/client-plan-nutrition-client";
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client";
 import { getNutrientValue } from "@/lib/nutrients";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
-import type { ClientAdherenceDay, ClientExerciseProgress, Food } from "@/lib/types";
+import type {
+  ClientAdherenceDay,
+  ClientExerciseProgress,
+  ClientMealCompletion,
+  ClientPlanDay,
+  ClientPlanEntryFacts,
+  Food,
+} from "@/lib/types";
 
 /**
  * The statistics module is a read-only aggregator: it is the one client module
@@ -44,6 +56,10 @@ function resolveClient(supabase?: SupabaseClient) {
 
 /**
  * Energy per day for the window, including days with no entries.
+ *
+ * Counts both halves of the day — what was typed into the diary and what was
+ * ticked off the plan. Reading only the diary was what made a client who
+ * followed their plan perfectly show up here as a flat zero.
  *
  * Gaps are filled with zero on purpose: a diary with holes should look like a
  * diary with holes, not like a shorter, tidier one.
@@ -76,10 +92,40 @@ async function loadKcalByDay(
     }
   }
 
+  // The plan side, guarded like every other cross-module read here.
+  let plans: ClientPlanDay[] = [];
+  let planFacts = new Map<string, ClientPlanEntryFacts>();
+  const completions = new Map<string, ClientMealCompletion>();
+  if (isClientModuleEnabled("plan")) {
+    plans = await fetchClientPlanDays(range, supabase);
+    if (plans.length > 0) {
+      planFacts = await fetchClientPlanFacts(plans, supabase);
+      const rows = await fetchClientMealCompletionsForPlans(
+        clientUserId,
+        plans.map((plan) => plan.id),
+        supabase,
+      );
+      for (const row of rows) completions.set(row.mealEntryId, row);
+    }
+  }
+
+  const dates = [...new Set([...days.map((d) => d.date), ...plans.map((p) => p.date)])];
+  const logByDate = new Map(days.map((day) => [day.date, day]));
+  const planByDate = new Map(plans.map((plan) => [plan.date, plan]));
+
   const kcalByDate = new Map(
-    days.map((day) => [
-      day.date,
-      getNutrientValue(calculateClientLogNutrients(day.entries, foods), "energie"),
+    dates.map((date) => [
+      date,
+      getNutrientValue(
+        calculateClientDayNutrients({
+          entries: logByDate.get(date)?.entries ?? [],
+          foods,
+          planEntries: planByDate.get(date)?.entries ?? [],
+          completions,
+          planFacts,
+        }),
+        "energie",
+      ),
     ]),
   );
 
@@ -116,7 +162,7 @@ export async function fetchClientStats(
     const links = await fetchActiveLinksForClient(client, clientUserId);
     const patientId = links[0]?.patientId;
     if (patientId) {
-      adherence = await fetchClientAdherence(patientId, clientUserId, range, client);
+      adherence = (await fetchClientAdherence(patientId, clientUserId, range, client)).byDay;
     }
   }
 
