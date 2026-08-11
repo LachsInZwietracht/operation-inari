@@ -61,6 +61,11 @@ export default async function AufnahmenPage() {
         initialSessions={initialData?.sessions}
         initialPlanSummaries={initialData?.planSummaries}
         initialAppointments={initialData?.appointments}
+        // Every waiting time, deadline and timeline position is measured from
+        // one clock. Letting the client call its own `new Date()` would make
+        // the server and client markup disagree whenever a day boundary or a
+        // slow hydration falls between the two renders.
+        renderedAt={new Date().toISOString()}
       />
     </Suspense>
   )

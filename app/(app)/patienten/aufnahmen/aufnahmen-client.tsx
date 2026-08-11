@@ -5,7 +5,9 @@ import Link from "next/link"
 import { Plus, Send } from "lucide-react"
 import { toast } from "sonner"
 
+import { IntakeBoardView } from "@/components/intake-board-view"
 import { IntakeListView } from "@/components/intake-list-view"
+import { IntakeTimelineView } from "@/components/intake-timeline-view"
 import {
   ListFilterBar,
   type ActiveListFilter,
@@ -45,6 +47,8 @@ interface AufnahmenPageClientProps {
   initialSessions?: CounselingSession[]
   initialPlanSummaries?: PatientPlanSummary[]
   initialAppointments?: PracticeAppointment[]
+  /** The one clock every waiting time and timeline position is measured from. */
+  renderedAt: string
 }
 
 const VIEWS = [
@@ -77,6 +81,7 @@ export function AufnahmenPageClient({
   initialSessions,
   initialPlanSummaries = [],
   initialAppointments,
+  renderedAt,
 }: AufnahmenPageClientProps) {
   const { patients } = usePatients({ initialPatients })
   const { sessions } = useCounseling({ initialSessions })
@@ -94,6 +99,8 @@ export function AufnahmenPageClient({
     null,
   )
 
+  const now = useMemo(() => new Date(renderedAt), [renderedAt])
+
   const rows = useMemo(
     () =>
       buildIntakeRows({
@@ -103,8 +110,9 @@ export function AufnahmenPageClient({
         planSummaries: initialPlanSummaries,
         sessions,
         appointments,
+        now,
       }),
-    [patients, links, submissions, initialPlanSummaries, sessions, appointments],
+    [patients, links, submissions, initialPlanSummaries, sessions, appointments, now],
   )
 
   const visibleRows = useMemo(() => {
@@ -201,6 +209,9 @@ export function AufnahmenPageClient({
 
   return (
     <ListPageShell
+      // Only the grouped list runs edge to edge; Zeitachse and Board are laid
+      // out surfaces and take the handoff's 22px inset.
+      padded={values.view !== "liste"}
       header={
         <PageBreadcrumb
           items={[
@@ -238,16 +249,20 @@ export function AufnahmenPageClient({
         />
       }
     >
-      {visibleRows.length > 0 ? (
+      {visibleRows.length === 0 ? (
+        <IntakeEmptyState
+          hasAnyRows={rows.length > 0}
+          onInvite={() => setInviteOpen(true)}
+        />
+      ) : values.view === "zeit" ? (
+        <IntakeTimelineView rows={visibleRows} onReview={setReviewRow} now={now} />
+      ) : values.view === "board" ? (
+        <IntakeBoardView rows={visibleRows} onReview={setReviewRow} />
+      ) : (
         <IntakeListView
           rows={visibleRows}
           onReview={setReviewRow}
           grouped={values.gruppierung === "stufe"}
-        />
-      ) : (
-        <IntakeEmptyState
-          hasAnyRows={rows.length > 0}
-          onInvite={() => setInviteOpen(true)}
         />
       )}
 
