@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DailyMealPlan, MealEntry, MealSlot, MealSlotType } from "@/lib/types";
-import type { PatientPlanSummary } from "@/lib/patient-status";
+import type { PatientPlanSummary } from "@/lib/patient-journey";
 import { createClient as createServerSupabaseClient, createServiceClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
 

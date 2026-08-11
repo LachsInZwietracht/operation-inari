@@ -1,19 +1,25 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+/*
+ * Geist for UI, Geist Mono for table heads, counters, timestamps and clock
+ * times — the split the patient-frontend handoff specifies. The CSS variable
+ * names stay generic so `--font-sans` / `--font-mono` in globals.css keep
+ * resolving without every consumer knowing which typeface is behind them.
+ */
+const geistSans = Geist({
+  variable: "--font-sans-family",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const geistMono = Geist_Mono({
+  variable: "--font-mono-family",
   subsets: ["latin"],
-  weight: ["500", "600"],
+  weight: ["400", "500", "600"],
 });
 
 const DEFAULT_METADATA_BASE_URL = "http://localhost:3000";
@@ -91,12 +97,17 @@ export default function RootLayout({
   return (
     <html lang="de" suppressHydrationWarning>
       <body
-        className={`${manrope.variable} ${jetbrainsMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/*
+          The handoff asks for the system preference as the starting value and
+          the user's own choice remembered afterwards. next-themes persists the
+          choice to localStorage; enabling system just supplies the first value.
+        */}
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
+          defaultTheme="system"
+          enableSystem
           disableTransitionOnChange
         >
           {children}

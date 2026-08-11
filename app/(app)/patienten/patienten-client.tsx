@@ -1,332 +1,296 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import Link from "next/link"
-import { Plus, Search, Send, UserPlus } from "lucide-react"
-import { toast } from "sonner"
+import { Plus, UserPlus } from "lucide-react"
 
-import { PageHeader } from "@/components/page-header"
-import { PatientIntakeInviteDialog } from "@/components/patient-intake-invite-dialog"
-import { PatientIntakeReview } from "@/components/patient-intake-review"
-import { PatientPipelineListRow } from "@/components/patient-pipeline-row"
+import { CareKpiRow } from "@/components/care-kpi-row"
+import { CareSidePanel } from "@/components/care-side-panel"
+import { CareTable } from "@/components/care-table"
+import { CareTimelineView } from "@/components/care-timeline-view"
+import {
+  ListFilterBar,
+  type ActiveListFilter,
+  type FilterFieldDefinition,
+} from "@/components/list-filter-bar"
+import { ListPageShell } from "@/components/list-page-shell"
+import { ListRowSkeleton } from "@/components/list-row-skeleton"
+import { PageBreadcrumb } from "@/components/page-breadcrumb"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
 import { useCounseling } from "@/hooks/use-counseling"
-import { usePatientIntake } from "@/hooks/use-patient-intake"
+import { useListUrlState } from "@/hooks/use-list-url-state"
 import { usePatients } from "@/hooks/use-patients"
+import { usePracticeAppointments } from "@/hooks/use-practice"
 import { INDICATION_OPTIONS } from "@/lib/constants"
 import {
-  PATIENT_STATUS_META,
-  PATIENT_STATUS_ORDER,
-  buildPatientPipeline,
-  countByStatus,
-  type PatientPipelineRow,
-  type PatientPipelineStatus,
+  buildAttentionItems,
+  buildCareMetrics,
+  buildUpcomingAppointments,
+  buildWeekActivity,
+} from "@/lib/care-metrics"
+import {
+  CARE_URGENCY_META,
+  buildCareRows,
+  type CareUrgency,
   type PatientPlanSummary,
-} from "@/lib/patient-status"
-import type { CounselingSession, Patient } from "@/lib/types"
+} from "@/lib/patient-journey"
+import type { CounselingSession, Patient, PracticeAppointment } from "@/lib/types"
 
 interface PatientenPageClientProps {
   initialPatients?: Patient[]
   initialSessions?: CounselingSession[]
   initialPlanSummaries?: PatientPlanSummary[]
+  initialAppointments?: PracticeAppointment[]
+  /** The one clock every duration on this page is measured from. */
+  renderedAt: string
 }
 
-type StatusFilter = PatientPipelineStatus | "alle"
+const VIEWS = [
+  { value: "liste", label: "Liste" },
+  { value: "zeit", label: "Zeitachse" },
+]
 
+const SORT_OPTIONS = [
+  { value: "status", label: "Status" },
+  { value: "name", label: "Name" },
+  { value: "planwoche", label: "Planwoche" },
+]
+
+const URGENCY_ORDER: CareUrgency[] = ["overdue", "due", "ok"]
+
+const URL_DEFAULTS = {
+  view: "liste",
+  name: "",
+  status: "",
+  indikation: "",
+  sortierung: "status",
+}
+
+/**
+ * Ongoing care: every patient with a live plan.
+ *
+ * The counterpart to Aufnahmen, split at the seam where a plan starts. What
+ * this screen does *not* show is deliberate: the design handoff asked for
+ * adherence, check-ins, plan runtime and unread messages, none of which this
+ * system records. See lib/care-metrics.ts.
+ */
 export function PatientenPageClient({
   initialPatients,
   initialSessions,
   initialPlanSummaries = [],
+  initialAppointments,
+  renderedAt,
 }: PatientenPageClientProps) {
-  const { patients } = usePatients({ initialPatients })
-  const { sessions: counselingSessions } = useCounseling({ initialSessions })
-  const { links, submissions, createLink, applySubmission } = usePatientIntake()
+  const { patients, isLoadingRemote } = usePatients({ initialPatients })
+  const { sessions } = useCounseling({ initialSessions })
+  const { appointments } = usePracticeAppointments({ initialAppointments })
 
-  const [search, setSearch] = useState("")
-  const [indicationFilter, setIndicationFilter] = useState<string>("alle")
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("alle")
-  const [inviteOpen, setInviteOpen] = useState(false)
-  const [reviewRow, setReviewRow] = useState<PatientPipelineRow | null>(null)
-  const [applying, setApplying] = useState(false)
-  // Set once a submission is applied, so the dialog can hand off to the plan
-  // instead of silently closing and leaving the user to re-navigate.
-  const [appliedPatient, setAppliedPatient] = useState<{ id: string; name: string } | null>(
-    null,
-  )
+  const { values, setValue, clearValue } = useListUrlState({ defaults: URL_DEFAULTS })
+  const now = useMemo(() => new Date(renderedAt), [renderedAt])
 
-  const lastSessionByPatient = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const session of counselingSessions) {
-      const existing = map.get(session.patientId)
-      if (!existing || session.date > existing) {
-        map.set(session.patientId, session.date)
-      }
-    }
-    return map
-  }, [counselingSessions])
-
-  // The whole list — patients and not-yet-applied invitations — in one shape.
-  // This is what dissolves the old Onboarding tab.
   const rows = useMemo(
     () =>
-      buildPatientPipeline({
+      buildCareRows({
         patients,
-        links,
-        submissions,
+        // Care urgency is derived from plans, sessions and appointments only.
+        // Invitations belong to the intake half of the journey, so this page
+        // does not fetch them at all.
+        links: [],
+        submissions: [],
         planSummaries: initialPlanSummaries,
-        lastSessionByPatient,
+        sessions,
+        appointments,
+        now,
       }),
-    [patients, links, submissions, initialPlanSummaries, lastSessionByPatient],
+    [patients, initialPlanSummaries, sessions, appointments, now],
   )
 
-  const counts = useMemo(() => countByStatus(rows), [rows])
+  const livePlanCount = useMemo(
+    () =>
+      initialPlanSummaries.filter(
+        (plan) => plan.patientId && plan.status !== "archived",
+      ).length,
+    [initialPlanSummaries],
+  )
 
   const visibleRows = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    return rows.filter((row) => {
-      if (statusFilter !== "alle" && row.status !== statusFilter) return false
+    const needle = values.name.trim().toLowerCase()
 
-      if (indicationFilter !== "alle") {
-        if (!row.patient?.indications?.includes(indicationFilter)) return false
+    const filtered = rows.filter((row) => {
+      if (values.status && row.urgency !== values.status) return false
+      if (values.indikation && !row.patient.indications?.includes(values.indikation)) {
+        return false
       }
-
-      if (!needle) return true
-      const haystack = row.patient
-        ? `${row.patient.firstName} ${row.patient.lastName} ${row.patient.lastName} ${row.patient.firstName}`
-        : row.displayName
-      return haystack.toLowerCase().includes(needle)
+      if (needle) {
+        // Match either order, so "Schneider" and "Maria" both find the row.
+        const { firstName, lastName } = row.patient
+        const haystack = `${firstName} ${lastName} ${lastName} ${firstName}`
+        if (!haystack.toLowerCase().includes(needle)) return false
+      }
+      return true
     })
-  }, [rows, search, statusFilter, indicationFilter])
 
-  async function handleApply() {
-    const submission = reviewRow?.pendingSubmission
-    if (!submission) return
-
-    setApplying(true)
-    try {
-      const { patientId } = await applySubmission(submission.id)
-      toast.success("Angaben übernommen")
-      if (patientId) {
-        setAppliedPatient({ id: patientId, name: reviewRow?.displayName ?? "Patient" })
-      } else {
-        setReviewRow(null)
-      }
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "Übernahme fehlgeschlagen")
-    } finally {
-      setApplying(false)
+    if (values.sortierung === "name") {
+      return [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName, "de"))
     }
-  }
+    if (values.sortierung === "planwoche") {
+      return [...filtered].sort((a, b) => b.planWeek - a.planWeek)
+    }
+    // buildCareRows already returns urgency-then-name order.
+    return filtered
+  }, [rows, values.name, values.status, values.indikation, values.sortierung])
 
-  function closeReview() {
-    setReviewRow(null)
-    setAppliedPatient(null)
-  }
+  // The panels describe the whole caseload, not the current filter — narrowing
+  // the table should not hide someone who has gone quiet.
+  const metrics = useMemo(
+    () => buildCareMetrics({ rows, sessions, livePlanCount, now }),
+    [rows, sessions, livePlanCount, now],
+  )
+  const attention = useMemo(() => buildAttentionItems(rows), [rows])
+  const upcoming = useMemo(() => buildUpcomingAppointments(rows), [rows])
+  const activity = useMemo(
+    () => buildWeekActivity(sessions, rows, now),
+    [sessions, rows, now],
+  )
+
+  const filterFields = useMemo<FilterFieldDefinition[]>(
+    () => [
+      {
+        field: "name",
+        label: "Name",
+        kind: "text",
+        placeholder: "Patientenname…",
+      },
+      {
+        field: "status",
+        label: "Status",
+        options: URGENCY_ORDER.map((urgency) => ({
+          value: urgency,
+          label: CARE_URGENCY_META[urgency].label,
+        })),
+      },
+      {
+        field: "indikation",
+        label: "Indikation",
+        options: INDICATION_OPTIONS.map((indication) => ({
+          value: indication,
+          label: indication,
+        })),
+      },
+    ],
+    [],
+  )
+
+  const activeFilters = useMemo<ActiveListFilter[]>(() => {
+    const active: ActiveListFilter[] = []
+    if (values.name) {
+      active.push({
+        field: "name",
+        label: "Name",
+        operator: "enthält",
+        value: values.name,
+        valueLabel: values.name,
+      })
+    }
+    if (values.status) {
+      active.push({
+        field: "status",
+        label: "Status",
+        operator: "ist",
+        value: values.status,
+        valueLabel: CARE_URGENCY_META[values.status as CareUrgency].label,
+      })
+    }
+    if (values.indikation) {
+      active.push({
+        field: "indikation",
+        label: "Indikation",
+        operator: "ist",
+        value: values.indikation,
+        valueLabel: values.indikation,
+      })
+    }
+    return active
+  }, [values.name, values.status, values.indikation])
+
+  const handleAddFilter = useCallback(
+    (filter: ActiveListFilter) => setValue(filter.field, filter.value),
+    [setValue],
+  )
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Patienten"
-        description="Einladen, prüfen, planen — alle Patienten und offenen Einladungen in einer Liste."
-        helpText="Jeder Eintrag zeigt seinen Status im Ablauf: Antwort da, Bereit für Plan, Fällig, Eingeladen oder Plan aktiv. Offene Einladungen erscheinen als eigene Zeile, bis die Angaben übernommen sind."
-      >
-        <Button variant="outline" onClick={() => setInviteOpen(true)}>
-          <Send className="mr-2 h-4 w-4" />
-          Einladung senden
-        </Button>
-        <Button asChild>
-          <Link href="/patienten/neu">
-            <Plus className="mr-2 h-4 w-4" />
-            Neuer Patient
-          </Link>
-        </Button>
-      </PageHeader>
-
-      {/* Status filters replace the old worklist tiles, which showed numbers
-          nobody could click. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <StatusFilterChip
-          label="Alle"
-          count={rows.length}
-          active={statusFilter === "alle"}
-          onClick={() => setStatusFilter("alle")}
+    <ListPageShell
+      padded
+      header={
+        <PageBreadcrumb items={[{ label: "Patienten" }]}>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/patienten/aufnahmen" prefetch={false}>
+              <UserPlus className="mr-1.5 size-3.5" />
+              Aufnahmen
+            </Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/patienten/neu" prefetch={false}>
+              <Plus className="mr-1.5 size-3.5" />
+              Neuer Patient
+            </Link>
+          </Button>
+        </PageBreadcrumb>
+      }
+      filterBar={
+        <ListFilterBar
+          views={VIEWS}
+          view={values.view}
+          onViewChange={(view) => setValue("view", view)}
+          filterFields={filterFields}
+          filters={activeFilters}
+          onAddFilter={handleAddFilter}
+          onRemoveFilter={clearValue}
+          sortOptions={SORT_OPTIONS}
+          sort={values.sortierung}
+          onSortChange={(sort) => setValue("sortierung", sort)}
         />
-        {PATIENT_STATUS_ORDER.map((status) => (
-          <StatusFilterChip
-            key={status}
-            label={PATIENT_STATUS_META[status].label}
-            count={counts[status]}
-            active={statusFilter === status}
-            dotClassName={PATIENT_STATUS_META[status].dotClassName}
-            onClick={() => setStatusFilter(statusFilter === status ? "alle" : status)}
-          />
-        ))}
-      </div>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <CareKpiRow metrics={metrics} />
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Patient oder Einladung suchen..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={indicationFilter} onValueChange={setIndicationFilter}>
-          <SelectTrigger className="w-full sm:w-[220px]" aria-label="Indikationen filtern">
-            <SelectValue placeholder="Indikation" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="alle">Alle Indikationen</SelectItem>
-            {INDICATION_OPTIONS.map((indication) => (
-              <SelectItem key={indication} value={indication}>
-                {indication}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {/* Both doors, always in the same place, never hunted for. */}
-        <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0">
-            <p className="text-sm font-medium">Neue Person aufnehmen</p>
-            <p className="text-xs text-muted-foreground">
-              Selbst anlegen, oder einen Fragebogen-Link schicken und die Angaben übernehmen.
-            </p>
+            {isLoadingRemote && rows.length === 0 ? (
+              <ListRowSkeleton rows={5} height={56} />
+            ) : visibleRows.length === 0 ? (
+              <CareEmptyState hasAnyRows={rows.length > 0} />
+            ) : values.view === "zeit" ? (
+              <CareTimelineView rows={visibleRows} now={now} />
+            ) : (
+              <CareTable rows={visibleRows} />
+            )}
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
-              <Send className="mr-1.5 h-3.5 w-3.5" />
-              Einladung
-            </Button>
-            <Button size="sm" asChild>
-              <Link href="/patienten/neu">
-                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                Neuer Patient
-              </Link>
-            </Button>
-          </div>
+
+          <CareSidePanel attention={attention} upcoming={upcoming} activity={activity} />
         </div>
-
-        {visibleRows.length > 0 ? (
-          visibleRows.map((row) => (
-            <PatientPipelineListRow key={row.id} row={row} onReview={setReviewRow} />
-          ))
-        ) : (
-          <div className="rounded-lg border bg-muted/20 py-10 text-center text-sm text-muted-foreground">
-            {rows.length === 0
-              ? "Noch keine Patienten. Lege einen an oder verschicke eine Einladung."
-              : "Kein Eintrag entspricht den Filtern."}
-          </div>
-        )}
       </div>
-
-      <PatientIntakeInviteDialog
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        onCreate={createLink}
-      />
-
-      <Dialog open={Boolean(reviewRow)} onOpenChange={(open) => !open && closeReview()}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          {appliedPatient ? (
-            // The handoff: applying used to save silently and abandon the user
-            // mid-workflow. The next step in the chain is always the plan.
-            <>
-              <DialogHeader>
-                <DialogTitle>Angaben übernommen</DialogTitle>
-                <DialogDescription>
-                  {appliedPatient.name} ist angelegt. Ziele, Vorlieben und Unverträglichkeiten
-                  sind hinterlegt — der Plan startet direkt damit.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button asChild className="sm:flex-1">
-                  <Link href={`/ernaehrungsplan?patientId=${appliedPatient.id}`}>
-                    Plan für {appliedPatient.name.split(",")[1]?.trim() || "Patient"} erstellen
-                  </Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href={`/patienten/${appliedPatient.id}`}>Zum Patienten</Link>
-                </Button>
-                <Button type="button" variant="ghost" onClick={closeReview}>
-                  Später
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>Angaben von {reviewRow?.displayName}</DialogTitle>
-                <DialogDescription>
-                  Prüfen und übernehmen. Danach kannst du direkt den Plan starten.
-                </DialogDescription>
-              </DialogHeader>
-
-              {reviewRow?.pendingSubmission ? (
-                <>
-                  <PatientIntakeReview submission={reviewRow.pendingSubmission} />
-                  <Button type="button" disabled={applying} onClick={handleApply}>
-                    {applying ? "Wird übernommen..." : "Übernehmen"}
-                  </Button>
-                </>
-              ) : null}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+    </ListPageShell>
   )
 }
 
-interface StatusFilterChipProps {
-  label: string
-  count: number
-  active: boolean
-  dotClassName?: string
-  onClick: () => void
-}
-
-function StatusFilterChip({
-  label,
-  count,
-  active,
-  dotClassName,
-  onClick,
-}: StatusFilterChipProps) {
+function CareEmptyState({ hasAnyRows }: { hasAnyRows: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-        active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-      }`}
-    >
-      {dotClassName && !active ? (
-        <span className={`size-1.5 rounded-full ${dotClassName}`} aria-hidden="true" />
-      ) : null}
-      {label}
-      <span className={active ? "opacity-80" : "text-muted-foreground"}>{count}</span>
-    </button>
+    <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+      <p className="text-[13px] text-muted-foreground">
+        {hasAnyRows
+          ? "Kein Patient entspricht den Filtern."
+          : "Noch niemand in laufender Betreuung. Sobald ein Plan startet, erscheint der Patient hier."}
+      </p>
+      {hasAnyRows ? null : (
+        <Button size="sm" asChild>
+          <Link href="/patienten/aufnahmen" prefetch={false}>
+            Zu den Aufnahmen
+          </Link>
+        </Button>
+      )}
+    </div>
   )
 }
