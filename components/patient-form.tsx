@@ -241,7 +241,10 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
         ? String((savedPatient as Patient).id)
         : patient?.id
       if (isEditing || submitIntent === "overview" || !savedId) {
-        router.push("/patienten")
+        // A patient with no plan yet belongs to Aufnahmen; /patienten only
+        // holds people already under care, so sending them there after
+        // creation would land on a list that does not contain them.
+        router.push(isEditing ? "/patienten" : "/patienten/aufnahmen")
       } else if (submitIntent === "counseling") {
         router.push(`/patienten/${savedId}/beratungen/neu`)
       } else {

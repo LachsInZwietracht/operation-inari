@@ -38,7 +38,15 @@ test.describe("Navigation", () => {
         url: /\/austauschtabellen/,
         heading: "Austauschtabellen",
       },
-      { label: "Patienten", path: "/patienten", url: /\/patienten/, heading: "Patienten" },
+      // The patient chain is split at the seam where a plan starts: Aufnahmen
+      // holds everyone still being taken on, Patienten everyone under care.
+      {
+        label: "Aufnahmen",
+        path: "/patienten/aufnahmen",
+        url: /\/patienten\/aufnahmen/,
+        heading: "Aufnahmen",
+      },
+      { label: "Patienten", path: "/patienten", url: /\/patienten$/, heading: "Patienten" },
       {
         label: "Menüpläne",
         path: "/institution/menueplaene",

@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-manrope);
-  --font-mono: var(--font-jetbrains-mono);
+  --font-sans: var(--font-sans-family);
+  --font-mono: var(--font-mono-family);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -41,34 +41,82 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* Handoff surfaces and text ranks — see :root for what each one carries. */
+  --color-panel: var(--panel);
+  --color-line-2: var(--line-2);
+  --color-row-hover: var(--row-hover);
+  --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
+  --color-track: var(--track);
+  --color-chip: var(--chip);
+  --color-btn: var(--btn);
+  /* Intake stages, in pipeline order. */
+  --color-stage-eingeladen: var(--stage-eingeladen);
+  --color-stage-fragebogen: var(--stage-fragebogen);
+  --color-stage-beratung: var(--stage-beratung);
+  --color-stage-plan: var(--stage-plan);
+  /* Urgency, used for the care-list row bar and adherence thresholds. */
+  --color-urgency-ok: var(--urgency-ok);
+  --color-urgency-due: var(--urgency-due);
+  --color-urgency-overdue: var(--urgency-overdue);
 }
 
 /*
- * Inari light theme — cool-neutral counterpart to the dark clinical palette.
+ * Inari light theme — warm-neutral surfaces from the patient-frontend handoff.
+ *
+ * The handoff ships its own variable names (--bg, --panel, --line, --fg2…). We
+ * map those values onto the shadcn tokens the rest of the app already uses
+ * rather than running a second palette alongside them. Two deliberate
+ * deviations, both so an app-wide repaint does not break existing screens:
+ *
+ * 1. `--primary` stays Inari green. The handoff sets its accent to the
+ *    foreground colour, which would turn every primary button in the app grey.
+ *    Its "no accent colour" rule is scoped to the patient screens, where status
+ *    colour must be the only colour that carries meaning.
+ * 2. `--card` stays white. The handoff's panel (#f4f4f1) is *darker* than its
+ *    page background (#fbfbf9); adopting it for cards would invert every card
+ *    in the app. `--panel` below carries that exact value for the screens that
+ *    actually specify it.
+ *
  * Chart hues validated for CVD separation and 3:1 surface contrast
  * (green/blue/violet/amber/red, worst adjacent pair ΔE 16.4).
  */
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: #f6f7f9;
-  --foreground: #1a1f26;
+  --background: #fbfbf9;
+  --foreground: #16181a;
   --card: #ffffff;
-  --card-foreground: #14171c;
+  --card-foreground: #16181a;
   --popover: #ffffff;
-  --popover-foreground: #14171c;
+  --popover-foreground: #16181a;
   --primary: #0d7a45;
   --primary-foreground: #ffffff;
-  --secondary: #eceff3;
+  --secondary: #f0f0ec;
   --secondary-foreground: #2a313a;
-  --muted: #eff1f5;
-  --muted-foreground: #5f6b78;
-  --accent: #e9edf2;
-  --accent-foreground: #14171c;
-  --destructive: #d64545;
-  --border: #dfe4ea;
-  --input: #ccd3dc;
+  --muted: #f4f4f1;
+  --muted-foreground: #5f6663;
+  --accent: #efefeb;
+  --accent-foreground: #16181a;
+  --destructive: #e5534b;
+  --border: #e5e5e0;
+  --input: #dcdcd6;
   --ring: #0d7a45;
+  /*
+   * Handoff tokens with no shadcn equivalent. Named for their role, not their
+   * shade, so the dark theme can invert them without renaming anything.
+   */
+  --panel: #f4f4f1;
+  --line-2: #efefeb;
+  --row-hover: #f5f5f2;
+  /* Third and fourth text ranks below --muted-foreground: labels, then axes. */
+  --fg-3: #8b918e;
+  --fg-4: #b3b8b5;
+  /* Unfilled portion of progress segments and adherence bars. */
+  --track: #e5e5e0;
+  --chip: #f0f0ec;
+  /* Resting button face — distinct from --card so it reads on a panel. */
+  --btn: #ffffff;
   /* Domain colour coding: pläne=green, patienten=blue, analyse=violet, berichte=amber, kritisch=red */
   --chart-1: #0f8a4f;
   --chart-2: #0e7bc0;
@@ -97,24 +145,33 @@
  */
 .dark {
   color-scheme: dark;
-  --background: #0f1115;
-  --foreground: #e8ebef;
-  --card: #14171c;
-  --card-foreground: #f3f5f8;
-  --popover: #14171c;
-  --popover-foreground: #f3f5f8;
+  --background: #08090a;
+  --foreground: #ededed;
+  --card: #0d0e10;
+  --card-foreground: #ededed;
+  --popover: #0d0e10;
+  --popover-foreground: #ededed;
   --primary: #3ecf8e;
   --primary-foreground: #0c1f16;
-  --secondary: #1a1f26;
+  --secondary: #141518;
   --secondary-foreground: #cdd3da;
-  --muted: #171b21;
-  --muted-foreground: #9aa4b1;
-  --accent: #1c2129;
-  --accent-foreground: #f3f5f8;
-  --destructive: #ef6b6e;
-  --border: #232931;
-  --input: #2a313a;
+  --muted: #141518;
+  --muted-foreground: #9ca1ab;
+  --accent: #1c1d20;
+  --accent-foreground: #ededed;
+  --destructive: #e5534b;
+  --border: #1c1d20;
+  --input: #26282c;
   --ring: #3ecf8e;
+  /* See :root for why these exist and what they carry. */
+  --panel: #0d0e10;
+  --line-2: #141518;
+  --row-hover: #0f1012;
+  --fg-3: #6f747d;
+  --fg-4: #43464d;
+  --track: #24262b;
+  --chip: #141518;
+  --btn: #111214;
   /* Domain colour coding: pläne=green, patienten=blue, analyse=violet, berichte=amber, kritisch=red */
   --chart-1: #3ecf8e;
   --chart-2: #5897f0;
@@ -135,6 +192,24 @@
   --brand-shadow: rgba(62, 207, 142, 0.3);
   --hero-panel-bg: radial-gradient(120% 140% at 0% 0%, #16241c 0%, #121820 62%);
   --hero-panel-border: #284035;
+}
+
+/*
+ * Status colours are identical in both themes on purpose.
+ *
+ * These encode information, not decoration: a practitioner who switches theme
+ * mid-shift must not have to relearn which colour means "waiting on me". They
+ * sit outside :root/.dark so nothing can override them per theme by accident.
+ */
+:root,
+.dark {
+  --stage-eingeladen: #8b8f98;
+  --stage-fragebogen: #e8a33d;
+  --stage-beratung: #4c8dff;
+  --stage-plan: #2fbf87;
+  --urgency-ok: #2fbf87;
+  --urgency-due: #e8a33d;
+  --urgency-overdue: #e5534b;
 }
 
 @layer base {

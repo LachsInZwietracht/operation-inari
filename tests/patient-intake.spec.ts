@@ -233,29 +233,61 @@ test.describe("Onboarding intake — end to end", () => {
 });
 
 test.describe("Onboarding intake — practitioner surface", () => {
-  // Onboarding no longer lives behind its own tab: an invited person is just an
-  // earlier pipeline state, so inviting happens directly from the patient list.
-  test("patients page offers inviting without a separate tab", async ({ page }) => {
-    await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  // Onboarding never had its own tab and still does not: an invited person is
+  // just an earlier stage of the intake, so inviting happens from Aufnahmen —
+  // the screen that holds everyone who does not have a plan yet.
+  test("Aufnahmen offers inviting without a separate tab", async ({ page }) => {
+    await page.goto("/patienten/aufnahmen", {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
     await page.waitForLoadState("networkidle");
-    await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Aufnahmen" })).toBeVisible({
       timeout: 30_000,
     });
 
     await expect(page.getByRole("tab", { name: "Onboarding" })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Einladung senden" }).click();
+    await page.getByRole("button", { name: "Einladung", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });
   });
 
-  test("patient list exposes pipeline status filters", async ({ page }) => {
-    await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  test("Aufnahmen filters by intake stage and puts it in the URL", async ({ page }) => {
+    await page.goto("/patienten/aufnahmen", {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("button", { name: /^Eingeladen/ })).toBeVisible({
+    await page.getByRole("button", { name: "Filter" }).click();
+    await page.getByRole("menuitem", { name: "Stufe" }).click();
+    await page.getByRole("menuitem", { name: "Eingeladen" }).click();
+
+    // The chip reads field, operator, value — and the same state is in the URL,
+    // so a filtered list survives a reload and can be shared.
+    await expect(page.getByRole("button", { name: /Filter Stufe entfernen/ })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole("button", { name: /^Antwort da/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Bereit für Plan/ })).toBeVisible();
+    await expect(page).toHaveURL(/stufe=eingeladen/);
+  });
+
+  test("Aufnahmen switches between Liste, Zeitachse and Board", async ({ page }) => {
+    await page.goto("/patienten/aufnahmen", {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await page.waitForLoadState("networkidle");
+
+    for (const [label, expected] of [
+      ["Zeitachse", /view=zeit/],
+      ["Board", /view=board/],
+    ] as const) {
+      await page.getByRole("tab", { name: label }).click();
+      await expect(page).toHaveURL(expected, { timeout: 15_000 });
+      await expect(page.getByRole("tab", { name: label })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    }
   });
 });

@@ -221,10 +221,32 @@ function patientCard(page: Page, patient: CreatedPatient) {
   return page.locator(`[data-patient-id="${patient.id}"]`).first();
 }
 
+/**
+ * Opens Aufnahmen, not /patienten.
+ *
+ * The patient chain is split at the seam where a plan starts: a freshly created
+ * fixture has no plan, so it lives on Aufnahmen. /patienten only holds patients
+ * already under care.
+ */
 async function openPatientList(page: Page) {
-  await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.goto("/patienten/aufnahmen", { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.waitForLoadState("networkidle");
-  await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Aufnahmen" })).toBeVisible({ timeout: 30_000 });
+}
+
+/** Applies one filter from the shared filter bar's "+ Filter" menu. */
+async function applyListFilter(page: Page, field: string, value: string) {
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByRole("menuitem", { name: field }).click();
+  if (field === "Name") {
+    await page.getByRole("searchbox", { name: "Name" }).fill(value);
+    await page.getByRole("searchbox", { name: "Name" }).press("Enter");
+  } else {
+    await page.getByRole("menuitem", { name: value }).click();
+  }
+  await expect(page.getByRole("button", { name: `Filter ${field} entfernen` })).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 async function openPatientDetail(page: Page, patient: CreatedPatient) {
@@ -272,9 +294,9 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientList(page);
-      const searchInput = page.getByPlaceholder("Patient oder Einladung suchen...");
-      await expect(searchInput).toBeVisible();
-      await searchInput.fill(primary.lastName);
+      // Free text is a filter like any other here, so a narrowed list always
+      // reads back as field, operator, value — and survives a reload.
+      await applyListFilter(page, "Name", primary.lastName);
       await expect(patientCard(page, primary)).toBeVisible();
       await expect(patientCard(page, secondary)).toHaveCount(0);
     } finally {
@@ -289,9 +311,7 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientList(page);
-      const indicationFilter = page.getByRole("combobox", { name: /Indikationen/i });
-      await indicationFilter.click();
-      await page.getByRole("option", { name: "Adipositas" }).click();
+      await applyListFilter(page, "Indikation", "Adipositas");
 
       await expect(patientCard(page, primary)).toBeVisible();
       await expect(patientCard(page, secondary)).toHaveCount(0);
@@ -312,7 +332,9 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientList(page);
-      await expect(patientCard(page, patient)).toContainText("Letzte Beratung: 15.05.2026");
+      // A patient whose questionnaire is in and who has had a session is at the
+      // "Plan erstellen" stage, whose timestamp column reads the session date.
+      await expect(patientCard(page, patient)).toContainText("Beratung 15.05.");
     } finally {
       await deleteCounselingSessionFixture(olderSession.id);
       await deleteCounselingSessionFixture(newerSession.id);
@@ -329,7 +351,10 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientList(page);
-      await expect(patientCard(page, patient)).not.toContainText("Letzte Beratung:");
+      // Without a session the patient sits one stage earlier, waiting on a
+      // conversation rather than on a plan.
+      await expect(patientCard(page, patient)).not.toContainText("Beratung ");
+      await expect(patientCard(page, patient)).toContainText("Aufgenommen ");
     } finally {
       await deletePatientFixture(patient.id);
     }
@@ -382,7 +407,9 @@ test.describe("Patient Management", () => {
 
     await page.getByRole("button", { name: "Speichern & Liste" }).click();
 
-    await expect(page).toHaveURL(/\/patienten/);
+    // A patient with no plan yet belongs to Aufnahmen, so that is where saving
+    // from the form lands.
+    await expect(page).toHaveURL(/\/patienten\/aufnahmen/);
     await expect(page.getByRole("link", { name: new RegExp(`${uniqueLastName}, Neu`) }).first()).toBeVisible({
       timeout: 30_000,
     });
