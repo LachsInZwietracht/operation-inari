@@ -31,7 +31,13 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
    * and making every navigation in the app slow.
    */
   const foodsRef = useRef(foods);
-  foodsRef.current = foods;
+
+  // Kept in sync from an effect rather than during render — writing a ref while
+  // rendering is not allowed under the React Compiler. Effects run in source
+  // order, so this lands before the two below that read it.
+  useEffect(() => {
+    foodsRef.current = foods;
+  }, [foods]);
 
   useEffect(() => {
     customRecipesRef.current = customRecipes;
