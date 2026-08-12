@@ -20,6 +20,12 @@ export interface ClientPatientHistory {
   patient: Pick<Patient, "firstName" | "goalWeight"> | null;
   /** The counselor's energy target, already reduced to answers not inputs. */
   energy: ClientEnergyReference | null;
+  /**
+   * Daily reference intake by nutrient id, resolved server-side for this
+   * person's age group, sex and life stage — none of which come with it.
+   * Empty when nobody has assigned a reference standard.
+   */
+  references: Map<string, number>;
   measurements: AnthropometricEntry[];
   activities: ActivityEntry[];
 }
@@ -27,6 +33,7 @@ export interface ClientPatientHistory {
 interface HistoryPayload {
   patient: { firstName: string; goalWeight: number | null } | null;
   energy: Record<string, unknown> | null;
+  references: Array<{ nutrientId: string; amount: unknown }> | null;
   measurements: Array<Record<string, unknown>> | null;
   activities: Array<Record<string, unknown>> | null;
 }
@@ -34,6 +41,7 @@ interface HistoryPayload {
 const EMPTY: ClientPatientHistory = {
   patient: null,
   energy: null,
+  references: new Map(),
   measurements: [],
   activities: [],
 };
@@ -107,6 +115,11 @@ export async function fetchClientPatientHistory(
           basalKcal: num(payload.energy.basalKcal),
         }
       : null,
+    references: new Map(
+      (payload.references ?? [])
+        .map((row) => [row.nutrientId, num(row.amount)] as const)
+        .filter((pair): pair is readonly [string, number] => pair[1] !== undefined),
+    ),
     measurements: (payload.measurements ?? []).map(mapMeasurement),
     activities: (payload.activities ?? []).map(mapActivity),
   };

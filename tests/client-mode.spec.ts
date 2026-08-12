@@ -107,6 +107,11 @@ test("counselor invites, client redeems, logs a meal, counselor sees it", async 
   await breakfast.getByRole("button", { name: "Hinzufügen" }).click();
 
   const dialog = page.getByRole("dialog");
+  // The dialog opens on "Zuletzt" whenever this account has any history, which
+  // depends on what ran before. This test is about searching, so it says so
+  // rather than relying on which tab happens to be the default.
+  const searchTab = dialog.getByRole("button", { name: "Suche", exact: true });
+  if (await searchTab.isVisible().catch(() => false)) await searchTab.click();
   await dialog.getByPlaceholder("Lebensmittel, Rezept oder Mahlzeit").fill("Smoketest Hafer");
   await dialog.getByRole("button", { name: FOOD_NAME }).click({ timeout: 15_000 });
 

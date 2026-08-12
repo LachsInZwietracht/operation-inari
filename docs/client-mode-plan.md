@@ -248,10 +248,47 @@ cover the repeat case without them.
 4. *Custom products as real client-owned foods* (migration `…81`), *saved
    meals* (`…82`) and *recipes logged as recipes* (`…83`).
 
-Still deliberately absent: photo recognition, micronutrient traffic lights in the
-client view (that is the counselor's work), client-authored recipes with
+Still deliberately absent: photo recognition, client-authored recipes with
 ingredients and instructions — saved meals cover the case people actually have —
 and streaks.
+
+**M6 — Micronutrients, and history as the first screen**: ✅
+
+1. *"Zuletzt" as the default tab* — the add dialog opens on what this person has
+   been eating (this slot's habits by frequency, then everything else by
+   recency) with the last amount pre-filled; search is one tap away. Replaces
+   the six frequent-entry chips, which were capped and could not express "what
+   I had last night". No schema.
+2. *Micronutrients in the day card* — folded away behind one line, opening on
+   the six furthest from target, with the full list grouped behind "Alle
+   anzeigen". Reference intake resolved server-side in
+   `client_patient_history()` for age group, sex and life stage (migration
+   `20260812000084`) — the answer travels, not the demographics, the same trade
+   migration `…79` made for the basal rate.
+3. *Coverage, not confidence* — catalog foods carry iron, barcode products do
+   not, and summed they are indistinguishable from a food containing none. The
+   day is therefore kept as parts rather than a sum
+   (`collectClientDayParts`), and every value states the share of the day's
+   energy that had data for it. Missing is never counted as zero.
+4. *What a portion is good for* — the add dialog's confirmation names the two or
+   three references the portion moves most.
+
+Reversals of earlier notes: micronutrients in the client view were listed here
+as the counselor's work. They are the client's too — but only with the coverage
+statement, which is what makes the number honest rather than an accusation.
+Sodium, sugar and saturated fat are shown as ceilings with no progress bar; a
+bar that fills up is an instruction to fill it.
+
+5. *The same rows over the window, in the Verlauf tab* — and the framing there
+   is deliberately **not** a habit tracker's. Reference intakes are defined as
+   averages over days, not daily quotas; one portion of liver is ten days of
+   vitamin A. "You hit iron on 4 of 14 days" would be factually wrong and
+   discouraging, so the headline is the **average against the reference** and
+   the daily bars sit one tap below it as context. Days the database could not
+   describe are excluded from the average rather than counted as low days, and
+   are drawn as grey bands so "no data" never looks like "ate none of it".
+   No schema — `fetchClientStats` now returns the window as unsummed parts and
+   the page combines them with the reference intake it already holds.
 
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 

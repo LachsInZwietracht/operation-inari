@@ -1,6 +1,8 @@
 "use client"
 
+import { ClientMicronutrientPanel } from "@/components/client/client-micronutrient-panel"
 import { Card, CardContent } from "@/components/ui/card"
+import type { ClientMicronutrientRow } from "@/lib/client-micronutrients"
 import {
   targetProgress,
   TARGET_SOURCE_LABELS,
@@ -33,9 +35,14 @@ interface MacroRow {
 export function ClientDayTotals({
   totals,
   target,
+  micronutrients,
+  microDataShare,
 }: {
   totals: NutrientValue[]
   target: ClientDayTarget | null
+  /** Empty when nobody has assigned this person a reference standard. */
+  micronutrients: ClientMicronutrientRow[]
+  microDataShare: number
 }) {
   const rows: MacroRow[] = [
     { id: "energie", label: "kcal", digits: 0, target: target?.kcal },
@@ -99,6 +106,10 @@ export function ClientDayTotals({
               : `Richtwert ${target.kcal} kcal (${TARGET_SOURCE_LABELS[target.source]})`}
           </p>
         ) : null}
+
+        {/* Below the macros and folded away: the four numbers are the daily
+            question, the micros are the one you ask when you want to. */}
+        <ClientMicronutrientPanel rows={micronutrients} dataShare={microDataShare} />
       </CardContent>
     </Card>
   )

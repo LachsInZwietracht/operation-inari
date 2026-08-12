@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { CLIENT_LOG_NUTRIENT_IDS } from "@/lib/client-food-log";
+import { CLIENT_NUTRIENT_IDS } from "@/lib/client-food-log";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type { Food, NutrientValue } from "@/lib/types";
 
@@ -167,7 +167,7 @@ export async function hydrateClientFoods(
     fetch("/api/foods/by-ids", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: unique, nutrientIds: CLIENT_LOG_NUTRIENT_IDS }),
+      body: JSON.stringify({ ids: unique, nutrientIds: CLIENT_NUTRIENT_IDS }),
     }).then((response) => (response.ok ? (response.json() as Promise<Food[]>) : [])),
     client
       .from("foods")

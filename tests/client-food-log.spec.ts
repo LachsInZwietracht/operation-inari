@@ -4,12 +4,15 @@ import {
   calculateClientDayNutrients,
   calculateClientLogNutrients,
   calculatePlannedNutrients,
+  collectRecentEntries,
   eatenAmount,
   formatPlanAmount,
+  logEntryKcal,
   planEntryNutrients,
 } from "@/lib/client-food-log";
 import { getNutrientValue } from "@/lib/nutrients";
 import type {
+  ClientFoodLogDay,
   ClientFoodLogEntry,
   ClientMealCompletion,
   ClientPlanEntry,
@@ -208,5 +211,95 @@ test.describe("small pieces", () => {
     expect(formatPlanAmount(60, "g")).toBe("60 g");
     expect(formatPlanAmount(1, "portion")).toBe("1 Portion");
     expect(formatPlanAmount(1.5, "portion")).toBe("1.5 Portionen");
+  });
+});
+
+/**
+ * The list the add dialog opens on.
+ *
+ * Two orderings share one list, and getting them the wrong way round is what
+ * would make it useless: this slot's habits first, everything else by when it
+ * was last eaten.
+ */
+test.describe("what this person has been eating", () => {
+  function logDay(date: string, entries: ClientFoodLogEntry[]): ClientFoodLogDay {
+    return { id: `day-${date}`, date, entries };
+  }
+
+  test("this slot's habits come before anything else, most frequent first", () => {
+    const days = [
+      logDay("2026-08-10", [
+        logEntry({ id: "a", foodId: "bread", slotType: "fruehstueck" }),
+        logEntry({ id: "b", foodId: "oats", slotType: "fruehstueck" }),
+      ]),
+      logDay("2026-08-11", [logEntry({ id: "c", foodId: "oats", slotType: "fruehstueck" })]),
+      // Eaten more recently, but at dinner — it must not outrank breakfast.
+      logDay("2026-08-12", [logEntry({ id: "d", foodId: "pasta", slotType: "abendessen" })]),
+    ];
+
+    expect(collectRecentEntries(days, "fruehstueck").map((row) => row.entry.foodId)).toEqual([
+      "oats",
+      "bread",
+      "pasta",
+    ]);
+  });
+
+  test("outside the slot, the most recent thing comes first", () => {
+    const days = [
+      logDay("2026-08-09", [logEntry({ id: "a", foodId: "rice", slotType: "abendessen" })]),
+      logDay("2026-08-12", [logEntry({ id: "b", foodId: "pasta", slotType: "abendessen" })]),
+    ];
+
+    expect(collectRecentEntries(days, "fruehstueck").map((row) => row.entry.foodId)).toEqual([
+      "pasta",
+      "rice",
+    ]);
+  });
+
+  test("the amount offered is the one used last, not the first ever", () => {
+    const days = [
+      logDay("2026-08-10", [logEntry({ id: "a", amount: 40 })]),
+      logDay("2026-08-12", [logEntry({ id: "b", amount: 80 })]),
+    ];
+
+    const [oats] = collectRecentEntries(days, "fruehstueck");
+    expect(oats.entry.amount).toBe(80);
+    expect(oats.count).toBe(2);
+    expect(oats.lastDate).toBe("2026-08-12");
+  });
+
+  test("something eaten in both slots is offered with this slot's portion", () => {
+    const days = [
+      // Newest first in the scan, so the dinner portion is seen before breakfast's.
+      logDay("2026-08-12", [
+        logEntry({ id: "a", amount: 200, slotType: "abendessen" }),
+      ]),
+      logDay("2026-08-11", [
+        logEntry({ id: "b", amount: 50, slotType: "fruehstueck" }),
+      ]),
+    ];
+
+    const [oats] = collectRecentEntries(days, "fruehstueck");
+    expect(oats.inSlot).toBe(true);
+    // 200 g of oats is dinner's answer to a breakfast question.
+    expect(oats.entry.amount).toBe(50);
+  });
+
+  test("two different recipes stay two entries", () => {
+    // Keyed as foods they would share an empty food id and collapse into one
+    // row that claims to have been eaten twice.
+    const days = [
+      logDay("2026-08-12", [
+        logEntry({ id: "a", sourceType: "recipe", foodId: undefined, recipeId: "soup" }),
+        logEntry({ id: "b", sourceType: "recipe", foodId: undefined, recipeId: "curry" }),
+      ]),
+    ];
+
+    expect(collectRecentEntries(days, "mittagessen")).toHaveLength(2);
+  });
+
+  test("an unpriceable row reports no energy rather than a free lunch", () => {
+    expect(logEntryKcal(logEntry({ amount: 50 }), foods)).toBe(185);
+    expect(logEntryKcal(logEntry({ foodId: "unknown-food" }), foods)).toBeUndefined();
   });
 });

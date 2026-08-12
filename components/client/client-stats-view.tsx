@@ -28,8 +28,10 @@ import {
 import { todayIsoDate } from "@/lib/client-mode"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { formatSet } from "@/lib/client-training"
+import { ClientNutrientTrends } from "@/components/client/client-nutrient-trends"
 import { ClientTrainingSummary } from "@/components/client/client-training-summary"
 import { PatientStatsTab } from "@/components/patient-stats-tab"
+import { summarizeNutrientTrends } from "@/lib/client-micronutrients"
 import { CLIENT_STATS_WINDOW_DAYS } from "@/lib/client-stats"
 import { fetchClientStats, type ClientStats } from "@/lib/data/client-stats-client"
 import {
@@ -181,6 +183,14 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
     (day) => day.gegessen + day.ausgelassen + day.offen > 0,
   )
 
+  // Combined here rather than inside `fetchClientStats`: the reference intake
+  // rides along with the patient projection this page already loads, and
+  // fetching it twice would be a second round trip for one map.
+  const nutrientTrends = summarizeNutrientTrends({
+    days: stats?.dayParts ?? [],
+    references: history?.references ?? new Map(),
+  })
+
   const exercises = (stats?.progress ?? []).slice(0, MAX_EXERCISES)
   // Bodyweight exercises have no 1RM to plot. Leaving them in would put a name
   // and a colour in the legend with no line under it — they keep their place in
@@ -297,6 +307,8 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
           )}
         </CardContent>
       </Card>
+
+      <ClientNutrientTrends trends={nutrientTrends} windowDays={CLIENT_STATS_WINDOW_DAYS} />
 
       {isClientModuleEnabled("plan") && hasAdherence && (
         <Card>

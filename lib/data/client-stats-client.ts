@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { format, parseISO, subDays } from "date-fns";
 
-import { calculateClientDayNutrients } from "@/lib/client-food-log";
+import { collectClientDayParts } from "@/lib/client-food-log";
 import {
   averageOfLoggedDays,
   buildKcalSeries,
@@ -26,7 +26,7 @@ import {
 } from "@/lib/data/client-plan-nutrition-client";
 import { hydrateClientFoods } from "@/lib/data/client-custom-foods-client";
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client";
-import { getNutrientValue } from "@/lib/nutrients";
+import { getNutrientValue, sumNutrients } from "@/lib/nutrients";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type {
   ClientAdherenceDay,
@@ -35,6 +35,7 @@ import type {
   ClientPlanDay,
   ClientPersonalRecord,
   ClientPlanEntryFacts,
+  NutrientValue,
 } from "@/lib/types";
 
 /**
@@ -52,6 +53,13 @@ export interface ClientStats {
   averageKcal: number;
   /** Estimated energy spent training, same window and same unit as the food. */
   burnedByDay: ClientKcalDay[];
+  /**
+   * The window as unsummed parts, oldest first — the raw material the
+   * micronutrient trends are built from. Kept unsummed because which source
+   * carried data for what is exactly what a sum destroys, and combined with
+   * the reference intake by the caller, which already holds it.
+   */
+  dayParts: { date: string; parts: NutrientValue[][] }[];
   adherence: ClientAdherenceDay[];
   progress: ClientExerciseProgress[];
   /** Training by week — the grain people actually plan in. */
@@ -65,20 +73,17 @@ function resolveClient(supabase?: SupabaseClient) {
 }
 
 /**
- * Energy per day for the window, including days with no entries.
+ * Everything eaten on each day of the window, one array per source.
  *
  * Counts both halves of the day — what was typed into the diary and what was
  * ticked off the plan. Reading only the diary was what made a client who
  * followed their plan perfectly show up here as a flat zero.
- *
- * Gaps are filled with zero on purpose: a diary with holes should look like a
- * diary with holes, not like a shorter, tidier one.
  */
-async function loadKcalByDay(
+async function loadDayParts(
   clientUserId: string,
   range: { from: string; to: string },
   supabase: SupabaseClient,
-): Promise<ClientKcalDay[]> {
+): Promise<Map<string, NutrientValue[][]>> {
   const days = await fetchClientFoodLogDays(clientUserId, range, supabase);
 
   const foodIds = [
@@ -127,24 +132,22 @@ async function loadKcalByDay(
   const logByDate = new Map(days.map((day) => [day.date, day]));
   const planByDate = new Map(plans.map((plan) => [plan.date, plan]));
 
-  const kcalByDate = new Map(
+  // Kept as parts rather than summed: the micronutrient trends need to know
+  // which sources carried data for what, and re-walking the window a second
+  // time to find out would risk the two views describing different days.
+  return new Map(
     dates.map((date) => [
       date,
-      getNutrientValue(
-        calculateClientDayNutrients({
-          entries: logByDate.get(date)?.entries ?? [],
-          foods,
-          recipeFacts,
-          planEntries: planByDate.get(date)?.entries ?? [],
-          completions,
-          planFacts,
-        }),
-        "energie",
-      ),
+      collectClientDayParts({
+        entries: logByDate.get(date)?.entries ?? [],
+        foods,
+        recipeFacts,
+        planEntries: planByDate.get(date)?.entries ?? [],
+        completions,
+        planFacts,
+      }),
     ]),
   );
-
-  return buildKcalSeries(kcalByDate, range.to);
 }
 
 /**
@@ -164,11 +167,26 @@ export async function fetchClientStats(
     to: today,
   };
 
-  const kcalByDay = isClientModuleEnabled("tagebuch")
-    ? await loadKcalByDay(clientUserId, range, client)
-    : [];
+  const partsByDate = isClientModuleEnabled("tagebuch")
+    ? await loadDayParts(clientUserId, range, client)
+    : new Map<string, NutrientValue[][]>();
+
+  const kcalByDay = buildKcalSeries(
+    new Map(
+      [...partsByDate].map(([date, parts]) => [
+        date,
+        getNutrientValue(sumNutrients(parts), "energie"),
+      ]),
+    ),
+    range.to,
+  );
 
   const averageKcal = averageOfLoggedDays(kcalByDay);
+
+  const dayParts = kcalByDay.map((day) => ({
+    date: day.date,
+    parts: partsByDate.get(day.date) ?? [],
+  }));
 
   let adherence: ClientAdherenceDay[] = [];
   if (isClientModuleEnabled("plan")) {
@@ -225,5 +243,14 @@ export async function fetchClientStats(
     burnedByDay = buildKcalSeries(burnedByDate, range.to);
   }
 
-  return { kcalByDay, averageKcal, burnedByDay, adherence, progress, trainingWeeks, records };
+  return {
+    kcalByDay,
+    averageKcal,
+    dayParts,
+    burnedByDay,
+    adherence,
+    progress,
+    trainingWeeks,
+    records,
+  };
 }
