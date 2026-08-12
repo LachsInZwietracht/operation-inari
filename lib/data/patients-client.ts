@@ -52,6 +52,8 @@ interface PatientRow {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relationship: string | null;
+  intake_stage_override: Patient["intakeStageOverride"] | null;
+  intake_stage_override_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -107,16 +109,69 @@ const PATIENT_NUTRITION_PREFERENCE_COLUMNS = [
   "diet_style",
 ];
 
+/** Same reasoning; see the intake-stage override migration. */
+const PATIENT_INTAKE_OVERRIDE_COLUMNS = [
+  "intake_stage_override",
+  "intake_stage_override_at",
+];
+
 const PATIENT_COLUMNS = [
+  ...PATIENT_BASE_COLUMNS,
+  ...PATIENT_NUTRITION_PREFERENCE_COLUMNS,
+  ...PATIENT_INTAKE_OVERRIDE_COLUMNS,
+].join(",");
+
+const PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES = [
+  ...PATIENT_BASE_COLUMNS,
+  ...PATIENT_INTAKE_OVERRIDE_COLUMNS,
+].join(",");
+
+const PATIENT_COLUMNS_WITHOUT_INTAKE_OVERRIDE = [
   ...PATIENT_BASE_COLUMNS,
   ...PATIENT_NUTRITION_PREFERENCE_COLUMNS,
 ].join(",");
 
-const PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES = PATIENT_BASE_COLUMNS.join(",");
+const PATIENT_COLUMNS_MINIMAL = PATIENT_BASE_COLUMNS.join(",");
 
 function isMissingNutritionPreferenceColumnError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return PATIENT_NUTRITION_PREFERENCE_COLUMNS.some((column) => message.includes(column));
+}
+
+function isMissingIntakeOverrideColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return PATIENT_INTAKE_OVERRIDE_COLUMNS.some((column) => message.includes(column));
+}
+
+/**
+ * Runs a patient query, retrying without whichever optional column group the
+ * database reports as missing. Anything else is rethrown untouched.
+ */
+async function withOptionalColumns<T>(run: (columns: string) => Promise<T>): Promise<T> {
+  try {
+    return await run(PATIENT_COLUMNS);
+  } catch (error) {
+    const missingNutrition = isMissingNutritionPreferenceColumnError(error);
+    const missingOverride = isMissingIntakeOverrideColumnError(error);
+    if (!missingNutrition && !missingOverride) throw error;
+
+    if (missingNutrition && missingOverride) return run(PATIENT_COLUMNS_MINIMAL);
+    if (missingNutrition) {
+      try {
+        return await run(PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
+      } catch (retryError) {
+        if (!isMissingIntakeOverrideColumnError(retryError)) throw retryError;
+        return run(PATIENT_COLUMNS_MINIMAL);
+      }
+    }
+
+    try {
+      return await run(PATIENT_COLUMNS_WITHOUT_INTAKE_OVERRIDE);
+    } catch (retryError) {
+      if (!isMissingNutritionPreferenceColumnError(retryError)) throw retryError;
+      return run(PATIENT_COLUMNS_MINIMAL);
+    }
+  }
 }
 
 function resolveBrowserClient(supabase?: SupabaseClient) {
@@ -174,6 +229,8 @@ function mapPatientRow(row: PatientRow): Patient {
     emergencyContactName: row.emergency_contact_name ?? undefined,
     emergencyContactPhone: row.emergency_contact_phone ?? undefined,
     emergencyContactRelationship: row.emergency_contact_relationship ?? undefined,
+    intakeStageOverride: row.intake_stage_override ?? undefined,
+    intakeStageOverrideAt: row.intake_stage_override_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -197,11 +254,38 @@ export async function fetchPatientsClient(
     return ((data ?? []) as unknown as PatientRow[]).map((row) => mapPatientRow(row));
   }
 
-  try {
-    return await runQuery(PATIENT_COLUMNS);
-  } catch (error) {
-    if (!isMissingNutritionPreferenceColumnError(error)) throw error;
-    return runQuery(PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
+  return withOptionalColumns(runQuery);
+}
+
+/**
+ * Pins or clears a patient's Aufnahmen stage by hand.
+ *
+ * Deliberately narrow rather than part of the general upsert: this writes two
+ * columns and nothing else, so setting an override from the board can never
+ * touch the rest of a patient record.
+ */
+export async function setPatientIntakeStageOverrideClient(
+  patientId: string,
+  stage: Patient["intakeStageOverride"] | null,
+  supabase?: SupabaseClient,
+): Promise<void> {
+  const client = resolveBrowserClient(supabase);
+  const { error } = await client
+    .from("patients")
+    .update({
+      intake_stage_override: stage ?? null,
+      intake_stage_override_at: stage ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", patientId);
+
+  if (error) {
+    if (isMissingIntakeOverrideColumnError(error)) {
+      throw new Error(
+        "Die manuelle Stufe ist in dieser Datenbank noch nicht eingerichtet. Die Migration muss zuerst eingespielt werden.",
+      );
+    }
+    throw new Error(error.message);
   }
 }
 

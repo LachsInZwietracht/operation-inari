@@ -121,6 +121,14 @@ export interface IntakeRow {
   waitingDays: number;
   /** Expiry within a day, or an unattended wait. Shown as red meta text only. */
   urgent: boolean;
+  /**
+   * True when {@link stage} was pinned by hand rather than derived from the
+   * records. The board marks these, because a pinned stage is the one place
+   * the pipeline can disagree with the underlying data.
+   */
+  stagePinned: boolean;
+  /** The stage the records themselves imply, kept for the "pinned" tooltip. */
+  derivedStage: IntakeStage;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,12 +359,18 @@ export function buildIntakeRows({
     const lastSessionDate = grouped.lastSessionByPatient.get(patient.id);
     const nextAppointment = grouped.nextAppointmentByPatient.get(patient.id) ?? null;
 
-    const stage = deriveIntakeStage({
+    const derivedStage = deriveIntakeStage({
       hasPatientRecord: true,
       pendingSubmission,
       pendingLink,
       lastSessionDate,
     });
+
+    // A hand-pinned stage wins over the derived one. It is the documented
+    // exception, so the row carries both and the board can say which is which.
+    const override = patient.intakeStageOverride;
+    const stage = override ?? derivedStage;
+    const stagePinned = Boolean(override) && override !== derivedStage;
 
     const timing = resolveStageTiming({
       stage,
@@ -378,6 +392,8 @@ export function buildIntakeRows({
       link: pendingLink,
       pendingSubmission,
       nextAppointment,
+      stagePinned,
+      derivedStage,
       ...timing,
       ...resolveUrgency({ timing, now, hasAppointment: Boolean(nextAppointment) }),
     });
@@ -414,6 +430,10 @@ export function buildIntakeRows({
       link,
       pendingSubmission,
       nextAppointment: null,
+      // An invitation has no patient record, so there is nothing an override
+      // could be stored on — this stage is always the derived one.
+      stagePinned: false,
+      derivedStage: stage,
       ...timing,
       ...resolveUrgency({ timing, now, hasAppointment: false }),
     });

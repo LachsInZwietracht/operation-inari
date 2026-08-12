@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { IntakeBoardView } from "@/components/intake-board-view"
 import { IntakeListView } from "@/components/intake-list-view"
 import { IntakeTimelineView } from "@/components/intake-timeline-view"
+import { IntakeTransitionDialog } from "@/components/intake-transition-dialog"
 import {
   ListFilterBar,
   type ActiveListFilter,
@@ -33,6 +34,8 @@ import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { usePatients } from "@/hooks/use-patients"
 import { usePracticeAppointments } from "@/hooks/use-practice"
 import { INDICATION_OPTIONS } from "@/lib/constants"
+import { setPatientIntakeStageOverrideClient } from "@/lib/data/patients-client"
+import { resolveIntakeTransition, type IntakeTransition } from "@/lib/intake-transitions"
 import {
   INTAKE_STAGE_META,
   INTAKE_STAGE_ORDER,
@@ -85,7 +88,7 @@ export function AufnahmenPageClient({
   initialAppointments,
   renderedAt,
 }: AufnahmenPageClientProps) {
-  const { patients } = usePatients({ initialPatients })
+  const { patients, patchPatientLocal } = usePatients({ initialPatients })
   const { sessions } = useCounseling({ initialSessions })
   const { appointments } = usePracticeAppointments({ initialAppointments })
   const {
@@ -108,6 +111,11 @@ export function AufnahmenPageClient({
   // Set once a submission is applied, so the dialog can hand off to the plan
   // instead of silently closing and leaving the user to re-navigate.
   const [appliedPatient, setAppliedPatient] = useState<{ id: string; name: string } | null>(
+    null,
+  )
+  // A card was dragged (or sent via its menu) to another stage. The dialog then
+  // names the one fact standing in the way — see lib/intake-transitions.ts.
+  const [move, setMove] = useState<{ row: IntakeRow; transition: IntakeTransition } | null>(
     null,
   )
 
@@ -252,6 +260,55 @@ export function AufnahmenPageClient({
     setAppliedPatient(null)
   }
 
+  const handleMove = useCallback((row: IntakeRow, to: IntakeStage) => {
+    const transition = resolveIntakeTransition(row, to)
+    // Dropped where it already was: nothing to explain, nothing to do.
+    if (!transition) return
+    setMove({ row, transition })
+  }, [])
+
+  const handleClearOverride = useCallback(
+    async (row: IntakeRow) => {
+      if (!row.patient) return
+      const patientId = row.patient.id
+      try {
+        await setPatientIntakeStageOverrideClient(patientId, null)
+        patchPatientLocal(patientId, {
+          intakeStageOverride: undefined,
+          intakeStageOverrideAt: undefined,
+        })
+        toast.success("Stufe wird wieder automatisch bestimmt")
+      } catch (caught) {
+        toast.error(
+          caught instanceof Error ? caught.message : "Stufe konnte nicht zurückgesetzt werden",
+        )
+      }
+    },
+    [patchPatientLocal],
+  )
+
+  const handleOverride = useCallback(
+    async (row: IntakeRow, stage: IntakeStage) => {
+      if (!row.patient) return
+      const patientId = row.patient.id
+      try {
+        await setPatientIntakeStageOverrideClient(patientId, stage)
+        // Reflect it locally so the card moves now rather than on the next
+        // reload; the write above is what makes it survive one.
+        patchPatientLocal(patientId, {
+          intakeStageOverride: stage,
+          intakeStageOverrideAt: new Date().toISOString(),
+        })
+        toast.success(`Stufe von Hand auf „${INTAKE_STAGE_META[stage].label}" gesetzt`)
+      } catch (caught) {
+        toast.error(
+          caught instanceof Error ? caught.message : "Stufe konnte nicht gesetzt werden",
+        )
+      }
+    },
+    [patchPatientLocal],
+  )
+
   return (
     <ListPageShell
       // Only the grouped list runs edge to edge; Zeitachse and Board are laid
@@ -269,7 +326,7 @@ export function AufnahmenPageClient({
             Einladung
           </Button>
           <Button size="sm" asChild>
-            <Link href="/patienten/neu" prefetch={false}>
+            <Link href="/patienten/neu">
               <Plus className="mr-1.5 size-3.5" />
               Neuer Patient
             </Link>
@@ -312,6 +369,8 @@ export function AufnahmenPageClient({
         <IntakeBoardView
           rows={visibleRows}
           onReview={setReviewRow}
+          onMove={handleMove}
+          onClearOverride={handleClearOverride}
           failedRowIds={failedRowIds}
         />
       ) : (
@@ -327,6 +386,14 @@ export function AufnahmenPageClient({
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         onCreate={createLink}
+      />
+
+      <IntakeTransitionDialog
+        move={move}
+        onClose={() => setMove(null)}
+        onReview={setReviewRow}
+        onInvite={() => setInviteOpen(true)}
+        onOverride={handleOverride}
       />
 
       <Dialog open={Boolean(reviewRow)} onOpenChange={(open) => !open && closeReview()}>

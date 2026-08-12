@@ -52,6 +52,8 @@ interface PatientRow {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relationship: string | null;
+  intake_stage_override: Patient["intakeStageOverride"] | null;
+  intake_stage_override_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,25 +100,59 @@ const PATIENT_BASE_COLUMNS = [
   "updated_at",
 ];
 
-// Diet columns are queried defensively: a deployment can reach production
+// Some columns are queried defensively: a deployment can reach production
 // before its migration has been applied, and the fallback keeps patient lists
-// readable instead of failing the whole query.
+// readable instead of failing the whole query. Each group is dropped on its
+// own, so a missing group never costs us the others.
 const PATIENT_NUTRITION_PREFERENCE_COLUMNS = [
   "nutrition_preferences",
   "nutrition_preference_notes",
   "diet_style",
 ];
 
-const PATIENT_COLUMNS = [
-  ...PATIENT_BASE_COLUMNS,
-  ...PATIENT_NUTRITION_PREFERENCE_COLUMNS,
-].join(",");
+const PATIENT_INTAKE_OVERRIDE_COLUMNS = [
+  "intake_stage_override",
+  "intake_stage_override_at",
+];
 
-const PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES = PATIENT_BASE_COLUMNS.join(",");
+const PATIENT_OPTIONAL_COLUMN_GROUPS = [
+  PATIENT_NUTRITION_PREFERENCE_COLUMNS,
+  PATIENT_INTAKE_OVERRIDE_COLUMNS,
+];
 
-function isMissingNutritionPreferenceColumnError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return PATIENT_NUTRITION_PREFERENCE_COLUMNS.some((column) => message.includes(column));
+function patientColumns(dropped: ReadonlySet<string>): string {
+  return [
+    ...PATIENT_BASE_COLUMNS,
+    ...PATIENT_OPTIONAL_COLUMN_GROUPS.flat().filter((column) => !dropped.has(column)),
+  ].join(",");
+}
+
+/**
+ * Runs a patient query, retrying without any optional column group the
+ * database says it does not have. Anything else is rethrown untouched.
+ */
+async function withOptionalColumns<T>(
+  run: (columns: string) => Promise<T>,
+): Promise<T> {
+  const dropped = new Set<string>();
+
+  // One attempt per group, plus the first one with everything present.
+  for (let attempt = 0; attempt <= PATIENT_OPTIONAL_COLUMN_GROUPS.length; attempt += 1) {
+    try {
+      return await run(patientColumns(dropped));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const missingGroup = PATIENT_OPTIONAL_COLUMN_GROUPS.find(
+        (group) =>
+          !group.every((column) => dropped.has(column)) &&
+          group.some((column) => message.includes(column)),
+      );
+      if (!missingGroup) throw error;
+      missingGroup.forEach((column) => dropped.add(column));
+    }
+  }
+
+  return run(patientColumns(dropped));
 }
 
 function mapPatientRow(row: PatientRow): Patient {
@@ -160,6 +196,8 @@ function mapPatientRow(row: PatientRow): Patient {
     emergencyContactName: row.emergency_contact_name ?? undefined,
     emergencyContactPhone: row.emergency_contact_phone ?? undefined,
     emergencyContactRelationship: row.emergency_contact_relationship ?? undefined,
+    intakeStageOverride: row.intake_stage_override ?? undefined,
+    intakeStageOverrideAt: row.intake_stage_override_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -213,14 +251,8 @@ async function fetchPatientRowByRef(
 export const fetchPatients = cache(async (supabase?: SupabaseClient): Promise<Patient[]> => {
   try {
     const client = await resolveClient(supabase);
-    try {
-      const rows = await fetchPatientRows(client, PATIENT_COLUMNS);
-      return rows.map(mapPatientRow);
-    } catch (error) {
-      if (!isMissingNutritionPreferenceColumnError(error)) throw error;
-      const rows = await fetchPatientRows(client, PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
-      return rows.map(mapPatientRow);
-    }
+    const rows = await withOptionalColumns((columns) => fetchPatientRows(client, columns));
+    return rows.map(mapPatientRow);
   } catch (error) {
     console.warn("Falling back to empty patient list:", error);
     return [];
@@ -233,18 +265,10 @@ export async function fetchPatientByRef(
 ): Promise<Patient | null> {
   try {
     const client = await resolveClient(supabase);
-    try {
-      const row = await fetchPatientRowByRef(client, PATIENT_COLUMNS, patientRef);
-      return row ? mapPatientRow(row) : null;
-    } catch (error) {
-      if (!isMissingNutritionPreferenceColumnError(error)) throw error;
-      const row = await fetchPatientRowByRef(
-        client,
-        PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES,
-        patientRef,
-      );
-      return row ? mapPatientRow(row) : null;
-    }
+    const row = await withOptionalColumns((columns) =>
+      fetchPatientRowByRef(client, columns, patientRef),
+    );
+    return row ? mapPatientRow(row) : null;
   } catch (error) {
     console.warn("Falling back from patient detail lookup:", error);
     return null;
@@ -276,10 +300,5 @@ export async function fetchPatientByRefForUser(
     return data ? mapPatientRow(data as unknown as PatientRow) : null;
   }
 
-  try {
-    return await runQuery(PATIENT_COLUMNS);
-  } catch (error) {
-    if (!isMissingNutritionPreferenceColumnError(error)) throw error;
-    return runQuery(PATIENT_COLUMNS_WITHOUT_NUTRITION_PREFERENCES);
-  }
+  return withOptionalColumns(runQuery);
 }
