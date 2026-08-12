@@ -374,7 +374,7 @@ The same migration splits diet information that `nutrition_preferences` previous
 
 The migration backfills `diet_style` from legacy array values (`vegan` > `vegetarian` > `keto` > `low_carb`, most restrictive first) and then removes those values from the array. `lib/data/patients.ts` and `lib/data/patients-client.ts` query the diet columns defensively — a deployment can reach production before its migration is applied, and the fallback keeps patient lists readable instead of failing the whole query.
 
-### Manual Intake-Stage Override (`20260812000082`)
+### Manual Intake-Stage Override (`20260812000085`)
 
 `patients.intake_stage_override` (nullable, `CHECK`-constrained to the four `IntakeStage` values) and `patients.intake_stage_override_at`, with a partial index on the rows that actually carry one.
 
