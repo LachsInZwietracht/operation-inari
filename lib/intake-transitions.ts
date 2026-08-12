@@ -143,18 +143,16 @@ export function resolveIntakeTransition(
         };
       }
 
-      // Coming back from "Plan erstellen" means undoing a documented session.
       return {
         ...base,
-        kind: "backwards",
-        explanation: `Für ${name} ist bereits ein Beratungsgespräch dokumentiert — deshalb steht die Karte auf „Plan erstellen". Ein dokumentiertes Gespräch lässt sich hier nicht zurücknehmen.`,
-        action: row.patient
-          ? {
-              type: "navigate",
-              label: "Beratungen ansehen",
-              href: `/patienten/${row.patient.id}`,
-            }
-          : null,
+        kind: "actionable",
+        explanation:
+          "Eine Beratung ist optional. Wenn du eine Sitzung dokumentieren möchtest, bleibt die Person bis dahin in dieser Stufe. Für einen Plan kannst du sie direkt starten.",
+        action: {
+          type: "navigate",
+          label: "Beratung dokumentieren",
+          href: `/patienten/${row.patient.id}/beratungen/neu`,
+        },
       };
     }
 
@@ -182,11 +180,11 @@ export function resolveIntakeTransition(
       return {
         ...base,
         kind: "actionable",
-        explanation: `„Plan erstellen" heißt: das Beratungsgespräch hat stattgefunden und ist dokumentiert. Für ${name} fehlt diese Dokumentation noch.`,
+        explanation: `Die geprüften Angaben von ${name} reichen als Grundlage für einen Plan. Eine Beratung kannst du ergänzen, wenn sie für diesen Fall sinnvoll ist.`,
         action: {
           type: "navigate",
-          label: "Beratung dokumentieren",
-          href: `/patienten/${row.patient.id}/beratungen/neu`,
+          label: "Plan starten",
+          href: `/ernaehrungsplan?patientId=${row.patient.id}`,
         },
       };
     }

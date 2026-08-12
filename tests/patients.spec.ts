@@ -289,6 +289,30 @@ test.describe("Patient Management", () => {
     }
   });
 
+  test("allows plan creation without a documented counseling session", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Asynchron",
+      lastName: "Planung",
+    });
+
+    try {
+      await page.goto("/patienten/aufnahmen?view=board", {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await page.waitForLoadState("networkidle");
+
+      const card = patientCard(page, patient);
+      await expect(card).toHaveAttribute("data-intake-stage", "plan");
+      await expect(card.getByRole("link", { name: "Plan starten" })).toHaveAttribute(
+        "href",
+        `/ernaehrungsplan?patientId=${patient.id}`,
+      );
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("displays patient list with backend data", async ({ page }) => {
     const primary = await createPatientFixture({ firstName: "Maria", lastName: "Schneider", indications: ["Adipositas"] });
     const secondary = await createPatientFixture({ firstName: "Thomas", lastName: "Weber", indications: ["Diabetes mellitus Typ 2"] });

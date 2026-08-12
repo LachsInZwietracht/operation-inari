@@ -69,7 +69,7 @@ export const INTAKE_STAGE_META: Record<IntakeStage, IntakeStageMeta> = {
   },
   beratung: {
     label: "Beratung",
-    columnHint: "Termin & Gespräch",
+    columnHint: "Optional dokumentieren",
     action: "Termin planen",
     color: "var(--stage-beratung)",
   },
@@ -320,6 +320,7 @@ function deriveIntakeStage(input: {
   pendingSubmission: PatientIntakeSubmission | null;
   pendingLink: PatientIntakeLink | null;
   lastSessionDate?: string;
+  nextAppointment: PracticeAppointment | null;
 }): IntakeStage {
   // Someone answered and is waiting on us. Always the most urgent.
   if (input.pendingSubmission) return "fragebogen";
@@ -327,9 +328,13 @@ function deriveIntakeStage(input: {
   // Invited, nothing back yet — the ball is with the patient.
   if (!input.hasPatientRecord || input.pendingLink) return "eingeladen";
 
-  // The data is in. Whether a conversation has happened decides what is next:
-  // without one there is nothing to build a plan on.
-  return input.lastSessionDate ? "plan" : "beratung";
+  // A plan can be prepared from the reviewed intake alone. A practitioner who
+  // chose a consultation keeps it visible here until it is documented, but a
+  // synchronous conversation is never a technical requirement for planning.
+  if (input.nextAppointment?.type === "beratung" && !input.lastSessionDate) {
+    return "beratung";
+  }
+  return "plan";
 }
 
 export interface BuildIntakeRowsInput extends PatientRecords {
@@ -368,6 +373,7 @@ export function buildIntakeRows({
       pendingSubmission,
       pendingLink,
       lastSessionDate,
+      nextAppointment,
     });
 
     // A hand-pinned stage wins over the derived one. It is the documented
