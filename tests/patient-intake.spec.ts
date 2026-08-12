@@ -291,6 +291,23 @@ test.describe("Onboarding intake — practitioner surface", () => {
     }
   });
 
+  test("Aufnahmen restores the last selected view when opened from navigation", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("inari:aufnahmen:view", "board");
+    });
+
+    await page.goto("/patienten/aufnahmen", {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+
+    await expect(page).toHaveURL(/view=board/, { timeout: 15_000 });
+    await expect(page.getByRole("tab", { name: "Board" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   test("Board shows all four stage columns and never scrolls the page sideways", async ({
     page,
   }) => {

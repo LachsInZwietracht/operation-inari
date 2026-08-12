@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { Loader2, Plus, Send, Trash2 } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
 import { IntakeBoardView } from "@/components/intake-board-view"
@@ -100,6 +101,8 @@ const URL_DEFAULTS = {
   sortierung: "wartezeit",
 }
 
+const INTAKE_VIEW_STORAGE_KEY = "inari:aufnahmen:view"
+
 export function AufnahmenPageClient({
   initialPatients,
   initialSessions,
@@ -122,6 +125,41 @@ export function AufnahmenPageClient({
   } = usePatientIntake({ initialLinks, initialSubmissions })
 
   const { values, setValue, clearValue } = useListUrlState({ defaults: URL_DEFAULTS })
+  const searchParams = useSearchParams()
+  const restoredViewRef = useRef(false)
+
+  // A shared URL always wins. When someone opens the plain Aufnahmen route
+  // from navigation, restore their last working view instead of forcing the
+  // default list every time.
+  useEffect(() => {
+    if (restoredViewRef.current) return
+
+    if (searchParams.has("view")) {
+      restoredViewRef.current = true
+      return
+    }
+
+    try {
+      const preferredView = window.localStorage.getItem(INTAKE_VIEW_STORAGE_KEY)
+      if (preferredView && VIEWS.some((view) => view.value === preferredView)) {
+        setValue("view", preferredView)
+        return
+      }
+    } catch {
+      // Private browsing or a full storage quota must never block Aufnahmen.
+    }
+
+    restoredViewRef.current = true
+  }, [searchParams, setValue])
+
+  useEffect(() => {
+    if (!restoredViewRef.current) return
+    try {
+      window.localStorage.setItem(INTAKE_VIEW_STORAGE_KEY, values.view)
+    } catch {
+      // The selected view remains in the URL even when storage is unavailable.
+    }
+  }, [searchParams, values.view])
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reviewRow, setReviewRow] = useState<IntakeRow | null>(null)
