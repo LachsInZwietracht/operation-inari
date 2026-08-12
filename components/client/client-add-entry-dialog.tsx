@@ -18,10 +18,12 @@ import { Label } from "@/components/ui/label"
 import { ClientBarcodePanel } from "@/components/client/client-barcode-panel"
 import type { BarcodeCustomPick } from "@/components/client/client-barcode-panel"
 import { ClientFoodSearchList } from "@/components/client/client-food-search-list"
+import { ClientRecentEntryList } from "@/components/client/client-recent-entry-list"
 import { isClientCapabilityEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import { clientLogEntryLabel, type ClientLogSuggestion } from "@/lib/client-food-log"
+import { clientLogEntryLabel, type ClientRecentEntry } from "@/lib/client-food-log"
 import { KIND_LABELS, type ClientSearchItem } from "@/lib/client-food-search"
+import { shortNutrientLabel, topContributions } from "@/lib/client-micronutrients"
 import {
   addClientFoodLogEntry,
   ensureClientFoodLogDay,
@@ -30,6 +32,15 @@ import {
 import { ensureClientCustomFood } from "@/lib/data/client-custom-foods-client"
 import { getNutrientValue, scaleNutrients } from "@/lib/nutrients"
 import type { ClientSavedMeal, Food, MealSlotType, NutrientValue } from "@/lib/types"
+
+/** Where the person is looking: their history, the catalog, or a barcode. */
+type Mode = "recent" | "search" | "barcode"
+
+const MODE_DESCRIPTIONS: Record<Mode, string> = {
+  recent: "Was du zuletzt gegessen hast — tippen und die Menge steht schon da.",
+  search: "Suche ein Lebensmittel, ein Rezept oder eine gespeicherte Mahlzeit.",
+  barcode: "Tipp den Barcode ein — wir suchen im Katalog und bei Open Food Facts.",
+}
 
 /**
  * What is about to be logged.
@@ -60,8 +71,11 @@ export function ClientAddEntryDialog({
   slot,
   date,
   dayId,
-  suggestions,
+  recent,
   foods,
+  recipeFacts,
+  recipeNames,
+  references,
   savedMeals,
   onClose,
   onSaved,
@@ -69,15 +83,22 @@ export function ClientAddEntryDialog({
   slot: MealSlotType
   date: string
   dayId: string | null
-  /** What this person usually eats in this slot, most frequent first. */
-  suggestions: ClientLogSuggestion[]
+  /** What this person has been eating, this slot's habits first. */
+  recent: ClientRecentEntry[]
   foods: Map<string, Food>
+  /** Per-portion nutrients by recipe id, for pricing recent recipe rows. */
+  recipeFacts?: Map<string, NutrientValue[]>
+  recipeNames?: Map<string, string>
+  /** Daily reference intake, for saying what a portion is good for. */
+  references: Map<string, number>
   savedMeals: ClientSavedMeal[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [selected, setSelected] = useState<EntryDraft | null>(null)
-  const [mode, setMode] = useState<"search" | "barcode">("search")
+  // Opens on what this person already eats. Searching is the fallback, not the
+  // first move — with a history, the answer is usually already on screen.
+  const [mode, setMode] = useState<Mode>(recent.length > 0 ? "recent" : "search")
   const [amount, setAmount] = useState("100")
   const [portionsByFood, setPortionsByFood] = useState<
     Map<string, { label: string; amountGrams: number }[]>
@@ -208,7 +229,7 @@ export function ClientAddEntryDialog({
    * A scanned or hand-entered product becomes a real food owned by this client,
    * so the next scan of the same bar finds it instead of making a second copy.
    */
-  async function adoptCustomProduct(product: BarcodeCustomPick) {
+  async function adoptCustomProduct(product: BarcodeCustomPick, grams = "100") {
     try {
       const foodId = await ensureClientCustomFood({
         name: product.name,
@@ -216,7 +237,7 @@ export function ClientAddEntryDialog({
         barcode: product.barcode,
       })
       keepAmountRef.current = true
-      setAmount("100")
+      setAmount(grams)
       setSelected({
         kind: "food",
         id: foodId,
@@ -229,8 +250,53 @@ export function ClientAddEntryDialog({
     }
   }
 
+  /** Re-logging something from the history, with the amount it had last time. */
+  function pickRecent(item: ClientRecentEntry) {
+    const entry = item.entry
+    keepAmountRef.current = true
+    setAmount(String(entry.amount))
+
+    if (entry.sourceType === "recipe" && entry.recipeId) {
+      setSelected({
+        kind: "recipe",
+        id: entry.recipeId,
+        name: clientLogEntryLabel(entry, foods, recipeNames),
+      })
+      return
+    }
+
+    if (entry.sourceType === "custom" && entry.customNutrients?.length) {
+      // Entries from before own products became real food rows. Re-logging one
+      // promotes it, so it stops being a copy the next time around.
+      void adoptCustomProduct(
+        { name: entry.customName ?? "Eigenes Produkt", nutrients: entry.customNutrients },
+        String(entry.amount),
+      )
+      return
+    }
+
+    if (entry.foodId) {
+      const food = foods.get(entry.foodId)
+      setSelected({
+        kind: "food",
+        id: entry.foodId,
+        name: clientLogEntryLabel(entry, foods, recipeNames),
+        subtitle: food?.manufacturer,
+        nutrientsPer100g: food
+          ? scaleNutrients(food.nutrients, food.baseAmount, 100)
+          : undefined,
+      })
+    }
+  }
+
   const parsedAmount = parseAmount(amount) ?? 0
   const isPortionUnit = selected !== null && selected.kind !== "food"
+
+  const modes: [Mode, string][] = [
+    ...(recent.length > 0 ? ([["recent", "Zuletzt"]] as [Mode, string][]) : []),
+    ["search", "Suche"],
+    ...(barcodeEnabled ? ([["barcode", "Barcode"]] as [Mode, string][]) : []),
+  ]
 
   return (
     <Dialog
@@ -243,20 +309,13 @@ export function ClientAddEntryDialog({
         <DialogHeader>
           <DialogTitle>{MEAL_SLOT_LABELS[slot]}</DialogTitle>
           <DialogDescription>
-            {mode === "barcode" && !selected
-              ? "Tipp den Barcode ein — wir suchen im Katalog und bei Open Food Facts."
-              : "Suche ein Lebensmittel, ein Rezept oder eine gespeicherte Mahlzeit."}
+            {selected ? "Menge prüfen und eintragen." : MODE_DESCRIPTIONS[mode]}
           </DialogDescription>
         </DialogHeader>
 
-        {barcodeEnabled && !selected && (
+        {modes.length > 1 && !selected && (
           <div className="flex gap-1 rounded-md bg-muted p-1">
-            {(
-              [
-                ["search", "Suche"],
-                ["barcode", "Barcode"],
-              ] as const
-            ).map(([value, label]) => (
+            {modes.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -298,7 +357,11 @@ export function ClientAddEntryDialog({
             {/* The full picture before confirming — the answer to "is this the
                 protein bar I meant?" */}
             {selected.kind === "food" && selected.nutrientsPer100g && parsedAmount > 0 && (
-              <NutritionCard nutrients={selected.nutrientsPer100g} grams={parsedAmount} />
+              <NutritionCard
+                nutrients={selected.nutrientsPer100g}
+                grams={parsedAmount}
+                references={references}
+              />
             )}
             {selected.kind === "recipe" && selected.kcalPerPortion !== undefined && (
               <p className="text-xs tabular-nums text-muted-foreground">
@@ -342,51 +405,17 @@ export function ClientAddEntryDialog({
             }}
             onPickCustom={(product) => void adoptCustomProduct(product)}
           />
+        ) : mode === "recent" ? (
+          <ClientRecentEntryList
+            entries={recent}
+            slot={slot}
+            foods={foods}
+            recipeFacts={recipeFacts}
+            recipeNames={recipeNames}
+            onPick={pickRecent}
+          />
         ) : (
-          <div className="space-y-3">
-            {/* Before anything is typed: the things this person actually eats
-                at this time of day. Most diaries are twenty foods on repeat. */}
-            {suggestions.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Zuletzt oft</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.map((suggestion) => (
-                    <Button
-                      key={suggestion.key}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 max-w-full px-2 text-xs"
-                      onClick={() => {
-                        const entry = suggestion.entry
-                        keepAmountRef.current = true
-                        setAmount(String(entry.amount))
-                        if (entry.sourceType === "recipe" && entry.recipeId) {
-                          setSelected({
-                            kind: "recipe",
-                            id: entry.recipeId,
-                            name: clientLogEntryLabel(entry, foods),
-                          })
-                        } else if (entry.foodId) {
-                          setSelected({
-                            kind: "food",
-                            id: entry.foodId,
-                            name: clientLogEntryLabel(entry, foods),
-                          })
-                        }
-                      }}
-                    >
-                      <span className="truncate">
-                        {clientLogEntryLabel(suggestion.entry, foods)}
-                      </span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <ClientFoodSearchList savedMeals={savedMeals} onPick={pick} />
-          </div>
+          <ClientFoodSearchList savedMeals={savedMeals} onPick={pick} />
         )}
 
         <DialogFooter>
@@ -404,7 +433,15 @@ export function ClientAddEntryDialog({
 }
 
 /** Macros for the amount actually being logged, not for an abstract 100 g. */
-function NutritionCard({ nutrients, grams }: { nutrients: NutrientValue[]; grams: number }) {
+function NutritionCard({
+  nutrients,
+  grams,
+  references,
+}: {
+  nutrients: NutrientValue[]
+  grams: number
+  references: Map<string, number>
+}) {
   const scaled = scaleNutrients(nutrients, 100, grams)
   const rows: [string, string, number][] = [
     ["kcal", "", getNutrientValue(scaled, "energie")],
@@ -413,17 +450,31 @@ function NutritionCard({ nutrients, grams }: { nutrients: NutrientValue[]; grams
     ["KH", "g", getNutrientValue(scaled, "kohlenhydrate")],
   ]
 
+  // What this portion is good for, while the decision is still open.
+  const contributions = topContributions({ nutrients: scaled, references })
+
   return (
-    <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/30 p-3 text-center">
-      {rows.map(([label, unit, value]) => (
-        <div key={label}>
-          <p className="text-sm font-semibold tabular-nums">
-            {Math.round(value)}
-            {unit && <span className="text-xs font-normal text-muted-foreground"> {unit}</span>}
-          </p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-        </div>
-      ))}
+    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+      <div className="grid grid-cols-4 gap-2 text-center">
+        {rows.map(([label, unit, value]) => (
+          <div key={label}>
+            <p className="text-sm font-semibold tabular-nums">
+              {Math.round(value)}
+              {unit && <span className="text-xs font-normal text-muted-foreground"> {unit}</span>}
+            </p>
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {contributions.length > 0 && (
+        <p className="border-t pt-2 text-center text-xs text-muted-foreground">
+          Deckt{" "}
+          {contributions
+            .map((entry) => `${entry.percent} % ${shortNutrientLabel(entry.label)}`)
+            .join(" · ")}
+        </p>
+      )}
     </div>
   )
 }

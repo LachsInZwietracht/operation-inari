@@ -32,13 +32,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import {
-  calculateClientDayNutrients,
   calculatePlannedNutrients,
   clientLogEntryLabel,
-  collectFrequentEntries,
+  collectClientDayParts,
+  collectRecentEntries,
   formatLogAmount,
   previousDayEntries,
 } from "@/lib/client-food-log"
+import {
+  micronutrientDataShare,
+  nutrientCoverage,
+  summarizeMicronutrients,
+} from "@/lib/client-micronutrients"
+import { sumNutrients } from "@/lib/nutrients"
 import { resolveClientDayTarget } from "@/lib/client-targets"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { todayIsoDate } from "@/lib/client-mode"
@@ -114,6 +120,7 @@ export function ClientFoodLogView({
   const [completions, setCompletions] = useState<Map<string, ClientMealCompletion>>(new Map())
   const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
   const [energy, setEnergy] = useState<ClientEnergyReference | null>(null)
+  const [references, setReferences] = useState<Map<string, number>>(new Map())
   const [recentDays, setRecentDays] = useState<ClientFoodLogDay[]>([])
   const [savedMeals, setSavedMeals] = useState<ClientSavedMeal[]>([])
   const [recipeFacts, setRecipeFacts] = useState<
@@ -128,8 +135,11 @@ export function ClientFoodLogView({
   )
 
   // Nutrients for logged catalog foods; custom entries carry their own.
+  // The recent days are hydrated too, not just today: without them every row
+  // in the "Zuletzt" list would read "Lebensmittel" with no energy, because
+  // nothing eaten last Tuesday is in today's food map.
   useEffect(() => {
-    const missing = (day?.entries ?? [])
+    const missing = [...(day?.entries ?? []), ...recentDays.flatMap((row) => row.entries)]
       .map((entry) => entry.foodId)
       .filter((foodId): foodId is string => Boolean(foodId) && !foods.has(foodId as string))
 
@@ -150,7 +160,7 @@ export function ClientFoodLogView({
     return () => {
       cancelled = true
     }
-  }, [day, foods])
+  }, [day, recentDays, foods])
 
   // What the plan costs. Resolved once per day; a plan entry the client ticks
   // off has to be priced before it can join the totals.
@@ -193,7 +203,9 @@ export function ClientFoodLogView({
 
     void fetchClientPatientHistory()
       .then((history) => {
-        if (!cancelled) setEnergy(history.energy)
+        if (cancelled) return
+        setEnergy(history.energy)
+        setReferences(history.references)
       })
       .catch(() => undefined)
 
@@ -241,12 +253,14 @@ export function ClientFoodLogView({
     () =>
       [
         ...new Set(
-          (day?.entries ?? [])
+          // The recent days are included for the same reason as the foods: a
+          // recipe from last week has to be nameable in the "Zuletzt" list.
+          [...(day?.entries ?? []), ...recentDays.flatMap((row) => row.entries)]
             .map((entry) => entry.recipeId)
             .filter((id): id is string => Boolean(id)),
         ),
       ].sort(),
-    [day],
+    [day, recentDays],
   )
   const recipeIdKey = loggedRecipeIds.join(",")
 
@@ -278,20 +292,39 @@ export function ClientFoodLogView({
     }
   }, [clientUserId, date])
 
+  const recipePerPortion = useMemo(
+    () => new Map([...recipeFacts].map(([id, facts]) => [id, facts.perPortion])),
+    [recipeFacts],
+  )
+
   // The day as a whole: what was typed in plus what was ticked off the plan.
-  const totals = useMemo(
+  // Kept as parts rather than a sum, because the micronutrient panel needs to
+  // know which sources carried data for what — a distinction the sum erases.
+  const dayParts = useMemo(
     () =>
-      calculateClientDayNutrients({
+      collectClientDayParts({
         entries: day?.entries ?? [],
         foods,
-        recipeFacts: new Map(
-          [...recipeFacts].map(([id, facts]) => [id, facts.perPortion]),
-        ),
+        recipeFacts: recipePerPortion,
         planEntries,
         completions,
         planFacts,
       }),
-    [day, foods, recipeFacts, planEntries, completions, planFacts],
+    [day, foods, recipePerPortion, planEntries, completions, planFacts],
+  )
+
+  const totals = useMemo(() => sumNutrients(dayParts), [dayParts])
+
+  const microDataShare = useMemo(() => micronutrientDataShare(dayParts), [dayParts])
+
+  const micronutrients = useMemo(
+    () =>
+      summarizeMicronutrients({
+        totals,
+        references,
+        coverage: nutrientCoverage(dayParts),
+      }),
+    [totals, references, dayParts],
   )
 
   // The day's own prescription outranks a standing target: it is the most
@@ -548,7 +581,12 @@ export function ClientFoodLogView({
         )}
       </div>
 
-      <ClientDayTotals totals={totals} target={target} />
+      <ClientDayTotals
+        totals={totals}
+        target={target}
+        micronutrients={micronutrients}
+        microDataShare={microDataShare}
+      />
 
       {SLOT_ORDER.map((slot) => {
         const entries = entriesBySlot.get(slot) ?? []
@@ -656,8 +694,11 @@ export function ClientFoodLogView({
           slot={addSlot}
           date={date}
           dayId={day?.id ?? null}
-          suggestions={collectFrequentEntries(recentDays, addSlot)}
+          recent={collectRecentEntries(recentDays, addSlot)}
           foods={foods}
+          recipeFacts={recipePerPortion}
+          recipeNames={recipeNames}
+          references={references}
           savedMeals={savedMeals}
           onClose={() => setAddSlot(null)}
           onSaved={() => {

@@ -8,10 +8,24 @@ import type {
   MealSlotType,
   NutrientValue,
 } from "@/lib/types";
-import { scaleNutrients, sumNutrients } from "@/lib/nutrients";
+import { CLIENT_MICRO_NUTRIENT_IDS } from "@/lib/client-micronutrients";
+import { getNutrientValue, scaleNutrients, sumNutrients } from "@/lib/nutrients";
 
-/** Macros shown in the client surface; keeps the by-ids payload small. */
+/** The four numbers the diary leads with. */
 export const CLIENT_LOG_NUTRIENT_IDS = ["energie", "eiweiss", "fett", "kohlenhydrate"];
+
+/**
+ * Everything the client surface loads for a food.
+ *
+ * Fetched in one go rather than lazily on opening the micronutrient panel:
+ * twenty values for a handful of foods is a smaller payload than the round
+ * trip that avoiding it would cost, and a panel that has to load before it can
+ * answer is a panel nobody opens twice.
+ */
+export const CLIENT_NUTRIENT_IDS = [
+  ...CLIENT_LOG_NUTRIENT_IDS,
+  ...CLIENT_MICRO_NUTRIENT_IDS,
+];
 
 /**
  * Nutrient totals for logged entries. Catalog entries scale from the food's
@@ -78,25 +92,45 @@ export function planEntryNutrients(
  * where it stands rather than copied into the diary, so there is only ever one
  * record of the fact.
  */
-export function calculateClientDayNutrients(input: {
+export interface ClientDayInput {
   entries: ClientFoodLogEntry[];
   foods: Map<string, Food>;
   recipeFacts?: Map<string, NutrientValue[]>;
   planEntries?: ClientPlanEntry[];
   completions?: Map<string, ClientMealCompletion>;
   planFacts?: Map<string, ClientPlanEntryFacts>;
-}): NutrientValue[] {
-  const parts: NutrientValue[][] = [
-    calculateClientLogNutrients(input.entries, input.foods, input.recipeFacts),
-  ];
+}
+
+/**
+ * The day, one array per thing eaten, before anything is added up.
+ *
+ * The totals are just the sum of these, but the parts carry something the sum
+ * destroys: which nutrients each source actually had data for. A food with no
+ * iron value simply has no iron entry, and once summed that is indistinguishable
+ * from an iron value of zero. Micronutrient coverage is computed from here for
+ * exactly that reason — and from the same walk, so it can never describe a
+ * different day than the totals do.
+ */
+export function collectClientDayParts(input: ClientDayInput): NutrientValue[][] {
+  const parts: NutrientValue[][] = [];
+
+  for (const entry of input.entries) {
+    const nutrients = calculateClientLogNutrients([entry], input.foods, input.recipeFacts);
+    if (nutrients.length > 0) parts.push(nutrients);
+  }
 
   for (const entry of input.planEntries ?? []) {
     const amount = eatenAmount(entry, input.completions?.get(entry.id));
     if (amount <= 0) continue;
-    parts.push(planEntryNutrients(input.planFacts?.get(entry.id), amount));
+    const nutrients = planEntryNutrients(input.planFacts?.get(entry.id), amount);
+    if (nutrients.length > 0) parts.push(nutrients);
   }
 
-  return sumNutrients(parts);
+  return parts;
+}
+
+export function calculateClientDayNutrients(input: ClientDayInput): NutrientValue[] {
+  return sumNutrients(collectClientDayParts(input));
 }
 
 /** Everything a plan prescribes for the day, answered or not — the reference. */
@@ -114,48 +148,85 @@ export function calculatePlannedNutrients(
  * product can sit in the same list.
  */
 export function logEntryKey(entry: ClientFoodLogEntry): string {
-  return entry.sourceType === "custom"
-    ? `custom:${(entry.customName ?? "").trim().toLowerCase()}`
-    : `food:${entry.foodId ?? ""}`;
+  if (entry.sourceType === "custom") {
+    return `custom:${(entry.customName ?? "").trim().toLowerCase()}`;
+  }
+  // Recipes need their own namespace: keyed as foods they would all collapse
+  // onto the same empty food id and read as one thing eaten many times.
+  if (entry.sourceType === "recipe") return `recipe:${entry.recipeId ?? ""}`;
+  return `food:${entry.foodId ?? ""}`;
 }
 
-export interface ClientLogSuggestion {
+export interface ClientRecentEntry {
   key: string;
+  /** The most recent logging of this thing — it carries the amount to reuse. */
   entry: ClientFoodLogEntry;
-  /** How often it appeared in the window — the reason it is being offered. */
+  /** How often it appeared in the slot being filled. 0 = only eaten elsewhere. */
   count: number;
+  /** The day it was last logged, in any slot. */
+  lastDate: string;
+  /** True when this belongs to the slot being filled. */
+  inSlot: boolean;
 }
 
 /**
- * The things worth offering before the person starts typing.
+ * Everything this person has eaten lately, ordered so the next tap is likely
+ * the right one.
  *
  * Most people eat the same twenty foods, and the second time something is
- * logged is the moment that decides whether a diary gets kept. Ranked by how
- * often it appears in this slot, with the most recent amount carried along, so
- * accepting a suggestion is one tap rather than a search and a number.
+ * logged is the moment that decides whether a diary gets kept — so this is the
+ * screen the add dialog opens on, not a list hidden behind a search.
  *
- * Scoped to the slot on purpose: what belongs at breakfast is rarely what
- * belongs at dinner, and a single global list would bury both.
+ * Two orderings in one list, because they answer different questions. What
+ * belongs in *this* slot comes first, by how often it shows up: breakfast is
+ * habit, and habit is best measured by repetition. Everything else follows by
+ * recency — the answer to "what did I have last night", which frequency would
+ * bury under the daily oats.
  */
-export function collectFrequentEntries(
+export function collectRecentEntries(
   days: ClientFoodLogDay[],
   slot: MealSlotType,
-  limit = 6,
-): ClientLogSuggestion[] {
-  const seen = new Map<string, ClientLogSuggestion>();
+  limit = 20,
+): ClientRecentEntry[] {
+  const seen = new Map<string, ClientRecentEntry>();
 
-  // Newest first, so the retained entry carries the most recent amount.
+  // Newest first, so the retained entry carries the most recent amount and the
+  // first sighting of a key is also its last logging date.
   for (const day of [...days].sort((a, b) => b.date.localeCompare(a.date))) {
     for (const entry of day.entries) {
-      if (entry.slotType !== slot) continue;
       const key = logEntryKey(entry);
+      const inSlot = entry.slotType === slot;
       const existing = seen.get(key);
-      if (existing) existing.count += 1;
-      else seen.set(key, { key, entry, count: 1 });
+
+      if (existing) {
+        if (inSlot) existing.count += 1;
+        // An entry first seen in another slot keeps its date but adopts the
+        // amount of this slot's most recent logging, which is the one being
+        // offered here.
+        if (inSlot && !existing.inSlot) {
+          existing.inSlot = true;
+          existing.entry = entry;
+        }
+        continue;
+      }
+
+      seen.set(key, {
+        key,
+        entry,
+        count: inSlot ? 1 : 0,
+        lastDate: day.date,
+        inSlot,
+      });
     }
   }
 
-  return [...seen.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+  return [...seen.values()]
+    .sort((a, b) => {
+      if (a.inSlot !== b.inSlot) return a.inSlot ? -1 : 1;
+      if (a.inSlot && a.count !== b.count) return b.count - a.count;
+      return b.lastDate.localeCompare(a.lastDate);
+    })
+    .slice(0, limit);
 }
 
 /** The entries of one slot on the day before `date` — the "wie gestern" source. */
@@ -182,6 +253,22 @@ export function clientLogEntryLabel(
   }
   const food = entry.foodId ? foods.get(entry.foodId) : undefined;
   return food?.name ?? "Lebensmittel";
+}
+
+/**
+ * Energy of a single entry, or undefined when it cannot be priced.
+ *
+ * Undefined rather than 0: a recent-list row that says "0 kcal" claims the
+ * food is free, while a row with no number just admits we do not know yet.
+ */
+export function logEntryKcal(
+  entry: ClientFoodLogEntry,
+  foods: Map<string, Food>,
+  recipeFacts?: Map<string, NutrientValue[]>,
+): number | undefined {
+  const nutrients = calculateClientLogNutrients([entry], foods, recipeFacts);
+  if (nutrients.length === 0) return undefined;
+  return Math.round(getNutrientValue(nutrients, "energie"));
 }
 
 /** "60 g" or "1 Portion", depending on what the entry counts. */

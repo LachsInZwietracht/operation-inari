@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { CLIENT_LOG_NUTRIENT_IDS } from "@/lib/client-food-log";
+import { CLIENT_NUTRIENT_IDS } from "@/lib/client-food-log";
 import {
   calculatePerServing,
   calculateRecipeNutrients,
@@ -44,7 +44,7 @@ async function fetchFoodsByIds(ids: string[]): Promise<Food[]> {
   const response = await fetch("/api/foods/by-ids", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids: [...new Set(ids)], nutrientIds: CLIENT_LOG_NUTRIENT_IDS }),
+    body: JSON.stringify({ ids: [...new Set(ids)], nutrientIds: CLIENT_NUTRIENT_IDS }),
   });
   if (!response.ok) return [];
   return (await response.json()) as Food[];
