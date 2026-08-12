@@ -12,6 +12,9 @@ interface PatientIntakeSubmissionRow {
   payload: PatientIntakePayload;
   status: PatientIntakeSubmission["status"];
   applied_patient_id: string | null;
+  reviewer_notes: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +33,9 @@ function mapRow(row: PatientIntakeSubmissionRow): PatientIntakeSubmission {
     payload: row.payload,
     status: row.status,
     appliedPatientId: row.applied_patient_id ?? undefined,
+    reviewerNotes: row.reviewer_notes ?? undefined,
+    reviewedAt: row.reviewed_at ?? undefined,
+    reviewedBy: row.reviewed_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -61,11 +67,12 @@ export interface ApplyIntakeSubmissionResult {
 
 export async function applyPatientIntakeSubmission(
   submissionId: string,
+  options?: { payload?: PatientIntakePayload; reviewerNotes?: string },
 ): Promise<ApplyIntakeSubmissionResult> {
   const response = await fetch("/api/patient-intake-submissions/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ submissionId }),
+    body: JSON.stringify({ submissionId, ...options }),
   });
 
   const body = await response.json().catch(() => null);
@@ -75,4 +82,20 @@ export async function applyPatientIntakeSubmission(
   }
 
   return { patientId: body.patientId as string };
+}
+
+export async function discardPatientIntakeSubmission(
+  submissionId: string,
+  options?: { reviewerNotes?: string },
+): Promise<void> {
+  const response = await fetch("/api/patient-intake-submissions/review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ submissionId, action: "discard", ...options }),
+  });
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(body?.error ?? `Verwerfen fehlgeschlagen (${response.status})`);
+  }
 }

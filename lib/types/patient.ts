@@ -265,7 +265,7 @@ export interface PatientIntakeLink extends Timestamped {
   url: string;
 }
 
-export type PatientIntakeSubmissionStatus = "new" | "reviewed" | "applied";
+export type PatientIntakeSubmissionStatus = "new" | "reviewed" | "applied" | "discarded";
 
 export interface PatientIntakeSubmission extends Timestamped {
   id: ID;
@@ -275,6 +275,9 @@ export interface PatientIntakeSubmission extends Timestamped {
   payload: PatientIntakePayload;
   status: PatientIntakeSubmissionStatus;
   appliedPatientId?: ID;
+  reviewerNotes?: string;
+  reviewedAt?: string;
+  reviewedBy?: ID;
 }
 
 export type IntakePrimaryGoal =

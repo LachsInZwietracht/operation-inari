@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react"
 import Link from "next/link"
-import { Plus, Send } from "lucide-react"
+import { Loader2, Plus, Send, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { IntakeBoardView } from "@/components/intake-board-view"
@@ -18,7 +18,17 @@ import { ListPageShell } from "@/components/list-page-shell"
 import { ListRowSkeleton } from "@/components/list-row-skeleton"
 import { PageBreadcrumb } from "@/components/page-breadcrumb"
 import { PatientIntakeInviteDialog } from "@/components/patient-intake-invite-dialog"
-import { PatientIntakeReview } from "@/components/patient-intake-review"
+import { PatientIntakeReviewEditor } from "@/components/patient-intake-review-editor"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -48,6 +58,7 @@ import type {
   CounselingSession,
   Patient,
   PatientIntakeLink,
+  PatientIntakePayload,
   PatientIntakeSubmission,
   PracticeAppointment,
 } from "@/lib/types"
@@ -106,6 +117,7 @@ export function AufnahmenPageClient({
     submissions,
     createLink,
     applySubmission,
+    discardSubmission,
     isLoading: intakeLoading,
   } = usePatientIntake({ initialLinks, initialSubmissions })
 
@@ -113,7 +125,11 @@ export function AufnahmenPageClient({
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reviewRow, setReviewRow] = useState<IntakeRow | null>(null)
+  const [reviewPayload, setReviewPayload] = useState<PatientIntakePayload | null>(null)
+  const [reviewerNotes, setReviewerNotes] = useState("")
   const [applying, setApplying] = useState(false)
+  const [discarding, setDiscarding] = useState(false)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   // Rows whose last action failed. The row stays exactly where it is with its
   // action disabled — dropping it would lose the practitioner's place in a list
   // they were working through.
@@ -236,6 +252,12 @@ export function AufnahmenPageClient({
     [setValue],
   )
 
+  const openReview = useCallback((row: IntakeRow) => {
+    setReviewRow(row)
+    setReviewPayload(row.pendingSubmission?.payload ?? null)
+    setReviewerNotes(row.pendingSubmission?.reviewerNotes ?? "")
+  }, [])
+
   async function handleApply() {
     const submission = reviewRow?.pendingSubmission
     if (!submission) return
@@ -243,7 +265,10 @@ export function AufnahmenPageClient({
     const rowId = reviewRow.id
     setApplying(true)
     try {
-      const { patientId } = await applySubmission(submission.id)
+      const { patientId } = await applySubmission(submission.id, {
+        payload: reviewPayload ?? submission.payload,
+        reviewerNotes,
+      })
       toast.success("Angaben übernommen")
       setFailedRowIds((previous) => {
         if (!previous.has(rowId)) return previous
@@ -252,7 +277,11 @@ export function AufnahmenPageClient({
         return next
       })
       if (patientId) {
-        setAppliedPatient({ id: patientId, name: reviewRow?.displayName ?? "Patient" })
+        const appliedPayload = reviewPayload ?? submission.payload
+        setAppliedPatient({
+          id: patientId,
+          name: `${appliedPayload.person.firstName} ${appliedPayload.person.lastName}`,
+        })
       } else {
         setReviewRow(null)
       }
@@ -265,8 +294,27 @@ export function AufnahmenPageClient({
     }
   }
 
+  async function handleDiscard() {
+    const submission = reviewRow?.pendingSubmission
+    if (!submission) return
+
+    setDiscarding(true)
+    try {
+      await discardSubmission(submission.id, { reviewerNotes })
+      toast.success("Einreichung verworfen")
+      setDiscardConfirmOpen(false)
+      closeReview()
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Verwerfen fehlgeschlagen")
+    } finally {
+      setDiscarding(false)
+    }
+  }
+
   function closeReview() {
     setReviewRow(null)
+    setReviewPayload(null)
+    setReviewerNotes("")
     setAppliedPatient(null)
   }
 
@@ -326,16 +374,13 @@ export function AufnahmenPageClient({
       padded={values.view !== "liste"}
       header={
         <PageBreadcrumb
-          items={[
-            { label: "Patienten", href: "/patienten" },
-            { label: "Aufnahmen" },
-          ]}
+          items={[{ label: "Aufnahmen" }]}
         >
-          <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
+          <Button size="sm" onClick={() => setInviteOpen(true)}>
             <Send className="mr-1.5 size-3.5" />
             Einladung
           </Button>
-          <Button size="sm" asChild>
+          <Button size="sm" variant="outline" asChild>
             <Link href="/patienten/neu">
               <Plus className="mr-1.5 size-3.5" />
               Neuer Patient
@@ -371,14 +416,14 @@ export function AufnahmenPageClient({
       ) : values.view === "zeit" ? (
         <IntakeTimelineView
           rows={visibleRows}
-          onReview={setReviewRow}
+          onReview={openReview}
           now={now}
           failedRowIds={failedRowIds}
         />
       ) : values.view === "board" ? (
         <IntakeBoardView
           rows={visibleRows}
-          onReview={setReviewRow}
+          onReview={openReview}
           onMove={handleMove}
           onClearOverride={handleClearOverride}
           failedRowIds={failedRowIds}
@@ -386,7 +431,7 @@ export function AufnahmenPageClient({
       ) : (
         <IntakeListView
           rows={visibleRows}
-          onReview={setReviewRow}
+          onReview={openReview}
           grouped={values.gruppierung === "stufe"}
           failedRowIds={failedRowIds}
         />
@@ -401,7 +446,7 @@ export function AufnahmenPageClient({
       <IntakeTransitionDialog
         move={move}
         onClose={() => setMove(null)}
-        onReview={setReviewRow}
+        onReview={openReview}
         onInvite={() => setInviteOpen(true)}
         onOverride={handleOverride}
       />
@@ -409,24 +454,24 @@ export function AufnahmenPageClient({
       <Dialog open={Boolean(reviewRow)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           {appliedPatient ? (
-            // The handoff: applying used to save silently and abandon the user
-            // mid-workflow. The next step in the chain is always the plan.
+            // Applying keeps the choice with the practitioner: continue in the
+            // patient record, start a plan, or return to the work list.
             <>
               <DialogHeader>
                 <DialogTitle>Angaben übernommen</DialogTitle>
                 <DialogDescription>
-                  {appliedPatient.name} ist angelegt. Ziele, Vorlieben und Unverträglichkeiten
-                  sind hinterlegt — der Plan startet direkt damit.
+                  {appliedPatient.name} ist angelegt. Ziele, Vorlieben,
+                  Unverträglichkeiten und deine Prüfnotiz sind gespeichert.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button asChild className="sm:flex-1">
                   <Link href={`/ernaehrungsplan?patientId=${appliedPatient.id}`}>
-                    Plan für {appliedPatient.name.split(",")[1]?.trim() || "Patient"} erstellen
+                    Ernährungsplan erstellen
                   </Link>
                 </Button>
                 <Button asChild variant="outline">
-                  <Link href={`/patienten/${appliedPatient.id}`}>Zum Patienten</Link>
+                  <Link href={`/patienten/${appliedPatient.id}`}>Patientenakte öffnen</Link>
                 </Button>
                 <Button type="button" variant="ghost" onClick={closeReview}>
                   Später
@@ -438,22 +483,68 @@ export function AufnahmenPageClient({
               <DialogHeader>
                 <DialogTitle>Angaben von {reviewRow?.displayName}</DialogTitle>
                 <DialogDescription>
-                  Prüfen und übernehmen. Danach kannst du direkt den Plan starten.
+                  Prüfe Widersprüche, korrigiere Angaben und entscheide dann über die
+                  Übernahme.
                 </DialogDescription>
               </DialogHeader>
 
-              {reviewRow?.pendingSubmission ? (
+              {reviewRow?.pendingSubmission && reviewPayload ? (
                 <>
-                  <PatientIntakeReview submission={reviewRow.pendingSubmission} />
-                  <Button type="button" disabled={applying} onClick={handleApply}>
-                    {applying ? "Wird übernommen..." : "Übernehmen"}
-                  </Button>
+                  <PatientIntakeReviewEditor
+                    submission={reviewRow.pendingSubmission}
+                    payload={reviewPayload}
+                    onPayloadChange={setReviewPayload}
+                    reviewerNotes={reviewerNotes}
+                    onReviewerNotesChange={setReviewerNotes}
+                  />
+                  <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      disabled={applying || discarding}
+                      onClick={() => setDiscardConfirmOpen(true)}
+                    >
+                      <Trash2 className="mr-1.5 size-4" />
+                      Verwerfen
+                    </Button>
+                    <Button type="button" disabled={applying || discarding} onClick={handleApply}>
+                      {applying ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : null}
+                      {applying ? "Wird übernommen..." : "Geprüft und übernehmen"}
+                    </Button>
+                  </div>
                 </>
               ) : null}
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Einreichung verwerfen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Die Antwort bleibt für die Nachvollziehbarkeit gespeichert, wird aber nicht in
+              eine Patientenakte übernommen. Diese Aufnahme verschwindet aus der Arbeitsliste.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={discarding}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={discarding}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDiscard()
+              }}
+            >
+              {discarding ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : null}
+              Verwerfen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ListPageShell>
   )
 }

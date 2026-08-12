@@ -46,6 +46,7 @@ export const INTAKE_FOOD_PREFERENCES: IntakeFoodPreferenceItem[] = [
   { id: "schwein", label: "Schweinefleisch", group: "protein", foodMatchTokens: ["schwein", "kasseler", "schnitzel"] },
   { id: "lachs", label: "Lachs", group: "protein", foodMatchTokens: ["lachs", "salmon"] },
   { id: "thunfisch", label: "Thunfisch", group: "protein", foodMatchTokens: ["thunfisch", "tuna"] },
+  { id: "garnelen", label: "Garnelen", group: "protein", foodMatchTokens: ["garnele", "shrimp", "prawn"] },
   { id: "eier", label: "Eier", group: "protein", foodMatchTokens: ["ei", "eier"] },
   { id: "tofu", label: "Tofu", group: "protein", foodMatchTokens: ["tofu", "sojaquark"] },
   { id: "linsen", label: "Linsen", group: "protein", foodMatchTokens: ["linse", "linsen"] },

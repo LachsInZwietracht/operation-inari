@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { PatientIntakeLink, PatientIntakeSubmission } from "@/lib/types";
+import type {
+  PatientIntakeLink,
+  PatientIntakePayload,
+  PatientIntakeSubmission,
+} from "@/lib/types";
 import {
   createPatientIntakeLinkClient,
   deletePatientIntakeLinkClient,
@@ -12,6 +16,7 @@ import {
 } from "@/lib/data/patient-intake-links-client";
 import {
   applyPatientIntakeSubmission,
+  discardPatientIntakeSubmission,
   fetchPatientIntakeSubmissionsClient,
 } from "@/lib/data/patient-intake-submissions-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -119,10 +124,21 @@ export function usePatientIntake(options: UsePatientIntakeOptions = {}) {
   }, []);
 
   const applySubmission = useCallback(
-    async (submissionId: string) => {
-      const result = await applyPatientIntakeSubmission(submissionId);
+    async (
+      submissionId: string,
+      options?: { payload?: PatientIntakePayload; reviewerNotes?: string },
+    ) => {
+      const result = await applyPatientIntakeSubmission(submissionId, options);
       await refresh();
       return result;
+    },
+    [refresh],
+  );
+
+  const discardSubmission = useCallback(
+    async (submissionId: string, options?: { reviewerNotes?: string }) => {
+      await discardPatientIntakeSubmission(submissionId, options);
+      await refresh();
     },
     [refresh],
   );
@@ -147,6 +163,7 @@ export function usePatientIntake(options: UsePatientIntakeOptions = {}) {
     revokeLink,
     deleteLink,
     applySubmission,
+    discardSubmission,
     getSubmissionForLink,
     getLinksForPatient,
   };

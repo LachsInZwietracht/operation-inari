@@ -354,7 +354,9 @@ export function buildIntakeRows({
     const links = grouped.linksByPatient.get(patient.id) ?? [];
     const submissions = grouped.submissionsByPatient.get(patient.id) ?? [];
     const pendingSubmission =
-      submissions.find((submission) => submission.status !== "applied") ?? null;
+      submissions.find((submission) =>
+        submission.status === "new" || submission.status === "reviewed",
+      ) ?? null;
     const pendingLink = links.find((link) => link.status === "pending") ?? null;
     const lastSessionDate = grouped.lastSessionByPatient.get(patient.id);
     const nextAppointment = grouped.nextAppointmentByPatient.get(patient.id) ?? null;
@@ -404,7 +406,9 @@ export function buildIntakeRows({
 
     const linkSubmissions = grouped.submissionsByLink.get(link.id) ?? [];
     const pendingSubmission =
-      linkSubmissions.find((submission) => submission.status !== "applied") ?? null;
+      linkSubmissions.find((submission) =>
+        submission.status === "new" || submission.status === "reviewed",
+      ) ?? null;
 
     // Already applied to a patient: that patient's own row tells the story.
     if (!pendingSubmission && linkSubmissions.length > 0) continue;

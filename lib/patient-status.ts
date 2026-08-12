@@ -130,7 +130,9 @@ export function derivePatientStatus({
   now = new Date(),
 }: DerivePatientStatusInput): PatientPipelineStatus {
   // 1. Someone answered and is waiting on us. Always the most urgent.
-  if (submissions.some((submission) => submission.status !== "applied")) {
+  if (submissions.some((submission) =>
+    submission.status === "new" || submission.status === "reviewed",
+  )) {
     return "antwort_da";
   }
 
@@ -273,7 +275,9 @@ export function buildPatientPipeline({
       status,
       link: patientLinks.find((link) => link.status === "pending") ?? null,
       pendingSubmission:
-        patientSubmissions.find((submission) => submission.status !== "applied") ?? null,
+        patientSubmissions.find((submission) =>
+          submission.status === "new" || submission.status === "reviewed",
+        ) ?? null,
       lastSessionDate,
       lastPlanDate,
     };
@@ -285,7 +289,9 @@ export function buildPatientPipeline({
 
     const linkSubmissions = submissionsByLink.get(link.id) ?? [];
     const pendingSubmission =
-      linkSubmissions.find((submission) => submission.status !== "applied") ?? null;
+      linkSubmissions.find((submission) =>
+        submission.status === "new" || submission.status === "reviewed",
+      ) ?? null;
 
     // Already applied to a patient: that patient row above tells the story.
     if (!pendingSubmission && linkSubmissions.length > 0) continue;

@@ -236,11 +236,17 @@ export function PatientIntakePanel({ patientId, defaultLabel }: PatientIntakePan
                 </div>
               ) : null}
 
+              {submission && submission.status === "discarded" ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Verworfen. Die ursprüngliche Antwort bleibt zur Nachvollziehbarkeit erhalten.
+                </p>
+              ) : null}
+
               {submission && isExpanded ? (
                 <div className="mt-3 border-t pt-3">
                   <PatientIntakeReview submission={submission} />
 
-                  {submission.status !== "applied" ? (
+                  {submission.status === "new" || submission.status === "reviewed" ? (
                     <Button
                       type="button"
                       className="mt-4 w-full sm:w-auto"

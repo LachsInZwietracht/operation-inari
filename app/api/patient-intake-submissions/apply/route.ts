@@ -8,6 +8,8 @@ import { intakePayloadSchema } from "@/lib/intake/schema";
 
 const applySchema = z.object({
   submissionId: z.string().uuid(),
+  payload: intakePayloadSchema.optional(),
+  reviewerNotes: z.string().trim().max(4_000).optional(),
 });
 
 /**
@@ -69,6 +71,12 @@ export async function POST(request: Request) {
       { status: 409 },
     );
   }
+  if (submission.status === "discarded") {
+    return NextResponse.json(
+      { error: "Einreichung wurde verworfen" },
+      { status: 409 },
+    );
+  }
 
   const { data: link, error: linkError } = await supabase
     .from("patient_intake_links")
@@ -86,7 +94,9 @@ export async function POST(request: Request) {
 
   // Re-validate: the payload was written by an unauthenticated caller, and the
   // catalog may have changed since it was submitted.
-  const payloadResult = intakePayloadSchema.safeParse(submission.payload);
+  const payloadResult = intakePayloadSchema.safeParse(
+    parsed.data.payload ?? submission.payload,
+  );
   if (!payloadResult.success) {
     return NextResponse.json(
       { error: "Die Angaben sind unvollständig und können nicht übernommen werden." },
@@ -98,6 +108,10 @@ export async function POST(request: Request) {
     payloadResult.data,
     submission.submitted_at ?? new Date().toISOString(),
   );
+  const reviewerNotes = parsed.data.reviewerNotes?.trim() || null;
+  const reviewNoteBlock = reviewerNotes
+    ? `Aufnahmeprüfung ${new Date().toLocaleDateString("de-DE")}: ${reviewerNotes}`
+    : null;
 
   let patientId = link.patient_id as string | null;
 
@@ -113,6 +127,14 @@ export async function POST(request: Request) {
     }
 
     const update = mergePatientUpdate(plan.patientFields, existing);
+    if (reviewNoteBlock) {
+      const previousNotes = typeof existing.admin_notes === "string"
+        ? existing.admin_notes.trim()
+        : "";
+      update.admin_notes = previousNotes
+        ? `${previousNotes}\n\n${reviewNoteBlock}`
+        : reviewNoteBlock;
+    }
     const { error: updateError } = await supabase
       .from("patients")
       .update(update)
@@ -130,6 +152,7 @@ export async function POST(request: Request) {
         status: "active",
         care_setting: "ambulatory",
         indications: [],
+        admin_notes: reviewNoteBlock,
       })
       .select("id")
       .single();
@@ -204,6 +227,10 @@ export async function POST(request: Request) {
       status: "applied",
       patient_id: patientId,
       applied_patient_id: patientId,
+      payload: payloadResult.data,
+      reviewer_notes: reviewerNotes,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user.id,
     })
     .eq("id", submissionId);
 
@@ -221,6 +248,8 @@ export async function POST(request: Request) {
       createdPatient: !link.patient_id,
       allergenCount: plan.allergens.length,
       foodPreferenceCount: plan.foodPreferences.length,
+      correctedBeforeApply: Boolean(parsed.data.payload),
+      hasReviewerNotes: Boolean(reviewerNotes),
     },
   });
 
