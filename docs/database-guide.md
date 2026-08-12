@@ -374,6 +374,14 @@ The same migration splits diet information that `nutrition_preferences` previous
 
 The migration backfills `diet_style` from legacy array values (`vegan` > `vegetarian` > `keto` > `low_carb`, most restrictive first) and then removes those values from the array. `lib/data/patients.ts` and `lib/data/patients-client.ts` query the diet columns defensively — a deployment can reach production before its migration is applied, and the fallback keeps patient lists readable instead of failing the whole query.
 
+### Manual Intake-Stage Override (`20260812000085`)
+
+`patients.intake_stage_override` (nullable, `CHECK`-constrained to the four `IntakeStage` values) and `patients.intake_stage_override_at`, with a partial index on the rows that actually carry one.
+
+The Aufnahmen board derives a patient's stage from records that already exist — a questionnaire that arrived, a patient record, a documented session — and that stays the rule. These columns are the documented exception: a practitioner who knows better than the data can pin a stage by hand, and the UI marks such a row rather than passing it off as derived (`stagePinned` in `lib/patient-journey.ts`). `NULL` means "derive it", which is the normal case.
+
+Additive and nullable, so rows without an override behave exactly as before and dropping the columns restores the previous behaviour. Both patient readers use the same defensive query pattern as the diet columns, extended to handle either group being absent independently — so this ships safely before `npx supabase db push` has run.
+
 ### Why Normalized `food_nutrients` Instead of a JSON Array?
 
 The current mock data stores nutrients as `NutrientValue[]` on each food object. For the database, we split this into a junction table because:

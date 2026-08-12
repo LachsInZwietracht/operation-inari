@@ -77,6 +77,18 @@ export interface Patient extends Timestamped {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   emergencyContactRelationship?: string;
+  /**
+   * Aufnahmen stage pinned by hand, overriding the derived one.
+   *
+   * Normally undefined: a stage is derived from plans, submissions and
+   * sessions, so it cannot drift from the facts. This is the escape hatch for
+   * a practitioner who knows something the records do not yet show. Typed as
+   * a plain string here rather than importing IntakeStage, so the domain type
+   * stays free of a dependency on the journey module.
+   */
+  intakeStageOverride?: "eingeladen" | "fragebogen" | "beratung" | "plan";
+  /** When {@link intakeStageOverride} was set. */
+  intakeStageOverrideAt?: string;
 }
 
 export interface BirthdayReminder extends Timestamped {

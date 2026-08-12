@@ -1,5 +1,4 @@
 import { createServerClient } from "@supabase/ssr"
-import type { JWK } from "@supabase/supabase-js"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { ADMIN_ROLES, INSTITUTION_ROLES, hasAnyRole, mapLegacyUserRole } from "@/lib/auth/rbac"
@@ -10,40 +9,11 @@ import {
   isClientRoute,
   parseAppMode,
 } from "@/lib/client-mode"
+import { loadJwks } from "@/lib/supabase/jwks"
 import type { AppRole } from "@/lib/types"
 
 const PUBLIC_APP_PATHS = ["/login", "/registrieren", "/passwort-vergessen"]
 const PUBLIC_PREFIXES = ["/_next", "/api", "/protokoll", "/onboarding", "/auth"]
-
-/**
- * Module-scoped JWKS cache so getClaims() verifies the JWT locally on every
- * navigation instead of calling the Supabase Auth server. The Supabase client
- * is recreated per request, so its own in-memory JWKS cache never survives.
- * On a signing-key rotation (kid miss) getClaims falls back to fetching the
- * well-known JWKS itself, so a stale cache degrades to a network hop, never
- * to a security gap — the signature is always verified.
- */
-const JWKS_TTL_MS = 10 * 60 * 1000
-let cachedJwks: { keys: JWK[] } | null = null
-let jwksFetchedAt = 0
-
-async function loadJwks(supabaseUrl: string): Promise<{ keys: JWK[] } | undefined> {
-  const now = Date.now()
-  if (cachedJwks && now - jwksFetchedAt < JWKS_TTL_MS) return cachedJwks
-  try {
-    const response = await fetch(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
-    if (response.ok) {
-      const jwks = (await response.json()) as { keys: JWK[] }
-      if (jwks.keys?.length > 0) {
-        cachedJwks = jwks
-        jwksFetchedAt = now
-      }
-    }
-  } catch (error) {
-    console.warn("Failed to refresh JWKS in middleware:", error)
-  }
-  return cachedJwks ?? undefined
-}
 
 async function resolveRole(supabase: ReturnType<typeof createServerClient>, userId: string, legacyRole: unknown): Promise<AppRole> {
   const { data, error } = await supabase

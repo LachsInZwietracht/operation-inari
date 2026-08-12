@@ -62,7 +62,6 @@ function CareTableRow({ row }: { row: CareRow }) {
       <div className="min-w-0 pl-3 lg:pl-2">
         <Link
           href={`/patienten/${row.id}`}
-          prefetch={false}
           className="block truncate text-[13.5px] font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           {row.displayName}

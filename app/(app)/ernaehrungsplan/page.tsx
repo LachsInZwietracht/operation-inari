@@ -4,6 +4,7 @@ import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { FoodsProvider } from "@/components/foods-provider";
 import type { DailyMealPlan, MealPlanTemplate, Recipe } from "@/lib/types";
 
@@ -73,9 +74,7 @@ export default async function ErnaehrungsplanPage({
 }) {
   const { patientId, date, template } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
 
   const [recipes, mealPlans, templates] = await Promise.all([
     fetchRecipes(),

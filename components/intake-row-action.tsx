@@ -84,7 +84,6 @@ export function IntakeRowAction({ row, onReview, disabled = false }: IntakeRowAc
   return (
     <Link
       href={href}
-      prefetch={false}
       aria-disabled={disabled}
       tabIndex={disabled ? -1 : undefined}
       className={cn(ACTION_CLASSES, disabled && "pointer-events-none opacity-50")}

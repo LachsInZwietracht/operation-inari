@@ -8,6 +8,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { INSTITUTION_ROLES, hasAnyRole, mapLegacyUserRole } from "@/lib/auth/rbac"
 import { fetchCurrentMembership } from "@/lib/auth/access"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { AppRole } from "@/lib/types"
 import type { User } from "@supabase/supabase-js"
 
@@ -15,9 +16,9 @@ export const dynamic = "force-dynamic";
 
 async function resolveAppShellAuth(): Promise<{ user: User | null; role: AppRole | null }> {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Local JWT verification instead of a network round trip to the Auth server
+  // on every single navigation. See lib/supabase/verified-user.ts.
+  const user = await getVerifiedUser(supabase)
 
   if (!user) return { user: null, role: null }
 

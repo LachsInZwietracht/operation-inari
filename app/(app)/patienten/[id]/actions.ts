@@ -7,6 +7,7 @@ import { z } from "zod";
 import { INVITE_CODE_ALPHABET, INVITE_CODE_LENGTH } from "@/lib/client-mode";
 import { CLIENT_LINK_COLUMNS, mapClientLinkRow, type ClientLinkRow } from "@/lib/data/client-links";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import type { ClientLink } from "@/lib/types";
 
 const INVITE_VALID_DAYS = 14;
@@ -49,9 +50,7 @@ export async function createClientInviteAction(
 
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getVerifiedUser(supabase);
 
     if (!user) {
       return { status: "error", message: "Nicht angemeldet." };
@@ -133,9 +132,7 @@ export async function revokeClientLinkAction(
 ): Promise<ClientInviteActionResult> {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getVerifiedUser(supabase);
 
     if (!user) {
       return { status: "error", message: "Nicht angemeldet." };

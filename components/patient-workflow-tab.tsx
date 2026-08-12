@@ -141,7 +141,7 @@ function WorkflowActionButton({ action }: { action: StageAction }) {
   if (action.href) {
     return (
       <Button asChild variant={action.variant ?? "default"} size="sm">
-        <Link href={action.href} prefetch={false}>
+        <Link href={action.href}>
           {action.label}
           <Icon className="ml-2 h-4 w-4" />
         </Link>

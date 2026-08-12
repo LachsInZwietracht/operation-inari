@@ -32,7 +32,6 @@ export function CareSidePanel({ attention, upcoming, activity }: CareSidePanelPr
             <Link
               key={item.id}
               href={item.href}
-              prefetch={false}
               className="flex items-baseline justify-between gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
             >
               <span className="min-w-0">

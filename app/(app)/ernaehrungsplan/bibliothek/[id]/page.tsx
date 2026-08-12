@@ -5,6 +5,7 @@ import { fetchFoodsViaRpc } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { FoodsProvider } from "@/components/foods-provider";
 import type { MealPlanTemplate, Recipe } from "@/lib/types";
 
@@ -61,9 +62,7 @@ export default async function BibliothekDetailPage({
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
 
   const [recipes, templates] = await Promise.all([
     fetchRecipes(),

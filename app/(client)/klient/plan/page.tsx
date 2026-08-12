@@ -5,6 +5,7 @@ import { isClientModuleEnabled } from "@/lib/client-modules"
 import { isIsoDate, todayIsoDate } from "@/lib/client-mode"
 import { fetchClientPlanDay } from "@/lib/data/client-plan-client"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { ClientPlanDay } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -28,9 +29,7 @@ export default async function ClientPlanPage({ searchParams }: ClientPlanPagePro
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
   if (!user) redirect("/login")
 

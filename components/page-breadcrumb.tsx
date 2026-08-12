@@ -1,6 +1,7 @@
 import { Fragment } from "react"
 import Link from "next/link"
 
+import { cn } from "@/lib/utils"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -44,7 +45,11 @@ export function PageBreadcrumb({ items, children }: PageBreadcrumbProps) {
               // item rather than inside it — nesting them is invalid HTML and
               // breaks hydration.
               <Fragment key={`${item.label}-${index}`}>
-                <BreadcrumbItem className="min-w-0">
+                {/* On a narrow screen the ancestors are dropped rather than
+                    truncated to three letters each: the page's own name is the
+                    part that has to stay readable, and the sidebar already says
+                    where you are. */}
+                <BreadcrumbItem className={cn("min-w-0", !isLast && "hidden sm:flex")}>
                   {isLast ? (
                     // The trail's last item *is* the page's name, so it doubles
                     // as the h1. Without it the page would have no heading at
@@ -65,7 +70,6 @@ export function PageBreadcrumb({ items, children }: PageBreadcrumbProps) {
                     <BreadcrumbLink asChild>
                       <Link
                         href={item.href}
-                        prefetch={false}
                         className="truncate text-[13px] text-muted-foreground"
                       >
                         {item.label}
@@ -73,7 +77,9 @@ export function PageBreadcrumb({ items, children }: PageBreadcrumbProps) {
                     </BreadcrumbLink>
                   )}
                 </BreadcrumbItem>
-                {isLast ? null : <BreadcrumbSeparator className="text-fg-4" />}
+                {isLast ? null : (
+                  <BreadcrumbSeparator className="hidden text-fg-4 sm:block" />
+                )}
               </Fragment>
             )
           })}

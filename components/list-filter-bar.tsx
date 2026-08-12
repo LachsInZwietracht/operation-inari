@@ -110,7 +110,11 @@ export function ListFilterBar({
   }
 
   return (
-    <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-b px-[18px]">
+    // Scrolls sideways rather than wrapping, so the bar stays exactly 44px on
+    // every screen. The right inset is a trailing spacer instead of padding:
+    // a flex container's end padding collapses once its content overflows, so
+    // `pr` would silently disappear at the width it matters most.
+    <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-b pl-[18px]">
       <div
         className="flex shrink-0 items-center gap-0.5 rounded-md bg-chip p-0.5"
         role="tablist"
@@ -236,6 +240,8 @@ export function ListFilterBar({
           onChange={onSortChange}
         />
       </div>
+
+      <span className="w-[18px] shrink-0" aria-hidden="true" />
     </div>
   )
 }

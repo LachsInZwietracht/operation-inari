@@ -4,6 +4,7 @@ import { ClientTrainingView } from "@/components/client/client-training-view"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { ClientWorkoutSession } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -19,9 +20,7 @@ export default async function ClientTrainingPage() {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
   if (!user) redirect("/login")
 

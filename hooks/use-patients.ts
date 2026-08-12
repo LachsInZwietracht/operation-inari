@@ -166,6 +166,27 @@ export function usePatients(options: UsePatientsOptions = {}) {
     return newPatient
   }, [isAuthenticated])
 
+  /**
+   * Updates a patient in local state only.
+   *
+   * For callers that have already persisted a narrow change themselves.
+   * {@link updatePatient} follows up with a full upsert of the whole record,
+   * which would rewrite every field from this browser's copy and could undo a
+   * colleague's concurrent edit — fine when the form owns the record, wrong
+   * when a single column was just written on its own.
+   */
+  const patchPatientLocal = useCallback((id: string, updates: Partial<Patient>) => {
+    setPatients((prev) =>
+      sortPatients(
+        prev.map((p) =>
+          p.id === id || (p.legacyId && p.legacyId === id)
+            ? { ...p, ...updates, updatedAt: new Date().toISOString() }
+            : p,
+        ),
+      ),
+    )
+  }, [])
+
   const updatePatient = useCallback((id: string, updates: Partial<Patient>) => {
     setPatients((prev) => {
       const next = prev
@@ -217,6 +238,7 @@ export function usePatients(options: UsePatientsOptions = {}) {
     getPatient,
     addPatient,
     updatePatient,
+    patchPatientLocal,
     deletePatient,
     isLoadingRemote
   }

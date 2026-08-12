@@ -1,7 +1,16 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { cache } from "react"
 
-export async function createClient() {
+/**
+ * The request's Supabase client, created once and shared.
+ *
+ * A layout, the page it renders and any helper they call used to build their
+ * own client, which meant each of them also ran its own auth check against it.
+ * React's `cache` scopes the client to the request, so those callers now share
+ * one client — and, through it, one verified session (see getVerifiedUser).
+ */
+export const createClient = cache(async function createClient() {
   const cookieStore = await cookies()
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -31,7 +40,7 @@ export async function createClient() {
       },
     },
   )
-}
+})
 
 /**
  * Creates a Supabase client using the Service Role Key.

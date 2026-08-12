@@ -6,6 +6,7 @@ import {
   fetchUserReferencePreference,
 } from "@/lib/data/reference-values-client"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { ReferenceStoreSeed } from "@/hooks/use-reference-profiles"
 
 async function loadInitialData(): Promise<ReferenceStoreSeed | null> {
@@ -18,12 +19,9 @@ async function loadInitialData(): Promise<ReferenceStoreSeed | null> {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
-  if (error || !user) {
+  if (!user) {
     return null
   }
 
