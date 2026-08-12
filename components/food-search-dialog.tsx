@@ -60,7 +60,9 @@ export function FoodSearchDialog({
   const [remoteResults, setRemoteResults] = React.useState<SearchResult[]>([])
   const [isSearchingRemote, setIsSearchingRemote] = React.useState(false)
   const [isFetchingFull, setIsFetchingFull] = React.useState(false)
-  const { getDisplayName, getSynonymsForFood } = useFoodSynonyms()
+  // Held back until the surface opens: this component is always mounted,
+  // and the synonym set is ~7,000 rows.
+  const { getDisplayName, getSynonymsForFood } = useFoodSynonyms({ enabled: open })
   const { index: searchIndex, isLoading: isIndexLoading, loadIndex } = useFoodSearch()
 
   // Trigger lazy index load when dialog opens

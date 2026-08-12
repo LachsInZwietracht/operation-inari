@@ -243,7 +243,8 @@ function IntakeBoardCard({
         <div className="min-w-0 flex-1">
           {row.patient ? (
             <Link
-              href={`/patienten/${row.patient.id}`}
+          prefetch={false}
+          href={`/patienten/${row.patient.id}`}
               // An anchor is natively draggable and would set its own payload,
               // so the card's drag would never carry the row id.
               draggable={false}

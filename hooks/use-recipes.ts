@@ -21,14 +21,25 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const migrationDone = useRef(false);
   const customRecipesRef = useRef(customRecipes);
+  /**
+   * `foods` is only used to resolve locally stored recipes, never to decide
+   * whether to sync. Holding it in a ref keeps it out of the effect dependency
+   * lists below: a caller passing an inline `[]` — which is a new array on
+   * every render — would otherwise re-arm those effects forever, and the sync
+   * effect sets state, so the loop feeds itself. That is exactly what happened
+   * on /rezepte: 132 requests in 12 seconds, saturating the connection pool
+   * and making every navigation in the app slow.
+   */
+  const foodsRef = useRef(foods);
+  foodsRef.current = foods;
 
   useEffect(() => {
     customRecipesRef.current = customRecipes;
   }, [customRecipes]);
 
   useEffect(() => {
-    saveLocalRecipes(customRecipes.filter(isLocalMigrationCandidate), foods);
-  }, [customRecipes, foods]);
+    saveLocalRecipes(customRecipes.filter(isLocalMigrationCandidate), foodsRef.current);
+  }, [customRecipes]);
 
   useEffect(() => {
     if (!isAuthenticated || authLoading) return;
@@ -75,7 +86,7 @@ export function useRecipes(initialCommunityRecipes: Recipe[] = [], foods: Food[]
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, authLoading, foods]);
+  }, [isAuthenticated, authLoading]);
 
   const allRecipes = useMemo(() => {
     const community = initialCommunityRecipes.map(r => ({ ...r, sourceType: "community" as const }));

@@ -65,7 +65,9 @@ export function FoodSearchDialog({
   const [remoteResults, setRemoteResults] = React.useState<SearchResult[]>([])
   const [isSearchingRemote, setIsSearchingRemote] = React.useState(false)
   const [serverError, setServerError] = React.useState<string | null>(null)
-  const { getDisplayName, getSynonymsForFood } = useFoodSynonyms()
+  // Held back until the surface opens: this component is always mounted,
+  // and the synonym set is ~7,000 rows.
+  const { getDisplayName, getSynonymsForFood } = useFoodSynonyms({ enabled: open })
 
   React.useEffect(() => {
     let active = true

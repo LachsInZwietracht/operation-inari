@@ -122,7 +122,8 @@ function IntakeListRow({ row, onReview, disabled }: IntakeListRowProps) {
       <div className="min-w-0 pl-3 lg:pl-2">
         {row.patient ? (
           <Link
-            href={`/patienten/${row.patient.id}`}
+          prefetch={false}
+          href={`/patienten/${row.patient.id}`}
             className="block truncate text-[13.5px] font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             {row.displayName}

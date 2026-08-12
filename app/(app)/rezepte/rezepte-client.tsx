@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Recipe } from "@/lib/types";
+import type { Food, Recipe } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -196,8 +196,15 @@ function recipeMatchesDietFilter(recipe: Recipe, dietFilter: DietFilter): boolea
   return hasDietTag(["keto", "ketogen", "low carb", "low-carb"]) || !recipeHasAnyToken(recipe, KETO_EXCLUSION_INGREDIENT_TOKENS);
 }
 
+/**
+ * One shared empty list rather than a fresh `[]` per render. An inline array
+ * literal is a new reference each time, which re-arms any hook dependency list
+ * it lands in — see the note in hooks/use-recipes.ts.
+ */
+const NO_FOODS: Food[] = []
+
 export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClientProps) {
-  const { allRecipes, addRecipe } = useRecipes(initialRecipes, []);
+  const { allRecipes, addRecipe } = useRecipes(initialRecipes, NO_FOODS);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Alle");
   const [libraryFilter, setLibraryFilter] = useState<"all" | "personal" | "community">("all");
@@ -504,7 +511,7 @@ export function RezeptePageClient({ recipes: initialRecipes }: RezeptePageClient
           <RecipeCard
             key={recipe.id}
             recipe={recipe}
-            foods={[]}
+            foods={NO_FOODS}
             onImport={
               recipe.sourceType !== "personal"
                 ? () => handleImportRecipe(recipe)
