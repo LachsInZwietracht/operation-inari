@@ -31,6 +31,7 @@ export function CareSidePanel({ attention, upcoming, activity }: CareSidePanelPr
           attention.slice(0, 8).map((item) => (
             <Link
               key={item.id}
+              prefetch={false}
               href={item.href}
               className="flex items-baseline justify-between gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
             >

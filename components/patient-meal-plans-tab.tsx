@@ -325,7 +325,7 @@ export function PatientMealPlansTab({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button asChild size="sm" variant="outline">
-                        <Link href={mealPlanHref(patient.id, plan)}>
+                        <Link prefetch={false} href={mealPlanHref(patient.id, plan)}>
                           Öffnen
                           <ExternalLink className="ml-2 h-4 w-4" />
                         </Link>

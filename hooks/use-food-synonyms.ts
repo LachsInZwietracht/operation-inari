@@ -53,31 +53,67 @@ function savePreferredMap(map: PreferredMap) {
   }
 }
 
-export function useFoodSynonyms() {
-  const [systemSynonyms, setSystemSynonyms] = useState<FoodSynonym[]>([]);
+/**
+ * System synonyms are global reference data that only changes when the ETL
+ * runs, so one fetch serves every component for the lifetime of the page.
+ *
+ * Without this, each mounted consumer pulled all ~7,000 rows for itself. The
+ * command palette is one of them and lives in the app shell, so that download
+ * was happening on every navigation in the app.
+ */
+let systemSynonymsCache: FoodSynonym[] | null = null;
+let systemSynonymsInFlight: Promise<FoodSynonym[]> | null = null;
+
+function loadSystemSynonymsOnce(): Promise<FoodSynonym[]> {
+  if (systemSynonymsCache) return Promise.resolve(systemSynonymsCache);
+  if (!systemSynonymsInFlight) {
+    systemSynonymsInFlight = fetchSystemFoodSynonyms()
+      .then((synonyms) => {
+        systemSynonymsCache = synonyms;
+        return synonyms;
+      })
+      .catch((error) => {
+        // Clear the slot so a later attempt can retry rather than replaying
+        // the same rejection forever.
+        systemSynonymsInFlight = null;
+        throw error;
+      });
+  }
+  return systemSynonymsInFlight;
+}
+
+interface UseFoodSynonymsOptions {
+  /**
+   * Set false to hold the download back until the surface is actually used.
+   * The command palette passes its own open state: it is always mounted, but
+   * only needs synonyms once someone starts searching.
+   */
+  enabled?: boolean;
+}
+
+export function useFoodSynonyms({ enabled = true }: UseFoodSynonymsOptions = {}) {
+  const [systemSynonyms, setSystemSynonyms] = useState<FoodSynonym[]>(
+    () => systemSynonymsCache ?? [],
+  );
   const [userSynonyms, setUserSynonyms] = useState<FoodSynonym[]>(() => loadUserSynonyms());
   const [preferredMap, setPreferredMap] = useState<PreferredMap>(() => loadPreferredMap());
 
   useEffect(() => {
+    if (!enabled || systemSynonymsCache) return;
     let cancelled = false;
 
-    async function loadSystemSynonyms() {
-      try {
-        const synonyms = await fetchSystemFoodSynonyms();
-        if (!cancelled) {
-          setSystemSynonyms(synonyms);
-        }
-      } catch (error) {
+    loadSystemSynonymsOnce()
+      .then((synonyms) => {
+        if (!cancelled) setSystemSynonyms(synonyms);
+      })
+      .catch((error) => {
         console.error("Failed to load system food synonyms from Supabase:", error);
-      }
-    }
-
-    void loadSystemSynonyms();
+      });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     saveUserSynonyms(userSynonyms);
