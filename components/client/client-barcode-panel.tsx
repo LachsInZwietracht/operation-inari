@@ -21,6 +21,8 @@ const ClientBarcodeScanner = dynamic(
 export interface BarcodeCustomPick {
   name: string
   nutrients: NutrientValue[]
+  /** The code it was found under — what makes a second scan find the first. */
+  barcode?: string
 }
 
 type PanelState =
@@ -77,6 +79,7 @@ export function ClientBarcodePanel({
               ? `${result.product.name} (${result.product.brand})`
               : result.product.name,
             nutrients: result.product.nutrients,
+            barcode: result.barcode,
           })
           return
         case "unknown":
@@ -225,7 +228,7 @@ function ManualProductForm({
       if (raw.trim() && value !== undefined) nutrients.push({ nutrientId, amount: value })
     }
 
-    onSubmit({ name: trimmedName, nutrients })
+    onSubmit({ name: trimmedName, nutrients, barcode })
   }
 
   return (

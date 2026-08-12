@@ -28,6 +28,7 @@ import {
 import { todayIsoDate } from "@/lib/client-mode"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { formatSet } from "@/lib/client-training"
+import { ClientTrainingSummary } from "@/components/client/client-training-summary"
 import { PatientStatsTab } from "@/components/patient-stats-tab"
 import { CLIENT_STATS_WINDOW_DAYS } from "@/lib/client-stats"
 import { fetchClientStats, type ClientStats } from "@/lib/data/client-stats-client"
@@ -221,6 +222,8 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
         />
       )}
 
+      <SectionHeading>Ernährung</SectionHeading>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Kalorien je Tag</CardTitle>
@@ -347,10 +350,20 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
         </Card>
       )}
 
+      {isClientModuleEnabled("training") && (
+        <>
+          <SectionHeading>Training</SectionHeading>
+          <ClientTrainingSummary
+            weeks={stats?.trainingWeeks ?? []}
+            records={stats?.records ?? []}
+          />
+        </>
+      )}
+
       {isClientModuleEnabled("training") && exercises.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Training</CardTitle>
+            <CardTitle className="text-base">Kraftverlauf</CardTitle>
             <CardDescription>
               Geschätztes Einer-Maximum je Übung und Kalenderwoche
               {exercises.length === MAX_EXERCISES ? " · deine drei häufigsten Übungen" : ""}
@@ -410,5 +423,17 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
         </Card>
       )}
     </div>
+  )
+}
+
+/**
+ * Section headings, because the page now answers two different questions and
+ * a wall of undifferentiated cards makes the reader do the sorting.
+ */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </h2>
   )
 }

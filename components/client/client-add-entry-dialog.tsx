@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { Loader2, Search } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -17,37 +17,43 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ClientBarcodePanel } from "@/components/client/client-barcode-panel"
 import type { BarcodeCustomPick } from "@/components/client/client-barcode-panel"
+import { ClientFoodSearchList } from "@/components/client/client-food-search-list"
 import { isClientCapabilityEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { clientLogEntryLabel, type ClientLogSuggestion } from "@/lib/client-food-log"
+import { KIND_LABELS, type ClientSearchItem } from "@/lib/client-food-search"
 import {
   addClientFoodLogEntry,
   ensureClientFoodLogDay,
   fetchFoodPortions,
 } from "@/lib/data/client-food-log-client"
-import { createClient } from "@/lib/supabase/client"
-import type { Food, MealSlotType } from "@/lib/types"
-
-interface FoodResult {
-  id: string
-  name: string
-}
+import { ensureClientCustomFood } from "@/lib/data/client-custom-foods-client"
+import { getNutrientValue, scaleNutrients } from "@/lib/nutrients"
+import type { ClientSavedMeal, Food, MealSlotType, NutrientValue } from "@/lib/types"
 
 /**
- * What is about to be logged, from either input path. Catalog foods keep their
- * id so the counselor sees a traceable product; scanned or hand-entered ones
- * carry their own per-100 g values.
+ * What is about to be logged.
+ *
+ * Catalog foods and the client's own products both keep a food id, so the
+ * counselor sees a traceable product either way. A recipe keeps its own id and
+ * counts portions. A saved meal is not a thing at all — it is the list of
+ * things it stands for, and logging it writes those.
  */
 type EntryDraft =
-  | { kind: "food"; id: string; name: string }
-  | { kind: "custom"; name: string; nutrients: BarcodeCustomPick["nutrients"] }
+  | {
+      kind: "food"
+      id: string
+      name: string
+      subtitle?: string
+      nutrientsPer100g?: NutrientValue[]
+    }
+  | { kind: "recipe"; id: string; name: string; kcalPerPortion?: number }
+  | { kind: "meal"; meal: ClientSavedMeal }
 
-interface SearchRow {
-  food_id: string
-  food_name: string
+function parseAmount(value: string): number | undefined {
+  const parsed = Number(value.replace(",", "."))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
-
-const SEARCH_DEBOUNCE_MS = 250
 
 /** Mounted per open by the caller, so it always starts from a clean state. */
 export function ClientAddEntryDialog({
@@ -56,6 +62,7 @@ export function ClientAddEntryDialog({
   dayId,
   suggestions,
   foods,
+  savedMeals,
   onClose,
   onSaved,
 }: {
@@ -65,63 +72,24 @@ export function ClientAddEntryDialog({
   /** What this person usually eats in this slot, most frequent first. */
   suggestions: ClientLogSuggestion[]
   foods: Map<string, Food>
+  savedMeals: ClientSavedMeal[]
   onClose: () => void
   onSaved: () => void
 }) {
-  const supabase = useMemo(() => createClient(), [])
-  const [query, setQuery] = useState("")
-  const [results, setResults] = useState<FoodResult[]>([])
-  const [isSearching, setIsSearching] = useState(false)
   const [selected, setSelected] = useState<EntryDraft | null>(null)
   const [mode, setMode] = useState<"search" | "barcode">("search")
   const [amount, setAmount] = useState("100")
-  // Keyed by food rather than reset per selection: clearing it synchronously in
-  // the effect would fire on every render that starts without a food picked.
   const [portionsByFood, setPortionsByFood] = useState<
     Map<string, { label: string; amountGrams: number }[]>
   >(new Map())
-  // A suggestion brings its own amount; the portion default must not overwrite it.
-  const keepAmountRef = useRef(false)
   const [isSaving, setIsSaving] = useState(false)
+
+  // A suggestion or a search hit brings its own amount; the portion default
+  // must not overwrite it.
+  const keepAmountRef = useRef(false)
 
   const barcodeEnabled = isClientCapabilityEnabled("barcode")
 
-  // Stale results stay in state but are not rendered below the query
-  // threshold, which keeps this effect free of a synchronous reset.
-  const trimmedQuery = query.trim()
-  const visibleResults = trimmedQuery.length >= 2 ? results : []
-
-  useEffect(() => {
-    const trimmed = query.trim()
-    if (trimmed.length < 2) return
-
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      setIsSearching(true)
-      void supabase
-        .rpc("search_foods", { search_query: trimmed, result_limit: 15 })
-        .abortSignal(controller.signal)
-        .then(({ data, error }) => {
-          if (error) {
-            setResults([])
-            return
-          }
-          setResults(
-            ((data ?? []) as SearchRow[]).map((row) => ({ id: row.food_id, name: row.food_name })),
-          )
-        })
-        .then(() => setIsSearching(false))
-    }, SEARCH_DEBOUNCE_MS)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(timer)
-      setIsSearching(false)
-    }
-  }, [query, supabase])
-
-  // Household measures for the picked food, and the default that follows from
-  // them: a typical portion is a better opening bid than a flat 100 g.
   useEffect(() => {
     if (selected?.kind !== "food") return
     const foodId = selected.id
@@ -146,15 +114,46 @@ export function ClientAddEntryDialog({
     }
   }, [selected])
 
-  const portions =
-    selected?.kind === "food" ? (portionsByFood.get(selected.id) ?? []) : []
+  const portions = selected?.kind === "food" ? (portionsByFood.get(selected.id) ?? []) : []
+
+  function pick(item: ClientSearchItem) {
+    keepAmountRef.current = true
+    setAmount(String(item.defaultAmount))
+
+    if (item.kind === "food") {
+      setSelected({
+        kind: "food",
+        id: item.id,
+        name: item.name,
+        // Carried through so the confirmation still says *which* protein bar.
+        subtitle: item.subtitle,
+        nutrientsPer100g: item.nutrientsPerUnit,
+      })
+      return
+    }
+    if (item.kind === "recipe") {
+      setSelected({
+        kind: "recipe",
+        id: item.id,
+        name: item.name,
+        kcalPerPortion: item.kcalPerUnit,
+      })
+      return
+    }
+    const meal = savedMeals.find((entry) => entry.id === item.id)
+    if (meal) setSelected({ kind: "meal", meal })
+  }
 
   async function handleSave() {
     if (!selected) return
 
-    const grams = Number(amount.replace(",", "."))
-    if (!Number.isFinite(grams) || grams <= 0) {
-      toast.error("Bitte gib eine Menge in Gramm ein.")
+    const parsed = parseAmount(amount)
+    if (parsed === undefined) {
+      toast.error(
+        selected.kind === "food"
+          ? "Bitte gib eine Menge in Gramm ein."
+          : "Bitte gib eine Menge ein.",
+      )
       return
     }
 
@@ -163,18 +162,38 @@ export function ClientAddEntryDialog({
       // The day row is created lazily on the first entry of that date.
       const resolvedDayId = dayId ?? (await ensureClientFoodLogDay(date)).id
 
-      await addClientFoodLogEntry({
-        dayId: resolvedDayId,
-        slotType: slot,
-        ...(selected.kind === "food"
-          ? { sourceType: "food" as const, foodId: selected.id }
-          : {
-              sourceType: "custom" as const,
-              customName: selected.name,
-              customNutrients: selected.nutrients,
-            }),
-        amount: grams,
-      })
+      if (selected.kind === "meal") {
+        // A saved meal *is* its items, so logging it writes them. One opaque
+        // line for something assembled out of four would be a line the person
+        // cannot correct piece by piece.
+        for (const item of selected.meal.items) {
+          await addClientFoodLogEntry({
+            dayId: resolvedDayId,
+            slotType: slot,
+            sourceType: item.sourceType,
+            foodId: item.foodId,
+            customName: item.customName,
+            customNutrients: item.customNutrients,
+            amount: item.amount * parsed,
+          })
+        }
+      } else if (selected.kind === "recipe") {
+        await addClientFoodLogEntry({
+          dayId: resolvedDayId,
+          slotType: slot,
+          sourceType: "recipe",
+          recipeId: selected.id,
+          amount: parsed,
+        })
+      } else {
+        await addClientFoodLogEntry({
+          dayId: resolvedDayId,
+          slotType: slot,
+          sourceType: "food",
+          foodId: selected.id,
+          amount: parsed,
+        })
+      }
 
       onSaved()
     } catch (error) {
@@ -185,15 +204,48 @@ export function ClientAddEntryDialog({
     }
   }
 
+  /**
+   * A scanned or hand-entered product becomes a real food owned by this client,
+   * so the next scan of the same bar finds it instead of making a second copy.
+   */
+  async function adoptCustomProduct(product: BarcodeCustomPick) {
+    try {
+      const foodId = await ensureClientCustomFood({
+        name: product.name,
+        nutrients: product.nutrients,
+        barcode: product.barcode,
+      })
+      keepAmountRef.current = true
+      setAmount("100")
+      setSelected({
+        kind: "food",
+        id: foodId,
+        name: product.name,
+        nutrientsPer100g: product.nutrients,
+      })
+    } catch (error) {
+      console.error("Failed to save the scanned product:", error)
+      toast.error("Das Produkt konnte nicht gespeichert werden.")
+    }
+  }
+
+  const parsedAmount = parseAmount(amount) ?? 0
+  const isPortionUnit = selected !== null && selected.kind !== "food"
+
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose()
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{MEAL_SLOT_LABELS[slot]}</DialogTitle>
           <DialogDescription>
             {mode === "barcode" && !selected
               ? "Tipp den Barcode ein — wir suchen im Katalog und bei Open Food Facts."
-              : "Suche ein Lebensmittel und trage die Menge ein."}
+              : "Suche ein Lebensmittel, ein Rezept oder eine gespeicherte Mahlzeit."}
           </DialogDescription>
         </DialogHeader>
 
@@ -225,19 +277,39 @@ export function ClientAddEntryDialog({
         {selected ? (
           <div className="space-y-4">
             <div className="rounded-md border p-3">
-              <p className="text-sm font-medium">{selected.name}</p>
+              <p className="text-sm font-medium">
+                {selected.kind === "meal" ? selected.meal.name : selected.name}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {selected.kind === "meal"
+                  ? `${selected.meal.items.length} Zutaten`
+                  : (selected.kind === "food" && selected.subtitle) || KIND_LABELS[selected.kind]}
+              </p>
               <Button
                 variant="link"
                 size="sm"
                 className="h-auto p-0 text-xs"
                 onClick={() => setSelected(null)}
               >
-                Anderes Lebensmittel wählen
+                Etwas anderes wählen
               </Button>
             </div>
 
+            {/* The full picture before confirming — the answer to "is this the
+                protein bar I meant?" */}
+            {selected.kind === "food" && selected.nutrientsPer100g && parsedAmount > 0 && (
+              <NutritionCard nutrients={selected.nutrientsPer100g} grams={parsedAmount} />
+            )}
+            {selected.kind === "recipe" && selected.kcalPerPortion !== undefined && (
+              <p className="text-xs tabular-nums text-muted-foreground">
+                ≈ {Math.round(selected.kcalPerPortion * parsedAmount)} kcal
+              </p>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="client-entry-amount">Menge in Gramm</Label>
+              <Label htmlFor="client-entry-amount">
+                {isPortionUnit ? "Portionen" : "Menge in Gramm"}
+              </Label>
               <Input
                 id="client-entry-amount"
                 inputMode="decimal"
@@ -250,11 +322,7 @@ export function ClientAddEntryDialog({
                     <Button
                       key={`${portion.label}-${portion.amountGrams}`}
                       type="button"
-                      variant={
-                        Number(amount.replace(",", ".")) === portion.amountGrams
-                          ? "secondary"
-                          : "outline"
-                      }
+                      variant={parsedAmount === portion.amountGrams ? "secondary" : "outline"}
                       size="sm"
                       className="h-7 px-2 text-xs"
                       onClick={() => setAmount(String(portion.amountGrams))}
@@ -268,25 +336,17 @@ export function ClientAddEntryDialog({
           </div>
         ) : mode === "barcode" ? (
           <ClientBarcodePanel
-            onPickCatalogFood={(food) => setSelected({ kind: "food", ...food })}
-            onPickCustom={(product) => setSelected({ kind: "custom", ...product })}
+            onPickCatalogFood={(food) => {
+              keepAmountRef.current = false
+              setSelected({ kind: "food", ...food })
+            }}
+            onPickCustom={(product) => void adoptCustomProduct(product)}
           />
         ) : (
-          <div className="space-y-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                autoFocus
-                className="pl-9"
-                placeholder="z. B. Haferflocken"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-
+          <div className="space-y-3">
             {/* Before anything is typed: the things this person actually eats
                 at this time of day. Most diaries are twenty foods on repeat. */}
-            {trimmedQuery.length < 2 && suggestions.length > 0 && (
+            {suggestions.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-xs text-muted-foreground">Zuletzt oft</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -301,11 +361,11 @@ export function ClientAddEntryDialog({
                         const entry = suggestion.entry
                         keepAmountRef.current = true
                         setAmount(String(entry.amount))
-                        if (entry.sourceType === "custom") {
+                        if (entry.sourceType === "recipe" && entry.recipeId) {
                           setSelected({
-                            kind: "custom",
-                            name: entry.customName ?? "Eigener Eintrag",
-                            nutrients: entry.customNutrients ?? [],
+                            kind: "recipe",
+                            id: entry.recipeId,
+                            name: clientLogEntryLabel(entry, foods),
                           })
                         } else if (entry.foodId) {
                           setSelected({
@@ -316,37 +376,16 @@ export function ClientAddEntryDialog({
                         }
                       }}
                     >
-                      <span className="truncate">{clientLogEntryLabel(suggestion.entry, foods)}</span>
+                      <span className="truncate">
+                        {clientLogEntryLabel(suggestion.entry, foods)}
+                      </span>
                     </Button>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="max-h-64 overflow-y-auto">
-              {isSearching && (
-                <p className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Suche läuft
-                </p>
-              )}
-              {!isSearching && trimmedQuery.length >= 2 && visibleResults.length === 0 && (
-                <p className="p-2 text-sm text-muted-foreground">Nichts gefunden.</p>
-              )}
-              <ul className="divide-y">
-                {visibleResults.map((result) => (
-                  <li key={result.id}>
-                    <button
-                      type="button"
-                      className="w-full px-2 py-2 text-left text-sm hover:bg-muted"
-                      onClick={() => setSelected({ kind: "food", ...result })}
-                    >
-                      {result.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ClientFoodSearchList savedMeals={savedMeals} onPick={pick} />
           </div>
         )}
 
@@ -361,5 +400,30 @@ export function ClientAddEntryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Macros for the amount actually being logged, not for an abstract 100 g. */
+function NutritionCard({ nutrients, grams }: { nutrients: NutrientValue[]; grams: number }) {
+  const scaled = scaleNutrients(nutrients, 100, grams)
+  const rows: [string, string, number][] = [
+    ["kcal", "", getNutrientValue(scaled, "energie")],
+    ["Eiweiß", "g", getNutrientValue(scaled, "eiweiss")],
+    ["Fett", "g", getNutrientValue(scaled, "fett")],
+    ["KH", "g", getNutrientValue(scaled, "kohlenhydrate")],
+  ]
+
+  return (
+    <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/30 p-3 text-center">
+      {rows.map(([label, unit, value]) => (
+        <div key={label}>
+          <p className="text-sm font-semibold tabular-nums">
+            {Math.round(value)}
+            {unit && <span className="text-xs font-normal text-muted-foreground"> {unit}</span>}
+          </p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
+      ))}
+    </div>
   )
 }

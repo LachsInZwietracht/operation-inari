@@ -21,6 +21,8 @@ export const CLIENT_LOG_NUTRIENT_IDS = ["energie", "eiweiss", "fett", "kohlenhyd
 export function calculateClientLogNutrients(
   entries: ClientFoodLogEntry[],
   foods: Map<string, Food>,
+  /** Per-portion nutrients by recipe id; a recipe entry counts portions. */
+  recipeFacts?: Map<string, NutrientValue[]>,
 ): NutrientValue[] {
   const scaled: NutrientValue[][] = [];
 
@@ -28,6 +30,15 @@ export function calculateClientLogNutrients(
     if (entry.sourceType === "custom") {
       if (!entry.customNutrients?.length) continue;
       scaled.push(scaleNutrients(entry.customNutrients, 100, entry.amount));
+      continue;
+    }
+
+    if (entry.sourceType === "recipe") {
+      const perPortion = entry.recipeId ? recipeFacts?.get(entry.recipeId) : undefined;
+      // Same rule as the plan side: an entry that cannot be priced adds
+      // nothing rather than a confident zero.
+      if (!perPortion?.length) continue;
+      scaled.push(scaleNutrients(perPortion, 1, entry.amount));
       continue;
     }
 
@@ -70,11 +81,14 @@ export function planEntryNutrients(
 export function calculateClientDayNutrients(input: {
   entries: ClientFoodLogEntry[];
   foods: Map<string, Food>;
+  recipeFacts?: Map<string, NutrientValue[]>;
   planEntries?: ClientPlanEntry[];
   completions?: Map<string, ClientMealCompletion>;
   planFacts?: Map<string, ClientPlanEntryFacts>;
 }): NutrientValue[] {
-  const parts: NutrientValue[][] = [calculateClientLogNutrients(input.entries, input.foods)];
+  const parts: NutrientValue[][] = [
+    calculateClientLogNutrients(input.entries, input.foods, input.recipeFacts),
+  ];
 
   for (const entry of input.planEntries ?? []) {
     const amount = eatenAmount(entry, input.completions?.get(entry.id));
@@ -160,10 +174,19 @@ export function previousDayEntries(
 export function clientLogEntryLabel(
   entry: ClientFoodLogEntry,
   foods: Map<string, Food>,
+  recipeNames?: Map<string, string>,
 ): string {
   if (entry.sourceType === "custom") return entry.customName ?? "Eigener Eintrag";
+  if (entry.sourceType === "recipe") {
+    return (entry.recipeId ? recipeNames?.get(entry.recipeId) : undefined) ?? "Rezept";
+  }
   const food = entry.foodId ? foods.get(entry.foodId) : undefined;
   return food?.name ?? "Lebensmittel";
+}
+
+/** "60 g" or "1 Portion", depending on what the entry counts. */
+export function formatLogAmount(entry: ClientFoodLogEntry): string {
+  return formatPlanAmount(entry.amount, entry.sourceType === "recipe" ? "portion" : "g");
 }
 
 /** "60 g" or "1 Portion" — plan entries carry two different units. */

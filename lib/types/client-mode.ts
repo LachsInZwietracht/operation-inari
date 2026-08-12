@@ -31,7 +31,7 @@ export interface ClientLinkWithCounselor extends ClientLink {
   patientName: string;
 }
 
-export type ClientFoodLogSourceType = "food" | "custom";
+export type ClientFoodLogSourceType = "food" | "custom" | "recipe";
 
 export interface ClientFoodLogEntry {
   id: ID;
@@ -44,7 +44,9 @@ export interface ClientFoodLogEntry {
   customName?: string;
   /** Per 100 g, same convention as `foods.baseAmount`. */
   customNutrients?: NutrientValue[];
-  amount: number; // grams
+  /** Set when sourceType is "recipe"; `amount` is then portions, not grams. */
+  recipeId?: ID;
+  amount: number;
   notes?: string;
   loggedAt: string;
   sortOrder: number;
@@ -57,6 +59,31 @@ export interface ClientFoodLogDay {
   /** Fluid intake in millilitres. Undefined is "not tracked", not zero. */
   waterMl?: number;
   entries: ClientFoodLogEntry[];
+}
+
+/** One component of a saved meal — the same shape as a diary entry. */
+export interface ClientSavedMealItem {
+  id: ID;
+  sourceType: ClientFoodLogSourceType;
+  foodId?: ID;
+  customName?: string;
+  customNutrients?: NutrientValue[];
+  amount: number; // grams
+  sortOrder: number;
+}
+
+/**
+ * "Mein übliches Frühstück": a named set of foods, not a recipe.
+ *
+ * No servings, no instructions, no nutrient targets — those make a recipe a
+ * counselor artefact and a chore for a client to assemble. This is the named
+ * version of "wie gestern".
+ */
+export interface ClientSavedMeal {
+  id: ID;
+  name: string;
+  createdAt: string;
+  items: ClientSavedMealItem[];
 }
 
 /**
