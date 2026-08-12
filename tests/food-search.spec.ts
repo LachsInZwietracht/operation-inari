@@ -1,4 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { admin } from "./fixtures/clinic-demo";
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 async function waitForFoodSearchInput(page: Page) {
   const input = page.getByPlaceholder(/Lebensmittel suchen/);
@@ -17,31 +22,38 @@ test.describe("Lebensmittel", () => {
   test("searches and filters foods with fuzzy matching", async ({ page }) => {
     await page.goto("/lebensmittel");
 
-    // Wait for foods to load from Supabase
+    // Wait for foods to load from Supabase. The first row becoming visible is
+    // not enough — the table streams in and counting right away catches it
+    // mid-render, so poll until the count has actually settled above the bar.
     const initialRows = page.locator("table tbody tr");
     await expect(initialRows.first()).toBeVisible({ timeout: 30_000 });
-    const initialCount = await initialRows.count();
-    expect(initialCount).toBeGreaterThan(10);
-
+    await expect(async () => {
+      expect(await initialRows.count()).toBeGreaterThan(10);
+    }).toPass({ timeout: 30_000 });
     // Exact substring search — "Karotte" should match "Karotte/Möhre, roh" etc.
     const searchInput = await waitForFoodSearchInput(page);
     await searchInput.fill("Karotte");
-    // Wait for the search to filter — row count should decrease
-    await expect(page.locator("table tbody tr")).not.toHaveCount(initialCount, {
-      timeout: 10_000,
-    });
-    const filteredRows = page.locator("table tbody tr");
-    const filteredCount = await filteredRows.count();
-    expect(filteredCount).toBeLessThan(initialCount);
-    expect(filteredCount).toBeGreaterThan(0);
-    await expect(filteredRows.first()).toContainText(/Karotte/);
 
-    // Clear search restores all results
+    // Wait for the *results*, not merely for the row count to change: while the
+    // query is in flight the body renders a single full-width loading row, so a
+    // count check would run against the loading state.
+    //
+    // Note the row count itself proves nothing here — the browser paginates at
+    // 25, so the broad and the narrow list both fill a page. What filtering
+    // actually changes is *which* foods are listed.
+    const filteredRows = page.locator("table tbody tr");
+    await expect(filteredRows.first()).toContainText(/Karotte/, { timeout: 30_000 });
+    expect(await filteredRows.count()).toBeGreaterThan(0);
+
+    // Clearing the search lifts the filter: a full page of foods again, no
+    // longer scoped to the query. (Row identity is not asserted — rows pick up
+    // synonym badges and hover controls once the search index loads, so their
+    // text is not stable across the two reads.)
     await searchInput.fill("");
-    // Just verify row count went back up (don't assert exact count — DOM with 7k rows is slow)
     await expect(async () => {
-      const count = await page.locator("table tbody tr").count();
-      expect(count).toBeGreaterThan(filteredCount);
+      const rows = page.locator("table tbody tr");
+      expect(await rows.count()).toBeGreaterThan(10);
+      expect(await rows.first().innerText()).not.toMatch(/Karotte/);
     }).toPass({ timeout: 30_000 });
   });
 
@@ -164,12 +176,42 @@ test.describe("Lebensmittel", () => {
     // Should filter to show fish items
     const rows = page.locator("table tbody tr");
     await expect(rows.first()).toBeVisible({ timeout: 10_000 });
-    const count = await rows.count();
-    expect(count).toBeGreaterThan(0);
 
+    // Assert the filter actually scoped the list to the fish subtree rather
+    // than naming species that happen to sit on page one. The catalog is
+    // alphabetical, so which fish appear first is not the filter's contract —
+    // "every visible row belongs to a fish group" is.
+    //
+    // Poll rather than read once: while the filtered page is in flight the
+    // body renders a single full-width colspan row, which has no second cell.
+    const fishGroupNames = /Seefisch|Süßwasserfisch|Meeresfrüchte|Fischerzeugnisse/;
+    await expect(async () => {
+      const labels = await page.locator("table tbody tr td:nth-child(2)").allInnerTexts();
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        expect(label).toMatch(fishGroupNames);
+      }
+    }).toPass({ timeout: 30_000 });
+  });
+
+  test("default listing leads with the curated reference catalog", async ({ page }) => {
+    await page.goto("/lebensmittel");
+
+    const rows = page.locator("table tbody tr");
+    await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      expect(await rows.count()).toBeGreaterThan(10);
+    }).toPass({ timeout: 30_000 });
+
+    // Open Food Facts outnumbers BLS ~94k to ~7k and many of its product names
+    // start with punctuation, so plain alphabetical order opened the browser on
+    // "_Muffins von Kathi". The catalog a dietitian is trained on has to lead;
+    // OFF stays reachable through search and the source selector.
+    // Branded rows are tagged with an "OFF" badge in the name cell; curated
+    // BLS/SFK rows carry none. The whole first page should be curated.
     await expect(
-      rows.filter({ hasText: /Lachs|Thunfisch|Kabeljau|Hering|Forelle/ }).first()
-    ).toBeVisible();
+      page.locator("table tbody tr").getByText("OFF", { exact: true }),
+    ).toHaveCount(0);
   });
 
   test("navigates to food detail and shows nutrient tabs", async ({ page }) => {
@@ -238,12 +280,30 @@ test.describe("Lebensmittel", () => {
   test("branded food detail resolves through the shared food data layer", async ({
     page,
   }) => {
-    await page.goto("/lebensmittel/brand_quick_oats");
+    // This used to point at `brand_quick_oats` from lib/mock-data, which the
+    // data layer only served while the database held zero branded rows. The
+    // Open Food Facts import ended that, so the mock fallback is dead code for
+    // this path and the id 404s. Resolve a real branded food instead — that is
+    // what the test is actually about.
+    const { data, error } = await admin
+      .from("foods")
+      .select("id,name,manufacturer")
+      .eq("is_branded", true)
+      .not("manufacturer", "is", null)
+      .limit(1)
+      .single();
+
+    expect(error, "no branded food available to resolve").toBeNull();
+    const branded = data!;
+
+    await page.goto(`/lebensmittel/${branded.id}`);
 
     await expect(
-      page.getByRole("heading", { name: /VitalFit Protein Porridge Vanille/i })
+      page.getByRole("heading", { name: branded.name, exact: false })
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Produktinfos")).toBeVisible();
-    await expect(page.getByText(/VitalFit GmbH/i)).toBeVisible();
+    await expect(
+      page.getByText(new RegExp(escapeRegExp(branded.manufacturer!), "i")).first()
+    ).toBeVisible();
   });
 });

@@ -48,6 +48,8 @@ const SUMMARY_NUTRIENTS = [
   { id: "kohlenhydrate", label: "Kohlenhydrate", unit: "g" },
 ] as const;
 
+const ALL_NUTRIENT_GROUPS = Object.keys(NUTRIENT_GROUP_LABELS) as NutrientGroup[];
+
 function getNutrientsByGroup(group: NutrientGroup) {
   return NUTRIENT_DEFINITIONS.filter((nd) => nd.group === group).sort(
     (a, b) => a.sortOrder - b.sortOrder,
@@ -65,6 +67,22 @@ function NutrientTabContent({ group, nutrients, refConfig }: NutrientTabContentP
   const hasUnmeasured = definitions.some(
     (def) => !nutrients.some((n) => n.nutrientId === def.id),
   );
+  const hasMeasured = definitions.some((def) =>
+    nutrients.some((n) => n.nutrientId === def.id),
+  );
+
+  // The source carries nothing for this group. Say so explicitly rather than
+  // listing every nutrient as "n. e." — but still render the tab, so absent
+  // data stays distinguishable from an absent feature (PRODI-feedback #3).
+  if (!hasMeasured) {
+    return (
+      <p className="text-muted-foreground py-6 text-sm">
+        Keine Daten für dieses Lebensmittel: Die gewählte Datenquelle erfasst keine Werte in
+        der Gruppe „{NUTRIENT_GROUP_LABELS[group]}“. Das bedeutet nicht, dass die Werte 0
+        betragen.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -133,25 +151,29 @@ function NutrientTabs({
   nutrients: { nutrientId: string; amount: number }[];
   refConfig: ResolvedReferenceConfig;
 }) {
-  const availableGroups = useMemo(() => {
-    return (Object.keys(NUTRIENT_GROUP_LABELS) as NutrientGroup[]).filter((group) => {
+  // Every group gets a tab, even when this food's source measured nothing in
+  // it. Hiding the tab made a sparse Open Food Facts product look identical to
+  // a food the app simply has no vitamin view for — a distinction a dietitian
+  // has to be able to make. The tab body explains the gap instead.
+  const populatedGroups = useMemo(() => {
+    return ALL_NUTRIENT_GROUPS.filter((group) => {
       const defs = getNutrientsByGroup(group);
       return defs.some((d) => nutrients.some((n) => n.nutrientId === d.id && n.amount > 0));
     });
   }, [nutrients]);
 
-  const defaultTab = availableGroups[0] ?? "makronaehrstoffe";
+  const defaultTab = populatedGroups[0] ?? "makronaehrstoffe";
 
   return (
     <Tabs defaultValue={defaultTab}>
       <TabsList className="flex-wrap">
-        {availableGroups.map((group) => (
+        {ALL_NUTRIENT_GROUPS.map((group) => (
           <TabsTrigger key={group} value={group}>
             {NUTRIENT_GROUP_LABELS[group]}
           </TabsTrigger>
         ))}
       </TabsList>
-      {availableGroups.map((group) => (
+      {ALL_NUTRIENT_GROUPS.map((group) => (
         <TabsContent key={group} value={group}>
           <NutrientTabContent group={group} nutrients={nutrients} refConfig={refConfig} />
         </TabsContent>

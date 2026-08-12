@@ -85,7 +85,14 @@ export function FoodSynonymManager({
           <Sparkles className="mr-1 h-3.5 w-3.5" /> Aliase verwalten
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
+      {/*
+        This manager renders inside a clickable table row whose onClick pushes
+        the food detail route. Radix portals the dialog out of the row's DOM
+        subtree, but React synthetic events still bubble along the *React*
+        tree — so without this guard every click inside the dialog (add alias,
+        delete, the close button) also navigated away mid-edit.
+      */}
+      <DialogContent className="sm:max-w-xl" onClick={(event) => event.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Synonyme für {food.name}</DialogTitle>
           <DialogDescription>

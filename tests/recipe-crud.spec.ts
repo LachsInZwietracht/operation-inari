@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { admin } from "./fixtures/clinic-demo";
 
 test.describe("Rezepte", () => {
   test("displays recipe list with mock recipes", async ({ page }) => {
@@ -63,6 +64,14 @@ test.describe("Rezepte", () => {
     // Submit the form
     await page.getByRole("button", { name: /Rezept erstellen/i }).click();
 
+    // The form redirects to the recipe list after saving (see
+    // components/recipe-form.tsx) — it has never routed to the new recipe's
+    // detail page. Follow the list entry to reach the detail view.
+    await page.waitForURL(/\/rezepte$/, { timeout: 30_000 });
+    const createdLink = page.getByRole("link", { name: new RegExp(recipeName) });
+    await expect(createdLink).toBeVisible({ timeout: 30_000 });
+    await createdLink.click();
+
     await expect(page.getByRole("heading", { name: recipeName })).toBeVisible({ timeout: 30_000 });
 
     const detailUrl = page.url();
@@ -70,8 +79,14 @@ test.describe("Rezepte", () => {
       window.localStorage.removeItem("prodi_custom_recipes");
     });
 
+    // Still resolvable with local storage cleared — proves it was persisted
+    // server-side rather than only cached in the browser.
     await page.goto(detailUrl);
     await expect(page.getByRole("heading", { name: recipeName })).toBeVisible({ timeout: 30_000 });
+
+    // The suite runs against a shared Supabase project, so remove the recipe
+    // instead of leaving one behind on every run.
+    await admin.from("recipes").delete().eq("name", recipeName);
   });
 
   test("normalizes legacy ingredient ids for custom recipe detail", async ({ page }) => {

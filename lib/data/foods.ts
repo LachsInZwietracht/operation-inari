@@ -801,8 +801,30 @@ async function fetchFoodsBrowserPageByQuery(
           "food_nutrients(nutrient_id,amount,per_amount)",
         ].join(","),
         withExactCount ? { count: "exact" } : undefined,
-      )
-      .order(query.mode === "code" ? "bls_code" : "name", { ascending: true });
+      );
+
+    // Curated reference foods (BLS/SFK, is_branded = FALSE) lead; branded Open
+    // Food Facts products follow. This mirrors the ranking the name search RPCs
+    // already apply (20260629000066_search_bls_priority) — that migration only
+    // covered the relevance-ranked search path, so browsing without a query
+    // still sorted by name alone. With ~94k branded OFF rows against ~7k BLS
+    // rows, plain name order opened /lebensmittel on OFF products whose names
+    // begin with punctuation ("_Muffins von Kathi"), burying the clinical
+    // catalog a dietitian is trained on. Backed by idx_foods_is_branded_name.
+    //
+    // Applied before the name order — `.order()` calls compose in call order,
+    // so this has to come first to be the primary sort key.
+    //
+    // Code mode is left out: only curated foods carry a bls_code, so ordering
+    // by it already lists them first (branded rows sort last as NULLs) using
+    // idx_foods_bls_code. Prepending is_branded there would change nothing and
+    // would trade an indexed scan for an unindexed two-key sort.
+    if (query.mode !== "code") {
+      builder = builder.order("is_branded", { ascending: true });
+    }
+    builder = builder.order(query.mode === "code" ? "bls_code" : "name", {
+      ascending: true,
+    });
 
     if (query.dataSourceId) {
       builder = builder.eq("data_source_id", query.dataSourceId);
