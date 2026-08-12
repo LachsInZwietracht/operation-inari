@@ -49,6 +49,8 @@ Notable repo facts:
 - `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` is a local-only bypass; do not add other bypasses.
 - RBAC roles live in `organization_memberships`: `owner`, `admin`, `dietitian`, `assistant`, `institution_admin`.
 - External image domains are not broadly configured in `next.config.ts`.
+- The `foods` catalog is ~101k rows and lopsided: ~94k branded Open Food Facts products against ~7k curated BLS 4.0 entries. Assume any query over the whole catalog is large.
+- Curated reference foods lead the catalog. Both the name-search RPCs (`20260629000066`) and the no-query browse order `is_branded ASC` first, so BLS/SFK come before branded OFF products. OFF stays fully searchable; only ordering is affected.
 
 ## Commands
 
@@ -81,6 +83,8 @@ Notable repo facts:
 - If a task touches schema, migrations, auth, RLS, exports, ETL, or shared domain contracts, inspect the relevant implementation and docs first.
 - Treat `lib/mock-data` carefully: some modules are explicit static reference catalogs or migration/demo fallbacks, not production runtime seeds.
 - For nutrient math or data-source changes, keep calculations traceable to deterministic source data.
+- Every `ORDER BY` over `foods` needs a btree index covering that exact key sequence. Without one the sort over ~101k rows plus the `food_nutrients` embed exceeds the Postgres statement timeout, and the failure is silent: the query returns nothing, the list renders "0 Lebensmittel", and only the server log shows `canceling statement due to statement timeout`. This has bitten twice (`20260629000068`, `20260812000086`).
+- When a portalled Radix overlay (Dialog, Select, Popover, Dropdown) sits inside a clickable ancestor such as a table row with `onClick`, stop propagation on the overlay *content*, not just the trigger. Radix portals the content out of the DOM subtree, but React synthetic events still bubble along the React tree, so inner clicks reach the row handler.
 
 ## Work Discipline
 
@@ -122,8 +126,13 @@ For routing, auth, exports, persistence, shared hooks, or institution/patient wo
 - Run `npm run build` for broad or cross-cutting changes.
 
 For nutrient calculation, food data, search, reference values, or ETL:
-- Run `npm run validate:nutrients`.
+- Run `npm run validate:nutrients`. It needs the licensed BLS workbook at `data/BLS_4_0_2025_DE/BLS_4_0_Daten_2025_DE.xlsx`, which is not committed; if `data/` is absent the check cannot run and that must be reported, not skipped silently.
 - Run the most relevant food/search/reference tests if behavior changed.
+- Benchmark catalog queries the way the app issues them, including the `food_nutrients` embed. A bare `select` runs in ~1s where the real embedded query times out, so a probe without it will wrongly clear a change.
+
+Running Playwright:
+- Use `--workers=1`. The suite shares one Supabase project and flakes badly in parallel.
+- Re-run a single spec in isolation before concluding a full-run failure is real. Also re-run once warm: a cold dev server compiles routes on first hit, and `/institution/menueplaene` can take minutes that way.
 
 If a check is too expensive or blocked by environment, report it explicitly.
 
