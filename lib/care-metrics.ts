@@ -53,16 +53,17 @@ export function buildCareMetrics({
   livePlanCount,
   now,
 }: BuildCareMetricsInput): CareMetric[] {
-  const startedThisWeek = rows.filter((row) =>
+  const plannedRows = rows.filter((row) => row.hasLivePlan);
+  const startedThisWeek = plannedRows.filter((row) =>
     withinLastDays(row.planStartedAt, WEEK_DAYS, now),
   ).length;
 
-  const planDatesThisWeek = rows.filter((row) =>
+  const planDatesThisWeek = plannedRows.filter((row) =>
     withinLastDays(row.planLatestAt, WEEK_DAYS, now),
   ).length;
 
-  const averageWeeks = rows.length
-    ? rows.reduce((sum, row) => sum + row.planWeek, 0) / rows.length
+  const averageWeeks = plannedRows.length
+    ? plannedRows.reduce((sum, row) => sum + row.planWeek, 0) / plannedRows.length
     : 0;
 
   const patientIds = new Set(rows.map((row) => row.id));
@@ -74,11 +75,11 @@ export function buildCareMetrics({
     withinPreviousWeek(session.date, now),
   ).length;
 
-  const slipping = rows.filter((row) => row.urgency !== "ok").length;
+  const slipping = plannedRows.filter((row) => row.urgency !== "ok").length;
 
   return [
     {
-      label: "Aktive Patienten",
+      label: "Patientenakten",
       value: String(rows.length),
       comparison: startedThisWeek
         ? `${startedThisWeek} neu diese Woche`
@@ -95,7 +96,7 @@ export function buildCareMetrics({
     },
     {
       label: "ø Betreuungsdauer",
-      value: rows.length ? `${averageWeeks.toFixed(1)} Wo.` : "—",
+      value: plannedRows.length ? `${averageWeeks.toFixed(1)} Wo.` : "—",
       comparison: slipping
         ? `${slipping} ohne aktuellen Kontakt`
         : "Alle im Kontaktfenster",
@@ -133,6 +134,18 @@ export function buildAttentionItems(rows: CareRow[]): AttentionItem[] {
   const items: AttentionItem[] = [];
 
   for (const row of rows) {
+    if (!row.hasLivePlan) {
+      items.push({
+        id: `${row.id}-erstkontakt`,
+        name: row.displayName,
+        reason: "Ernährungsplan noch nicht gestartet",
+        timing: `seit ${row.daysSinceContact} Tagen`,
+        tone: "warning",
+        href: `/patienten/${row.id}`,
+      });
+      continue;
+    }
+
     if (row.urgency !== "ok") {
       items.push({
         id: `${row.id}-kontakt`,

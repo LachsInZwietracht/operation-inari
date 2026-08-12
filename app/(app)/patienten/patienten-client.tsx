@@ -57,7 +57,7 @@ const SORT_OPTIONS = [
   { value: "planwoche", label: "Planwoche" },
 ]
 
-const URGENCY_ORDER: CareUrgency[] = ["overdue", "due", "ok"]
+const URGENCY_ORDER: CareUrgency[] = ["erstkontakt", "overdue", "due", "ok"]
 
 const URL_DEFAULTS = {
   view: "liste",
@@ -68,12 +68,8 @@ const URL_DEFAULTS = {
 }
 
 /**
- * Ongoing care: every patient with a live plan.
- *
- * The counterpart to Aufnahmen, split at the seam where a plan starts. What
- * this screen does *not* show is deliberate: the design handoff asked for
- * adherence, check-ins, plan runtime and unread messages, none of which this
- * system records. See lib/care-metrics.ts.
+ * Patient records and ongoing care in one list. A newly accepted intake is a
+ * patient immediately, even while its first plan is still open.
  */
 export function PatientenPageClient({
   initialPatients,
@@ -93,9 +89,8 @@ export function PatientenPageClient({
     () =>
       buildCareRows({
         patients,
-        // Care urgency is derived from plans, sessions and appointments only.
-        // Invitations belong to the intake half of the journey, so this page
-        // does not fetch them at all.
+        // Invitations and questionnaires remain on Aufnahmen. This list begins
+        // once a patient record exists, with or without a plan.
         links: [],
         submissions: [],
         planSummaries: initialPlanSummaries,
@@ -282,7 +277,7 @@ function CareEmptyState({ hasAnyRows }: { hasAnyRows: boolean }) {
       <p className="text-[13px] text-muted-foreground">
         {hasAnyRows
           ? "Kein Patient entspricht den Filtern."
-          : "Noch niemand in laufender Betreuung. Sobald ein Plan startet, erscheint der Patient hier."}
+          : "Noch keine Patientenakte. Übernommene Aufnahmen erscheinen hier sofort."}
       </p>
       {hasAnyRows ? null : (
         <Button size="sm" asChild>

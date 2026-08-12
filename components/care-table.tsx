@@ -27,7 +27,7 @@ export function CareTable({ rows }: CareTableProps) {
       <div className="hidden grid-cols-[4px_minmax(170px,1fr)_130px_150px_120px_110px] items-center gap-x-4 border-b pb-2 lg:grid">
         <span />
         <span className={HEAD_CLASSES}>Patient</span>
-        <span className={HEAD_CLASSES}>Planwoche</span>
+        <span className={HEAD_CLASSES}>Planstatus</span>
         <span className={HEAD_CLASSES}>Letzte Beratung</span>
         <span className={HEAD_CLASSES}>Nächster Termin</span>
         <span className={cn(HEAD_CLASSES, "text-right")}>Status</span>
@@ -68,7 +68,7 @@ function CareTableRow({ row }: { row: CareRow }) {
           {row.displayName}
         </Link>
         <p className="truncate text-[12.5px] text-muted-foreground lg:hidden">
-          Woche {row.planWeek} ·{" "}
+          {row.hasLivePlan ? `Woche ${row.planWeek}` : "Noch kein Plan"} ·{" "}
           {row.lastSessionDate
             ? `Beratung ${formatShortDate(row.lastSessionDate)}`
             : "Noch keine Beratung"}
@@ -76,7 +76,7 @@ function CareTableRow({ row }: { row: CareRow }) {
       </div>
 
       <span className="hidden font-mono text-[12.5px] text-muted-foreground lg:block">
-        Woche {row.planWeek}
+        {row.hasLivePlan ? `Woche ${row.planWeek}` : "Noch kein Plan"}
       </span>
 
       <span className="hidden truncate font-mono text-[12.5px] text-muted-foreground lg:block">

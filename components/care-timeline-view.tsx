@@ -128,7 +128,7 @@ export function CareTimelineView({ rows, now }: CareTimelineViewProps) {
                   {row.displayName}
                 </Link>
                 <span className="block truncate font-mono text-[11px] text-fg-3">
-                  Woche {row.planWeek}
+                  {row.hasLivePlan ? `Woche ${row.planWeek}` : "Noch kein Plan"}
                 </span>
               </div>
             </div>

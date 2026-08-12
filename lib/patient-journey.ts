@@ -15,11 +15,10 @@ import type {
  * single place that answers "where is this person right now?", so Aufnahmen,
  * the care list, and the patient page can never disagree.
  *
- * The chain has one natural seam — whether a live plan exists — and the two
- * patient screens sit on either side of it:
+ * The two patient screens answer different questions:
  *
- *   Aufnahmen  → no live plan yet, resolved to one of four {@link IntakeStage}s
- *   Betreuung  → a live plan exists, resolved to one {@link CareUrgency}
+ *   Aufnahmen  → Which invitations and first-plan tasks need work now?
+ *   Patienten  → Which patient records exist, and who needs attention?
  *
  * Everything is derived from data we already store. There is deliberately no
  * `stage` column: adding one would mean a production migration plus a second
@@ -141,13 +140,14 @@ export interface IntakeRow {
  * The care list's row bar encodes this rather than a stage: everyone on that
  * screen has a plan, so the useful question is who has slipped.
  */
-export type CareUrgency = "ok" | "due" | "overdue";
+export type CareUrgency = "erstkontakt" | "ok" | "due" | "overdue";
 
 /** Contact quieter than this is due; twice this is overdue. */
 export const CONTACT_DUE_DAYS = 45;
 export const CONTACT_OVERDUE_DAYS = 90;
 
 export const CARE_URGENCY_META: Record<CareUrgency, { label: string; color: string }> = {
+  erstkontakt: { label: "Erstkontakt offen", color: "var(--stage-beratung)" },
   ok: { label: "Im Plan", color: "var(--urgency-ok)" },
   due: { label: "Fällig", color: "var(--urgency-due)" },
   overdue: { label: "Überfällig", color: "var(--urgency-overdue)" },
@@ -158,6 +158,8 @@ export interface CareRow {
   patient: Patient;
   displayName: string;
   urgency: CareUrgency;
+  /** False while the patient record exists but no patient-bound plan exists. */
+  hasLivePlan: boolean;
   /** ISO date the current plan run started — the earliest live plan. */
   planStartedAt: string;
   /** ISO date of the most recent live plan. */
@@ -552,16 +554,20 @@ export interface BuildCareRowsInput extends PatientRecords {
   now?: Date;
 }
 
-/** Builds the ongoing-care list: everyone with at least one live plan. */
+/**
+ * Builds the patient list. Every patient record appears here immediately;
+ * people without a plan have the explicit "Erstkontakt offen" status.
+ */
 export function buildCareRows({ now = new Date(), ...records }: BuildCareRowsInput): CareRow[] {
   const grouped = groupPatientRecords(records, now);
   const rows: CareRow[] = [];
 
   for (const patient of records.patients) {
     const livePlans = grouped.livePlansByPatient.get(patient.id);
-    if (!livePlans?.length) continue;
-
-    const dates = livePlans.map((plan) => plan.date).sort();
+    const hasLivePlan = Boolean(livePlans?.length);
+    const dates = hasLivePlan
+      ? livePlans!.map((plan) => plan.date).sort()
+      : [patient.createdAt];
     const planStartedAt = dates[0];
     const planLatestAt = dates[dates.length - 1];
     const lastSessionDate = grouped.lastSessionByPatient.get(patient.id);
@@ -577,10 +583,13 @@ export function buildCareRows({ now = new Date(), ...records }: BuildCareRowsInp
       id: patient.id,
       patient,
       displayName: patientDisplayName(patient),
-      urgency: resolveCareUrgency(daysSinceContact),
+      urgency: hasLivePlan ? resolveCareUrgency(daysSinceContact) : "erstkontakt",
+      hasLivePlan,
       planStartedAt,
       planLatestAt,
-      planWeek: Math.floor(Math.max(0, daysSince(planStartedAt, now)) / 7) + 1,
+      planWeek: hasLivePlan
+        ? Math.floor(Math.max(0, daysSince(planStartedAt, now)) / 7) + 1
+        : 0,
       lastSessionDate,
       daysSinceContact,
       nextAppointment: grouped.nextAppointmentByPatient.get(patient.id) ?? null,
@@ -596,7 +605,12 @@ function resolveCareUrgency(daysSinceContact: number): CareUrgency {
   return "ok";
 }
 
-const CARE_URGENCY_RANK: Record<CareUrgency, number> = { overdue: 0, due: 1, ok: 2 };
+const CARE_URGENCY_RANK: Record<CareUrgency, number> = {
+  erstkontakt: 0,
+  overdue: 1,
+  due: 2,
+  ok: 3,
+};
 
 /** Slipped patients first, then alphabetical so the list stays predictable. */
 export function sortCareRows(rows: CareRow[]): CareRow[] {

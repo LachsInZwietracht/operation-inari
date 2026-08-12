@@ -221,17 +221,17 @@ function patientCard(page: Page, patient: CreatedPatient) {
   return page.locator(`[data-patient-id="${patient.id}"]`).first();
 }
 
-/**
- * Opens Aufnahmen, not /patienten.
- *
- * The patient chain is split at the seam where a plan starts: a freshly created
- * fixture has no plan, so it lives on Aufnahmen. /patienten only holds patients
- * already under care.
- */
+/** Opens the intake work queue, where a new patient remains until a plan exists. */
 async function openPatientList(page: Page) {
   await page.goto("/patienten/aufnahmen", { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { name: "Aufnahmen" })).toBeVisible({ timeout: 30_000 });
+}
+
+async function openAllPatients(page: Page) {
+  await page.goto("/patienten", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: "Patienten" })).toBeVisible({ timeout: 30_000 });
 }
 
 /** Applies one filter from the shared filter bar's "+ Filter" menu. */
@@ -270,6 +270,24 @@ test.describe("Patient Management", () => {
   // Parallel workers share one dev server; cold compiles push slower runs past
   // the default 30s budget (same override as meal-plan.spec.ts).
   test.setTimeout(60_000);
+
+  test("shows a new patient record immediately, before the first plan", async ({ page }) => {
+    const patient = await createPatientFixture({
+      firstName: "Neue",
+      lastName: "Patientenakte",
+    });
+
+    try {
+      await openAllPatients(page);
+      const card = patientCard(page, patient);
+      await expect(card).toBeVisible();
+      await expect(card).toHaveAttribute("data-care-urgency", "erstkontakt");
+      await expect(card).toContainText("Noch kein Plan");
+      await expect(card).toContainText("Erstkontakt offen");
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
 
   test("displays patient list with backend data", async ({ page }) => {
     const primary = await createPatientFixture({ firstName: "Maria", lastName: "Schneider", indications: ["Adipositas"] });
