@@ -2,6 +2,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { ClientShell } from "@/components/client/client-shell"
 import { FoodSearchProvider } from "@/components/foods-provider"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { User } from "@supabase/supabase-js"
 
 export const dynamic = "force-dynamic"
@@ -14,9 +15,7 @@ async function resolveClientShellUser(): Promise<User | null> {
   if (authDisabled || authOptional) return null
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
   return user
 }

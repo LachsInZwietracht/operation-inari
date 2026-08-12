@@ -82,7 +82,7 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
                   </SidebarMenuButton>
                 ) : (
                   <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                    <Link href={item.route} prefetch={false}>
+                    <Link href={item.route}>
                       <item.icon />
                       <span>{item.label}</span>
                     </Link>
@@ -102,7 +102,7 @@ export function AppSidebar({ canAccessInstitution = true, ...props }: AppSidebar
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard" prefetch={false}>
+              <Link href="/dashboard">
                 <span
                   className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-[11px] p-1.5 group-data-[collapsible=icon]:size-8"
                   style={{

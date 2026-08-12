@@ -7,6 +7,7 @@ import {
   fetchPatientNames,
 } from "@/lib/data/client-links"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { ClientLinkWithCounselor } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -20,9 +21,7 @@ export default async function ClientCarePage() {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
   if (!user) redirect("/login")
 

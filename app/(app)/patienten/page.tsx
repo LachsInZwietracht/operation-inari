@@ -6,6 +6,7 @@ import { fetchCounselingSessionsClient } from "@/lib/data/counseling-client"
 import { fetchPatientPlanSummaries } from "@/lib/data/meal-plans"
 import { fetchPatients } from "@/lib/data/patients"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { PatientPlanSummary } from "@/lib/patient-journey"
 import type { CounselingSession, Patient, PracticeAppointment } from "@/lib/types"
 
@@ -26,12 +27,9 @@ async function loadInitialData(): Promise<PatientenInitialData | null> {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
-  if (error || !user) {
+  if (!user) {
     return null
   }
 

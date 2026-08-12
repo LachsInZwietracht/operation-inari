@@ -225,13 +225,13 @@ export function PatientenPageClient({
       header={
         <PageBreadcrumb items={[{ label: "Patienten" }]}>
           <Button size="sm" variant="outline" asChild>
-            <Link href="/patienten/aufnahmen" prefetch={false}>
+            <Link href="/patienten/aufnahmen">
               <UserPlus className="mr-1.5 size-3.5" />
               Aufnahmen
             </Link>
           </Button>
           <Button size="sm" asChild>
-            <Link href="/patienten/neu" prefetch={false}>
+            <Link href="/patienten/neu">
               <Plus className="mr-1.5 size-3.5" />
               Neuer Patient
             </Link>
@@ -286,7 +286,7 @@ function CareEmptyState({ hasAnyRows }: { hasAnyRows: boolean }) {
       </p>
       {hasAnyRows ? null : (
         <Button size="sm" asChild>
-          <Link href="/patienten/aufnahmen" prefetch={false}>
+          <Link href="/patienten/aufnahmen">
             Zu den Aufnahmen
           </Link>
         </Button>

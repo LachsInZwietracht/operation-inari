@@ -264,13 +264,13 @@ export function PatientMealPlansTab({
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline">
-              <Link href={comparisonHref(plans)} prefetch={false}>
+              <Link href={comparisonHref(plans)}>
                 <FileText className="mr-2 h-4 w-4" />
                 Vergleichen
               </Link>
             </Button>
             <Button asChild size="sm">
-              <Link href={mealPlanHref(patient.id)} prefetch={false}>
+              <Link href={mealPlanHref(patient.id)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Plan anlegen
               </Link>
@@ -325,7 +325,7 @@ export function PatientMealPlansTab({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button asChild size="sm" variant="outline">
-                        <Link href={mealPlanHref(patient.id, plan)} prefetch={false}>
+                        <Link href={mealPlanHref(patient.id, plan)}>
                           Öffnen
                           <ExternalLink className="ml-2 h-4 w-4" />
                         </Link>
@@ -400,7 +400,7 @@ export function PatientMealPlansTab({
               </p>
             </div>
             <Button asChild>
-              <Link href={mealPlanHref(patient.id)} prefetch={false}>
+              <Link href={mealPlanHref(patient.id)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Ernährungsplan anlegen
               </Link>

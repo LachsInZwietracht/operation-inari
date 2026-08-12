@@ -3,6 +3,7 @@ import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 import { listApiKeys } from "@/lib/data/api-keys"
 import { fetchExportJobsClient } from "@/lib/data/export-jobs"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { ApiKeyRecord, ExportJobRecord } from "@/lib/types"
 
 interface ApiExportInitialData {
@@ -20,12 +21,9 @@ async function loadInitialData(): Promise<ApiExportInitialData> {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
-  if (error || !user) {
+  if (!user) {
     return {}
   }
 

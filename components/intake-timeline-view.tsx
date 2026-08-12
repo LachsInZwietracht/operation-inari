@@ -174,7 +174,6 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
           {row.patient ? (
             <Link
               href={`/patienten/${row.patient.id}`}
-              prefetch={false}
               className="block truncate text-[13.5px] font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               {row.displayName}

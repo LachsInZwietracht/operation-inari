@@ -55,7 +55,6 @@ export default function ErnaehrungsplaenePage() {
           <Link
             key={tile.route}
             href={tile.route}
-            prefetch={false}
             className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <Card className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-accent/40">

@@ -13,6 +13,7 @@ import {
   normalizeInviteCode,
 } from "@/lib/client-mode";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import type { AppMode } from "@/lib/types";
 
 export interface ClientModeActionResult {
@@ -68,9 +69,7 @@ export async function redeemClientInviteAction(
 
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getVerifiedUser(supabase);
 
     if (!user) {
       return { status: "error", message: "Bitte melde dich an, um die Einladung anzunehmen." };
@@ -158,9 +157,7 @@ export async function revokeClientLinkAsClientAction(
 ): Promise<ClientModeActionResult> {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getVerifiedUser(supabase);
 
     if (!user) {
       return { status: "error", message: "Bitte melde dich an." };

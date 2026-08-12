@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation"
 import { ClientStatsView } from "@/components/client/client-stats-view"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 
 export const dynamic = "force-dynamic"
 
@@ -17,9 +18,7 @@ export default async function ClientStatsPage() {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
   if (!user) redirect("/login")
 

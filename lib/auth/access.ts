@@ -1,6 +1,8 @@
+import { cache } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import type { AppRole, Organization, OrganizationMembership } from "@/lib/types";
 
 type MembershipRow = {
@@ -75,11 +77,14 @@ function getDisplayName(user: User) {
   return [firstName, lastName].filter(Boolean).join(" ") || user.email || "Unbekannter Benutzer";
 }
 
+/**
+ * The signed-in user, verified locally rather than fetched from the Auth
+ * server. See {@link getVerifiedUser} for the tradeoff — access to data is
+ * unaffected, because RLS validates the token on every query regardless.
+ */
 export async function getCurrentUser(supabase?: SupabaseClient) {
   const client = supabase ?? await createClient();
-  const { data, error } = await client.auth.getUser();
-  if (error) throw new Error(error.message);
-  return data.user;
+  return getVerifiedUser(client);
 }
 
 export async function requireUser(supabase?: SupabaseClient) {
@@ -88,7 +93,11 @@ export async function requireUser(supabase?: SupabaseClient) {
   return user;
 }
 
-export async function fetchCurrentMembership(
+/**
+ * Request-scoped: the app shell, the page inside it and any data helper they
+ * call all need the membership, and used to query it once each.
+ */
+export const fetchCurrentMembership = cache(async function fetchCurrentMembership(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<OrganizationMembership | null> {
@@ -103,7 +112,7 @@ export async function fetchCurrentMembership(
 
   if (error) throw new Error(error.message);
   return data ? mapMembership(data as MembershipRow) : null;
-}
+});
 
 export async function ensureCurrentMembership(supabase?: SupabaseClient) {
   const client = supabase ?? await createClient();

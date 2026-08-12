@@ -3,6 +3,7 @@ import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchInvoicesClient } from "@/lib/data/invoices-client"
 import { fetchPatients } from "@/lib/data/patients"
 import { createClient } from "@/lib/supabase/server"
+import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import type { InvoiceEntry, Patient, PracticeAppointment } from "@/lib/types"
 
 interface AbrechnungInitialData {
@@ -21,12 +22,9 @@ async function loadInitialData(): Promise<AbrechnungInitialData | null> {
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedUser(supabase)
 
-  if (error || !user) {
+  if (!user) {
     return null
   }
 
