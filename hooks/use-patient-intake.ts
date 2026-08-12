@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { PatientIntakeLink, PatientIntakeSubmission } from "@/lib/types";
 import {
@@ -16,17 +16,34 @@ import {
 } from "@/lib/data/patient-intake-submissions-client";
 import { useAuth } from "@/hooks/use-auth";
 
+interface UsePatientIntakeOptions {
+  /**
+   * Invitations and questionnaires fetched on the server. Supplying them skips
+   * the first client fetch entirely — the board derives its stages from exactly
+   * these two sets, so fetching them after hydration made the columns pop in.
+   */
+  initialLinks?: PatientIntakeLink[];
+  initialSubmissions?: PatientIntakeSubmission[];
+}
+
 /**
  * Intake invitations are server-only from day one — unlike the older workspace
  * hooks there is deliberately no localStorage draft/migration path, because an
  * invitation that only exists in one browser is worthless.
  */
-export function usePatientIntake() {
+export function usePatientIntake(options: UsePatientIntakeOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [links, setLinks] = useState<PatientIntakeLink[]>([]);
-  const [submissions, setSubmissions] = useState<PatientIntakeSubmission[]>([]);
+  const [links, setLinks] = useState<PatientIntakeLink[]>(options.initialLinks ?? []);
+  const [submissions, setSubmissions] = useState<PatientIntakeSubmission[]>(
+    options.initialSubmissions ?? [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Consumed once: the first mount uses the server's copy, and any later
+  // reload goes to the network as normal.
+  const hasServerData = useRef(
+    Boolean(options.initialLinks && options.initialSubmissions),
+  );
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -50,6 +67,10 @@ export function usePatientIntake() {
   // synchronous cascade on mount. `refresh` stays for event-driven reloads.
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
+    if (hasServerData.current) {
+      hasServerData.current = false;
+      return;
+    }
 
     let cancelled = false;
 

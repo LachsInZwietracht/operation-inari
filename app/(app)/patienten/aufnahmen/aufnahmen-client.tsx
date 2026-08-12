@@ -44,13 +44,21 @@ import {
   type IntakeStage,
   type PatientPlanSummary,
 } from "@/lib/patient-journey"
-import type { CounselingSession, Patient, PracticeAppointment } from "@/lib/types"
+import type {
+  CounselingSession,
+  Patient,
+  PatientIntakeLink,
+  PatientIntakeSubmission,
+  PracticeAppointment,
+} from "@/lib/types"
 
 interface AufnahmenPageClientProps {
   initialPatients?: Patient[]
   initialSessions?: CounselingSession[]
   initialPlanSummaries?: PatientPlanSummary[]
   initialAppointments?: PracticeAppointment[]
+  initialLinks?: PatientIntakeLink[]
+  initialSubmissions?: PatientIntakeSubmission[]
   /** The one clock every waiting time and timeline position is measured from. */
   renderedAt: string
 }
@@ -86,6 +94,8 @@ export function AufnahmenPageClient({
   initialSessions,
   initialPlanSummaries = [],
   initialAppointments,
+  initialLinks,
+  initialSubmissions,
   renderedAt,
 }: AufnahmenPageClientProps) {
   const { patients, patchPatientLocal } = usePatients({ initialPatients })
@@ -97,7 +107,7 @@ export function AufnahmenPageClient({
     createLink,
     applySubmission,
     isLoading: intakeLoading,
-  } = usePatientIntake()
+  } = usePatientIntake({ initialLinks, initialSubmissions })
 
   const { values, setValue, clearValue } = useListUrlState({ defaults: URL_DEFAULTS })
 
