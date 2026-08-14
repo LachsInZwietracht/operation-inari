@@ -57,7 +57,10 @@ export const CLIENT_MODULES: ClientModule[] = [
     // `lib/energy-expenditure.ts`, which the counselor's activity form uses too.
     // Removing this module leaves that file in place.
     id: "training",
-    label: "Training",
+    // The id, the route and the consent flag stay "training": they are the
+    // permission surface and renaming them would be a migration for a word.
+    // The label is what people read.
+    label: "Aktivität",
     route: "/klient/training",
     icon: Dumbbell,
     enabled: true,

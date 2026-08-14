@@ -118,6 +118,10 @@ test("a repeated session offers last time's exercises and prefills them", async 
 test("a session with a duration shows what it cost", async ({ page }) => {
   await page.goto("/klient/training");
 
+  // The tab pages by week now, and this session is exactly seven days old —
+  // the same weekday, one week back.
+  await page.getByRole("button", { name: "Vorherige Woche" }).click();
+
   const past = page
     .locator("[data-slot=card]")
     .filter({ hasText: TITLE })

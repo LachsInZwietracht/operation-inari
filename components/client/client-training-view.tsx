@@ -3,7 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { ChevronRight, Flame, Pencil, Plus, Timer, Trash2, TrendingUp, Trophy } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronRight as ChevronRightIcon,
+  Flame,
+  Pencil,
+  Plus,
+  Timer,
+  Trash2,
+  TrendingUp,
+  Trophy,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { ClientExerciseDetailDialog } from "@/components/client/client-exercise-detail-dialog"
@@ -20,11 +31,17 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
+  addWeeks,
   findPersonalRecords,
   formatSet,
+  isStrengthSession,
   summarizeExerciseProgress,
+  summarizeWeek,
   suggestExercisesForSession,
+  weekEnd,
+  weekStart,
 } from "@/lib/client-training"
+import { todayIsoDate } from "@/lib/client-mode"
 import { estimateActivityEnergy, findActivity } from "@/lib/energy-expenditure"
 import { fetchClientPatientHistory } from "@/lib/data/client-history-client"
 import {
@@ -91,6 +108,25 @@ export function ClientTrainingView({
       .then((history) => setHistoryWeightKg(history.measurements.at(-1)?.weight || undefined))
       .catch(() => setHistoryWeightKg(undefined))
   }, [clientUserId])
+
+  const [week, setWeek] = useState(() => weekStart(todayIsoDate()))
+
+  const weekSessions = useMemo(
+    () => sessions.filter((session) => session.date >= week && session.date <= weekEnd(week)),
+    [sessions, week],
+  )
+
+  const weekSummary = useMemo(
+    () =>
+      summarizeWeek(
+        weekSessions.map((session) => ({
+          durationMinutes: session.durationMinutes,
+          sets: session.sets,
+          kcal: sessionEnergy(session)?.netKcal,
+        })),
+      ),
+    [weekSessions],
+  )
 
   const records = useMemo(() => findPersonalRecords(sessions), [sessions])
   const recordSetIds = useMemo(
@@ -164,13 +200,70 @@ export function ClientTrainingView({
 
   return (
     <div className="space-y-4">
+      {/* By week, not by day. The diary's day chrome would be empty most of
+          the time here — and a week is the grain training is planned in. */}
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Training</h1>
-        <Button size="sm" onClick={() => setSessionDialog({})}>
-          <Plus className="mr-1 h-4 w-4" />
-          Einheit
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Vorherige Woche"
+          onClick={() => setWeek((current) => addWeeks(current, -1))}
+        >
+          <ChevronLeft className="h-5 w-5" />
         </Button>
+
+        <div className="text-center">
+          <p className="text-base font-semibold">
+            {week === weekStart(todayIsoDate()) ? "Diese Woche" : `KW ${format(parseISO(week), "I", { locale: de })}`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {format(parseISO(week), "d.", { locale: de })}–
+            {format(parseISO(weekEnd(week)), "d. MMMM", { locale: de })}
+          </p>
+        </div>
+
+        {week >= weekStart(todayIsoDate()) ? (
+          <Button variant="ghost" size="icon" disabled aria-label="Nächste Woche">
+            <ChevronRightIcon className="h-5 w-5" />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Nächste Woche"
+            onClick={() => setWeek((current) => addWeeks(current, 1))}
+          >
+            <ChevronRightIcon className="h-5 w-5" />
+          </Button>
+        )}
       </div>
+
+      <Card>
+        <CardContent className="flex items-center justify-between gap-2 py-4">
+          <div className="grid flex-1 grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-lg font-semibold tabular-nums">{weekSummary.sessions}</p>
+              <p className="text-xs text-muted-foreground">
+                {weekSummary.sessions === 1 ? "Einheit" : "Einheiten"}
+              </p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold tabular-nums">{weekSummary.minutes}</p>
+              <p className="text-xs text-muted-foreground">Minuten</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold tabular-nums">
+                {weekSummary.kcal ?? "—"}
+              </p>
+              <p className="text-xs text-muted-foreground">kcal</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setSessionDialog({})}>
+            <Plus className="mr-1 h-4 w-4" />
+            Einheit
+          </Button>
+        </CardContent>
+      </Card>
 
       {progress.length > 0 && (
         <Card>
@@ -235,18 +328,17 @@ export function ClientTrainingView({
         </Card>
       )}
 
-      {sessions.length === 0 ? (
+      {weekSessions.length === 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Noch kein Training erfasst</CardTitle>
+            <CardTitle className="text-base">Diese Woche noch nichts</CardTitle>
             <CardDescription>
-              Leg eine Einheit an und trag deine Sätze ein. Ab der zweiten siehst du, ob du dich
-              gesteigert hast.
+              Kraft, ein Spaziergang, Radfahren — alles zählt. Trag eine Einheit ein.
             </CardDescription>
           </CardHeader>
         </Card>
       ) : (
-        sessions.map((session) => {
+        weekSessions.map((session) => {
           const energy = sessionEnergy(session)
           const suggestions = suggestExercisesForSession(sessions, session)
 
@@ -306,8 +398,12 @@ export function ClientTrainingView({
                 </div>
               </CardHeader>
 
+              {/* A walk is a complete entry with no sets in it. Only strength
+                  work gets the exercise machinery — offering "+ Satz" under a
+                  bike ride is the surface insisting on a shape the data never
+                  required. */}
               <CardContent className="space-y-3 pt-0">
-                {session.sets.length === 0 ? (
+                {!isStrengthSession(session) ? null : session.sets.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Noch keine Sätze.</p>
                 ) : (
                   <ul className="space-y-3">
@@ -366,7 +462,7 @@ export function ClientTrainingView({
                   </ul>
                 )}
 
-                {suggestions.length > 0 && (
+                {isStrengthSession(session) && suggestions.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-xs text-muted-foreground">
                       Beim letzten „{session.title}“ dabei:
@@ -390,14 +486,27 @@ export function ClientTrainingView({
                   </div>
                 )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSetDialog({ sessionId: session.id })}
-                >
-                  <Plus className="mr-1 h-4 w-4" />
-                  Andere Übung
-                </Button>
+                {isStrengthSession(session) ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSetDialog({ sessionId: session.id })}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    Andere Übung
+                  </Button>
+                ) : (
+                  // The way back for something logged as a walk that turned
+                  // into a workout — without making it the default gesture.
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0 text-xs text-muted-foreground"
+                    onClick={() => setSetDialog({ sessionId: session.id })}
+                  >
+                    Übung hinzufügen
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )

@@ -279,3 +279,113 @@ export function formatSetRun(sets: Pick<ClientWorkoutSet, "reps" | "weightKg">[]
 
   return parts.join(", ");
 }
+
+/**
+ * The week a session belongs to, Monday to Sunday.
+ *
+ * Training is navigated by week, not by day, and that is not a compromise for
+ * consistency's sake. You eat every day; you train three or four times a week,
+ * so a day view would be empty more often than not and paging through blanks
+ * is the worst kind of symmetry with the diary. A week is also the grain people
+ * actually plan training in.
+ */
+export function weekStart(date: string): string {
+  const parsed = new Date(`${date}T00:00:00`);
+  // getDay() is 0 for Sunday; shift so Monday starts the week.
+  const offset = (parsed.getDay() + 6) % 7;
+  parsed.setDate(parsed.getDate() - offset);
+  return isoDate(parsed);
+}
+
+export function addWeeks(weekStartDate: string, delta: number): string {
+  const parsed = new Date(`${weekStartDate}T00:00:00`);
+  parsed.setDate(parsed.getDate() + delta * 7);
+  return isoDate(parsed);
+}
+
+export function weekEnd(weekStartDate: string): string {
+  const parsed = new Date(`${weekStartDate}T00:00:00`);
+  parsed.setDate(parsed.getDate() + 6);
+  return isoDate(parsed);
+}
+
+/**
+ * The local calendar date, not the UTC one.
+ *
+ * `toISOString()` converts first: midnight in Europe/Berlin is still the
+ * previous day in UTC, so a Monday would come back as the Sunday before it.
+ */
+function isoDate(value: Date): string {
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${value.getFullYear()}-${month}-${day}`;
+}
+
+export interface ClientWeekSummary {
+  sessions: number;
+  minutes: number;
+  volumeKg: number;
+  /** Undefined when no session in the week could be costed. */
+  kcal?: number;
+}
+
+/**
+ * What a week of activity amounted to.
+ *
+ * Energy is undefined rather than 0 when nothing could be estimated — a week of
+ * sessions logged without a duration has not burned nothing, it has simply not
+ * said.
+ */
+export function summarizeWeek(
+  sessions: { durationMinutes?: number; sets: ClientWorkoutSet[]; kcal?: number }[],
+): ClientWeekSummary {
+  const costed = sessions.filter((session) => session.kcal !== undefined);
+
+  return {
+    sessions: sessions.length,
+    minutes: sessions.reduce((sum, session) => sum + (session.durationMinutes ?? 0), 0),
+    volumeKg: sessions.reduce(
+      (sum, session) => sum + session.sets.reduce((inner, set) => inner + setVolumeKg(set), 0),
+      0,
+    ),
+    kcal:
+      costed.length > 0
+        ? Math.round(costed.reduce((sum, session) => sum + (session.kcal ?? 0), 0))
+        : undefined,
+  };
+}
+
+/**
+ * Whether a session is a strength workout or a plain activity.
+ *
+ * A walk is a session with a duration and no sets — the schema always allowed
+ * it, only the surface insisted on exercises. This is what decides whether the
+ * card offers "+ Satz" or simply states what was done.
+ */
+export function isStrengthSession(session: {
+  activityKind?: string;
+  sets: ClientWorkoutSet[];
+}): boolean {
+  if (session.sets.length > 0) return true;
+  // No kind recorded means the session predates the column, or nobody chose.
+  // Those are workouts — the tab was strength training when they were written,
+  // and hiding their sets would be a change made to their past.
+  if (!session.activityKind) return true;
+  return isStrengthKind(session.activityKind);
+}
+
+/**
+ * The kinds that carry their meaning in sets rather than in minutes.
+ *
+ * Kept separate from `isStrengthSession` because the entry form has to decide
+ * before any set exists, and both must agree on what "strength" means.
+ *
+ * Note the deliberate asymmetry on a missing kind: here it is **not** strength,
+ * because the form always has one selected and an absent value can only mean
+ * the caller has nothing to go on. `isStrengthSession` answers the opposite for
+ * a *stored* row, where a missing kind means the row predates the column. Use
+ * that one for anything read out of the database.
+ */
+export function isStrengthKind(activityKind?: string): boolean {
+  return activityKind === "kraft" || activityKind === "zirkel";
+}

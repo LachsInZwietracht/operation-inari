@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { todayIsoDate } from "@/lib/client-mode"
+import { isStrengthKind } from "@/lib/client-training"
 import {
   ACTIVITY_INTENSITIES,
   estimateActivityEnergy,
@@ -85,6 +86,12 @@ export function ClientWorkoutSessionDialog({
 
   const parsedDuration = parseNumber(duration)
   const parsedWeight = parseNumber(weight)
+
+  // A walk is nothing but its duration: without one there is no volume, no
+  // sets and no energy — the entry would say only that something happened.
+  // Strength work still carries its meaning in the sets, so there it stays
+  // optional and the estimate is the thing you forgo.
+  const needsDuration = !isStrengthKind(activityKind)
   const estimate = useMemo(
     () =>
       estimateActivityEnergy({
@@ -97,6 +104,11 @@ export function ClientWorkoutSessionDialog({
   )
 
   async function handleSave() {
+    if (needsDuration && parsedDuration === undefined) {
+      toast.error("Wie lange war die Einheit? Ohne Dauer lässt sich nichts davon berechnen.")
+      return
+    }
+
     const trimmed = title.trim() || "Training"
     setIsSaving(true)
     try {
@@ -167,11 +179,18 @@ export function ClientWorkoutSessionDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="session-duration">Dauer (Minuten)</Label>
+              <Label htmlFor="session-duration">
+                Dauer (Minuten)
+                {!needsDuration && (
+                  <span className="ml-1 font-normal text-muted-foreground">optional</span>
+                )}
+              </Label>
               <Input
                 id="session-duration"
                 inputMode="numeric"
                 placeholder="60"
+                required={needsDuration}
+                aria-required={needsDuration}
                 value={duration}
                 onChange={(event) => setDuration(event.target.value)}
               />

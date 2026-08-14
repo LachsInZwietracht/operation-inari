@@ -1,14 +1,20 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  addWeeks,
   buildExerciseHistory,
   estimateOneRepMax,
   findLastPerformance,
   findPersonalRecords,
   formatSetRun,
+  isStrengthKind,
+  isStrengthSession,
   nextSetIndex,
   suggestExercisesForSession,
   summarizeExerciseProgress,
+  summarizeWeek,
+  weekEnd,
+  weekStart,
 } from "@/lib/client-training";
 import type { ClientWorkoutSession, ClientWorkoutSet } from "@/lib/types";
 
@@ -178,5 +184,79 @@ test.describe("set formatting", () => {
 
   test("a single set is written plainly", () => {
     expect(formatSetRun([{ reps: 10, weightKg: 40 }])).toBe("10 × 40 kg");
+  });
+});
+
+/**
+ * Activity by week.
+ *
+ * The tab covers walks and bike rides now, not only lifting — which is why the
+ * two questions here are "which week is this" and "does this session want the
+ * exercise machinery at all".
+ */
+test.describe("the week as the unit", () => {
+  test("a week runs Monday to Sunday", () => {
+    // 2026-08-14 is a Friday.
+    expect(weekStart("2026-08-14")).toBe("2026-08-10");
+    expect(weekEnd("2026-08-10")).toBe("2026-08-16");
+    // Sunday belongs to the week that started six days earlier, not the next.
+    expect(weekStart("2026-08-16")).toBe("2026-08-10");
+    expect(weekStart("2026-08-17")).toBe("2026-08-17");
+  });
+
+  test("paging moves whole weeks in both directions", () => {
+    expect(addWeeks("2026-08-10", -1)).toBe("2026-08-03");
+    expect(addWeeks("2026-08-10", 1)).toBe("2026-08-17");
+  });
+
+  test("a week with nothing costed reports no energy rather than zero", () => {
+    // Sessions logged without a duration have not burned nothing — they have
+    // simply not said, and a confident 0 would read as the former.
+    const summary = summarizeWeek([{ sets: [], durationMinutes: undefined }]);
+    expect(summary.sessions).toBe(1);
+    expect(summary.kcal).toBeUndefined();
+  });
+
+  test("minutes and volume add up across the week", () => {
+    const summary = summarizeWeek([
+      { durationMinutes: 30, sets: [], kcal: 120 },
+      { durationMinutes: 70, sets: [{ reps: 10, weightKg: 40 } as never], kcal: 200 },
+    ]);
+    expect(summary.minutes).toBe(100);
+    expect(summary.volumeKg).toBe(400);
+    expect(summary.kcal).toBe(320);
+  });
+});
+
+test.describe("what wants sets and what does not", () => {
+  test("a walk is a complete entry with nothing in it", () => {
+    expect(isStrengthSession({ activityKind: "gehen", sets: [] })).toBe(false);
+    expect(isStrengthSession({ activityKind: "radfahren", sets: [] })).toBe(false);
+  });
+
+  test("strength work keeps the exercise machinery", () => {
+    expect(isStrengthSession({ activityKind: "kraft", sets: [] })).toBe(true);
+    expect(isStrengthSession({ activityKind: "zirkel", sets: [] })).toBe(true);
+  });
+
+  test("only strength kinds may skip the duration", () => {
+    // The entry form has to decide before any set exists, so this is the one
+    // definition both it and the card read.
+    expect(isStrengthKind("kraft")).toBe(true);
+    expect(isStrengthKind("zirkel")).toBe(true);
+    expect(isStrengthKind("gehen")).toBe(false);
+    expect(isStrengthKind("sonstiges")).toBe(false);
+    expect(isStrengthKind(undefined)).toBe(false);
+  });
+
+  test("a session from before the column existed keeps its sets", () => {
+    // Hiding the exercise machinery from rows written when this tab *was*
+    // strength training would be a change made to someone's past.
+    expect(isStrengthSession({ sets: [] })).toBe(true);
+  });
+
+  test("anything that already has sets is a workout, whatever it was called", () => {
+    // Someone logs a walk, then adds a set of pull-ups from the playground bar.
+    expect(isStrengthSession({ activityKind: "gehen", sets: [{} as never] })).toBe(true);
   });
 });

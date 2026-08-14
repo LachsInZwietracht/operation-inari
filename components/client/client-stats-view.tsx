@@ -172,6 +172,11 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
   // Only drawn once there is something to draw: an all-zero series next to the
   // food would read as "you burned nothing", when it means "no duration logged".
   const hasBurned = kcalData.some((day) => day.verbrannt > 0)
+  const burnedDays = kcalData.filter((day) => day.verbrannt > 0)
+  const burnedTotal = Math.round(burnedDays.reduce((sum, day) => sum + day.verbrannt, 0))
+  // Averaged over days that had a session, not over the window — the same rule
+  // the food average uses, for the same reason.
+  const burnedAverage = burnedDays.length > 0 ? Math.round(burnedTotal / burnedDays.length) : 0
 
   const adherenceData = (stats?.adherence ?? []).map((day) => ({
     label: shortDate(day.date),
@@ -365,6 +370,55 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
       {isClientModuleEnabled("training") && (
         <>
           <SectionHeading>Training</SectionHeading>
+
+          {/* Burned energy on its own, next to the food chart's version of it
+              rather than instead: there it answers "what did this day look
+              like", here it answers "how much am I actually moving". */}
+          {hasBurned && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Zusätzlich verbrannt</CardTitle>
+                <CardDescription>
+                  Letzte {CLIENT_STATS_WINDOW_DAYS} Tage · {burnedTotal} kcal insgesamt, Ø{" "}
+                  {burnedAverage} kcal an Tagen mit Training
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart
+                    data={kcalData}
+                    margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      vertical={false}
+                      stroke="var(--color-border)"
+                      strokeOpacity={0.6}
+                    />
+                    <XAxis dataKey="label" interval="preserveStartEnd" {...AXIS_PROPS} />
+                    <YAxis {...AXIS_PROPS} />
+                    <Tooltip
+                      cursor={{ fill: "var(--color-muted)", fillOpacity: 0.4 }}
+                      content={<ChartTooltip unit="kcal" />}
+                    />
+                    {/* One series, so the card title is the legend. */}
+                    <Bar
+                      dataKey="verbrannt"
+                      name="Verbrannt"
+                      fill={SERIES_COLORS[1]}
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={22}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                <p className="text-xs text-muted-foreground">
+                  Geschätzt aus Art, Dauer und Körpergewicht — was zusätzlich zum Grundumsatz
+                  verbraucht wurde. Einheiten ohne Dauer zählen nicht mit.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <ClientTrainingSummary
             weeks={stats?.trainingWeeks ?? []}
             records={stats?.records ?? []}
