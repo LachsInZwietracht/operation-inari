@@ -124,10 +124,6 @@ export function StammdatenTab({
               <dt className="text-sm text-muted-foreground">Kontaktfreigabe</dt>
               <dd className="text-sm font-medium">{patient.communicationConsent ? "Ja" : "Nein"}</dd>
             </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Digitale Protokolle</dt>
-              <dd className="text-sm font-medium">{patient.digitalProtocolConsent ? "Freigegeben" : "Nicht freigegeben"}</dd>
-            </div>
             {patient.street && (
               <div className="sm:col-span-2">
                 <dt className="text-sm text-muted-foreground">Adresse</dt>

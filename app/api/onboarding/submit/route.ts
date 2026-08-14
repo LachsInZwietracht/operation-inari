@@ -5,10 +5,9 @@ import { writeAccessAuditLog } from "@/lib/audit/access-audit";
 import { countAnsweredSections, intakeSubmitRequestSchema } from "@/lib/intake/schema";
 
 /**
- * Public, unauthenticated endpoint for the onboarding intake form.
- * Mirrors `app/api/protokoll/submit/route.ts`: the link id is the only
- * credential, writes go through the service role, and nothing is applied to a
- * patient record here.
+ * Public, unauthenticated endpoint for the onboarding intake form. The link id
+ * is the only credential, writes go through the service role, and nothing is
+ * applied to a patient record here.
  */
 export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") ?? 0);

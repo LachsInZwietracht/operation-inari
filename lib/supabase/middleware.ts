@@ -13,7 +13,7 @@ import { loadJwks } from "@/lib/supabase/jwks"
 import type { AppRole } from "@/lib/types"
 
 const PUBLIC_APP_PATHS = ["/login", "/registrieren", "/passwort-vergessen"]
-const PUBLIC_PREFIXES = ["/_next", "/api", "/protokoll", "/onboarding", "/auth"]
+const PUBLIC_PREFIXES = ["/_next", "/api", "/onboarding", "/auth"]
 
 async function resolveRole(supabase: ReturnType<typeof createServerClient>, userId: string, legacyRole: unknown): Promise<AppRole> {
   const { data, error } = await supabase

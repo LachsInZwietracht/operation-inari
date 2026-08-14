@@ -35,9 +35,7 @@ type CreatedCounselingSession = {
 };
 
 type WorkflowFixture = {
-  linkId: string;
-  submissionId: string;
-  protocolId: string;
+  measurementId: string;
   appointmentId: string;
 };
 
@@ -135,46 +133,20 @@ async function deleteCounselingSessionFixture(sessionId: string) {
 async function createWorkflowFixture(patientId: string): Promise<WorkflowFixture> {
   const userId = await getTestUserId();
 
-  const linkId = crypto.randomUUID();
-  const submissionId = crypto.randomUUID();
-  const protocolId = crypto.randomUUID();
+  const measurementId = crypto.randomUUID();
   const appointmentId = crypto.randomUUID();
 
-  const { error: linkError } = await admin.from("patient_digital_protocol_links").insert({
-    id: linkId,
+  // Assessment is derived from clinical inputs now that protocols are gone.
+  const { error: measurementError } = await admin.from("patient_anthropometrics").insert({
+    id: measurementId,
     user_id: userId,
     patient_id: patientId,
-    method: "Digitales 24h Recall",
-    status: "received",
-    url: `https://demo.prodi.local/protokoll/${linkId}`,
-    expires_at: "2026-12-31",
+    date: "2026-04-19",
+    weight: 82,
+    height: 178,
+    bmi: 25.9,
   });
-  if (linkError) throw new Error(linkError.message);
-
-  const { error: protocolError } = await admin.from("nutrition_protocols").insert({
-    id: protocolId,
-    user_id: userId,
-    patient_id: patientId,
-    title: "3-Tage-Ernährungsprotokoll",
-    type: "ernaehrungsprotokoll",
-    start_date: "2026-04-19",
-    end_date: "2026-04-21",
-    notes: "Aus digitaler Einreichung übernommen",
-    metadata: { source: "digital_protocol_submission", sourceSubmissionId: submissionId },
-  });
-  if (protocolError) throw new Error(protocolError.message);
-
-  const { error: submissionError } = await admin.from("digital_protocol_submissions").insert({
-    id: submissionId,
-    link_id: linkId,
-    patient_id: patientId,
-    submitted_at: "2026-04-20T08:00:00.000Z",
-    days: [{ date: "2026-04-19", entries: [{ mealSlot: "Frühstück", freeText: "2 Scheiben Vollkornbrot", time: "08:00" }] }],
-    notes: "Patient hat App genutzt",
-    status: "converted",
-    converted_protocol_id: protocolId,
-  });
-  if (submissionError) throw new Error(submissionError.message);
+  if (measurementError) throw new Error(measurementError.message);
 
   const { error: appointmentError } = await admin.from("appointments").insert({
     id: appointmentId,
@@ -190,15 +162,12 @@ async function createWorkflowFixture(patientId: string): Promise<WorkflowFixture
   });
   if (appointmentError) throw new Error(appointmentError.message);
 
-  return { linkId, submissionId, protocolId, appointmentId };
+  return { measurementId, appointmentId };
 }
 
 async function deleteWorkflowFixture(patientId: string, fixture: WorkflowFixture) {
   await admin.from("appointments").delete().eq("id", fixture.appointmentId);
-  await admin.from("nutrition_protocol_entries").delete().eq("protocol_id", fixture.protocolId);
-  await admin.from("nutrition_protocols").delete().eq("id", fixture.protocolId);
-  await admin.from("digital_protocol_submissions").delete().eq("id", fixture.submissionId);
-  await admin.from("patient_digital_protocol_links").delete().eq("id", fixture.linkId);
+  await admin.from("patient_anthropometrics").delete().eq("id", fixture.measurementId);
   await deleteClinicalRows("appointments", patientId);
 }
 
@@ -258,11 +227,6 @@ async function openPatientDetail(page: Page, patient: CreatedPatient) {
 async function openAssessmentSection(page: Page, section: string) {
   // Assessment sections now live as sub-tabs under the "Profil" tab.
   await page.getByRole("tab", { name: "Profil" }).first().click();
-  await page.getByRole("tab", { name: section }).click();
-}
-
-async function openNutritionSection(page: Page, section: string) {
-  await page.getByRole("tab", { name: "Ernährung" }).click();
   await page.getByRole("tab", { name: section }).click();
 }
 
@@ -497,9 +461,13 @@ test.describe("Patient Management", () => {
       await openPatientDetail(page, patient);
 
       await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText("3/4 Schritte abgeschlossen")).toBeVisible();
+      await expect(page.getByText("2/4 Schritte abgeschlossen")).toBeVisible();
       await expect(page.getByText("Ein patientenbezogener Kontrolltermin ist bereits im Kalender hinterlegt.")).toBeVisible();
-      await expect(page.getByText("Digitale Einreichung wurde in ein internes Protokoll übernommen.")).toBeVisible();
+      await expect(page.getByText("Messwerte und Screenings sind dokumentiert.")).toBeVisible();
+      await expect(
+        // The summary shows twice: on the stage card and in the "next step" card.
+        page.getByText("Es gibt noch keinen Klienten-Zugang; der Patient kann nichts selbst erfassen.").first(),
+      ).toBeVisible();
       await expect(page.getByRole("link", { name: "Plan anlegen" }).first()).toHaveAttribute("href", `/ernaehrungsplan?patientId=${patient.id}`);
       await expect(page.getByText("Quick Links")).toHaveCount(0);
     } finally {
@@ -669,48 +637,6 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("cell", { name: /98 mg\/dl/i })).toBeVisible();
     } finally {
       await deleteClinicalRows("patient_lab_values", patient.id).catch(() => {});
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("persists digital protocol links and status updates across reload", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Digital", lastName: "Persist" });
-
-    try {
-      await openPatientDetail(page, patient);
-      await openNutritionSection(page, "Protokolle");
-
-      await page.getByRole("button", { name: "Link erstellen" }).click();
-      await expect(page.getByText("Digitales 24h Recall", { exact: true }).last()).toBeVisible();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ method: string; status: string }>(
-            "patient_digital_protocol_links",
-            patient.id,
-          );
-          return rows.some((row) => row.method === "Digitales 24h Recall" && row.status === "pending");
-        })
-        .toBe(true);
-
-      await page.getByRole("button", { name: "Status toggeln" }).click();
-
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ method: string; status: string }>(
-            "patient_digital_protocol_links",
-            patient.id,
-          );
-          return rows.some((row) => row.method === "Digitales 24h Recall" && row.status === "received");
-        })
-        .toBe(true);
-
-      await page.reload({ waitUntil: "networkidle" });
-      await openNutritionSection(page, "Protokolle");
-      await expect(page.getByText("Digitales 24h Recall", { exact: true }).last()).toBeVisible();
-      await expect(page.getByText("eingetroffen")).toBeVisible();
-    } finally {
-      await deleteClinicalRows("patient_digital_protocol_links", patient.id).catch(() => {});
       await deletePatientFixture(patient.id);
     }
   });

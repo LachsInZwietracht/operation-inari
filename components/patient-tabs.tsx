@@ -15,9 +15,6 @@ import { useLabValues } from "@/hooks/use-lab-values"
 import { useActivities } from "@/hooks/use-activities"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
 import { useScreenings } from "@/hooks/use-screenings"
-import { useDigitalProtocols } from "@/hooks/use-digital-protocols"
-import { useDigitalProtocolSubmissions } from "@/hooks/use-digital-protocol-submissions"
-import { useProtocols } from "@/hooks/use-protocols"
 import { useCounseling } from "@/hooks/use-counseling"
 import type {
   AnthropometricEntry,
@@ -34,7 +31,6 @@ import type { AllergenType, AllergenSeverity } from "@/lib/allergen-constants"
 import { AnthropometrieTab } from "@/components/patient-tabs/anthropometrie-tab"
 import { BeratungenTab } from "@/components/patient-tabs/beratungen-tab"
 import { DiagnosenTab } from "@/components/patient-tabs/diagnosen-tab"
-import { ProtokolleTab } from "@/components/patient-tabs/protokolle-tab"
 import { StammdatenTab } from "@/components/patient-tabs/stammdaten-tab"
 import { AktivitaetTab } from "@/components/patient-tabs/aktivitaet-tab"
 import { PatientIntakePanel } from "@/components/patient-intake-panel"
@@ -45,10 +41,9 @@ import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
 /** Sentinel for "no style selected" — Radix Select rejects an empty value. */
 const DIET_STYLE_NONE = "__none__"
 
-const EMPTY_PROTOCOL_FOODS: Food[] = []
 
 const PROFILE_TAB_VALUES = ["stammdaten", "anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
-const NUTRITION_TAB_VALUES = ["ernaehrungsplaene", "protokolle"] as const
+const NUTRITION_TAB_VALUES = ["ernaehrungsplaene"] as const
 
 const KNOWN_TAB_VALUES = new Set<string>([
   "workflow",
@@ -114,22 +109,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     initialEntries: initialData?.screenings,
   })
   const {
-    getForPatient: getDigitalLinksForPatient,
-    generateLink,
-    updateStatus: updateDigitalLinkStatus,
-    isLoadingRemote: isLoadingDigitalProtocols,
-  } = useDigitalProtocols({ initialLinks: initialData?.digitalLinks })
-  const { getForPatient: getProtocolsForPatient } = useProtocols(EMPTY_PROTOCOL_FOODS, {
-    initialProtocols: initialData?.protocols,
-  })
-  const {
-    submissions: digitalSubmissions,
-    isLoading: isLoadingSubmissions,
-    updateStatus: updateSubmissionStatus,
-  } = useDigitalProtocolSubmissions(patient.id, {
-    initialSubmissions: initialData?.digitalSubmissions,
-  })
-  const {
     getForPatient: getAllergensForPatient,
     addEntry: addAllergen,
     deleteEntry: deleteAllergen,
@@ -164,7 +143,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const handlePalChange = (value: string) => {
     void setPal(parseFloat(value), patient.id)
   }
-  const [digitalMethod, setDigitalMethod] = useState("Digitales 24h Recall")
   const [targetWeightInput, setTargetWeightInput] = useState("")
   const [calorieDeficitInput, setCalorieDeficitInput] = useState("500")
   const [showAllergenForm, setShowAllergenForm] = useState(false)
@@ -183,7 +161,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const sessions = counselingSessions.filter(
     (session) => session.patientId === patient.id || session.patientId === patient.legacyId,
   )
-  const protocols = getProtocolsForPatient(patient.id)
   const diagnoses = getDiagnosesForPatient(patient.id)
   const medications = getMedicationsForPatient(patient.id)
   const labEntries = getLabValuesForPatient(patient.id)
@@ -195,8 +172,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const medicationsPending = isLoadingMedications && medications.length === 0
   const labValuesPending = isLoadingLabValues && entriesForSelectedLab.length === 0
   const counselingPending = isLoadingCounseling && sessions.length === 0
-  const digitalLinks = getDigitalLinksForPatient(patient.id)
-  const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
   const dietExclusions = (currentPatient.nutritionPreferences ?? []).filter(
@@ -398,13 +373,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     toast.success("Notizen zu Ernährungsvorlieben gespeichert")
   }, [currentPatient.nutritionPreferenceNotes, nutritionPreferenceNotes, patient.id, updatePatient])
 
-  const digitalMethodOptions = [
-    "Digitales 24h Recall",
-    "FFQ Link",
-    "3-Tages-Protokoll",
-    "Haushaltsmengen",
-  ]
-
   const palOptions = [
     { value: "1.2", label: "1.2 · Ruhig/Büro" },
     { value: "1.4", label: "1.4 · Leichte Aktivität" },
@@ -413,13 +381,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     { value: "2.0", label: "2.0 · Leistungssport" },
   ]
 
-  const protocolComparison = useMemo(() => protocols.slice(0, 2), [protocols])
-  const comparisonMetrics = [
-    { key: "energie", label: "Energie", unit: "kcal" },
-    { key: "eiweiss", label: "Eiweiß", unit: "g" },
-    { key: "fett", label: "Fett", unit: "g" },
-    { key: "kohlenhydrate", label: "Kohlenhydrate", unit: "g" },
-  ]
 
   const handleDiagnosisSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -511,34 +472,16 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
       <TabsContent value="workflow" className="space-y-4">
         <PatientWorkflowTab
           patient={patient}
-          protocols={protocols}
-          digitalLinks={digitalLinks}
-          digitalSubmissions={digitalSubmissions}
           sessions={sessions}
           anthroEntries={anthroEntries}
           screenings={screenings}
           appointments={patientAppointments}
           mealPlans={initialData?.mealPlans ?? []}
-          onGenerateLink={() =>
-            void generateLink({
-              patientId: patient.id,
-              method: digitalMethod,
-              status: "pending",
-              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-            })
-          }
-          onMarkSubmissionReviewed={(submissionId) => void updateSubmissionStatus(submissionId, "reviewed")}
-          isLoadingSubmissions={isLoadingSubmissions}
-          digitalLinksPending={digitalLinksPending}
           counselingPending={counselingPending}
         />
       </TabsContent>
 
       <TabsContent value="ernaehrungsplaene" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="ernaehrungsplaene">Ernährungspläne</TabsTrigger>
-          <TabsTrigger value="protokolle">Protokolle</TabsTrigger>
-        </TabsList>
         <PatientMealPlansTab
           patient={patient}
           initialPlans={initialData?.mealPlans ?? []}
@@ -658,32 +601,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           nutritionPreferenceAllergens={nutritionPreferenceAllergens}
           allergensPending={allergensPending}
           onManageAllergens={() => setActiveTab("diagnosen")}
-        />
-      </TabsContent>
-
-      <TabsContent value="protokolle" className="space-y-4">
-        <ProtokolleTab
-          patient={patient}
-          protocols={protocols}
-          protocolComparison={protocolComparison}
-          comparisonMetrics={comparisonMetrics}
-          digitalMethod={digitalMethod}
-          setDigitalMethod={setDigitalMethod}
-          digitalMethodOptions={digitalMethodOptions}
-          onGenerateLink={() =>
-            void generateLink({
-              patientId: patient.id,
-              method: digitalMethod,
-              status: "pending",
-              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-            })
-          }
-          digitalLinks={digitalLinks}
-          digitalLinksPending={digitalLinksPending}
-          onUpdateLinkStatus={updateDigitalLinkStatus}
-          digitalSubmissions={digitalSubmissions}
-          isLoadingSubmissions={isLoadingSubmissions}
-          onMarkSubmissionReviewed={(submissionId) => void updateSubmissionStatus(submissionId, "reviewed")}
         />
       </TabsContent>
 

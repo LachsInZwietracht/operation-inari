@@ -550,21 +550,6 @@ export function PatientForm({ patient, onSubmit, isEditing, existingPatients = [
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="digitalProtocolConsent"
-                render={({ field }) => (
-                  <FormItem className="flex items-start gap-3 rounded-md border p-3">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Digitale Protokolle freigegeben</FormLabel>
-                      <FormDescription>Patient darf öffentliche Protokoll-Links erhalten.</FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
             </div>
           </CardContent>
         </Card>

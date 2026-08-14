@@ -3,12 +3,9 @@ import type {
   AnthropometricEntry,
   CounselingSession,
   DiagnosisEntry,
-  DigitalProtocolLink,
-  DigitalProtocolSubmission,
   InvoiceEntry,
   LabValueEntry,
   MedicationEntry,
-  NutritionProtocol,
   Patient,
   PatientAllergenEntry,
   PracticeAppointment,
@@ -22,7 +19,6 @@ import { fetchActivitiesClient } from "@/lib/data/patient-activities-client"
 import { fetchAnthropometricEntriesClient } from "@/lib/data/patient-anthropometrics-client"
 import { fetchCounselingSessionsClient } from "@/lib/data/counseling-client"
 import { fetchDiagnosesClient } from "@/lib/data/patient-diagnoses-client"
-import { fetchDigitalProtocolLinksClient } from "@/lib/data/patient-digital-protocol-links-client"
 import { fetchInvoicesClient } from "@/lib/data/invoices-client"
 import { fetchLabValuesClient } from "@/lib/data/patient-lab-values-client"
 import { fetchMedicationsClient } from "@/lib/data/patient-medications-client"
@@ -32,9 +28,7 @@ import { fetchMealPlans } from "@/lib/data/meal-plans"
 import { fetchFoodsByIds } from "@/lib/data/foods"
 import { fetchRecipes } from "@/lib/data/recipes"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
-import { fetchProtocolsClient } from "@/lib/data/protocols-client"
 import { fetchScreeningsClient } from "@/lib/data/patient-screenings-client"
-import { fetchSubmissionsForPatientClient } from "@/lib/data/digital-protocol-submissions-client"
 import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 
 export interface PatientWorkspaceData {
@@ -45,8 +39,6 @@ export interface PatientWorkspaceData {
   appointments: PracticeAppointment[]
   counselingSessions: CounselingSession[]
   diagnoses: DiagnosisEntry[]
-  digitalLinks: DigitalProtocolLink[]
-  digitalSubmissions: DigitalProtocolSubmission[]
   invoices: InvoiceEntry[]
   labValues: LabValueEntry[]
   medications: MedicationEntry[]
@@ -54,7 +46,6 @@ export interface PatientWorkspaceData {
   mealPlans: DailyMealPlan[]
   mealPlanFoods: Food[]
   recipes: Recipe[]
-  protocols: NutritionProtocol[]
   screenings: ScreeningResult[]
 }
 
@@ -125,8 +116,6 @@ export async function fetchPatientWorkspaceData(
       appointments: [],
       counselingSessions: [],
       diagnoses: [],
-      digitalLinks: [],
-      digitalSubmissions: [],
       invoices: [],
       labValues: [],
       medications: [],
@@ -134,7 +123,6 @@ export async function fetchPatientWorkspaceData(
       mealPlans: [],
       mealPlanFoods: [],
       recipes: [],
-      protocols: [],
       screenings: [],
     }
   }
@@ -156,7 +144,6 @@ export async function fetchPatientWorkspaceData(
         "labs",
         "mealPlans",
         "medications",
-        "protocols",
         "reports",
         "screenings",
       ],
@@ -169,15 +156,12 @@ export async function fetchPatientWorkspaceData(
     appointments,
     counselingSessions,
     diagnoses,
-    digitalLinks,
-    digitalSubmissions,
     invoices,
     labValues,
     medications,
     patientAllergens,
     mealPlans,
     recipes,
-    protocols,
     screenings,
   ] = await Promise.all([
     orEmpty(fetchActivitiesClient(supabase), "activities"),
@@ -185,15 +169,12 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchAppointmentsClient(supabase, { patientRefs }), "appointments"),
     orEmpty(fetchCounselingSessionsClient(supabase, { patientId: patient.id }), "counseling sessions"),
     orEmpty(fetchDiagnosesClient(supabase), "diagnoses"),
-    orEmpty(fetchDigitalProtocolLinksClient(supabase), "digital protocol links"),
-    orEmpty(fetchSubmissionsForPatientClient(patient.id, supabase), "digital submissions"),
     orEmpty(fetchInvoicesClient(supabase, { patientRefs }), "invoices"),
     orEmpty(fetchLabValuesClient(supabase), "lab values"),
     orEmpty(fetchMedicationsClient(supabase), "medications"),
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
     orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
     orEmpty(fetchRecipes({ supabase }), "recipes"),
-    orEmpty(fetchProtocolsClient(supabase, { patientRefs }), "protocols"),
     orEmpty(fetchScreeningsClient(supabase), "screenings"),
   ])
 
@@ -238,8 +219,6 @@ export async function fetchPatientWorkspaceData(
     appointments: filterForPatient(appointments, patient),
     counselingSessions: filterForPatient(counselingSessions, patient),
     diagnoses: filterForPatient(diagnoses, patient),
-    digitalLinks: filterForPatient(digitalLinks, patient),
-    digitalSubmissions,
     invoices: filterForPatient(invoices, patient),
     labValues: filterForPatient(labValues, patient),
     medications: filterForPatient(medications, patient),
@@ -247,7 +226,6 @@ export async function fetchPatientWorkspaceData(
     mealPlans: patientMealPlans,
     mealPlanFoods,
     recipes: mealPlanRecipes,
-    protocols: filterForPatient(protocols, patient),
     screenings: filterForPatient(screenings, patient),
   }
 }

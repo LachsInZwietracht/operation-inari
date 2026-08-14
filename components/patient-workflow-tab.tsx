@@ -1,23 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo } from "react"
-import {
-  ArrowRight,
-  ClipboardCheck,
-  Plus,
-} from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatDate } from "@/lib/format"
+import { fetchClientLinkForPatient } from "@/lib/data/client-links"
+import { createClient } from "@/lib/supabase/client"
 import type {
   AnthropometricEntry,
+  ClientLink,
   CounselingSession,
-  DigitalProtocolLink,
-  DigitalProtocolSubmission,
-  NutritionProtocol,
   Patient,
   PracticeAppointment,
   ScreeningResult,
@@ -59,18 +55,11 @@ interface PatientWorkflowStage {
 
 interface PatientWorkflowTabProps {
   patient: Patient
-  protocols: NutritionProtocol[]
-  digitalLinks: DigitalProtocolLink[]
-  digitalSubmissions: DigitalProtocolSubmission[]
   sessions: CounselingSession[]
   anthroEntries: AnthropometricEntry[]
   screenings: ScreeningResult[]
   appointments: PracticeAppointment[]
   mealPlans?: DailyMealPlan[]
-  onGenerateLink: () => void
-  onMarkSubmissionReviewed: (submissionId: string) => void
-  isLoadingSubmissions: boolean
-  digitalLinksPending: boolean
   counselingPending: boolean
 }
 
@@ -159,33 +148,32 @@ function WorkflowActionButton({ action }: { action: StageAction }) {
 
 export function PatientWorkflowTab({
   patient,
-  protocols,
-  digitalLinks,
-  digitalSubmissions,
   sessions,
   anthroEntries,
   screenings,
   appointments,
   mealPlans: initialMealPlans,
-  onGenerateLink,
-  onMarkSubmissionReviewed,
 }: PatientWorkflowTabProps) {
   const {
     plans: patientMealPlans,
     latestPlan,
   } = usePatientMealPlans(patient, initialMealPlans)
-  const latestProtocol = useMemo(
-    () => getLatestByDate(protocols, (protocol) => protocol.updatedAt ?? protocol.startDate),
-    [protocols],
-  )
-  const latestSubmission = useMemo(
-    () => getLatestByDate(digitalSubmissions, (submission) => submission.submittedAt),
-    [digitalSubmissions],
-  )
-  const latestLink = useMemo(
-    () => getLatestByDate(digitalLinks, (link) => link.updatedAt ?? link.createdAt),
-    [digitalLinks],
-  )
+
+  // Intake is now "does this person keep their own record in the app", so the
+  // stage reads the client link rather than a self-service protocol link.
+  const supabase = useMemo(() => createClient(), [])
+  const [clientLink, setClientLink] = useState<ClientLink | null>(null)
+  useEffect(() => {
+    let active = true
+    fetchClientLinkForPatient(supabase, patient.id)
+      .then((link) => {
+        if (active) setClientLink(link)
+      })
+      .catch((error) => console.error("Failed to load client link:", error))
+    return () => {
+      active = false
+    }
+  }, [supabase, patient.id])
   const latestSession = useMemo(
     () => getLatestByDate(sessions, (session) => session.updatedAt ?? session.date),
     [sessions],
@@ -201,50 +189,25 @@ export function PatientWorkflowTab({
   const hasClinicalInputs = anthroEntries.length > 0 || screenings.length > 0
 
   const intakeStage: PatientWorkflowStage = useMemo(() => {
-    if (latestSubmission?.status === "converted" && latestSubmission.convertedProtocolId) {
+    if (clientLink?.status === "active") {
       return {
         key: "intake",
         label: "Intake",
         status: "done",
-        summary: "Digitale Einreichung wurde in ein internes Protokoll übernommen.",
-        dateLabel: formatDate(latestSubmission.submittedAt),
-        primaryAction: buildAction("Protokoll öffnen", `/patienten/${patient.id}/protokolle/${latestSubmission.convertedProtocolId}`),
+        summary: "Der Klient nutzt die App und führt sein Tagebuch selbst.",
+        dateLabel: formatDate(clientLink.updatedAt ?? clientLink.createdAt),
+        primaryAction: buildAction("Klienten-App öffnen", `/patienten/${patient.id}`),
       }
     }
 
-    if (latestSubmission) {
-      return {
-        key: "intake",
-        label: "Intake",
-        status: latestSubmission.status === "new" ? "attention" : "in_progress",
-        summary:
-          latestSubmission.status === "new"
-            ? "Neue digitale Einreichung wartet auf Sichtung."
-            : "Digitale Einreichung ist geprüft und bereit zur Übernahme.",
-        dateLabel: formatDate(latestSubmission.submittedAt),
-        primaryAction: buildAction(
-          "In Entwurf übernehmen",
-          `/patienten/${patient.id}/protokolle/neu?digitalSubmission=${latestSubmission.id}`,
-        ),
-        secondaryAction:
-          latestSubmission.status === "new"
-            ? {
-                label: "Als geprüft markieren",
-                onClick: () => onMarkSubmissionReviewed(latestSubmission.id),
-                variant: "outline",
-                icon: ClipboardCheck,
-              }
-            : undefined,
-      }
-    }
-
-    if (latestLink) {
+    if (clientLink) {
       return {
         key: "intake",
         label: "Intake",
         status: "in_progress",
-        summary: `Digitaler Erfassungslink (${latestLink.method}) wurde bereitgestellt, aber noch nicht eingereicht.`,
-        dateLabel: formatDate(latestLink.updatedAt ?? latestLink.createdAt),
+        summary: "Die Einladung zum Klienten-Zugang ist verschickt, aber noch nicht angenommen.",
+        dateLabel: formatDate(clientLink.updatedAt ?? clientLink.createdAt),
+        primaryAction: buildAction("Einladung ansehen", `/patienten/${patient.id}`),
       }
     }
 
@@ -252,48 +215,20 @@ export function PatientWorkflowTab({
       key: "intake",
       label: "Intake",
       status: "not_started",
-      summary: "Es gibt noch keinen aktiven Self-Service-Link oder eine eingereichte Ernährungserfassung.",
-      primaryAction: {
-        label: "Link erstellen",
-        onClick: onGenerateLink,
-        variant: "default",
-        icon: Plus,
-      },
+      summary: "Es gibt noch keinen Klienten-Zugang; der Patient kann nichts selbst erfassen.",
+      primaryAction: buildAction("Klienten-Zugang einladen", `/patienten/${patient.id}`),
       secondaryAction: buildAction("Patientendaten prüfen", `/patienten/${patient.id}`, undefined, "outline"),
     }
-  }, [latestLink, latestSubmission, onGenerateLink, onMarkSubmissionReviewed, patient.id])
+  }, [clientLink, patient.id])
 
   const assessmentStage: PatientWorkflowStage = useMemo(() => {
-    if (latestProtocol) {
-      return {
-        key: "assessment",
-        label: "Assessment",
-        status: "done",
-        summary: "Ein internes Ernährungsprotokoll liegt vor und kann klinisch weiterverarbeitet werden.",
-        dateLabel: formatDate(latestProtocol.startDate),
-        primaryAction: buildAction("Protokoll öffnen", `/patienten/${patient.id}/protokolle/${latestProtocol.id}`),
-        secondaryAction: buildAction("Neues Protokoll", `/patienten/${patient.id}/protokolle/neu`, undefined, "outline"),
-      }
-    }
-
     if (hasClinicalInputs) {
       return {
         key: "assessment",
         label: "Assessment",
-        status: "in_progress",
-        summary: "Klinische Basisdaten sind dokumentiert, aber noch kein finales Ernährungsprotokoll.",
-        primaryAction: buildAction("Protokoll erstellen", `/patienten/${patient.id}/protokolle/neu`),
-        secondaryAction: buildAction("Messwerte prüfen", `/patienten/${patient.id}`, undefined, "outline"),
-      }
-    }
-
-    if (latestSubmission || latestLink) {
-      return {
-        key: "assessment",
-        label: "Assessment",
-        status: "attention",
-        summary: "Die digitale Erfassung ist vorhanden, jetzt sollte das interne Assessment dokumentiert werden.",
-        primaryAction: buildAction("Protokoll erstellen", `/patienten/${patient.id}/protokolle/neu`),
+        status: "done",
+        summary: "Messwerte und Screenings sind dokumentiert.",
+        primaryAction: buildAction("Messwerte prüfen", `/patienten/${patient.id}`),
       }
     }
 
@@ -301,10 +236,10 @@ export function PatientWorkflowTab({
       key: "assessment",
       label: "Assessment",
       status: "not_started",
-      summary: "Noch keine Assessment-Dokumentation vorhanden.",
-      primaryAction: buildAction("Protokoll erstellen", `/patienten/${patient.id}/protokolle/neu`),
+      summary: "Noch keine Messwerte oder Screenings erfasst.",
+      primaryAction: buildAction("Messwerte erfassen", `/patienten/${patient.id}`),
     }
-  }, [hasClinicalInputs, latestLink, latestProtocol, latestSubmission, patient.id])
+  }, [hasClinicalInputs, patient.id])
 
   const planStage: PatientWorkflowStage = useMemo(() => {
     if (latestPlan) {
@@ -337,13 +272,12 @@ export function PatientWorkflowTab({
       }
     }
 
-    if (latestProtocol) {
+    if (hasClinicalInputs) {
       return {
         key: "plan",
         label: "Plan",
         status: "attention",
         summary: "Assessment liegt vor. Als nächster Schritt sollte ein patientengebundener Ernährungsplan erstellt werden.",
-        dateLabel: formatDate(latestProtocol.startDate),
         primaryAction: buildAction("Plan anlegen", mealPlanHref(patient.id)),
         secondaryAction: buildAction("Beratung anlegen", `/patienten/${patient.id}/beratungen/neu`, undefined, "outline"),
       }
@@ -356,7 +290,7 @@ export function PatientWorkflowTab({
       summary: "Noch kein patientengebundener Ernährungsplan vorhanden.",
       primaryAction: buildAction("Plan anlegen", mealPlanHref(patient.id)),
     }
-  }, [latestPlan, latestProtocol, latestSession, patient.id])
+  }, [hasClinicalInputs, latestPlan, latestSession, patient.id])
 
   const followUpStage: PatientWorkflowStage = useMemo(() => {
     const completedTimelineEntry = latestSession?.timeline?.find((entry) => entry.status === "done")
@@ -415,36 +349,6 @@ export function PatientWorkflowTab({
   const timelineEvents = useMemo(() => {
     const events: PatientWorkflowEvent[] = []
 
-    digitalSubmissions.forEach((submission) => {
-      events.push({
-        id: `submission_${submission.id}`,
-        date: submission.submittedAt,
-        title: "Digitale Einreichung",
-        description:
-          submission.status === "converted"
-            ? "In internes Protokoll übernommen"
-            : submission.status === "reviewed"
-              ? "Geprüft und bereit zur Übernahme"
-              : "Neu eingereicht",
-        href:
-          submission.convertedProtocolId
-            ? `/patienten/${patient.id}/protokolle/${submission.convertedProtocolId}`
-            : `/patienten/${patient.id}/protokolle/neu?digitalSubmission=${submission.id}`,
-        tone: submission.status === "converted" ? "success" : "warning",
-      })
-    })
-
-    protocols.forEach((protocol) => {
-      events.push({
-        id: `protocol_${protocol.id}`,
-        date: protocol.updatedAt ?? protocol.startDate,
-        title: protocol.title,
-        description: "Internes Ernährungsprotokoll dokumentiert",
-        href: `/patienten/${patient.id}/protokolle/${protocol.id}`,
-        tone: "success",
-      })
-    })
-
     sessions.forEach((session) => {
       events.push({
         id: `session_${session.id}`,
@@ -495,7 +399,7 @@ export function PatientWorkflowTab({
     return events
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 6)
-  }, [appointments, digitalSubmissions, patient.id, patientMealPlans, protocols, sessions])
+  }, [appointments, patient.id, patientMealPlans, sessions])
 
   const latestActivity = timelineEvents[0] ?? null
   const completedCount = stages.filter((stage) => stage.status === "done").length
