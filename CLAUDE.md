@@ -2,6 +2,12 @@
 
 @AGENTS.md
 
+## Projektseite
+
+- Notion "Inari Overview": https://app.notion.com/p/Inari-Overview-38e47f3f37d880e4933fe8cf25933c0f
+  Enthält das Tasks-Board und den Callout "Ideensammler" — dort werden Ideen geparkt, die
+  noch nicht gebaut werden.
+
 ## Claude Code Notes
 
 - This file intentionally imports the canonical project instructions from `AGENTS.md`.
