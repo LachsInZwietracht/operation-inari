@@ -207,21 +207,29 @@ test.describe("in the diary", () => {
       .locator("[data-slot=card]")
       .filter({ hasText: "Frühstück" })
       .first();
-    await expect(breakfast.getByText(FOOD_NAME)).toBeVisible();
+    // The plan is drawn into the slot itself: one list, the planned row not
+    // yet answered, which `aria-pressed` carries rather than the grey alone.
+    // The row itself, not its menu trigger — that carries the same name on
+    // purpose, so a screen reader knows which row the menu belongs to.
+    const planned = breakfast
+      .getByRole("button", { name: new RegExp(FOOD_NAME) })
+      .first();
+    await expect(planned).toHaveAttribute("aria-pressed", "false");
     // 60 g of a 350 kcal/100 g food.
-    await expect(breakfast.getByText(/60 g · 210 kcal · geplant/)).toBeVisible();
+    await expect(breakfast.getByText(/60 g · 210 kcal/)).toBeVisible();
 
     // Nothing is eaten yet, so the day is still empty.
     const totals = page.locator("[data-slot=card]").first();
     await expect(totals.getByText("0", { exact: true })).toBeVisible();
 
-    await breakfast.getByRole("button", { name: "Gegessen" }).click();
+    // One tap is the whole answer.
+    await planned.click();
     await expect(page.getByText("210", { exact: true })).toBeVisible();
 
     // The recipe: 200 g at 350 kcal/100 g over two servings = 350 kcal each.
     const lunch = page.locator("[data-slot=card]").filter({ hasText: "Mittagessen" }).first();
     await expect(lunch.getByText(/1 Portion · 350 kcal/)).toBeVisible();
-    await lunch.getByRole("button", { name: "Gegessen" }).click();
+    await lunch.getByRole("button", { name: new RegExp(RECIPE_NAME) }).first().click();
 
     await expect(page.getByText("560", { exact: true })).toBeVisible();
   });
@@ -242,9 +250,12 @@ test.describe("in the diary", () => {
       .locator("[data-slot=card]")
       .filter({ hasText: "Frühstück" })
       .first();
-    await breakfast.getByRole("button", { name: "Ausgelassen" }).click();
+    // Skipping is a secondary action now — the fast path is the tap that says
+    // you ate it, and everything else lives behind the row's menu.
+    await breakfast.getByRole("button", { name: /mehr$/ }).first().click();
+    await page.getByRole("menuitem", { name: "Nicht gegessen" }).click();
 
-    await expect(breakfast.locator("p.line-through")).toBeVisible();
+    await expect(breakfast.locator(".line-through")).toBeVisible();
     const totals = page.locator("[data-slot=card]").first();
     await expect(totals.getByText("0", { exact: true })).toBeVisible();
   });

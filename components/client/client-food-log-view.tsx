@@ -17,26 +17,31 @@ import { toast } from "sonner"
 
 import { ClientAddEntryDialog } from "@/components/client/client-add-entry-dialog"
 import { ClientDayContext } from "@/components/client/client-day-context"
+import { ClientDaySummary } from "@/components/client/client-day-summary"
+import {
+  ClientEntryDetail,
+  parseEntryAmount,
+} from "@/components/client/client-entry-detail"
 import { ClientDayTotals } from "@/components/client/client-day-totals"
-import { ClientPlannedMealList } from "@/components/client/client-planned-meal-list"
+import { ClientPlannedAmountDialog } from "@/components/client/client-planned-amount-dialog"
+import { ClientSlotList } from "@/components/client/client-slot-list"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import {
   calculatePlannedNutrients,
   clientLogEntryLabel,
   collectClientDayParts,
   collectRecentEntries,
-  formatLogAmount,
+  eatenAmount,
   previousDayEntries,
 } from "@/lib/client-food-log"
 import {
@@ -44,7 +49,9 @@ import {
   nutrientCoverage,
   summarizeMicronutrients,
 } from "@/lib/client-micronutrients"
-import { sumNutrients } from "@/lib/nutrients"
+import { scaleNutrients, sumNutrients } from "@/lib/nutrients"
+import { summarizeDay } from "@/lib/client-day-summary"
+import { buildSlotRows } from "@/lib/client-slot-rows"
 import { resolveClientDayTarget } from "@/lib/client-targets"
 import { isClientModuleEnabled } from "@/lib/client-modules"
 import { todayIsoDate } from "@/lib/client-mode"
@@ -55,6 +62,7 @@ import {
   fetchClientFoodLogDay,
   fetchClientFoodLogDays,
   updateClientFoodLogDay,
+  fetchFoodPortions,
   updateClientFoodLogEntryAmount,
 } from "@/lib/data/client-food-log-client"
 import {
@@ -114,19 +122,25 @@ export function ClientFoodLogView({
   const [day, setDay] = useState<ClientFoodLogDay | null>(initialDay)
   const [foods, setFoods] = useState<Map<string, Food>>(new Map())
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [addSlot, setAddSlot] = useState<MealSlotType | null>(null)
+  const [addSlot, setAddSlot] = useState<{
+    slot: MealSlotType
+    /** Set when the dialog was opened from a planned row's "anders gegessen". */
+    replaces?: { id: string; label: string }
+  } | null>(null)
 
   const [planFacts, setPlanFacts] = useState<Map<string, ClientPlanEntryFacts>>(new Map())
   const [completions, setCompletions] = useState<Map<string, ClientMealCompletion>>(new Map())
   const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
   const [energy, setEnergy] = useState<ClientEnergyReference | null>(null)
   const [references, setReferences] = useState<Map<string, number>>(new Map())
+  const [latestWeight, setLatestWeight] = useState<{ date: string; weight: number } | null>(null)
   const [recentDays, setRecentDays] = useState<ClientFoodLogDay[]>([])
   const [savedMeals, setSavedMeals] = useState<ClientSavedMeal[]>([])
   const [recipeFacts, setRecipeFacts] = useState<
     Map<string, { name: string; perPortion: NutrientValue[] }>
   >(new Map())
   const [editingEntry, setEditingEntry] = useState<ClientFoodLogEntry | null>(null)
+  const [editingPlanEntry, setEditingPlanEntry] = useState<ClientPlanEntry | null>(null)
 
   const planEnabled = isClientModuleEnabled("plan")
   const planEntries = useMemo(
@@ -206,6 +220,10 @@ export function ClientFoodLogView({
         if (cancelled) return
         setEnergy(history.energy)
         setReferences(history.references)
+        // The measurement list is ordered oldest first; the field shows the
+        // last one, whoever recorded it.
+        const last = history.measurements[history.measurements.length - 1]
+        if (last) setLatestWeight({ date: last.date, weight: last.weight })
       })
       .catch(() => undefined)
 
@@ -336,6 +354,29 @@ export function ClientFoodLogView({
         energy,
       }),
     [planEntries, planFacts, energy],
+  )
+
+  const highlights = useMemo(
+    () =>
+      summarizeDay({
+        totals,
+        target,
+        micronutrients,
+        waterMl: day?.waterMl,
+        plan:
+          planEntries.length > 0
+            ? {
+                planned: planEntries.length,
+                eaten: planEntries.filter((entry) => {
+                  const completion = completions.get(entry.id)
+                  return completion !== undefined && !completion.skipped
+                }).length,
+              }
+            : undefined,
+        entryCount: (day?.entries ?? []).length,
+        isPast: date < todayIsoDate(),
+      }),
+    [totals, target, micronutrients, day, planEntries, completions, date],
   )
 
   const recipeNames = useMemo(
@@ -617,56 +658,50 @@ export function ClientFoodLogView({
                     Wie gestern
                   </Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => setAddSlot(slot)}>
+                <Button variant="ghost" size="sm" onClick={() => setAddSlot({ slot })}>
                   <Plus className="mr-1 h-4 w-4" />
                   Hinzufügen
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {/* The plan first: it is the expectation the day is measured
-                  against, and answering it is the fastest way to fill the day. */}
-              <ClientPlannedMealList
-                entries={planned}
-                facts={planFacts}
-                completions={completions}
-                pendingEntryId={pendingEntryId}
-                onAnswer={(entry, skipped) => void answerPlanEntry(entry, skipped)}
-                onAmount={(entry, amount) => void setPlanEntryAmount(entry, amount)}
-              />
-
-              {entries.length === 0 && planned.length === 0 ? (
-                <p className="py-2 text-sm text-muted-foreground">Noch nichts eingetragen.</p>
-              ) : (
-                <ul className="divide-y">
-                  {entries.map((entry) => (
-                    <li key={entry.id} className="flex items-center gap-2 py-2">
-                      {/* Correcting a portion used to mean deleting the line and
-                          entering it again. */}
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => setEditingEntry(entry)}
-                      >
-                        <span className="block truncate text-sm">
-                          {clientLogEntryLabel(entry, foods, recipeNames)}
-                        </span>
-                        <span className="text-xs text-muted-foreground underline underline-offset-2">
-                          {formatLogAmount(entry)}
-                        </span>
-                      </button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Eintrag löschen"
-                        onClick={() => void handleDelete(entry.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <ClientSlotList
+              rows={buildSlotRows({
+                planEntries: planned,
+                planFacts,
+                completions,
+                entries,
+                foods,
+                recipeFacts: recipePerPortion,
+                recipeNames,
+              })}
+              pendingId={pendingEntryId}
+              onEat={(row) => {
+                if (row.kind !== "planned") return
+                const entry = planned.find((item) => item.id === row.planEntryId)
+                if (entry) void answerPlanEntry(entry, false)
+              }}
+              onSkip={(row) => {
+                if (row.kind !== "planned") return
+                const entry = planned.find((item) => item.id === row.planEntryId)
+                if (entry) void answerPlanEntry(entry, true)
+              }}
+              onChangeAmount={(row) => {
+                if (row.kind !== "planned") return
+                const entry = planned.find((item) => item.id === row.planEntryId)
+                if (entry) setEditingPlanEntry(entry)
+              }}
+              onReplace={(row) => {
+                if (row.kind !== "planned") return
+                setAddSlot({ slot, replaces: { id: row.planEntryId, label: row.label } })
+              }}
+              onOpenEntry={(row) => {
+                if (row.kind === "logged") setEditingEntry(row.entry)
+              }}
+              onDeleteEntry={(row) => {
+                if (row.kind === "logged") void handleDelete(row.entry.id)
+              }}
+            />
             </CardContent>
           </Card>
         )
@@ -675,11 +710,19 @@ export function ClientFoodLogView({
       {/* After the meals, not before them: the note is written when the day is
           over, and water is a running tally rather than a headline. */}
       <ClientDayContext
+        date={date}
         waterMl={day?.waterMl}
         notes={day?.notes}
+        weightKg={latestWeight?.weight}
+        weightMeasuredOn={latestWeight?.date}
         onWaterChange={(waterMl) => void patchDay({ waterMl })}
         onNotesChange={(notes) => void patchDay({ notes })}
+        onWeightRecorded={(entry) =>
+          setLatestWeight({ date: entry.date, weight: entry.weight })
+        }
       />
+
+      <ClientDaySummary highlights={highlights} />
 
       {isRefreshing && (
         <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -691,10 +734,11 @@ export function ClientFoodLogView({
       {/* Mounted per open so the dialog always starts from a clean state. */}
       {addSlot !== null && (
         <ClientAddEntryDialog
-          slot={addSlot}
+          slot={addSlot.slot}
+          replaces={addSlot.replaces}
           date={date}
           dayId={day?.id ?? null}
-          recent={collectRecentEntries(recentDays, addSlot)}
+          recent={collectRecentEntries(recentDays, addSlot.slot)}
           foods={foods}
           recipeFacts={recipePerPortion}
           recipeNames={recipeNames}
@@ -702,19 +746,46 @@ export function ClientFoodLogView({
           savedMeals={savedMeals}
           onClose={() => setAddSlot(null)}
           onSaved={() => {
+            const replaced = addSlot.replaces
             setAddSlot(null)
+            // A swap answers the plan row as well: the entry says what was
+            // eaten, the completion keeps adherence arithmetic unchanged.
+            if (replaced) {
+              const entry = planEntries.find((item) => item.id === replaced.id)
+              if (entry) void answerPlanEntry(entry, true)
+            }
             void refreshDay()
           }}
         />
       )}
 
+      {editingPlanEntry && (
+        <ClientPlannedAmountDialog
+          entry={editingPlanEntry}
+          facts={planFacts.get(editingPlanEntry.id)}
+          current={eatenAmount(editingPlanEntry, completions.get(editingPlanEntry.id))}
+          onClose={() => setEditingPlanEntry(null)}
+          onSave={(amount: number | undefined) => {
+            void setPlanEntryAmount(editingPlanEntry, amount)
+            setEditingPlanEntry(null)
+          }}
+        />
+      )}
+
       {editingEntry && (
-        <ClientEntryAmountDialog
+        <ClientEditEntryDialog
+          entry={editingEntry}
           label={clientLogEntryLabel(editingEntry, foods, recipeNames)}
-          amount={editingEntry.amount}
+          foods={foods}
+          recipeFacts={recipePerPortion}
+          references={references}
           onClose={() => setEditingEntry(null)}
           onSave={(amount) => {
             void saveEntryAmount(editingEntry, amount)
+            setEditingEntry(null)
+          }}
+          onDelete={() => {
+            void handleDelete(editingEntry.id)
             setEditingEntry(null)
           }}
         />
@@ -723,19 +794,64 @@ export function ClientFoodLogView({
   )
 }
 
-/** Corrects the amount of an entry already written down. */
-function ClientEntryAmountDialog({
+/**
+ * An entry already written down, opened again in full.
+ *
+ * This used to be a bare number field. Correcting a portion without seeing what
+ * the correction does is guesswork, and the same card that helped decide the
+ * amount in the first place is the one that helps fix it — including the
+ * portion chips, which are usually the reason the number was wrong.
+ */
+function ClientEditEntryDialog({
+  entry,
   label,
-  amount,
+  foods,
+  recipeFacts,
+  references,
   onClose,
   onSave,
+  onDelete,
 }: {
+  entry: ClientFoodLogEntry
   label: string
-  amount: number
+  foods: Map<string, Food>
+  recipeFacts: Map<string, NutrientValue[]>
+  references: Map<string, number>
   onClose: () => void
   onSave: (amount: number) => void
+  onDelete: () => void
 }) {
-  const [value, setValue] = useState(String(amount))
+  const [value, setValue] = useState(String(entry.amount))
+  const [portions, setPortions] = useState<{ label: string; amountGrams: number }[]>([])
+
+  useEffect(() => {
+    if (entry.sourceType !== "food" || !entry.foodId) return
+    const foodId = entry.foodId
+
+    let cancelled = false
+    void fetchFoodPortions([foodId])
+      .then((byFood) => {
+        if (!cancelled) setPortions(byFood.get(foodId) ?? [])
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [entry])
+
+  // Each source keeps its nutrients somewhere different: the catalog in the
+  // food map, a scanned product on the row itself, a recipe in the priced
+  // facts. All three normalise to "per one unit" here.
+  const food = entry.foodId ? foods.get(entry.foodId) : undefined
+  const nutrientsPerUnit =
+    entry.sourceType === "custom"
+      ? entry.customNutrients
+      : entry.sourceType === "recipe"
+        ? (entry.recipeId ? recipeFacts.get(entry.recipeId) : undefined)
+        : food
+          ? scaleNutrients(food.nutrients, food.baseAmount, 100)
+          : undefined
 
   return (
     <Dialog
@@ -744,34 +860,49 @@ function ClientEntryAmountDialog({
         if (!next) onClose()
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="truncate">{label}</DialogTitle>
+          <DialogTitle>{MEAL_SLOT_LABELS[entry.slotType]}</DialogTitle>
+          <DialogDescription>Menge prüfen und speichern.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor="entry-amount">Menge in Gramm</Label>
-          <Input
-            id="entry-amount"
-            autoFocus
-            inputMode="decimal"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        </div>
+        <ClientEntryDetail
+          name={label}
+          subtitle={food?.manufacturer}
+          nutrientsPerUnit={nutrientsPerUnit}
+          unit={entry.sourceType === "recipe" ? "portion" : "g"}
+          amount={value}
+          onAmountChange={setValue}
+          portions={portions}
+          references={references}
+        />
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Abbrechen
-          </Button>
+        <DialogFooter className="sm:justify-between">
+          {/* Deleting lives here too: having opened the line to look at it is
+              exactly when someone decides it should not be there. */}
+          {/* Stacked below the other two on a phone, so it stays left-aligned
+              rather than sitting centred under the primary action. */}
           <Button
-            onClick={() => {
-              const parsed = Number(value.replace(",", "."))
-              if (Number.isFinite(parsed) && parsed > 0) onSave(parsed)
-            }}
+            variant="ghost"
+            className="w-full justify-start text-destructive sm:w-auto"
+            onClick={onDelete}
           >
-            Speichern
+            <Trash2 className="mr-1 h-4 w-4" />
+            Löschen
           </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => {
+                const parsed = parseEntryAmount(value)
+                if (parsed !== undefined) onSave(parsed)
+              }}
+            >
+              Speichern
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

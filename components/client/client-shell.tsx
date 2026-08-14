@@ -2,7 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Settings } from "lucide-react"
+
 import { BrandMark } from "@/components/brand-mark"
+import { Button } from "@/components/ui/button"
 import { ModeSwitchButton } from "@/components/mode-switch-button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ENABLED_CLIENT_MODULES } from "@/lib/client-modules"
@@ -21,6 +24,14 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
         <BrandMark className="h-6 w-auto" />
         <span className="text-sm font-medium text-muted-foreground">Klient</span>
         <div className="ml-auto flex items-center gap-1">
+          {/* Settings live in the header, not as a sixth tab: five is already
+              a lot of bottom navigation on a phone, and this is not a place
+              anyone goes daily. */}
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/klient/einstellungen" aria-label="Einstellungen">
+              <Settings className="h-5 w-5" />
+            </Link>
+          </Button>
           <ThemeToggle />
           <ModeSwitchButton target="counselor" size="sm" variant="ghost" />
         </div>

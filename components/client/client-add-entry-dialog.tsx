@@ -13,24 +13,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { ClientBarcodePanel } from "@/components/client/client-barcode-panel"
 import type { BarcodeCustomPick } from "@/components/client/client-barcode-panel"
 import { ClientFoodSearchList } from "@/components/client/client-food-search-list"
+import {
+  ClientEntryDetail,
+  parseEntryAmount,
+} from "@/components/client/client-entry-detail"
 import { ClientRecentEntryList } from "@/components/client/client-recent-entry-list"
 import { isClientCapabilityEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { clientLogEntryLabel, type ClientRecentEntry } from "@/lib/client-food-log"
 import { KIND_LABELS, type ClientSearchItem } from "@/lib/client-food-search"
-import { shortNutrientLabel, topContributions } from "@/lib/client-micronutrients"
 import {
   addClientFoodLogEntry,
   ensureClientFoodLogDay,
   fetchFoodPortions,
 } from "@/lib/data/client-food-log-client"
 import { ensureClientCustomFood } from "@/lib/data/client-custom-foods-client"
-import { getNutrientValue, scaleNutrients } from "@/lib/nutrients"
+import { scaleNutrients } from "@/lib/nutrients"
 import type { ClientSavedMeal, Food, MealSlotType, NutrientValue } from "@/lib/types"
 
 /** Where the person is looking: their history, the catalog, or a barcode. */
@@ -61,14 +62,10 @@ type EntryDraft =
   | { kind: "recipe"; id: string; name: string; kcalPerPortion?: number }
   | { kind: "meal"; meal: ClientSavedMeal }
 
-function parseAmount(value: string): number | undefined {
-  const parsed = Number(value.replace(",", "."))
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
-
 /** Mounted per open by the caller, so it always starts from a clean state. */
 export function ClientAddEntryDialog({
   slot,
+  replaces,
   date,
   dayId,
   recent,
@@ -81,6 +78,8 @@ export function ClientAddEntryDialog({
   onSaved,
 }: {
   slot: MealSlotType
+  /** Set when this is answering a planned row with "anders gegessen". */
+  replaces?: { id: string; label: string }
   date: string
   dayId: string | null
   /** What this person has been eating, this slot's habits first. */
@@ -168,7 +167,7 @@ export function ClientAddEntryDialog({
   async function handleSave() {
     if (!selected) return
 
-    const parsed = parseAmount(amount)
+    const parsed = parseEntryAmount(amount)
     if (parsed === undefined) {
       toast.error(
         selected.kind === "food"
@@ -196,6 +195,7 @@ export function ClientAddEntryDialog({
             customName: item.customName,
             customNutrients: item.customNutrients,
             amount: item.amount * parsed,
+            replacesMealEntryId: replaces?.id,
           })
         }
       } else if (selected.kind === "recipe") {
@@ -205,6 +205,7 @@ export function ClientAddEntryDialog({
           sourceType: "recipe",
           recipeId: selected.id,
           amount: parsed,
+          replacesMealEntryId: replaces?.id,
         })
       } else {
         await addClientFoodLogEntry({
@@ -213,6 +214,7 @@ export function ClientAddEntryDialog({
           sourceType: "food",
           foodId: selected.id,
           amount: parsed,
+          replacesMealEntryId: replaces?.id,
         })
       }
 
@@ -289,9 +291,6 @@ export function ClientAddEntryDialog({
     }
   }
 
-  const parsedAmount = parseAmount(amount) ?? 0
-  const isPortionUnit = selected !== null && selected.kind !== "food"
-
   const modes: [Mode, string][] = [
     ...(recent.length > 0 ? ([["recent", "Zuletzt"]] as [Mode, string][]) : []),
     ["search", "Suche"],
@@ -307,7 +306,9 @@ export function ClientAddEntryDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{MEAL_SLOT_LABELS[slot]}</DialogTitle>
+          <DialogTitle>
+            {replaces ? `Statt ${replaces.label}` : MEAL_SLOT_LABELS[slot]}
+          </DialogTitle>
           <DialogDescription>
             {selected ? "Menge prüfen und eintragen." : MODE_DESCRIPTIONS[mode]}
           </DialogDescription>
@@ -334,69 +335,27 @@ export function ClientAddEntryDialog({
         )}
 
         {selected ? (
-          <div className="space-y-4">
-            <div className="rounded-md border p-3">
-              <p className="text-sm font-medium">
-                {selected.kind === "meal" ? selected.meal.name : selected.name}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {selected.kind === "meal"
-                  ? `${selected.meal.items.length} Zutaten`
-                  : (selected.kind === "food" && selected.subtitle) || KIND_LABELS[selected.kind]}
-              </p>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs"
-                onClick={() => setSelected(null)}
-              >
-                Etwas anderes wählen
-              </Button>
-            </div>
-
-            {/* The full picture before confirming — the answer to "is this the
-                protein bar I meant?" */}
-            {selected.kind === "food" && selected.nutrientsPer100g && parsedAmount > 0 && (
-              <NutritionCard
-                nutrients={selected.nutrientsPer100g}
-                grams={parsedAmount}
-                references={references}
-              />
-            )}
-            {selected.kind === "recipe" && selected.kcalPerPortion !== undefined && (
-              <p className="text-xs tabular-nums text-muted-foreground">
-                ≈ {Math.round(selected.kcalPerPortion * parsedAmount)} kcal
-              </p>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="client-entry-amount">
-                {isPortionUnit ? "Portionen" : "Menge in Gramm"}
-              </Label>
-              <Input
-                id="client-entry-amount"
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-              {portions.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {portions.map((portion) => (
-                    <Button
-                      key={`${portion.label}-${portion.amountGrams}`}
-                      type="button"
-                      variant={parsedAmount === portion.amountGrams ? "secondary" : "outline"}
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => setAmount(String(portion.amountGrams))}
-                    >
-                      {portion.label} · {portion.amountGrams} g
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <ClientEntryDetail
+            name={selected.kind === "meal" ? selected.meal.name : selected.name}
+            subtitle={
+              selected.kind === "meal"
+                ? `${selected.meal.items.length} Zutaten`
+                : (selected.kind === "food" && selected.subtitle) || KIND_LABELS[selected.kind]
+            }
+            nutrientsPerUnit={
+              selected.kind === "food"
+                ? selected.nutrientsPer100g
+                : selected.kind === "recipe" && selected.kcalPerPortion !== undefined
+                  ? [{ nutrientId: "energie", amount: selected.kcalPerPortion }]
+                  : undefined
+            }
+            unit={selected.kind === "food" ? "g" : "portion"}
+            amount={amount}
+            onAmountChange={setAmount}
+            portions={portions}
+            references={references}
+            onReselect={() => setSelected(null)}
+          />
         ) : mode === "barcode" ? (
           <ClientBarcodePanel
             onPickCatalogFood={(food) => {
@@ -429,52 +388,5 @@ export function ClientAddEntryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/** Macros for the amount actually being logged, not for an abstract 100 g. */
-function NutritionCard({
-  nutrients,
-  grams,
-  references,
-}: {
-  nutrients: NutrientValue[]
-  grams: number
-  references: Map<string, number>
-}) {
-  const scaled = scaleNutrients(nutrients, 100, grams)
-  const rows: [string, string, number][] = [
-    ["kcal", "", getNutrientValue(scaled, "energie")],
-    ["Eiweiß", "g", getNutrientValue(scaled, "eiweiss")],
-    ["Fett", "g", getNutrientValue(scaled, "fett")],
-    ["KH", "g", getNutrientValue(scaled, "kohlenhydrate")],
-  ]
-
-  // What this portion is good for, while the decision is still open.
-  const contributions = topContributions({ nutrients: scaled, references })
-
-  return (
-    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
-      <div className="grid grid-cols-4 gap-2 text-center">
-        {rows.map(([label, unit, value]) => (
-          <div key={label}>
-            <p className="text-sm font-semibold tabular-nums">
-              {Math.round(value)}
-              {unit && <span className="text-xs font-normal text-muted-foreground"> {unit}</span>}
-            </p>
-            <p className="text-xs text-muted-foreground">{label}</p>
-          </div>
-        ))}
-      </div>
-
-      {contributions.length > 0 && (
-        <p className="border-t pt-2 text-center text-xs text-muted-foreground">
-          Deckt{" "}
-          {contributions
-            .map((entry) => `${entry.percent} % ${shortNutrientLabel(entry.label)}`)
-            .join(" · ")}
-        </p>
-      )}
-    </div>
   )
 }

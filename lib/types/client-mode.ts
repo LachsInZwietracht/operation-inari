@@ -48,6 +48,14 @@ export interface ClientFoodLogEntry {
   recipeId?: ID;
   amount: number;
   notes?: string;
+  /**
+   * The planned meal entry this was eaten instead of.
+   *
+   * Set only when the client answered a plan row with "anders gegessen". The
+   * plan entry is marked skipped as before — this is the evidence of what took
+   * its place, not a third adherence state.
+   */
+  replacesMealEntryId?: ID;
   loggedAt: string;
   sortOrder: number;
 }

@@ -6,6 +6,8 @@ import { Droplets, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { ClientWeightField } from "@/components/client/client-weight-field"
+import type { ClientWeighIn } from "@/lib/data/client-anthropometrics-client"
 
 /** One glass. Water gets logged in glasses, not in millilitres. */
 const GLASS_ML = 250
@@ -13,7 +15,7 @@ const MAX_ML = 5000
 const NOTE_DEBOUNCE_MS = 800
 
 /**
- * The two things about a day that are not a number.
+ * The things about a day that are not the food.
  *
  * The note is the more valuable of the two and the cheaper: "Einladung bei
  * Freunden", "kaum geschlafen" is the line that explains the macros around it,
@@ -24,15 +26,24 @@ const NOTE_DEBOUNCE_MS = 800
  * are an implementation detail shown alongside.
  */
 export function ClientDayContext({
+  date,
   waterMl,
   notes,
+  weightKg,
+  weightMeasuredOn,
   onWaterChange,
   onNotesChange,
+  onWeightRecorded,
 }: {
+  date: string
   waterMl?: number
   notes?: string
+  /** The most recent known weight, whoever recorded it. */
+  weightKg?: number
+  weightMeasuredOn?: string
   onWaterChange: (waterMl: number) => void
   onNotesChange: (notes: string) => void
+  onWeightRecorded: (entry: ClientWeighIn) => void
 }) {
   const [noteDraft, setNoteDraft] = useState(notes ?? "")
   const savedRef = useRef(notes ?? "")
@@ -86,6 +97,13 @@ export function ClientDayContext({
             <Plus className="h-4 w-4" />
           </Button>
         </div>
+
+        <ClientWeightField
+          date={date}
+          weightKg={weightKg}
+          measuredOn={weightMeasuredOn}
+          onRecorded={onWeightRecorded}
+        />
 
         <Textarea
           rows={2}

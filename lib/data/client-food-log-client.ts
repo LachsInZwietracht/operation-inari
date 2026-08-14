@@ -26,11 +26,12 @@ interface FoodLogEntryRow {
   notes: string | null;
   logged_at: string;
   sort_order: number;
+  replaces_meal_entry_id: string | null;
 }
 
 const DAY_COLUMNS =
   "id,client_user_id,log_date,notes,water_ml," +
-  "client_food_log_entries(id,day_id,slot_type,source_type,food_id,custom_name,custom_nutrients,recipe_id,amount,notes,logged_at,sort_order)";
+  "client_food_log_entries(id,day_id,slot_type,source_type,food_id,custom_name,custom_nutrients,recipe_id,amount,notes,logged_at,sort_order,replaces_meal_entry_id)";
 
 function resolveClient(supabase?: SupabaseClient) {
   return supabase ?? createBrowserSupabaseClient();
@@ -55,6 +56,7 @@ function mapEntryRow(row: FoodLogEntryRow): ClientFoodLogEntry {
     recipeId: row.recipe_id ?? undefined,
     amount: Number(row.amount ?? 0),
     notes: row.notes ?? undefined,
+    replacesMealEntryId: row.replaces_meal_entry_id ?? undefined,
     loggedAt: row.logged_at,
     sortOrder: row.sort_order ?? 0,
   };
@@ -160,6 +162,8 @@ export interface ClientFoodLogEntryInput {
   amount: number;
   notes?: string;
   sortOrder?: number;
+  /** Set when this is answering a plan row with "anders gegessen". */
+  replacesMealEntryId?: string;
 }
 
 export async function addClientFoodLogEntry(
@@ -183,6 +187,7 @@ export async function addClientFoodLogEntry(
       amount: input.amount,
       notes: input.notes ?? null,
       sort_order: input.sortOrder ?? 0,
+      replaces_meal_entry_id: input.replacesMealEntryId ?? null,
     })
     .select("*")
     .single();

@@ -290,6 +290,42 @@ bar that fills up is an instruction to fill it.
    No schema — `fetchClientStats` now returns the window as unsummed parts and
    the page combines them with the reference intake it already holds.
 
+**M7 — The day as one list, and the things around it**: ✅
+
+1. *A logged entry opens the same card it was added with* — macros for the
+   amount, the micronutrient contributions, the portion chips. Editing used to
+   be a bare number field, which asked people to change a portion without
+   showing them what changing it does. Extracted to `ClientEntryDetail`, so
+   both paths are literally the same screen.
+2. *Weight from the client* — `client_record_weight` (migration `…88`). The one
+   place client mode writes into the counselor's record, hence a function and
+   not a policy: height is carried forward and only asked for when nothing is
+   on file, a measurement taken in the practice is never overwritten, and
+   `recorded_by_client` keeps self-reported and measured apart.
+3. *A day summary* — only what went well, at most three, and nothing at all
+   rather than a generic compliment. Never praises a micronutrient the day had
+   no data for, and never names one that is in everything anyway (phosphorus).
+4. *Settings* at `/klient/einstellungen`, reached from a gear in the header
+   rather than a sixth bottom tab. Height and weight editable; name and goal
+   weight read-only — that is the practice's record, and changing it is a
+   conversation, not a field. Saved meals listed and deletable. Date of birth
+   and sex stay absent by design; only the reference values derived from them
+   travel.
+5. *Plan and diary merged into one list per slot* — planned meals are drawn
+   into the day greyed out, one tap says they were eaten, and a row still grey
+   in the evening has answered the question by itself.
+
+   The rejected variant is worth recording, because it is the obvious one:
+   letting a logged entry *automatically* overwrite a planned one. It cannot
+   work. With two planned items and one logged food, nothing can say which was
+   replaced; additions (the plan plus an apple) are more common than
+   substitutions and would silently delete the plan; and "skipped",
+   "unanswered" and "replaced" would collapse into a single absence —
+   destroying the only signal a plan exists to produce. So replacing is
+   explicit: "anders gegessen" writes `replaces_meal_entry_id` (migration
+   `…89`) *and* marks the plan entry skipped, which leaves adherence
+   arithmetic untouched and gives the counselor "statt Linsensuppe: Döner".
+
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 
 ## Risks
