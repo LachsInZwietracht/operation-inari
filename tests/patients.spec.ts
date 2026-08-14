@@ -673,39 +673,6 @@ test.describe("Patient Management", () => {
     }
   });
 
-  test("persists activities across reload", async ({ page }) => {
-    const patient = await createPatientFixture({ firstName: "Activity", lastName: "Persist" });
-
-    try {
-      await openPatientDetail(page, patient);
-      await openAssessmentSection(page, "Aktivität & Energie");
-      const activityTab = page.locator('[role="tabpanel"][data-state="active"]').first();
-
-      await activityTab.getByPlaceholder("Spaziergang").fill("Nordic Walking");
-      await activityTab.locator('input[type="number"]').first().fill("50");
-      await activityTab.locator('input[type="date"]').first().fill("2026-04-18");
-      await page.getByRole("button", { name: "Aktivität speichern" }).click();
-
-      await expect(page.getByText(/Nordic Walking/i)).toBeVisible();
-      await expect
-        .poll(async () => {
-          const rows = await fetchClinicalRows<{ type: string; duration_minutes: string }>(
-            "patient_activities",
-            patient.id,
-          );
-          return rows.some((row) => row.type === "Nordic Walking" && Number(row.duration_minutes) === 50);
-        })
-        .toBe(true);
-
-      await page.reload({ waitUntil: "networkidle" });
-      await openAssessmentSection(page, "Aktivität & Energie");
-      await expect(page.getByText(/Nordic Walking/i)).toBeVisible();
-    } finally {
-      await deleteClinicalRows("patient_activities", patient.id).catch(() => {});
-      await deletePatientFixture(patient.id);
-    }
-  });
-
   test("persists digital protocol links and status updates across reload", async ({ page }) => {
     const patient = await createPatientFixture({ firstName: "Digital", lastName: "Persist" });
 

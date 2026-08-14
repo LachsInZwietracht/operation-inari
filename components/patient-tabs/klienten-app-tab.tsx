@@ -26,6 +26,7 @@ import { fetchClientRecipeFacts } from "@/lib/data/client-plan-nutrition-client"
 import { fetchClientAdherence } from "@/lib/data/client-plan-client"
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client"
 import { fetchClientLinkForPatient } from "@/lib/data/client-links"
+import { estimateActivityEnergy } from "@/lib/energy-expenditure"
 import { getNutrientValue } from "@/lib/nutrients"
 import { createClient } from "@/lib/supabase/client"
 import type {
@@ -39,6 +40,37 @@ import type {
 } from "@/lib/types"
 
 const LOG_WINDOW_DAYS = 7
+
+/**
+ * The one line under an activity: what it consisted of.
+ *
+ * A walk carries its meaning in minutes and kcal, a strength session in its
+ * sets — so both are shown when present and neither is invented. The kcal
+ * figure is the same estimate the client sees, recomputed from the stored
+ * inputs rather than read from a column.
+ */
+function describeSession(session: ClientWorkoutSession): string {
+  const parts: string[] = []
+
+  if (session.durationMinutes !== undefined) parts.push(`${session.durationMinutes} min`)
+
+  const energy = estimateActivityEnergy({
+    activityId: session.activityKind,
+    intensity: session.intensity,
+    minutes: session.durationMinutes,
+    weightKg: session.bodyWeightKg,
+  })
+  if (energy) parts.push(`ca. ${energy.netKcal} kcal`)
+
+  if (session.sets.length > 0) {
+    const exercises = [...new Set(session.sets.map((set) => set.exerciseName))].slice(0, 3)
+    parts.push(
+      `${session.sets.length} ${session.sets.length === 1 ? "Satz" : "Sätze"} · ${exercises.join(", ")}`,
+    )
+  }
+
+  return parts.join(" · ")
+}
 
 export function KlientenAppTab({ patient }: { patient: Patient }) {
   const supabase = useMemo(() => createClient(), [])
@@ -299,29 +331,25 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
       {link?.status === "active" && isClientModuleEnabled("training") && workouts.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Letzte Trainingseinheiten</CardTitle>
+            <CardTitle className="text-base">Letzte Aktivitäten</CardTitle>
             <CardDescription>Vom Klienten selbst erfasst.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="divide-y">
-              {workouts.map((session) => (
-                <li key={session.id} className="py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">{session.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(parseISO(session.date), "d. MMMM", { locale: de })}
-                    </p>
-                  </div>
-                  {session.sets.length > 0 && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {session.sets.length} {session.sets.length === 1 ? "Satz" : "Sätze"} ·{" "}
-                      {[...new Set(session.sets.map((set) => set.exerciseName))]
-                        .slice(0, 3)
-                        .join(", ")}
-                    </p>
-                  )}
-                </li>
-              ))}
+              {workouts.map((session) => {
+                const detail = describeSession(session)
+                return (
+                  <li key={session.id} className="py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{session.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(parseISO(session.date), "d. MMMM", { locale: de })}
+                      </p>
+                    </div>
+                    {detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}
+                  </li>
+                )
+              })}
             </ul>
           </CardContent>
         </Card>

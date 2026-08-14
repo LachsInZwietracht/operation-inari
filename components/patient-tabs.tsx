@@ -9,7 +9,6 @@ import { useAnthropometric } from "@/hooks/use-anthropometric"
 import { LAB_PARAMETERS } from "@/lib/reference-data/lab-parameters"
 import { GROWTH_PERCENTILES } from "@/lib/reference-data/growth-percentiles"
 import { AMPUTATION_AREAS } from "@/lib/constants"
-import { estimateActivityEnergy, matchActivityByName } from "@/lib/energy-expenditure"
 import { useDiagnoses } from "@/hooks/use-diagnoses"
 import { useMedications } from "@/hooks/use-medications"
 import { useLabValues } from "@/hooks/use-lab-values"
@@ -105,11 +104,11 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     addEntry: addLabValue,
     isLoadingRemote: isLoadingLabValues,
   } = useLabValues({ initialEntries: initialData?.labValues })
-  const {
-    getForPatient: getActivitiesForPatient,
-    addEntry: addActivity,
-    isLoadingRemote: isLoadingActivities,
-  } = useActivities({ initialEntries: initialData?.activities })
+  // Read-only: activities are the client's to record, so nothing here writes
+  // them. The rows that exist are shown in the statistics and nowhere else.
+  const { getForPatient: getActivitiesForPatient } = useActivities({
+    initialEntries: initialData?.activities,
+  })
   const { getPatientAssignment, setPal } = useReferenceProfiles()
   const { getForPatient: getScreeningsForPatient } = useScreenings({
     initialEntries: initialData?.screenings,
@@ -165,12 +164,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const handlePalChange = (value: string) => {
     void setPal(parseFloat(value), patient.id)
   }
-  const [activityForm, setActivityForm] = useState({
-    type: "Spaziergang",
-    durationMinutes: "30",
-    intensity: "moderat",
-    date: new Date().toISOString().slice(0, 10),
-  })
   const [digitalMethod, setDigitalMethod] = useState("Digitales 24h Recall")
   const [targetWeightInput, setTargetWeightInput] = useState("")
   const [calorieDeficitInput, setCalorieDeficitInput] = useState("500")
@@ -203,7 +196,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const labValuesPending = isLoadingLabValues && entriesForSelectedLab.length === 0
   const counselingPending = isLoadingCounseling && sessions.length === 0
   const digitalLinks = getDigitalLinksForPatient(patient.id)
-  const activitiesPending = isLoadingActivities && activities.length === 0
   const digitalLinksPending = isLoadingDigitalProtocols && digitalLinks.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
@@ -232,7 +224,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     return Math.round(10 * weight + 6.25 * height - 5 * ageYears + genderFactor)
   }, [ageYears, height, patient.gender, weight])
   const totalEnergyExpenditure = Math.round(basalMetabolicRate * pal)
-  const activityKcal = activities.reduce((sum, entry) => sum + (entry.energyKcal ?? entry.durationMinutes * 4.5), 0)
 
   useEffect(() => {
     if (latestAnthro && !targetWeightInput) {
@@ -476,32 +467,6 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     setLabNotesInput("")
   }
 
-  const handleActivitySubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const duration = Number(activityForm.durationMinutes) || 30
-    // Was a flat factor of 5 MET for everything from Yoga to interval running.
-    // The activity name and the intensity the form already collects pick a
-    // real MET value instead; net of resting metabolism, so the figure is the
-    // extra cost of the activity rather than the whole hour.
-    const estimatedEnergy =
-      estimateActivityEnergy({
-        activityId: matchActivityByName(activityForm.type).id,
-        intensity: activityForm.intensity,
-        minutes: duration,
-        weightKg: weight,
-      })?.netKcal ?? 0
-    addActivity({
-      patientId: patient.id,
-      type: activityForm.type,
-      durationMinutes: duration,
-      intensity: activityForm.intensity,
-      date: activityForm.date || new Date().toISOString().slice(0, 10),
-      pal,
-      energyKcal: estimatedEnergy,
-    })
-    setActivityForm((prev) => ({ ...prev, type: "", durationMinutes: "30" }))
-  }
-
   const patientAppointments = appointments.filter(
     (appointment) => appointment.patientId === patient.id || appointment.patientId === patient.legacyId,
   )
@@ -679,16 +644,10 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           profileSubNav={profileSubNav}
           basalMetabolicRate={basalMetabolicRate}
           totalEnergyExpenditure={totalEnergyExpenditure}
-          activityKcal={activityKcal}
           palValue={palValue}
           palPersisted={palPersisted}
           palOptions={palOptions}
           onPalChange={handlePalChange}
-          activityForm={activityForm}
-          setActivityForm={setActivityForm}
-          onActivitySubmit={handleActivitySubmit}
-          activities={activities}
-          activitiesPending={activitiesPending}
           dietStyle={dietStyle}
           onDietStyleChange={handleDietStyleChange}
           dietExclusions={dietExclusions}
