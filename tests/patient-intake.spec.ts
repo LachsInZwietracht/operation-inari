@@ -122,6 +122,8 @@ test.describe("Onboarding intake — expired and revoked links", () => {
 });
 
 test.describe("Onboarding intake — end to end", () => {
+  test.setTimeout(60_000);
+
   test("fills the intake and creates a patient on apply", async ({ page, request }) => {
     const link = await createIntakeLink();
     let createdPatientId: string | undefined;
@@ -217,6 +219,20 @@ test.describe("Onboarding intake — end to end", () => {
       expect(patient?.last_name).toBe("Onboarding");
       expect(patient?.date_of_birth).toBe("1991-05-14");
       expect(patient?.intake_reason).toBe("Abnehmen");
+
+      // The stored original stays visible from the patient record without
+      // turning the editable record back into the submitted questionnaire.
+      await page.goto(`/patienten/${createdPatientId}`, {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await expect(page.getByRole("button", { name: "Originale Aufnahme" })).toBeVisible({
+        timeout: 30_000,
+      });
+      await page.getByRole("button", { name: "Originale Aufnahme" }).click();
+      const originalIntakeDialog = page.getByRole("dialog", { name: "Originale Aufnahme" });
+      await expect(originalIntakeDialog).toBeVisible();
+      await expect(originalIntakeDialog.getByText("Testine Onboarding")).toBeVisible();
 
       // Applying twice is refused rather than duplicating the patient.
       const secondApply = await request.post("/api/patient-intake-submissions/apply", {

@@ -13,6 +13,7 @@ import type {
   ScreeningResult,
   DailyMealPlan,
   Food,
+  PatientIntakeSubmission,
 } from "@/lib/types"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { fetchActivitiesClient } from "@/lib/data/patient-activities-client"
@@ -29,6 +30,7 @@ import { fetchFoodsByIds } from "@/lib/data/foods"
 import { fetchRecipes } from "@/lib/data/recipes"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchScreeningsClient } from "@/lib/data/patient-screenings-client"
+import { fetchPatientIntakeSubmissionsClient } from "@/lib/data/patient-intake-submissions-client"
 import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 
 export interface PatientWorkspaceData {
@@ -43,6 +45,7 @@ export interface PatientWorkspaceData {
   labValues: LabValueEntry[]
   medications: MedicationEntry[]
   patientAllergens: PatientAllergenEntry[]
+  intakeSubmissions: PatientIntakeSubmission[]
   mealPlans: DailyMealPlan[]
   mealPlanFoods: Food[]
   recipes: Recipe[]
@@ -120,6 +123,7 @@ export async function fetchPatientWorkspaceData(
       labValues: [],
       medications: [],
       patientAllergens: [],
+      intakeSubmissions: [],
       mealPlans: [],
       mealPlanFoods: [],
       recipes: [],
@@ -141,6 +145,7 @@ export async function fetchPatientWorkspaceData(
         "appointments",
         "counseling",
         "diagnoses",
+        "intake",
         "labs",
         "mealPlans",
         "medications",
@@ -160,6 +165,7 @@ export async function fetchPatientWorkspaceData(
     labValues,
     medications,
     patientAllergens,
+    intakeSubmissions,
     mealPlans,
     recipes,
     screenings,
@@ -173,6 +179,7 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchLabValuesClient(supabase), "lab values"),
     orEmpty(fetchMedicationsClient(supabase), "medications"),
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
+    orEmpty(fetchPatientIntakeSubmissionsClient(supabase), "intake submissions"),
     orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
     orEmpty(fetchRecipes({ supabase }), "recipes"),
     orEmpty(fetchScreeningsClient(supabase), "screenings"),
@@ -223,6 +230,11 @@ export async function fetchPatientWorkspaceData(
     labValues: filterForPatient(labValues, patient),
     medications: filterForPatient(medications, patient),
     patientAllergens: filterForPatient(patientAllergens, patient),
+    intakeSubmissions: intakeSubmissions.filter(
+      (submission) =>
+        matchesPatientRef(patient, submission.patientId) ||
+        matchesPatientRef(patient, submission.appliedPatientId),
+    ),
     mealPlans: patientMealPlans,
     mealPlanFoods,
     recipes: mealPlanRecipes,

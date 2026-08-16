@@ -432,13 +432,15 @@ test.describe("Patient Management", () => {
     try {
       await openPatientDetail(page, patient);
 
-      await expect(page.getByRole("tab", { name: "Workflow" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Übersicht" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Ablauf" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Ernährung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Beratung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Statistiken" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText("Behandlungspfad")).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Übersicht" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByText("Aktueller Stand")).toBeVisible();
+      await expect(page.getByText("Gewichtsverlauf")).toBeVisible();
       await page.getByRole("button", { name: "Löschen" }).click();
       await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -460,7 +462,8 @@ test.describe("Patient Management", () => {
     try {
       await openPatientDetail(page, patient);
 
-      await expect(page.getByRole("tab", { name: "Workflow" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByRole("tab", { name: "Übersicht" })).toHaveAttribute("data-state", "active");
+      await page.getByRole("tab", { name: "Ablauf" }).click();
       await expect(page.getByText("2/4 Schritte abgeschlossen")).toBeVisible();
       await expect(page.getByText("Ein patientenbezogener Kontrolltermin ist bereits im Kalender hinterlegt.")).toBeVisible();
       await expect(page.getByText("Messwerte und Screenings sind dokumentiert.")).toBeVisible();

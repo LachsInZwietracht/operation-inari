@@ -34,6 +34,7 @@ import { DiagnosenTab } from "@/components/patient-tabs/diagnosen-tab"
 import { StammdatenTab } from "@/components/patient-tabs/stammdaten-tab"
 import { AktivitaetTab } from "@/components/patient-tabs/aktivitaet-tab"
 import { PatientIntakePanel } from "@/components/patient-intake-panel"
+import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
 import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
@@ -46,6 +47,7 @@ const PROFILE_TAB_VALUES = ["stammdaten", "anthropometrie", "diagnosen", "laborw
 const NUTRITION_TAB_VALUES = ["ernaehrungsplaene"] as const
 
 const KNOWN_TAB_VALUES = new Set<string>([
+  "overview",
   "workflow",
   "beratungen",
   "statistiken",
@@ -54,6 +56,10 @@ const KNOWN_TAB_VALUES = new Set<string>([
   ...NUTRITION_TAB_VALUES,
 ])
 
+const PatientOverviewTab = dynamic(
+  () => import("@/components/patient-overview-tab").then((mod) => mod.PatientOverviewTab),
+  { ssr: false, loading: () => <div className="h-[420px] rounded-md bg-muted/40" /> },
+)
 const PatientWorkflowTab = dynamic(
   () => import("@/components/patient-workflow-tab").then((mod) => mod.PatientWorkflowTab),
   { ssr: false },
@@ -121,6 +127,9 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const { appointments } = usePracticeAppointments({
     initialAppointments: initialData?.appointments,
   })
+  const { submissions: allIntakeSubmissions } = usePatientIntake({
+    initialSubmissions: initialData?.intakeSubmissions,
+  })
 
   const [showAnthroForm, setShowAnthroForm] = useState(false)
   const [showDiagnosisForm, setShowDiagnosisForm] = useState(false)
@@ -173,6 +182,13 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const labValuesPending = isLoadingLabValues && entriesForSelectedLab.length === 0
   const counselingPending = isLoadingCounseling && sessions.length === 0
   const patientAllergens = getAllergensForPatient(patient.id)
+  const intakeSubmissions = allIntakeSubmissions.filter(
+    (submission) =>
+      submission.patientId === patient.id ||
+      submission.patientId === patient.legacyId ||
+      submission.appliedPatientId === patient.id ||
+      submission.appliedPatientId === patient.legacyId,
+  )
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
   const dietExclusions = (currentPatient.nutritionPreferences ?? []).filter(
     (entry): entry is DietExclusion => DIET_EXCLUSIONS.includes(entry as DietExclusion),
@@ -433,7 +449,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   )
   const searchParams = useSearchParams()
   const initialTabParam = searchParams.get("tab")
-  const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "workflow"
+  const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "overview"
   const [activeTab, setActiveTab] = useState(initialTab)
   useEffect(() => {
     if (newMeasurementRequest == null) return
@@ -461,13 +477,34 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList>
-        <TabsTrigger value="workflow">Workflow</TabsTrigger>
+        <TabsTrigger value="overview">Übersicht</TabsTrigger>
+        <TabsTrigger value="workflow">Ablauf</TabsTrigger>
         <TabsTrigger value={profileTriggerValue}>Profil</TabsTrigger>
         <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
         <TabsTrigger value="beratungen">Beratung</TabsTrigger>
         <TabsTrigger value="klienten-app">Klienten-App</TabsTrigger>
         <TabsTrigger value="statistiken">Statistiken</TabsTrigger>
       </TabsList>
+
+      <TabsContent value="overview" className="space-y-4">
+        <PatientOverviewTab
+          patient={currentPatient}
+          anthropometrics={anthroEntries}
+          appointments={patientAppointments}
+          sessions={sessions}
+          diagnoses={diagnoses}
+          patientAllergens={patientAllergens}
+          mealPlans={initialData?.mealPlans ?? []}
+          intakeSubmissions={intakeSubmissions}
+          basalMetabolicRate={latestAnthro ? basalMetabolicRate : undefined}
+          totalEnergyExpenditure={latestAnthro ? totalEnergyExpenditure : undefined}
+          palValue={pal}
+          onAddMeasurement={() => {
+            setActiveTab("anthropometrie")
+            setShowAnthroForm(true)
+          }}
+        />
+      </TabsContent>
 
       <TabsContent value="workflow" className="space-y-4">
         <PatientWorkflowTab

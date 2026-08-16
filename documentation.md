@@ -360,8 +360,10 @@ Each subsection includes route, core components, important hooks/utilities, and 
   - `Übersicht` summarizes restriction-heavy cases, allergen profiles, pending orders, and cycle status from the same shared dataset.
 - **Fallback behavior:** The pages no longer own local mock analytics datasets or server-side canned institution records. They render from shared derived data and show an empty state when no active cycle is available.
 
-### 4.24 Patient Workflow Hub (`/patienten/[id]`)
-- **Primary surface:** `components/patient-tabs.tsx` now opens on a dedicated `Workflow` tab. The patient record uses five top-level tabs: `Workflow`, `Profil`, `Ernährung`, `Beratung`, and `Statistiken`.
+### 4.24 Patientenakte (`/patienten/[id]`)
+- **Startseite:** `components/patient-tabs.tsx` öffnet die Akte auf `Übersicht`. Sie fasst aktuelle Körperwerte, Energiebedarf, Ernährungseinschränkungen, Behandlung, Termine, Plan und wichtige Ereignisse zusammen. Fehlende Werte werden klar als fehlend gezeigt und nicht geschätzt.
+- **Originalquelle:** Zugeordnete Aufnahmebögen werden gezielt für diese Akte geladen. `Originale Aufnahme` zeigt den unveränderten eingegangenen Bogen im Dialog.
+- **Details:** `Ablauf`, `Profil`, `Ernährung`, `Beratung`, `Klienten-App` und `Statistiken` bleiben als vertiefende Bereiche erhalten.
 - **Purpose:** Present the investor/demo-ready ambulatory patient journey in one place without introducing a new backend workflow entity.
 - **Core component:** `components/patient-workflow-tab.tsx`.
 - **Derived stages:** `Intake`, `Assessment`, `Plan`, `Report`, `Follow-up`.
