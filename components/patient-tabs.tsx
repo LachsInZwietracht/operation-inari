@@ -38,6 +38,7 @@ import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
 import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
+import { calculateEnergy } from "@/lib/nutrition/energy-calculation"
 
 /** Sentinel for "no style selected" — Radix Select rejects an empty value. */
 const DIET_STYLE_NONE = "__none__"
@@ -210,11 +211,20 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const weight = latestAnthro?.weight ?? 70
   const height = latestAnthro?.height ?? 170
   const pal = parseFloat(palValue)
-  const basalMetabolicRate = useMemo(() => {
-    const genderFactor = patient.gender === "m" ? 5 : patient.gender === "w" ? -161 : -151
-    return Math.round(10 * weight + 6.25 * height - 5 * ageYears + genderFactor)
-  }, [ageYears, height, patient.gender, weight])
-  const totalEnergyExpenditure = Math.round(basalMetabolicRate * pal)
+  const energy = useMemo(
+    () =>
+      calculateEnergy({
+        sex: patient.gender === "m" ? "male" : patient.gender === "w" ? "female" : "diverse",
+        formula: "mifflin",
+        weightKg: weight,
+        heightCm: height,
+        ageYears,
+        pal,
+      }),
+    [ageYears, height, pal, patient.gender, weight],
+  )
+  const basalMetabolicRate = Math.round(energy.basalMetabolicRate)
+  const totalEnergyExpenditure = Math.round(energy.totalEnergyExpenditure)
 
   useEffect(() => {
     if (latestAnthro && !targetWeightInput) {

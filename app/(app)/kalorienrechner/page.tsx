@@ -23,6 +23,11 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { MACRO_PRESETS } from "@/lib/nutrition/macro-presets";
+import {
+  calculateEnergy,
+  energyGaugeMaximum,
+  type EnergyFormula,
+} from "@/lib/nutrition/energy-calculation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -51,7 +56,7 @@ import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import type { AnthropometricEntry, Patient } from "@/lib/types";
 
 type Sex = "male" | "female";
-type Formula = "mifflin" | "harris";
+type Formula = EnergyFormula;
 
 const GENERAL_OPTION = "__general__";
 
@@ -83,23 +88,11 @@ function activityIdForPal(pal: number): string {
   return best.id;
 }
 
-const MACROS = [
+const MACRO_META = [
   { key: "carbs" as const, label: "Kohlenhydrate", kcalPerGram: 4, color: "var(--chart-3)" },
   { key: "fat" as const, label: "Fett", kcalPerGram: 9, color: "var(--chart-2)" },
   { key: "protein" as const, label: "Eiweiß", kcalPerGram: 4, color: "var(--chart-1)" },
 ];
-
-const KCAL_PER_KG = 7700;
-
-function bmrFor(sex: Sex, formula: Formula, weight: number, height: number, age: number): number {
-  if (formula === "harris") {
-    return sex === "male"
-      ? 88.362 + 13.397 * weight + 4.799 * height - 5.677 * age
-      : 447.593 + 9.247 * weight + 3.098 * height - 4.33 * age;
-  }
-  const base = 10 * weight + 6.25 * height - 5 * age;
-  return sex === "male" ? base + 5 : base - 161;
-}
 
 function sexForGender(gender: Patient["gender"]): Sex {
   return gender === "m" ? "male" : "female";
@@ -115,8 +108,8 @@ function latestEntry(entries: AnthropometricEntry[]): AnthropometricEntry | null
 
 export default function KalorienrechnerPage() {
   const searchParams = useSearchParams();
-  const { patients, getPatient, updatePatient } = usePatients();
-  const { getForPatient, addEntry, isLoadingRemote: anthroLoading } = useAnthropometric();
+  const { patients, getPatient, savePatient } = usePatients();
+  const { getForPatient, saveEntry, isLoadingRemote: anthroLoading } = useAnthropometric();
   const {
     getPatientAssignment,
     isLoadingRemote: isLoadingReferenceProfiles,
@@ -169,8 +162,15 @@ export default function KalorienrechnerPage() {
       setGoalWeight(patient.goalWeight != null ? String(patient.goalWeight) : "");
 
       if (patient.dailyCalorieGoal != null) {
-        const tdee = bmrFor(nextSex, formula, nextWeight, nextHeight, nextAge) * nextActivity.pal;
-        const delta = Math.max(-1000, Math.min(1000, Math.round((patient.dailyCalorieGoal - tdee) / 50) * 50));
+        const energy = calculateEnergy({
+          sex: nextSex,
+          formula,
+          weightKg: nextWeight,
+          heightCm: nextHeight,
+          ageYears: nextAge,
+          pal: nextActivity.pal,
+        });
+        const delta = Math.max(-1000, Math.min(1000, Math.round((patient.dailyCalorieGoal - energy.totalEnergyExpenditure) / 50) * 50));
         setCalorieDelta(delta);
       } else {
         setCalorieDelta(0);
@@ -207,19 +207,30 @@ export default function KalorienrechnerPage() {
   }, [selectedPatientId, patients, getPatient, applyPatient, anthroLoading, isLoadingReferenceProfiles]);
 
   const result = useMemo(() => {
-    const bmr = Math.max(0, bmrFor(sex, formula, weight, height, age));
-    const tdee = bmr * activity.pal;
-    const target = Math.max(0, tdee + calorieDelta);
-    const weeklyKg = (calorieDelta * 7) / KCAL_PER_KG;
-    const bmi = height > 0 ? weight / Math.pow(height / 100, 2) : 0;
-
-    const macros = MACROS.map((m) => {
-      const pct = preset[m.key];
-      const kcal = (target * pct) / 100;
-      return { ...m, pct, kcal, grams: kcal / m.kcalPerGram };
+    const energy = calculateEnergy({
+      sex,
+      formula,
+      weightKg: weight,
+      heightCm: height,
+      ageYears: age,
+      pal: activity.pal,
+      calorieDelta,
+      macroPreset: preset,
     });
-
-    return { bmr, tdee, target, weeklyKg, bmi, macros };
+    const macros = energy.macros.map((macro) => ({
+      ...macro,
+      pct: macro.percentage,
+      label: MACRO_META.find((meta) => meta.key === macro.key)?.label ?? macro.key,
+      color: MACRO_META.find((meta) => meta.key === macro.key)?.color ?? "var(--chart-1)",
+    }));
+    return {
+      bmr: energy.basalMetabolicRate,
+      tdee: energy.totalEnergyExpenditure,
+      target: energy.targetEnergy,
+      weeklyKg: energy.weeklyWeightChangeKg,
+      bmi: energy.bmi ?? 0,
+      macros,
+    };
   }, [sex, formula, weight, height, age, activity.pal, calorieDelta, preset]);
 
   const goal =
@@ -229,9 +240,8 @@ export default function KalorienrechnerPage() {
         ? { label: "Aufbauen", icon: TrendingUp, tone: "text-emerald-500" }
         : { label: "Gewicht halten", icon: Minus, tone: "text-muted-foreground" };
 
-  const gaugeData = [
-    { name: "target", value: Math.min(100, (result.target / 4000) * 100), fill: "var(--chart-1)" },
-  ];
+  const gaugeMaximum = energyGaugeMaximum(result.target, result.tdee);
+  const gaugeData = [{ name: "target", value: (result.target / gaugeMaximum) * 100, fill: "var(--chart-1)" }];
 
   const bmiCategory =
     result.bmi < 18.5
@@ -247,7 +257,7 @@ export default function KalorienrechnerPage() {
     setIsSaving(true);
     try {
       const parsedGoalWeight = goalWeight.trim() === "" ? undefined : Number(goalWeight);
-      updatePatient(selectedPatient.id, {
+      await savePatient(selectedPatient.id, {
         dailyCalorieGoal: Math.round(result.target),
         goalWeight: parsedGoalWeight != null && !Number.isNaN(parsedGoalWeight) ? parsedGoalWeight : undefined,
         macroPreset: presetId,
@@ -260,7 +270,7 @@ export default function KalorienrechnerPage() {
       const latest = latestEntry(getForPatient(selectedPatient.id));
       if (!latest || latest.weight !== weight || latest.height !== height) {
         const bmi = height > 0 ? Math.round((weight / Math.pow(height / 100, 2)) * 10) / 10 : 0;
-        addEntry({
+        await saveEntry({
           patientId: selectedPatient.id,
           date: new Date().toISOString().slice(0, 10),
           weight,
@@ -276,7 +286,7 @@ export default function KalorienrechnerPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [selectedPatient, goalWeight, result.target, presetId, setPal, activity.pal, getForPatient, weight, height, addEntry, updatePatient]);
+  }, [selectedPatient, goalWeight, result.target, presetId, setPal, activity.pal, getForPatient, weight, height, saveEntry, savePatient]);
 
   return (
     <div className="space-y-6">
@@ -458,6 +468,7 @@ export default function KalorienrechnerPage() {
                     </>
                   )}
                 </p>
+                <p className="text-xs text-muted-foreground">Skala: 0–{formatNumber(gaugeMaximum)} kcal</p>
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <Stat label="Grundumsatz" value={`${formatNumber(Math.round(result.bmr))}`} unit="kcal" />
                   <Stat label="Gesamtbedarf" value={`${formatNumber(Math.round(result.tdee))}`} unit="kcal" />

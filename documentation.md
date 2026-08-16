@@ -143,9 +143,10 @@ Each subsection includes route, core components, important hooks/utilities, and 
 
 ### 4.6.2 Kalorienrechner (`/kalorienrechner`)
 - **Component:** `app/(app)/kalorienrechner/page.tsx` (client). Sidebar entry in the **Ernährung** section.
-  - Estimates Grundumsatz (BMR via Mifflin-St Jeor or Harris-Benedict), Gesamtbedarf (BMR × PAL), an adjustable daily calorie target (±1000 kcal balance with a 7700 kcal/kg weekly prognosis), and a macro split (Ausgewogen / Low Carb / Eiweißreich / Ketogen) rendered as a radial gauge + macro cards.
+  - The shared `lib/nutrition/energy-calculation.ts` calculates Grundumsatz (Mifflin-St Jeor or Harris-Benedict), Gesamtbedarf (BMR × PAL), daily target (±1000 kcal balance with a 7700 kcal/kg weekly prognosis), BMI, and macro grams. The same Mifflin result is shown in the patient record.
+  - The radial gauge uses a dynamic scale. Very high values remain readable and are never silently cut off at 4.000 kcal.
   - **Patient-aware:** an optional patient selector (top-right) and the `?patientId=` deep link load the patient's values — gender, age (from `dateOfBirth`), latest weight/height from `patient_anthropometrics`, PAL (mapped from `patient_reference_assignments.pal_value`), and saved `macroPreset`/`goalWeight`/`dailyCalorieGoal`. Applied once per selection after weigh-ins finish syncing.
-  - **Im Patienten speichern:** writes `dailyCalorieGoal`, `goalWeight`, and `macroPreset` back to the patient (`usePatients().updatePatient`), persists the activity level as PAL via `useReferenceProfiles().setPal` (shared with the patient energy panel in `patient-tabs.tsx`, no parallel store), and records a new dated weigh-in via `useAnthropometric().addEntry` only when weight/height changed. Maintenance calories are derived live (BMR × PAL), not stored.
+  - **Im Patienten speichern:** waits for `dailyCalorieGoal`, `goalWeight`, `macroPreset`, PAL, and a changed weigh-in to be written before it reports success. Maintenance calories are derived live (BMR × PAL), not stored.
   - **Schema:** `patients.daily_calorie_goal`, `patients.goal_weight`, `patients.macro_preset` (migration `20260619000058_patient_calorie_targets.sql`).
 
 ### 4.7 Berichte (removed)

@@ -210,6 +210,44 @@ export function usePatients(options: UsePatientsOptions = {}) {
     })
   }, [isAuthenticated])
 
+  /**
+   * Persists a deliberate change before reporting success to its caller.
+   * Forms that own the whole record can still use updatePatient's responsive
+   * background save, while short clinical actions can show an honest result.
+   */
+  const savePatient = useCallback(async (id: string, updates: Partial<Patient>) => {
+    const current = patientsRef.current.find(
+      (patient) => patient.id === id || patient.legacyId === id,
+    )
+    if (!current) throw new Error("Patient nicht gefunden")
+
+    const optimistic = { ...current, ...updates, updatedAt: new Date().toISOString() }
+    setPatients((previous) =>
+      sortPatients(previous.map((patient) =>
+        patient.id === id || patient.legacyId === id ? optimistic : patient,
+      )),
+    )
+
+    if (!isAuthenticated) return optimistic
+
+    try {
+      const persisted = await persistPatient(optimistic as Parameters<typeof persistPatient>[0])
+      setPatients((previous) =>
+        sortPatients(previous.map((patient) =>
+          patient.id === id || patient.legacyId === id ? persisted : patient,
+        )),
+      )
+      return persisted
+    } catch (error) {
+      setPatients((previous) =>
+        sortPatients(previous.map((patient) =>
+          patient.id === id || patient.legacyId === id ? current : patient,
+        )),
+      )
+      throw error
+    }
+  }, [isAuthenticated])
+
   const deletePatient = useCallback(async (id: string) => {
     let removedPatient: Patient | undefined
 
@@ -238,6 +276,7 @@ export function usePatients(options: UsePatientsOptions = {}) {
     getPatient,
     addPatient,
     updatePatient,
+    savePatient,
     patchPatientLocal,
     deletePatient,
     isLoadingRemote

@@ -167,6 +167,34 @@ export function useAnthropometric(options: UseAnthropometricOptions = {}) {
     [isAuthenticated],
   )
 
+  /** Saves a measurement and resolves only after the remote record exists. */
+  const saveEntry = useCallback(
+    async (entry: Omit<AnthropometricEntry, "id" | "createdAt" | "updatedAt">) => {
+      const now = new Date().toISOString()
+      const optimistic: AnthropometricEntry = {
+        ...entry,
+        id: `anthro_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        createdAt: now,
+        updatedAt: now,
+      }
+      setEntries((previous) => sortEntries([...previous, optimistic]))
+
+      if (!isAuthenticated) return optimistic
+
+      try {
+        const persisted = await persistAnthropometricEntry(optimistic)
+        setEntries((previous) =>
+          sortEntries(previous.map((item) => item.id === optimistic.id ? persisted : item)),
+        )
+        return persisted
+      } catch (error) {
+        setEntries((previous) => previous.filter((item) => item.id !== optimistic.id))
+        throw error
+      }
+    },
+    [isAuthenticated],
+  )
+
   const deleteEntry = useCallback(
     (id: string) => {
       setEntries((prev) => prev.filter((e) => e.id !== id))
@@ -184,6 +212,7 @@ export function useAnthropometric(options: UseAnthropometricOptions = {}) {
     entries,
     getForPatient,
     addEntry,
+    saveEntry,
     deleteEntry,
     isLoadingRemote,
   }
