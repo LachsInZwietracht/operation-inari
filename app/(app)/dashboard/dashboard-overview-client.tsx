@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { addDays, format, formatDistanceToNowStrict, parseISO } from "date-fns"
+import { addDays, addWeeks, format, formatDistanceToNowStrict, isWeekend, parseISO, startOfWeek } from "date-fns"
 import { de } from "date-fns/locale"
 import {
   AlertCircle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   Clock3,
@@ -208,11 +209,12 @@ export function DashboardOverviewClient({
   const today = useMemo(() => new Date(nowTs), [nowTs])
   const todayIso = format(today, "yyyy-MM-dd")
   const [selectedDate, setSelectedDate] = useState(todayIso)
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(today, { weekStartsOn: 1 }))
 
   const derived = useMemo(() => {
     const patientsById = new Map(patients.map((patient) => [patient.id, patient]))
     const week = Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(today, index)
+      const date = addDays(weekStart, index)
       const iso = format(date, "yyyy-MM-dd")
       return {
         date,
@@ -236,7 +238,7 @@ export function DashboardOverviewClient({
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 5)
     const worklist = buildDashboardWorklist({ patients, plans, appointments, sessions, submissions, now: today }).slice(0, 7)
-    const weekEnd = format(addDays(today, 6), "yyyy-MM-dd")
+    const weekEnd = format(addDays(weekStart, 6), "yyyy-MM-dd")
 
     return {
       patientsById,
@@ -249,15 +251,23 @@ export function DashboardOverviewClient({
         intake: submissions.filter((submission) => submission.status === "new" || submission.status === "reviewed").length,
         patients: patients.filter((patient) => (patient.status ?? "active") === "active").length,
         plans: plans.filter((plan) => plan.status === "draft" || plan.status === "active").length,
-        appointments: appointments.filter((appointment) => appointment.date >= todayIso && appointment.date <= weekEnd).length,
+        appointments: appointments.filter((appointment) => appointment.date >= format(weekStart, "yyyy-MM-dd") && appointment.date <= weekEnd).length,
       },
     }
-  }, [appointments, patients, plans, sessions, submissions, today, todayIso])
+  }, [appointments, patients, plans, sessions, submissions, today, weekStart])
 
   const selectedAppointments = derived.week.find((day) => day.iso === selectedDate)?.appointments ?? []
   const selectedDateObject = derived.week.find((day) => day.iso === selectedDate)?.date ?? today
   const hour = today.getHours()
   const greeting = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"
+  const changeWeek = (direction: -1 | 1) => {
+    setWeekStart((current) => addWeeks(current, direction))
+    setSelectedDate((current) => format(addWeeks(parseISO(current), direction), "yyyy-MM-dd"))
+  }
+  const showCurrentWeek = () => {
+    setWeekStart(startOfWeek(today, { weekStartsOn: 1 }))
+    setSelectedDate(todayIso)
+  }
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1300px] flex-col gap-5 overflow-x-hidden">
@@ -289,25 +299,43 @@ export function DashboardOverviewClient({
         <StatCard label="Fragebogen prüfen" value={derived.stats.intake} helper="wartet auf deine Entscheidung" icon={ClipboardCheck} color="var(--chart-4)" />
         <StatCard label="Aktive Patienten" value={derived.stats.patients} helper="aktuell in der Praxis" icon={Users} color="var(--chart-2)" />
         <StatCard label="Offene Pläne" value={derived.stats.plans} helper="Entwürfe und laufende Pläne" icon={FilePenLine} color="var(--chart-1)" />
-        <StatCard label="Termine in 7 Tagen" value={derived.stats.appointments} helper="einschließlich heute" icon={CalendarDays} color="var(--chart-3)" />
+        <StatCard label="Termine diese Woche" value={derived.stats.appointments} helper="Montag bis Sonntag" icon={CalendarDays} color="var(--chart-3)" />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
         <CardShell>
-          <CardHeading title="Kalender" helper="Heute und die nächsten sechs Tage" href="/termine" linkLabel="Großen Kalender öffnen" />
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[15px] font-bold" style={{ color: TEXT.hi }}>Kalender</h2>
+              <p className="mt-0.5 text-xs" style={{ color: TEXT.faint }}>
+                {format(weekStart, "d. MMMM", { locale: de })} – {format(addDays(weekStart, 6), "d. MMMM yyyy", { locale: de })}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => changeWeek(-1)} aria-label="Vorherige Woche" className="flex size-8 items-center justify-center rounded-lg border hover:bg-muted">
+                <ChevronLeft className="size-4" />
+              </button>
+              <button type="button" onClick={showCurrentWeek} className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold hover:bg-muted">Heute</button>
+              <button type="button" onClick={() => changeWeek(1)} aria-label="Nächste Woche" className="flex size-8 items-center justify-center rounded-lg border hover:bg-muted">
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          </div>
           <div className="-mx-1 overflow-x-auto px-1 pb-1">
             <div className="grid min-w-[500px] grid-cols-7 gap-1.5" role="tablist" aria-label="Kalendertage">
               {derived.week.map((day) => {
               const selected = day.iso === selectedDate
+              const weekend = isWeekend(day.date)
               return (
                 <button
                   key={day.iso}
                   type="button"
                   role="tab"
                   aria-selected={selected}
+                  aria-label={`${format(day.date, "EEEE, d. MMMM", { locale: de })}${weekend ? " (Wochenende)" : ""}`}
                   onClick={() => setSelectedDate(day.iso)}
-                  className="flex min-w-0 flex-col items-center rounded-xl border px-1 py-2.5 transition-colors hover:bg-muted"
-                  style={selected ? { borderColor: "var(--primary)", backgroundColor: soft("var(--primary)") } : undefined}
+                  className={`flex min-w-0 flex-col items-center rounded-xl border px-1 py-2.5 transition-colors hover:bg-muted ${weekend ? "opacity-60" : ""}`}
+                  style={selected ? { borderColor: "var(--primary)", backgroundColor: soft("var(--primary)") } : weekend ? { backgroundColor: soft("var(--muted-foreground)") } : undefined}
                 >
                   <span className="truncate text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{format(day.date, "EEE", { locale: de })}</span>
                   <span className="mt-1 font-mono text-lg font-semibold tabular-nums">{format(day.date, "d")}</span>

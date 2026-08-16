@@ -67,9 +67,9 @@ Agent quick index:
 Each subsection includes route, core components, important hooks/utilities, and extension notes.
 
 ### 4.1 Dashboard (`/dashboard`)
-- **Daily work surface:** `app/(app)/dashboard/page.tsx` fetches the user's patients, plans, appointments, counseling sessions, and intake submissions in parallel. `dashboard-overview-client.tsx` renders the next seven days as a selectable calendar at the top of the page, followed by the appointments on the selected day.
+- **Weekly work surface:** `app/(app)/dashboard/page.tsx` fetches the user's patients, plans, appointments, counseling sessions, and intake submissions in parallel. `dashboard-overview-client.tsx` renders Monday through Sunday as a selectable calendar, with previous week, next week, and today controls. Saturday and Sunday remain visible but muted. The appointments for the selected day sit directly below it.
 - **Prioritized work list:** `lib/dashboard-worklist.ts` derives actions from existing records only. Returned intake questionnaires lead, followed by open plans and active patients whose last documented contact is at least 42 days old and who have no future appointment. It never writes reminders or clinical state.
-- **Overview cards:** open questionnaires, active patients, open plans, and appointments in the next seven days sit above the calendar. Recent patient files and meal plans stay below the daily work surface. The former separate appointment block at the bottom was removed.
+- **Overview cards:** open questionnaires, active patients, open plans, and appointments in the selected calendar week sit above the calendar. Recent patient files and meal plans stay below the weekly work surface. The former separate appointment block and the `Großen Kalender öffnen` link were removed.
 - **Empty workspaces:** every area keeps a useful empty state and a direct action instead of showing invented demo appointments.
 
 ### 4.2 Lebensmittel (Foods) (`/lebensmittel`)
