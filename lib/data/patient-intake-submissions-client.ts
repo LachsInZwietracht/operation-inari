@@ -63,6 +63,7 @@ export async function fetchPatientIntakeSubmissionsClient(
 
 export interface ApplyIntakeSubmissionResult {
   patientId: string;
+  patientName?: string;
 }
 
 export async function applyPatientIntakeSubmission(
@@ -81,7 +82,10 @@ export async function applyPatientIntakeSubmission(
     throw new Error(body?.error ?? `Übernahme fehlgeschlagen (${response.status})`);
   }
 
-  return { patientId: body.patientId as string };
+  return {
+    patientId: body.patientId as string,
+    patientName: typeof body.patientName === "string" ? body.patientName : undefined,
+  };
 }
 
 export async function discardPatientIntakeSubmission(

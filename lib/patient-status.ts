@@ -53,7 +53,7 @@ export const PATIENT_STATUS_META: Record<PatientPipelineStatus, PatientStatusMet
   },
   bereit: {
     label: "Bereit für Plan",
-    action: "Plan starten",
+    action: "Patientenakte öffnen",
     description: "Die Daten stehen, es gibt aber noch keinen Ernährungsplan.",
     order: 1,
     dotClassName: "bg-sky-500",

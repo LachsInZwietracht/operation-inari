@@ -219,16 +219,14 @@ export function PatientIntakePanel({ patientId, defaultLabel }: PatientIntakePan
                   <p className="text-xs text-muted-foreground">Übernommen.</p>
                   {submission.appliedPatientId ? (
                     <>
-                      {/* The next step in the chain is the plan, so offer it here
-                          rather than making the user navigate back out. */}
                       <Button type="button" size="sm" asChild>
-                        <Link href={`/ernaehrungsplan?patientId=${submission.appliedPatientId}`}>
-                          Plan starten
+                        <Link href={`/patienten/${submission.appliedPatientId}`}>
+                          Patientenakte öffnen
                         </Link>
                       </Button>
                       <Button type="button" size="sm" variant="outline" asChild>
-                        <Link href={`/patienten/${submission.appliedPatientId}`}>
-                          Zum Patienten
+                        <Link href={`/ernaehrungsplan?patientId=${submission.appliedPatientId}`}>
+                          Ernährungsplan erstellen
                         </Link>
                       </Button>
                     </>

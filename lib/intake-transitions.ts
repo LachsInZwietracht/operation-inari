@@ -183,8 +183,8 @@ export function resolveIntakeTransition(
         explanation: `Die geprüften Angaben von ${name} reichen als Grundlage für einen Plan. Eine Beratung kannst du ergänzen, wenn sie für diesen Fall sinnvoll ist.`,
         action: {
           type: "navigate",
-          label: "Plan starten",
-          href: `/ernaehrungsplan?patientId=${row.patient.id}`,
+          label: "Patientenakte öffnen",
+          href: `/patienten/${row.patient.id}`,
         },
       };
     }

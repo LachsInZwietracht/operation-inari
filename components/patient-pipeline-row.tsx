@@ -83,7 +83,7 @@ export function PatientPipelineListRow({ row, onReview }: PatientPipelineRowProp
     if (row.status === "bereit") {
       return (
         <Button asChild size="sm">
-          <Link href={`/ernaehrungsplan?patientId=${patient.id}`}>{meta.action}</Link>
+          <Link href={`/patienten/${patient.id}`}>{meta.action}</Link>
         </Button>
       )
     }

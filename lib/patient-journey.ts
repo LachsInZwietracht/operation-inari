@@ -76,7 +76,7 @@ export const INTAKE_STAGE_META: Record<IntakeStage, IntakeStageMeta> = {
   plan: {
     label: "Plan erstellen",
     columnHint: "Bereit für Plan",
-    action: "Plan starten",
+    action: "Patientenakte öffnen",
     color: "var(--stage-plan)",
   },
 };
@@ -100,6 +100,10 @@ export interface IntakeRow {
   pendingSubmission: PatientIntakeSubmission | null;
   /** ISO timestamp this person entered the current stage — the bar's left edge. */
   enteredStageAt: string;
+  /** When the questionnaire arrived, kept visible after it was reviewed. */
+  questionnaireReceivedAt?: string;
+  /** When the practitioner accepted the questionnaire into the patient record. */
+  intakeAppliedAt?: string;
   /**
    * ISO timestamp the bar runs to. A real deadline where one exists (invitation
    * expiry, booked appointment), otherwise now — an open-ended wait is drawn as
@@ -382,13 +386,15 @@ export function buildIntakeRows({
     const stage = override ?? derivedStage;
     const stagePinned = Boolean(override) && override !== derivedStage;
 
+    const appliedSubmission = latestAppliedSubmission(submissions);
+    const questionnaireReceivedAt = (pendingSubmission ?? appliedSubmission)?.submittedAt;
+    const intakeAppliedAt = appliedSubmission?.reviewedAt;
     const timing = resolveStageTiming({
       stage,
       nowIso,
       link: pendingLink,
       pendingSubmission,
-      appliedSubmission:
-        submissions.find((submission) => submission.status === "applied") ?? null,
+      appliedSubmission,
       patientCreatedAt: patient.createdAt,
       lastSessionDate,
       nextAppointment,
@@ -404,6 +410,8 @@ export function buildIntakeRows({
       nextAppointment,
       stagePinned,
       derivedStage,
+      questionnaireReceivedAt,
+      intakeAppliedAt,
       ...timing,
       ...resolveUrgency({ timing, now, hasAppointment: Boolean(nextAppointment) }),
     });
@@ -484,7 +492,9 @@ function resolveStageTiming(input: {
       };
     case "beratung": {
       const start =
-        input.appliedSubmission?.submittedAt ?? input.patientCreatedAt;
+        input.appliedSubmission?.reviewedAt ??
+        input.appliedSubmission?.submittedAt ??
+        input.patientCreatedAt;
       const appointment = input.nextAppointment;
       return {
         enteredStageAt: start,
@@ -494,11 +504,39 @@ function resolveStageTiming(input: {
     }
     case "plan":
       return {
-        enteredStageAt: input.lastSessionDate ?? input.patientCreatedAt,
+        // Reviewing an earlier questionnaire today starts the plan work today.
+        // The submission time remains visible separately as the moment the
+        // questionnaire arrived, so the two clinically useful events cannot
+        // be confused.
+        enteredStageAt:
+          input.lastSessionDate ??
+          input.appliedSubmission?.reviewedAt ??
+          input.appliedSubmission?.submittedAt ??
+          input.patientCreatedAt,
         runsUntil: input.nowIso,
         hasDeadline: false,
       };
   }
+}
+
+function latestAppliedSubmission(
+  submissions: PatientIntakeSubmission[],
+): PatientIntakeSubmission | null {
+  let latest: PatientIntakeSubmission | null = null;
+
+  for (const submission of submissions) {
+    if (submission.status !== "applied") continue;
+    if (!latest) {
+      latest = submission;
+      continue;
+    }
+
+    const submittedAt = submission.reviewedAt ?? submission.submittedAt;
+    const latestAt = latest.reviewedAt ?? latest.submittedAt;
+    if (submittedAt > latestAt) latest = submission;
+  }
+
+  return latest;
 }
 
 function resolveUrgency(input: {

@@ -76,7 +76,7 @@ export function IntakeRowAction({ row, onReview, disabled = false }: IntakeRowAc
 
   const href =
     row.stage === "plan"
-      ? `/ernaehrungsplan?patientId=${row.patient.id}`
+      ? `/patienten/${row.patient.id}`
       : // Termine owns its own filter state and takes no query parameters, so
         // this lands on the calendar rather than a pre-filled booking.
         "/termine"

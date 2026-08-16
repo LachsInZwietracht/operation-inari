@@ -16,7 +16,7 @@ import {
  *  - Unknown catalog ids are dropped, never fatal. A stale phone tab must not
  *    block the practitioner from applying an otherwise good submission.
  *  - Patient-reported data never overwrites an existing non-empty value on the
- *    practitioner's record (see `mergePatientUpdate`).
+ *    practitioner's record, including identity data (see `mergePatientUpdate`).
  */
 
 export interface IntakePatientFields {
@@ -155,8 +155,8 @@ export function buildIntakeApplyPlan(
 
 /**
  * Builds the update set for an existing patient. A field the practitioner has
- * already filled in wins over the submitted value; empty submitted values never
- * clear existing data.
+ * already filled in wins over the submitted value, including the person's
+ * identity; empty submitted values never clear existing data.
  */
 export function mergePatientUpdate(
   fields: IntakePatientFields,
@@ -175,12 +175,6 @@ export function mergePatientUpdate(
     if (!isEmpty(existing[column])) continue;
     update[column] = value;
   }
-
-  // Identity always reflects what the person entered about themselves.
-  update.first_name = fields.first_name;
-  update.last_name = fields.last_name;
-  update.date_of_birth = fields.date_of_birth;
-  update.gender = fields.gender;
 
   return update;
 }

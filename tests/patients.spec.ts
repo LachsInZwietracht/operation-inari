@@ -253,7 +253,7 @@ test.describe("Patient Management", () => {
     }
   });
 
-  test("allows plan creation without a documented counseling session", async ({ page }) => {
+  test("opens the patient record without a documented counseling session", async ({ page }) => {
     const patient = await createPatientFixture({
       firstName: "Asynchron",
       lastName: "Planung",
@@ -268,9 +268,9 @@ test.describe("Patient Management", () => {
 
       const card = patientCard(page, patient);
       await expect(card).toHaveAttribute("data-intake-stage", "plan");
-      await expect(card.getByRole("link", { name: "Plan starten" })).toHaveAttribute(
+      await expect(card.getByRole("link", { name: "Patientenakte öffnen" })).toHaveAttribute(
         "href",
-        `/ernaehrungsplan?patientId=${patient.id}`,
+        `/patienten/${patient.id}`,
       );
     } finally {
       await deletePatientFixture(patient.id);
@@ -348,7 +348,7 @@ test.describe("Patient Management", () => {
     }
   });
 
-  test("does not show a counseling row on the patient card when no session exists", async ({ page }) => {
+  test("shows a plan-ready patient card when no counseling session exists", async ({ page }) => {
     const patient = await createPatientFixture({
       firstName: "Counseling",
       lastName: "None",
@@ -357,10 +357,10 @@ test.describe("Patient Management", () => {
 
     try {
       await openPatientList(page);
-      // Without a session the patient sits one stage earlier, waiting on a
-      // conversation rather than on a plan.
-      await expect(patientCard(page, patient)).not.toContainText("Beratung ");
-      await expect(patientCard(page, patient)).toContainText("Aufgenommen ");
+      // A reviewed intake is enough to prepare a plan. A counseling session is
+      // optional and must not hold the person in an earlier stage.
+      await expect(patientCard(page, patient)).toHaveAttribute("data-intake-stage", "plan");
+      await expect(patientCard(page, patient)).toContainText("Seit heute bereit");
     } finally {
       await deletePatientFixture(patient.id);
     }

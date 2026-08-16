@@ -114,6 +114,7 @@ export async function POST(request: Request) {
     : null;
 
   let patientId = link.patient_id as string | null;
+  let patientName = `${plan.patientFields.first_name} ${plan.patientFields.last_name}`;
 
   if (patientId) {
     const { data: existing, error: existingError } = await supabase
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
     }
 
     const update = mergePatientUpdate(plan.patientFields, existing);
+    patientName = `${String(existing.first_name ?? "")} ${String(existing.last_name ?? "")}`.trim();
     if (reviewNoteBlock) {
       const previousNotes = typeof existing.admin_notes === "string"
         ? existing.admin_notes.trim()
@@ -253,5 +255,5 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ success: true, patientId });
+  return NextResponse.json({ success: true, patientId, patientName });
 }

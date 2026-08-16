@@ -42,11 +42,15 @@ export function intakeTimestampLabel(row: IntakeRow): string {
       return `Eingeladen ${formatShortDate(row.enteredStageAt)}`;
     case "fragebogen":
       // The minute matters here: it is the moment the wait became ours.
-      return `Geantwortet ${formatShortDateTime(row.enteredStageAt)}`;
+      return `Eingegangen ${formatShortDateTime(row.enteredStageAt)}`;
     case "beratung":
       return `Aufgenommen ${formatShortDate(row.enteredStageAt)}`;
     case "plan":
-      return `Beratung ${formatShortDate(row.enteredStageAt)}`;
+      // Keep the arrival visible even when a practitioner reviewed it later.
+      // Without this, a received form and a reviewed form look like one event.
+      return row.questionnaireReceivedAt
+        ? `Eingegangen ${formatShortDateTime(row.questionnaireReceivedAt)}`
+        : `Beratung ${formatShortDate(row.enteredStageAt)}`;
   }
 }
 
@@ -67,13 +71,18 @@ export function intakeStatusLabel(row: IntakeRow): string {
     }
     case "fragebogen":
       return row.waitingDays === 0
-        ? "Heute eingegangen"
+        ? "Prüfung offen"
         : `Wartet seit ${pluralDays(row.waitingDays)}`;
     case "beratung":
       return row.nextAppointment
         ? `Termin ${formatShortDate(row.nextAppointment.date)}`
         : `Ohne Termin seit ${pluralDays(row.waitingDays)}`;
     case "plan":
+      if (row.intakeAppliedAt) {
+        return row.waitingDays === 0
+          ? "Heute übernommen · Plan bereit"
+          : `Übernommen ${formatShortDate(row.intakeAppliedAt)} · Plan bereit`;
+      }
       return row.waitingDays === 0
         ? "Seit heute bereit"
         : `Bereit seit ${pluralDays(row.waitingDays)}`;

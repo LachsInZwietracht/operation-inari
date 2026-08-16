@@ -303,7 +303,7 @@ export function AufnahmenPageClient({
     const rowId = reviewRow.id
     setApplying(true)
     try {
-      const { patientId } = await applySubmission(submission.id, {
+      const { patientId, patientName } = await applySubmission(submission.id, {
         payload: reviewPayload ?? submission.payload,
         reviewerNotes,
       })
@@ -318,7 +318,7 @@ export function AufnahmenPageClient({
         const appliedPayload = reviewPayload ?? submission.payload
         setAppliedPatient({
           id: patientId,
-          name: `${appliedPayload.person.firstName} ${appliedPayload.person.lastName}`,
+          name: patientName ?? `${appliedPayload.person.firstName} ${appliedPayload.person.lastName}`,
         })
       } else {
         setReviewRow(null)
@@ -504,12 +504,12 @@ export function AufnahmenPageClient({
               </DialogHeader>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button asChild className="sm:flex-1">
+                  <Link href={`/patienten/${appliedPatient.id}`}>Patientenakte öffnen</Link>
+                </Button>
+                <Button asChild variant="outline">
                   <Link href={`/ernaehrungsplan?patientId=${appliedPatient.id}`}>
                     Ernährungsplan erstellen
                   </Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href={`/patienten/${appliedPatient.id}`}>Patientenakte öffnen</Link>
                 </Button>
                 <Button type="button" variant="ghost" onClick={closeReview}>
                   Später
