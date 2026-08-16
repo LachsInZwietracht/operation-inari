@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test"
 import { intakeStatusLabel, intakeTimestampLabel } from "@/lib/intake-format"
 import { buildIntakeApplyPlan, mergePatientUpdate } from "@/lib/intake/apply-submission"
 import { intakePayloadSchema } from "@/lib/intake/schema"
-import { buildIntakeRows } from "@/lib/patient-journey"
-import type { Patient, PatientIntakeSubmission } from "@/lib/types"
+import { buildIntakeRows, derivePatientIntakeStage } from "@/lib/patient-journey"
+import type { Patient, PatientIntakeLink, PatientIntakeSubmission } from "@/lib/types"
 
 const SUBMITTED_AT = "2026-08-13T09:30:00.000Z"
 const REVIEWED_AT = "2026-08-16T10:15:00.000Z"
@@ -81,4 +81,27 @@ test("keeps a stored patient identity when a questionnaire uses another name", (
   expect(update).not.toHaveProperty("last_name")
   expect(update).not.toHaveProperty("date_of_birth")
   expect(update).not.toHaveProperty("gender")
+})
+
+test("uses the intake phase colours' source of truth for a patient record", () => {
+  const invitation: PatientIntakeLink = {
+    id: "link-spuridon",
+    patientId: "patient-spuridon",
+    label: "Spuridon Demir",
+    status: "received",
+    url: "https://inari.test/onboarding/link-spuridon",
+    createdAt: "2026-08-12T08:00:00.000Z",
+    updatedAt: "2026-08-13T09:30:00.000Z",
+  }
+
+  expect(
+    derivePatientIntakeStage({
+      patient: patient(),
+      links: [invitation],
+      submissions: [appliedSubmission()],
+      sessions: [],
+      appointments: [],
+      now: NOW,
+    }),
+  ).toBe("plan")
 })

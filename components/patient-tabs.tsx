@@ -128,7 +128,8 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const { appointments } = usePracticeAppointments({
     initialAppointments: initialData?.appointments,
   })
-  const { submissions: allIntakeSubmissions } = usePatientIntake({
+  const { links: allIntakeLinks, submissions: allIntakeSubmissions } = usePatientIntake({
+    initialLinks: initialData?.intakeLinks,
     initialSubmissions: initialData?.intakeSubmissions,
   })
 
@@ -189,6 +190,9 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
       submission.patientId === patient.legacyId ||
       submission.appliedPatientId === patient.id ||
       submission.appliedPatientId === patient.legacyId,
+  )
+  const intakeLinks = allIntakeLinks.filter(
+    (link) => link.patientId === patient.id || link.patientId === patient.legacyId,
   )
   const allergensPending = isLoadingAllergens && patientAllergens.length === 0
   const dietExclusions = (currentPatient.nutritionPreferences ?? []).filter(
@@ -505,6 +509,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           diagnoses={diagnoses}
           patientAllergens={patientAllergens}
           mealPlans={initialData?.mealPlans ?? []}
+          intakeLinks={intakeLinks}
           intakeSubmissions={intakeSubmissions}
           basalMetabolicRate={latestAnthro ? basalMetabolicRate : undefined}
           totalEnergyExpenditure={latestAnthro ? totalEnergyExpenditure : undefined}

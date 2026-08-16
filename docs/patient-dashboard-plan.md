@@ -81,7 +81,7 @@ Darunter stehen wenige, nützliche Verläufe:
 Weitere Teile:
 
 - `Originale Aufnahme öffnen` zeigt die eingegangenen Angaben in einem Dialog. Das bestehende Prüf-Layout wird wiederverwendet.
-- Eine Ereignisleiste zeigt Aufnahme, Messungen, Beratungen, Pläne und Termine in verständlicher Reihenfolge.
+- Eine Ereignisleiste zeigt Einladung, Aufnahme, Übernahme, Messungen, Beratungen, Pläne und Termine in verständlicher Reihenfolge. Sie nutzt dieselben Phasenfarben wie die Aufnahmen.
 - Eine Karte `Nächster sinnvoller Schritt` gibt direkte Aktionen zur Akte, zum Plan, zur Messung oder zur Beratung.
 - Fehlende Daten werden als klare Aufgaben gezeigt. Es gibt keine erfundenen Werte.
 - Die Seite bleibt auf kleinen Bildschirmen gut lesbar. Tabs dürfen nicht abgeschnitten werden oder die Seite seitlich verschieben.
@@ -201,6 +201,12 @@ Eigener Commit und Push nach erfolgreicher Prüfung.
 - Vor dem Import: Schema-Prüfung, Vorschau, verständliche Fehler und keine teilweise Übernahme.
 - Export enthält Ziele, Regeln, Planzeilen, Portionswerte, Datenquellen und Prüfhinweise.
 - Bestehende PDF- und CSV-Ausgaben für Patienten bleiben getrennt von diesem Arbeitsformat.
+
+### Umsetzungsstand am 16. August 2026
+
+- Erledigt: erklärbarer Vorschlag aus passenden Rezepten, serverseitige Rollenprüfung und bewusste Übernahme als Entwurf.
+- Erledigt: versionierte Inari-JSON für einen Tagesplan. Export und Import prüfen Rolle sowie Lebensmittel- und Rezeptverweise auf dem Server. Der Import zeigt eine Vorschau und ersetzt erst nach Bestätigung die Slots des gewählten Tages.
+- Noch offen: CSV-Austausch, mehrere Tage in einer Datei sowie das vollständige Optimieren von weichen Zielwerten und Portionsgrößen.
 
 ### Sicherheit
 

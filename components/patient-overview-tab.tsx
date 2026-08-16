@@ -1,15 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useMemo, useState, type CSSProperties } from "react"
 import {
   CalendarDays,
+  Check,
   ClipboardList,
   FileText,
   Flame,
   HeartPulse,
   Ruler,
   Scale,
+  Send,
   Stethoscope,
   Target,
   UtensilsCrossed,
@@ -25,6 +27,7 @@ import {
 } from "recharts"
 
 import { PatientIntakeReview } from "@/components/patient-intake-review"
+import { IntakeStageProgress } from "@/components/intake-stage-progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,6 +42,12 @@ import {
 import { ALLERGEN_MAP, ALLERGEN_TYPE_LABELS } from "@/lib/allergen-constants"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS, resolveDietStyle } from "@/lib/diet-constants"
 import { formatDate, formatNumber } from "@/lib/format"
+import {
+  derivePatientIntakeStage,
+  INTAKE_STAGE_META,
+  INTAKE_STAGE_ORDER,
+  type IntakeStage,
+} from "@/lib/patient-journey"
 import type {
   AnthropometricEntry,
   CounselingSession,
@@ -46,6 +55,7 @@ import type {
   DiagnosisEntry,
   Patient,
   PatientAllergenEntry,
+  PatientIntakeLink,
   PatientIntakeSubmission,
   PracticeAppointment,
 } from "@/lib/types"
@@ -58,6 +68,7 @@ interface PatientOverviewTabProps {
   diagnoses: DiagnosisEntry[]
   patientAllergens: PatientAllergenEntry[]
   mealPlans: DailyMealPlan[]
+  intakeLinks: PatientIntakeLink[]
   intakeSubmissions: PatientIntakeSubmission[]
   basalMetabolicRate?: number
   totalEnergyExpenditure?: number
@@ -79,14 +90,20 @@ function MetricCard({
   label,
   value,
   note,
+  progress,
+  progressLabel,
+  accentColor = "var(--primary)",
 }: {
   icon: typeof Scale
   label: string
   value: string
   note?: string
+  progress?: number
+  progressLabel?: string
+  accentColor?: string
 }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -94,13 +111,49 @@ function MetricCard({
             <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
             {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
           </div>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 14%, transparent)`, color: accentColor }}
+          >
             <Icon className="h-4 w-4" />
           </span>
         </div>
+        {progress !== undefined ? (
+          <div className="mt-4 space-y-1.5">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${Math.max(0, Math.min(progress, 100))}%`, backgroundColor: accentColor }}
+              />
+            </div>
+            {progressLabel ? <p className="text-[11px] text-muted-foreground">{progressLabel}</p> : null}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )
+}
+
+function bmiProgress(bmi?: number): number | undefined {
+  if (bmi === undefined) return undefined
+  return Math.max(0, Math.min(((bmi - 12) / 28) * 100, 100))
+}
+
+function bmiLabel(bmi?: number): string | undefined {
+  if (bmi === undefined) return undefined
+  if (bmi < 18.5) return "BMI-Skala: unter 18,5"
+  if (bmi < 25) return "BMI-Skala: 18,5–24,9"
+  if (bmi < 30) return "BMI-Skala: 25,0–29,9"
+  return "BMI-Skala: ab 30,0"
+}
+
+interface TimelineEvent {
+  id: string
+  date: string
+  label: string
+  detail: string
+  stage: IntakeStage
+  isUpcoming?: boolean
 }
 
 export function PatientOverviewTab({
@@ -111,6 +164,7 @@ export function PatientOverviewTab({
   diagnoses,
   patientAllergens,
   mealPlans,
+  intakeLinks,
   intakeSubmissions,
   basalMetabolicRate,
   totalEnergyExpenditure,
@@ -161,14 +215,89 @@ export function PatientOverviewTab({
     0,
     Math.floor((todayDate.getTime() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
   )
-  const events = [
-    intakeSubmission ? { date: intakeSubmission.submittedAt, label: "Aufnahme eingegangen", detail: "Angaben des Patienten" } : null,
-    intakeSubmission?.reviewedAt ? { date: intakeSubmission.reviewedAt, label: "Aufnahme übernommen", detail: "In die Patientenakte übertragen" } : null,
-    latestMeasurement ? { date: latestMeasurement.date, label: "Messwerte erfasst", detail: `${formatNumber(latestMeasurement.weight, 1)} kg · BMI ${formatNumber(latestMeasurement.bmi, 1)}` } : null,
-    latestSession ? { date: latestSession.date, label: "Letzte Beratung", detail: latestSession.type } : null,
-    currentPlan ? { date: currentPlan.date, label: "Ernährungsplan", detail: currentPlan.title ?? "Plan angelegt" } : null,
-    nextAppointment ? { date: nextAppointment.date, label: "Nächster Termin", detail: `${nextAppointment.title} · ${nextAppointment.startTime.slice(0, 5)} Uhr` } : null,
-  ].filter((event): event is { date: string; label: string; detail: string } => Boolean(event)).sort((a, b) => b.date.localeCompare(a.date))
+  const currentStage = derivePatientIntakeStage({
+    patient,
+    links: intakeLinks,
+    submissions: intakeSubmissions,
+    sessions,
+    appointments,
+    now: todayDate,
+  })
+  const stageMeta = INTAKE_STAGE_META[currentStage]
+  const phaseStyle = { borderColor: stageMeta.color } as CSSProperties
+  const latestIntakeLink = useMemo(
+    () => [...intakeLinks].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0],
+    [intakeLinks],
+  )
+  const eventCandidates: Array<TimelineEvent | null> = [
+    latestIntakeLink
+      ? {
+          id: `invite-${latestIntakeLink.id}`,
+          date: latestIntakeLink.createdAt,
+          label: "Einladung versendet",
+          detail: "Aufnahmelink wurde erstellt und geteilt",
+          stage: "eingeladen" as const,
+        }
+      : null,
+    intakeSubmission
+      ? {
+          id: `submission-${intakeSubmission.id}`,
+          date: intakeSubmission.submittedAt,
+          label: "Aufnahme eingegangen",
+          detail: "Angaben des Patienten liegen vor",
+          stage: "fragebogen" as const,
+        }
+      : null,
+    intakeSubmission?.reviewedAt
+      ? {
+          id: `applied-${intakeSubmission.id}`,
+          date: intakeSubmission.reviewedAt,
+          label: "Aufnahme übernommen",
+          detail: "In die Patientenakte übertragen",
+          stage: "plan" as const,
+        }
+      : null,
+    latestMeasurement
+      ? {
+          id: `measurement-${latestMeasurement.id}`,
+          date: latestMeasurement.date,
+          label: "Messwerte erfasst",
+          detail: `${formatNumber(latestMeasurement.weight, 1)} kg · BMI ${formatNumber(latestMeasurement.bmi, 1)}`,
+          stage: "beratung" as const,
+        }
+      : null,
+    latestSession
+      ? {
+          id: `session-${latestSession.id}`,
+          date: latestSession.date,
+          label: "Letzte Beratung",
+          detail: latestSession.type,
+          stage: "beratung" as const,
+        }
+      : null,
+    currentPlan
+      ? {
+          id: `plan-${currentPlan.id}`,
+          date: currentPlan.date,
+          label: "Ernährungsplan",
+          detail: currentPlan.title ?? "Plan angelegt",
+          stage: "plan" as const,
+        }
+      : null,
+    nextAppointment
+      ? {
+          id: `appointment-${nextAppointment.id}`,
+          date: nextAppointment.date,
+          label: "Nächster Termin",
+          detail: `${nextAppointment.title} · ${nextAppointment.startTime.slice(0, 5)} Uhr`,
+          stage: "beratung" as const,
+          isUpcoming: true,
+        }
+      : null,
+  ]
+  const events = eventCandidates
+    .filter((event): event is TimelineEvent => event !== null)
+    .sort((left, right) => right.date.localeCompare(left.date))
 
   const careTags = [
     ...(patient.indications ?? []),
@@ -185,11 +314,19 @@ export function PatientOverviewTab({
 
   return (
     <div className="space-y-4">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
+      <Card
+        className="border-2 bg-gradient-to-br from-card via-background to-background"
+        style={phaseStyle}
+      >
         <CardHeader className="gap-2 pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Aktueller Stand</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle>Aktueller Stand</CardTitle>
+                <Badge style={{ backgroundColor: stageMeta.color, color: "white" }}>
+                  Aktuelle Phase: {stageMeta.label}
+                </Badge>
+              </div>
               <CardDescription className="mt-1">
                 Die wichtigsten Informationen für die nächste Betreuung von {patient.firstName}.
               </CardDescription>
@@ -221,14 +358,40 @@ export function PatientOverviewTab({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Detail label="Letzter Kontakt" value={latestSession ? formatDate(latestSession.date) : undefined} />
-          <Detail
-            label="Nächster Termin"
-            value={nextAppointment ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)}` : undefined}
-          />
-          <Detail label="Aktueller Plan" value={currentPlan?.title ?? (currentPlan ? "Ernährungsplan" : undefined)} />
-          <Detail label="Kalorienziel" value={patient.dailyCalorieGoal ? `${formatNumber(patient.dailyCalorieGoal)} kcal` : undefined} />
+        <CardContent className="space-y-4 border-t pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/60 px-3 py-2">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versorgungsweg</p>
+              <p className="mt-0.5 text-sm font-medium">{stageMeta.columnHint}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-1.5 md:flex" aria-label="Phasen der Aufnahme">
+                {INTAKE_STAGE_ORDER.map((stage) => (
+                  <span
+                    key={stage}
+                    className="rounded-full px-2 py-1 text-xs font-medium"
+                    style={
+                      stage === currentStage
+                        ? { backgroundColor: INTAKE_STAGE_META[stage].color, color: "white" }
+                        : { backgroundColor: "var(--card)", color: "var(--muted-foreground)" }
+                    }
+                  >
+                    {INTAKE_STAGE_META[stage].label}
+                  </span>
+                ))}
+              </div>
+              <IntakeStageProgress stage={currentStage} />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Detail label="Letzter Kontakt" value={latestSession ? formatDate(latestSession.date) : undefined} />
+            <Detail
+              label="Nächster Termin"
+              value={nextAppointment ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)}` : undefined}
+            />
+            <Detail label="Aktueller Plan" value={currentPlan?.title ?? (currentPlan ? "Ernährungsplan" : undefined)} />
+            <Detail label="Kalorienziel" value={patient.dailyCalorieGoal ? `${formatNumber(patient.dailyCalorieGoal)} kcal` : undefined} />
+          </div>
         </CardContent>
       </Card>
 
@@ -238,30 +401,41 @@ export function PatientOverviewTab({
           label="Alter"
           value={`${ageYears} Jahre`}
           note={`Geboren am ${formatDate(patient.dateOfBirth)}`}
+          progress={ageYears}
+          progressLabel="Altersskala von 0 bis 100 Jahren"
+          accentColor={stageMeta.color}
         />
         <MetricCard
           icon={Scale}
           label="Gewicht"
           value={latestMeasurement ? `${formatNumber(latestMeasurement.weight, 1)} kg` : "–"}
           note={latestMeasurement ? `vom ${formatDate(latestMeasurement.date)}` : "Messwert fehlt"}
+          accentColor={stageMeta.color}
         />
         <MetricCard
           icon={Ruler}
           label="Größe"
           value={latestMeasurement ? `${formatNumber(latestMeasurement.height)} cm` : "–"}
           note={latestMeasurement ? "aus letzter Messung" : "Messwert fehlt"}
+          progress={latestMeasurement ? ((latestMeasurement.height - 120) / 100) * 100 : undefined}
+          progressLabel={latestMeasurement ? "Größenskala von 120 bis 220 cm" : undefined}
+          accentColor={stageMeta.color}
         />
         <MetricCard
           icon={HeartPulse}
           label="BMI"
           value={latestMeasurement ? formatNumber(latestMeasurement.bmi, 1) : "–"}
           note={latestWeightChange === undefined ? "Verlauf nach Messung sichtbar" : `${latestWeightChange > 0 ? "+" : ""}${formatNumber(latestWeightChange, 1)} kg seit erster Messung`}
+          progress={bmiProgress(latestMeasurement?.bmi)}
+          progressLabel={bmiLabel(latestMeasurement?.bmi)}
+          accentColor={stageMeta.color}
         />
         <MetricCard
           icon={Target}
           label="Zielgewicht"
           value={patient.goalWeight ? `${formatNumber(patient.goalWeight, 1)} kg` : "–"}
-          note={patient.goalWeight ? "in der Patientenakte festgelegt" : "Ziel noch nicht festgelegt"}
+          note={patient.goalWeight && latestMeasurement ? `${formatNumber(Math.abs(latestMeasurement.weight - patient.goalWeight), 1)} kg bis zum Ziel` : patient.goalWeight ? "in der Patientenakte festgelegt" : "Ziel noch nicht festgelegt"}
+          accentColor={stageMeta.color}
         />
       </section>
 
@@ -370,16 +544,30 @@ export function PatientOverviewTab({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Wichtige Ereignisse</CardTitle>
-          <CardDescription>Die letzten und nächsten Schritte in dieser Patientenakte.</CardDescription>
+          <CardDescription>Meilensteine von der Einladung bis zur laufenden Betreuung.</CardDescription>
         </CardHeader>
         <CardContent>
           {events.length ? (
-            <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <ol className="relative space-y-4 border-l border-border pl-5">
               {events.map((event) => (
-                <li key={`${event.label}-${event.date}`} className="rounded-lg border p-3">
-                  <p className="text-xs font-medium text-muted-foreground">{formatDate(event.date)}</p>
-                  <p className="mt-1 text-sm font-medium">{event.label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{event.detail}</p>
+                <li key={event.id} className="relative rounded-lg border bg-card p-3">
+                  <span
+                    className="absolute -left-[1.81rem] top-4 flex h-5 w-5 items-center justify-center rounded-full border-4 border-card"
+                    style={{ backgroundColor: INTAKE_STAGE_META[event.stage].color }}
+                    aria-hidden="true"
+                  >
+                    {event.label === "Einladung versendet" ? <Send className="h-2.5 w-2.5 text-white" /> : <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">{event.label}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{event.detail}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {event.isUpcoming ? <Badge variant="outline">Geplant</Badge> : null}
+                      <p className="text-xs font-medium text-muted-foreground">{formatDate(event.date)}</p>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ol>

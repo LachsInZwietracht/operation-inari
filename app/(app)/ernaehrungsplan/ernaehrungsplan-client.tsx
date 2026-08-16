@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Download,
+  FileUp,
   LayoutTemplate,
   Sparkles,
   UserPlus,
@@ -88,6 +89,7 @@ import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
 import { PlanExportDialog } from "@/components/plan-export-dialog"
 import { PlanSuggestionDialog } from "@/components/plan-suggestion-dialog"
+import { PlanDataExchangeDialog } from "@/components/plan-data-exchange-dialog"
 import { cn } from "@/lib/utils"
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
@@ -213,6 +215,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
   const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [planDataExchangeOpen, setPlanDataExchangeOpen] = useState(false)
   const [suggestionDialogOpen, setSuggestionDialogOpen] = useState(false)
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
@@ -672,6 +675,12 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       Export
     </Button>
   )
+  const planDataExchangeMenu = (
+    <Button variant="outline" size="sm" onClick={() => setPlanDataExchangeOpen(true)}>
+      <FileUp className="mr-1.5 h-4 w-4" />
+      Plan-Datei
+    </Button>
+  )
 
   // The dialog exports the week the user is looking at: the week view follows
   // its offset navigation, the day view the week around the active date.
@@ -852,6 +861,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 Aus Vorlage
               </Button>
 
+              {planDataExchangeMenu}
               {exportMenu}
             </div>
           </div>
@@ -889,7 +899,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             weekRangeLabel={weekRangeLabel}
             onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
             onNextWeek={() => setWeekOffset((prev) => prev + 1)}
-            headerActions={exportMenu}
+            headerActions={<>{planDataExchangeMenu}{exportMenu}</>}
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
@@ -984,6 +994,20 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         onApply={(slots, notes) => {
           applyTemplateToDate(currentDate, slots, { notes: notes.join(" ") })
           toast.success("Planvorschlag als Entwurf eingesetzt.")
+        }}
+      />
+
+      <PlanDataExchangeDialog
+        open={planDataExchangeOpen}
+        onOpenChange={setPlanDataExchangeOpen}
+        plan={currentPlan}
+        onApply={(slots, importedPlan) => {
+          applyTemplateToDate(currentDate, slots, {
+            title: importedPlan.title ?? currentPlan.title,
+            notes: importedPlan.notes ?? currentPlan.notes,
+            targetProfileId: importedPlan.targetProfileId ?? currentPlan.targetProfileId,
+            dietLineId: importedPlan.dietLineId ?? currentPlan.dietLineId,
+          })
         }}
       />
 

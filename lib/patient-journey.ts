@@ -341,6 +341,60 @@ function deriveIntakeStage(input: {
   return "plan";
 }
 
+/**
+ * Resolves the visible intake phase for one existing patient record.
+ *
+ * The patient overview uses this same rule as the Aufnahmen board. A live
+ * meal plan does not create a fifth colour; it remains in the established
+ * plan phase so colours keep the same meaning across both screens.
+ */
+export function derivePatientIntakeStage(input: {
+  patient: Patient;
+  links: PatientIntakeLink[];
+  submissions: PatientIntakeSubmission[];
+  sessions: CounselingSession[];
+  appointments: PracticeAppointment[];
+  now?: Date;
+}): IntakeStage {
+  const now = input.now ?? new Date();
+  const patientIds = new Set(
+    [input.patient.id, input.patient.legacyId].filter(Boolean) as string[],
+  );
+  const links = input.links.filter((link) => patientIds.has(link.patientId ?? ""));
+  const linkIds = new Set(links.map((link) => link.id));
+  const submissions = input.submissions.filter(
+    (submission) =>
+      patientIds.has(submission.patientId ?? "") ||
+      patientIds.has(submission.appliedPatientId ?? "") ||
+      linkIds.has(submission.linkId),
+  );
+  const pendingSubmission =
+    submissions.find(
+      (submission) => submission.status === "new" || submission.status === "reviewed",
+    ) ?? null;
+  const pendingLink = links.find((link) => link.status === "pending") ?? null;
+  const lastSessionDate = input.sessions
+    .filter((session) => patientIds.has(session.patientId))
+    .map((session) => session.date)
+    .sort()
+    .at(-1);
+  const today = toIsoDate(now);
+  const nextAppointment = input.appointments
+    .filter(
+      (appointment) =>
+        patientIds.has(appointment.patientId ?? "") && appointment.date >= today,
+    )
+    .sort((left, right) => left.date.localeCompare(right.date))[0] ?? null;
+
+  return deriveIntakeStage({
+    hasPatientRecord: true,
+    pendingSubmission,
+    pendingLink,
+    lastSessionDate,
+    nextAppointment,
+  });
+}
+
 export interface BuildIntakeRowsInput extends PatientRecords {
   /** Injectable for deterministic tests; defaults to now. */
   now?: Date;

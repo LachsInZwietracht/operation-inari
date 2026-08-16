@@ -30,6 +30,7 @@ These are the user's "Was ich wichtig finde" points, treated as required product
 8. **Sensible portion sizes alongside gram amounts.** Offer meaningful portion options per food/food group, not only grams. (Source for portion data is open.)
    - _Status (2026-07-10):_ Data foundation fixed. `etl:portions` had two bugs (1000-row fetch cap, parent-vs-child food-group mismatch) that left `food_portions` empty; after the fix the import yields ~11k curated portion rows across the BLS catalog. Portions surface on food detail, in the Austauschtabellen, and as the realistic-portion cap of the planner's Nährstoff-Lückenfüller. Still open: offering portion options (instead of grams) directly in the meal-plan entry flows.
 9. **Export to Word, Excel, and other formats.** Export plans/results; research clinic cloud/software environments and consider API integration. DSGVO/GDPR is even more critical here.
+   - _Update (2026-08-16):_ In addition to the existing PDF reports, the planner can now exchange a versioned JSON plan file. The server checks the permitted role and all referenced foods/recipes, records the access, and imports only after a visible preview and explicit draft action. Word/Excel and multi-day interchange remain open.
 
 ## Requirement Checklist (high-interest, feasibility TBD)
 

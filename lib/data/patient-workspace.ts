@@ -13,6 +13,7 @@ import type {
   ScreeningResult,
   DailyMealPlan,
   Food,
+  PatientIntakeLink,
   PatientIntakeSubmission,
 } from "@/lib/types"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
@@ -31,6 +32,7 @@ import { fetchRecipes } from "@/lib/data/recipes"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchScreeningsClient } from "@/lib/data/patient-screenings-client"
 import { fetchPatientIntakeSubmissionsClient } from "@/lib/data/patient-intake-submissions-client"
+import { fetchPatientIntakeLinksServer } from "@/lib/data/patient-intake-server"
 import { writeAccessAuditLog } from "@/lib/audit/access-audit"
 
 export interface PatientWorkspaceData {
@@ -45,6 +47,7 @@ export interface PatientWorkspaceData {
   labValues: LabValueEntry[]
   medications: MedicationEntry[]
   patientAllergens: PatientAllergenEntry[]
+  intakeLinks: PatientIntakeLink[]
   intakeSubmissions: PatientIntakeSubmission[]
   mealPlans: DailyMealPlan[]
   mealPlanFoods: Food[]
@@ -123,6 +126,7 @@ export async function fetchPatientWorkspaceData(
       labValues: [],
       medications: [],
       patientAllergens: [],
+      intakeLinks: [],
       intakeSubmissions: [],
       mealPlans: [],
       mealPlanFoods: [],
@@ -165,6 +169,7 @@ export async function fetchPatientWorkspaceData(
     labValues,
     medications,
     patientAllergens,
+    intakeLinks,
     intakeSubmissions,
     mealPlans,
     recipes,
@@ -179,6 +184,7 @@ export async function fetchPatientWorkspaceData(
     orEmpty(fetchLabValuesClient(supabase), "lab values"),
     orEmpty(fetchMedicationsClient(supabase), "medications"),
     orEmpty(fetchPatientAllergensClient(supabase), "patient allergens"),
+    orEmpty(fetchPatientIntakeLinksServer(supabase), "intake links"),
     orEmpty(fetchPatientIntakeSubmissionsClient(supabase), "intake submissions"),
     orEmpty(fetchMealPlans({ supabase, userId: user.id, includeSystem: false }), "meal plans"),
     orEmpty(fetchRecipes({ supabase }), "recipes"),
@@ -230,6 +236,7 @@ export async function fetchPatientWorkspaceData(
     labValues: filterForPatient(labValues, patient),
     medications: filterForPatient(medications, patient),
     patientAllergens: filterForPatient(patientAllergens, patient),
+    intakeLinks: intakeLinks.filter((link) => matchesPatientRef(patient, link.patientId)),
     intakeSubmissions: intakeSubmissions.filter(
       (submission) =>
         matchesPatientRef(patient, submission.patientId) ||

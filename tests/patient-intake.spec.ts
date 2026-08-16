@@ -229,6 +229,10 @@ test.describe("Onboarding intake — end to end", () => {
       await expect(page.getByRole("button", { name: "Originale Aufnahme" })).toBeVisible({
         timeout: 30_000,
       });
+      await expect(page.getByText("Wichtige Ereignisse", { exact: true })).toBeVisible();
+      await expect(page.getByText("Einladung versendet")).toBeVisible();
+      await expect(page.getByText("Aufnahme eingegangen")).toBeVisible();
+      await expect(page.getByText("Aufnahme übernommen")).toBeVisible();
       await page.getByRole("button", { name: "Originale Aufnahme" }).click();
       const originalIntakeDialog = page.getByRole("dialog", { name: "Originale Aufnahme" });
       await expect(originalIntakeDialog).toBeVisible();
