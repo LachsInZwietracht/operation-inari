@@ -19,6 +19,7 @@ import {
   ArrowUpRight,
   Download,
   LayoutTemplate,
+  Sparkles,
   UserPlus,
   UserRound,
 } from "lucide-react"
@@ -86,6 +87,7 @@ import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
 import { PlanExportDialog } from "@/components/plan-export-dialog"
+import { PlanSuggestionDialog } from "@/components/plan-suggestion-dialog"
 import { cn } from "@/lib/utils"
 
 const UNASSIGNED_PATIENT_VALUE = "__unassigned__"
@@ -211,6 +213,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
   const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [suggestionDialogOpen, setSuggestionDialogOpen] = useState(false)
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
 
@@ -715,13 +718,19 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </SelectContent>
         </Select>
         {visiblePatient && (
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/patienten/${visiblePatient.id}`)}
-          >
-            <ArrowUpRight className="mr-1.5 h-4 w-4" />
-            Zum Patienten
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setSuggestionDialogOpen(true)}>
+              <Sparkles className="mr-1.5 h-4 w-4" />
+              Planvorschlag
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/patienten/${visiblePatient.id}`)}
+            >
+              <ArrowUpRight className="mr-1.5 h-4 w-4" />
+              Zum Patienten
+            </Button>
+          </>
         )}
       </PageHeader>
 
@@ -966,6 +975,16 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         patientIndications={getPatientIndications(visiblePatient)}
         dietLineName={dietLine?.name}
         planId={currentPlan.id}
+      />
+
+      <PlanSuggestionDialog
+        open={suggestionDialogOpen}
+        onOpenChange={setSuggestionDialogOpen}
+        patientId={visiblePatient?.id}
+        onApply={(slots, notes) => {
+          applyTemplateToDate(currentDate, slots, { notes: notes.join(" ") })
+          toast.success("Planvorschlag als Entwurf eingesetzt.")
+        }}
       />
 
       <PlanDietLineDialog
