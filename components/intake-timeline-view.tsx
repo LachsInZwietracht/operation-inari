@@ -3,8 +3,9 @@
 import Link from "next/link"
 
 import { IntakeRowAction } from "@/components/intake-row-action"
-import { formatShortDate, intakeStatusLabel } from "@/lib/intake-format"
-import { INTAKE_STAGE_META, type IntakeRow } from "@/lib/patient-journey"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { formatShortDate, formatShortDateTime, intakeStatusLabel } from "@/lib/intake-format"
+import { INTAKE_STAGE_META, type IntakeHistoryEvent, type IntakeRow } from "@/lib/patient-journey"
 import { cn } from "@/lib/utils"
 
 interface IntakeTimelineViewProps {
@@ -50,6 +51,14 @@ function resolveWindow(rows: IntakeRow[], nowMs: number): TimelineWindow {
     }
     if (!Number.isNaN(end)) {
       halfSpanDays = Math.max(halfSpanDays, (end - nowMs) / MS_PER_DAY)
+    }
+    // History can reach further back (or forward) than the current stage's
+    // own bar — an old invitation must still fall inside the window, or it
+    // clamps to the edge and looks like it happened "just now".
+    for (const event of row.history) {
+      const eventMs = new Date(event.date).getTime()
+      if (Number.isNaN(eventMs)) continue
+      halfSpanDays = Math.max(halfSpanDays, Math.abs(nowMs - eventMs) / MS_PER_DAY)
     }
   }
 
@@ -206,6 +215,10 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
           aria-hidden="true"
         />
 
+        {row.history.map((event) => (
+          <IntakeHistoryMark key={event.id} event={event} window={window} />
+        ))}
+
         {/* The label sits on the page background so it covers the baseline
             rather than being crossed out by it. */}
         <span
@@ -232,5 +245,41 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
         <IntakeRowAction row={row} onReview={onReview} disabled={disabled} />
       </span>
     </div>
+  )
+}
+
+/**
+ * One dated milestone, marked on the row's own line rather than folded into
+ * the current-stage bar — so a practitioner can see the whole way here, not
+ * just the last leg.
+ */
+function IntakeHistoryMark({
+  event,
+  window,
+}: {
+  event: IntakeHistoryEvent
+  window: TimelineWindow
+}) {
+  const position = toPercent(event.date, window)
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className={cn(
+            "absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground",
+            event.pending ? "bg-background" : "bg-fg-3",
+          )}
+          style={{
+            left: `${position}%`,
+            borderColor: event.pending ? "var(--fg-3)" : undefined,
+          }}
+        />
+      </TooltipTrigger>
+      <TooltipContent>
+        {event.label} · {event.precise ? formatShortDateTime(event.date) : formatShortDate(event.date)}
+      </TooltipContent>
+    </Tooltip>
   )
 }

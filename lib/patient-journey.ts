@@ -132,6 +132,25 @@ export interface IntakeRow {
   stagePinned: boolean;
   /** The stage the records themselves imply, kept for the "pinned" tooltip. */
   derivedStage: IntakeStage;
+  /**
+   * Every dated milestone for this person, oldest first — not just the current
+   * stage. The Zeitachse plots these as marks along the row so a practitioner
+   * can see how long someone has actually been in the system, even after the
+   * stage that produced an earlier mark (e.g. an invitation's expiry) has
+   * since moved on.
+   */
+  history: IntakeHistoryEvent[];
+}
+
+export interface IntakeHistoryEvent {
+  id: string;
+  /** ISO timestamp or date. */
+  date: string;
+  label: string;
+  /** A deadline or booking still ahead of us, drawn hollow rather than solid. */
+  pending?: boolean;
+  /** True when {@link date} carries a real time of day, not just a calendar date. */
+  precise?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +487,7 @@ export function buildIntakeRows({
       intakeAppliedAt,
       ...timing,
       ...resolveUrgency({ timing, now, hasAppointment: Boolean(nextAppointment) }),
+      history: buildIntakeHistory({ links, submissions, lastSessionDate, nextAppointment }),
     });
   }
 
@@ -510,6 +530,12 @@ export function buildIntakeRows({
       derivedStage: stage,
       ...timing,
       ...resolveUrgency({ timing, now, hasAppointment: false }),
+      history: buildIntakeHistory({
+        links: [link],
+        submissions: linkSubmissions,
+        lastSessionDate: undefined,
+        nextAppointment: null,
+      }),
     });
   }
 
@@ -571,6 +597,95 @@ function resolveStageTiming(input: {
         hasDeadline: false,
       };
   }
+}
+
+/**
+ * Every dated milestone a row can show, oldest first.
+ *
+ * Kept separate from {@link resolveStageTiming}: that function answers "where
+ * does the current bar run", this one answers "what happened before that" —
+ * the two must not collapse into each other or the history would only ever
+ * repeat the current stage.
+ */
+function buildIntakeHistory(input: {
+  links: PatientIntakeLink[];
+  submissions: PatientIntakeSubmission[];
+  lastSessionDate?: string;
+  nextAppointment: PracticeAppointment | null;
+}): IntakeHistoryEvent[] {
+  const events: IntakeHistoryEvent[] = [];
+
+  const firstLink = [...input.links].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  )[0];
+  if (firstLink) {
+    events.push({
+      id: `invited-${firstLink.id}`,
+      date: firstLink.createdAt,
+      label: "Einladung versendet",
+      precise: true,
+    });
+  }
+
+  // The deadline that still governs a live invitation. Shown even once the
+  // person has moved past "eingeladen" only while the link itself is still
+  // pending — an accepted or revoked link no longer has a deadline worth
+  // marking.
+  const openLink = input.links.find((link) => link.status === "pending" && link.expiresAt);
+  if (openLink?.expiresAt) {
+    events.push({
+      id: `expires-${openLink.id}`,
+      date: openLink.expiresAt,
+      label: "Link läuft ab",
+      pending: true,
+    });
+  }
+
+  const firstSubmission = [...input.submissions].sort((a, b) =>
+    a.submittedAt.localeCompare(b.submittedAt),
+  )[0];
+  if (firstSubmission) {
+    events.push({
+      id: `submitted-${firstSubmission.id}`,
+      date: firstSubmission.submittedAt,
+      label: "Fragebogen eingegangen",
+      precise: true,
+    });
+  }
+
+  const lastReviewed = input.submissions
+    .filter((submission): submission is PatientIntakeSubmission & { reviewedAt: string } =>
+      Boolean(submission.reviewedAt),
+    )
+    .sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt))
+    .at(-1);
+  if (lastReviewed) {
+    events.push({
+      id: `reviewed-${lastReviewed.id}`,
+      date: lastReviewed.reviewedAt,
+      label: lastReviewed.status === "applied" ? "Aufnahme übernommen" : "Fragebogen geprüft",
+      precise: true,
+    });
+  }
+
+  if (input.lastSessionDate) {
+    events.push({
+      id: "session",
+      date: input.lastSessionDate,
+      label: "Beratung",
+    });
+  }
+
+  if (input.nextAppointment) {
+    events.push({
+      id: `appointment-${input.nextAppointment.id}`,
+      date: input.nextAppointment.date,
+      label: "Termin geplant",
+      pending: true,
+    });
+  }
+
+  return events.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function latestAppliedSubmission(
