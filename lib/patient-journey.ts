@@ -147,6 +147,12 @@ export interface IntakeHistoryEvent {
   /** ISO timestamp or date. */
   date: string;
   label: string;
+  /**
+   * The pipeline stage this milestone belongs to. Carries the mark's colour, so
+   * a dot on the timeline reads the same as the bar and the board column for
+   * the same step.
+   */
+  stage: IntakeStage;
   /** A deadline or booking still ahead of us, drawn hollow rather than solid. */
   pending?: boolean;
   /** True when {@link date} carries a real time of day, not just a calendar date. */
@@ -623,6 +629,7 @@ function buildIntakeHistory(input: {
       id: `invited-${firstLink.id}`,
       date: firstLink.createdAt,
       label: "Einladung versendet",
+      stage: "eingeladen",
       precise: true,
     });
   }
@@ -637,6 +644,7 @@ function buildIntakeHistory(input: {
       id: `expires-${openLink.id}`,
       date: openLink.expiresAt,
       label: "Link läuft ab",
+      stage: "eingeladen",
       pending: true,
     });
   }
@@ -649,6 +657,7 @@ function buildIntakeHistory(input: {
       id: `submitted-${firstSubmission.id}`,
       date: firstSubmission.submittedAt,
       label: "Fragebogen eingegangen",
+      stage: "fragebogen",
       precise: true,
     });
   }
@@ -664,6 +673,7 @@ function buildIntakeHistory(input: {
       id: `reviewed-${lastReviewed.id}`,
       date: lastReviewed.reviewedAt,
       label: lastReviewed.status === "applied" ? "Aufnahme übernommen" : "Fragebogen geprüft",
+      stage: "plan",
       precise: true,
     });
   }
@@ -673,6 +683,7 @@ function buildIntakeHistory(input: {
       id: "session",
       date: input.lastSessionDate,
       label: "Beratung",
+      stage: "beratung",
     });
   }
 
@@ -681,6 +692,7 @@ function buildIntakeHistory(input: {
       id: `appointment-${input.nextAppointment.id}`,
       date: input.nextAppointment.date,
       label: "Termin geplant",
+      stage: "beratung",
       pending: true,
     });
   }

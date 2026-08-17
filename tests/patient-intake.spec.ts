@@ -226,15 +226,17 @@ test.describe("Onboarding intake — end to end", () => {
         waitUntil: "domcontentloaded",
         timeout: 30_000,
       });
-      await expect(page.getByRole("button", { name: "Originale Aufnahme" })).toBeVisible({
+      // The header summary lists it as a row; its accessible name carries the
+      // submission date alongside the label.
+      await expect(page.getByRole("button", { name: /Originalaufnahme/ })).toBeVisible({
         timeout: 30_000,
       });
       await expect(page.getByText("Wichtige Ereignisse", { exact: true })).toBeVisible();
       await expect(page.getByText("Einladung versendet")).toBeVisible();
       await expect(page.getByText("Aufnahme eingegangen")).toBeVisible();
       await expect(page.getByText("Aufnahme übernommen")).toBeVisible();
-      await page.getByRole("button", { name: "Originale Aufnahme" }).click();
-      const originalIntakeDialog = page.getByRole("dialog", { name: "Originale Aufnahme" });
+      await page.getByRole("button", { name: /Originalaufnahme/ }).click();
+      const originalIntakeDialog = page.getByRole("dialog", { name: "Originalaufnahme" });
       await expect(originalIntakeDialog).toBeVisible();
       await expect(originalIntakeDialog.getByText("Testine Onboarding")).toBeVisible();
 

@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
+import type React from "react"
 import { useMemo, useState, type CSSProperties } from "react"
 import {
   CalendarDays,
   Check,
-  ClipboardList,
+  ChevronRight,
   FileText,
   Flame,
   HeartPulse,
@@ -45,9 +46,9 @@ import { formatDate, formatNumber } from "@/lib/format"
 import {
   derivePatientIntakeStage,
   INTAKE_STAGE_META,
-  INTAKE_STAGE_ORDER,
   type IntakeStage,
 } from "@/lib/patient-journey"
+import { cn } from "@/lib/utils"
 import type {
   AnthropometricEntry,
   CounselingSession,
@@ -82,6 +83,71 @@ function Detail({ label, value }: { label: string; value?: string }) {
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm font-medium">{value ?? "Nicht erfasst"}</p>
     </div>
+  )
+}
+
+/**
+ * One line of the header summary.
+ *
+ * The header used to spend its height on restating the phase four different
+ * ways. These rows carry the facts a practitioner opens the record for instead:
+ * label on the left, the answer on the right, one line each.
+ */
+function SummaryRow({
+  label,
+  value,
+  muted,
+}: {
+  label: string
+  value: string
+  /** True when there is nothing recorded yet, so the value reads as absent. */
+  muted?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b py-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className={cn("text-sm font-medium tabular-nums", muted && "text-muted-foreground")}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * A summary row that opens something. Same shape as {@link SummaryRow}.
+ *
+ * Spreads the remaining props onto the button so it can serve as a
+ * `DialogTrigger asChild` child — Radix passes its handlers down that way, and
+ * swallowing them here would leave the trigger inert.
+ */
+function SummaryActionRow({
+  label,
+  value,
+  muted,
+  ...props
+}: React.ComponentProps<"button"> & {
+  label: string
+  value: string
+  muted?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      {...props}
+      className="group flex w-full items-baseline justify-between gap-3 border-b py-2 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex items-baseline gap-1.5">
+        <span className={cn("text-sm font-medium tabular-nums", muted && "text-muted-foreground")}>
+          {value}
+        </span>
+        <ChevronRight className="size-3.5 shrink-0 self-center text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </button>
   )
 }
 
@@ -314,83 +380,83 @@ export function PatientOverviewTab({
 
   return (
     <div className="space-y-4">
-      <Card
-        className="border-2 bg-gradient-to-br from-card via-background to-background"
-        style={phaseStyle}
-      >
-        <CardHeader className="gap-2 pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle>Aktueller Stand</CardTitle>
-                <Badge style={{ backgroundColor: stageMeta.color, color: "white" }}>
-                  Aktuelle Phase: {stageMeta.label}
-                </Badge>
-              </div>
-              <CardDescription className="mt-1">
-                Die wichtigsten Informationen für die nächste Betreuung von {patient.firstName}.
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {intakeSubmission ? (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <ClipboardList className="mr-2 h-4 w-4" />
-                      Originale Aufnahme
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto" onClick={(event) => event.stopPropagation()}>
-                    <DialogHeader>
-                      <DialogTitle>Originale Aufnahme</DialogTitle>
-                      <DialogDescription>
-                        Eingegangen am {formatDate(intakeSubmission.submittedAt)}. Diese Angaben bleiben als Quelle erhalten.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <PatientIntakeReview submission={intakeSubmission} />
-                  </DialogContent>
-                </Dialog>
-              ) : null}
-              <Button onClick={onAddMeasurement}>
-                <Scale className="mr-2 h-4 w-4" />
-                Messwerte erfassen
-              </Button>
-            </div>
+      <Card style={phaseStyle}>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 pb-3">
+          <div className="flex items-center gap-2.5">
+            <CardTitle className="text-base">Aktueller Stand</CardTitle>
+            <Badge style={{ backgroundColor: stageMeta.color, color: "white" }}>
+              {stageMeta.label}
+            </Badge>
           </div>
+          <IntakeStageProgress stage={currentStage} />
         </CardHeader>
-        <CardContent className="space-y-4 border-t pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/60 px-3 py-2">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versorgungsweg</p>
-              <p className="mt-0.5 text-sm font-medium">{stageMeta.columnHint}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-1.5 md:flex" aria-label="Phasen der Aufnahme">
-                {INTAKE_STAGE_ORDER.map((stage) => (
-                  <span
-                    key={stage}
-                    className="rounded-full px-2 py-1 text-xs font-medium"
-                    style={
-                      stage === currentStage
-                        ? { backgroundColor: INTAKE_STAGE_META[stage].color, color: "white" }
-                        : { backgroundColor: "var(--card)", color: "var(--muted-foreground)" }
-                    }
-                  >
-                    {INTAKE_STAGE_META[stage].label}
-                  </span>
-                ))}
-              </div>
-              <IntakeStageProgress stage={currentStage} />
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Detail label="Letzter Kontakt" value={latestSession ? formatDate(latestSession.date) : undefined} />
-            <Detail
-              label="Nächster Termin"
-              value={nextAppointment ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)}` : undefined}
+        <CardContent className="border-t pt-2">
+          {/* The closing row of the grid carries no divider — one column on
+              small screens, two from `sm` up, so the count differs per layout. */}
+          <div className="grid gap-x-8 [&>*:last-child]:border-b-0 sm:grid-cols-2 sm:[&>*:nth-last-child(-n+2)]:border-b-0">
+            <SummaryRow
+              label="Letzter Kontakt"
+              value={latestSession ? formatDate(latestSession.date) : "Nicht erfasst"}
+              muted={!latestSession}
             />
-            <Detail label="Aktueller Plan" value={currentPlan?.title ?? (currentPlan ? "Ernährungsplan" : undefined)} />
-            <Detail label="Kalorienziel" value={patient.dailyCalorieGoal ? `${formatNumber(patient.dailyCalorieGoal)} kcal` : undefined} />
+            <SummaryRow
+              label="Nächster Termin"
+              value={
+                nextAppointment
+                  ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)}`
+                  : "Nicht geplant"
+              }
+              muted={!nextAppointment}
+            />
+            <SummaryRow
+              label="Aktueller Plan"
+              value={currentPlan ? (currentPlan.title ?? "Ernährungsplan") : "Kein Plan"}
+              muted={!currentPlan}
+            />
+            <SummaryRow
+              label="Kalorienziel"
+              value={
+                patient.dailyCalorieGoal
+                  ? `${formatNumber(patient.dailyCalorieGoal)} kcal`
+                  : "Nicht festgelegt"
+              }
+              muted={!patient.dailyCalorieGoal}
+            />
+            {intakeSubmission ? (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <SummaryActionRow
+                    label="Originalaufnahme"
+                    value={formatDate(intakeSubmission.submittedAt)}
+                  />
+                </DialogTrigger>
+                <DialogContent
+                  className="max-h-[85vh] max-w-3xl overflow-y-auto"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <DialogHeader>
+                    <DialogTitle>Originalaufnahme</DialogTitle>
+                    <DialogDescription>
+                      Eingegangen am {formatDate(intakeSubmission.submittedAt)}. Diese Angaben
+                      bleiben als Quelle erhalten.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <PatientIntakeReview submission={intakeSubmission} />
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <SummaryRow label="Originalaufnahme" value="Nicht vorhanden" muted />
+            )}
+            <SummaryActionRow
+              label="Messwerte erfassen"
+              value={
+                latestMeasurement
+                  ? `Zuletzt ${formatDate(latestMeasurement.date)}`
+                  : "Keine Messung"
+              }
+              muted={!latestMeasurement}
+              onClick={onAddMeasurement}
+            />
           </div>
         </CardContent>
       </Card>

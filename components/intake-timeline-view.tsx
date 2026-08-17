@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { ChevronsLeft, ChevronsRight } from "lucide-react"
 
 import { IntakeRowAction } from "@/components/intake-row-action"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -25,6 +26,8 @@ const MAX_HALF_SPAN_DAYS = 60
 const LABEL_FLIP_PERCENT = 68
 /** A bar starting left of this leaves no room to place the label before it. */
 const LABEL_BEFORE_MIN_PERCENT = 28
+/** Rendered size of a history mark, in px. Must match the `size-*` class below. */
+const MARK_SIZE_PX = 10
 
 interface TimelineWindow {
   startMs: number
@@ -72,6 +75,30 @@ function toPercent(iso: string, window: TimelineWindow): number {
   const ratio = (value - window.startMs) / (window.endMs - window.startMs)
   // Rows older than the window clamp to the edge rather than disappearing.
   return Math.min(100, Math.max(0, ratio * 100))
+}
+
+/** Where an event falls relative to the visible window. */
+type MarkZone = "before" | "inside" | "after"
+
+function markZone(iso: string, window: TimelineWindow): MarkZone {
+  const value = new Date(iso).getTime()
+  if (Number.isNaN(value)) return "inside"
+  if (value < window.startMs) return "before"
+  if (value > window.endMs) return "after"
+  return "inside"
+}
+
+/**
+ * Positions a mark so it always sits fully inside the track.
+ *
+ * A percentage alone is not enough: the mark is centred on its position, so at
+ * 0% or 100% half of it lands outside the `overflow-hidden` track and gets cut
+ * off. Shifting by half the mark's width at the edges — and nothing at the
+ * centre — keeps every mark whole without moving it off its date.
+ */
+function markLeft(percent: number): string {
+  const shift = MARK_SIZE_PX / 2 - (percent / 100) * MARK_SIZE_PX
+  return `calc(${percent}% + ${shift}px)`
 }
 
 /**
@@ -167,6 +194,21 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
         ? "before"
         : "inside"
 
+  // Anything outside the window would otherwise pile up on the very edge, one
+  // mark hiding the next. Collect those into a single marker per side instead,
+  // so the row still says "there is more history here" without lying about
+  // where it happened.
+  const earlierEvents: IntakeHistoryEvent[] = []
+  const visibleEvents: IntakeHistoryEvent[] = []
+  const laterEvents: IntakeHistoryEvent[] = []
+
+  for (const event of row.history) {
+    const zone = markZone(event.date, window)
+    if (zone === "before") earlierEvents.push(event)
+    else if (zone === "after") laterEvents.push(event)
+    else visibleEvents.push(event)
+  }
+
   return (
     <div
       className="grid h-14 grid-cols-[240px_minmax(0,1fr)_130px] items-center gap-x-4 border-b transition-colors hover:bg-row-hover"
@@ -215,9 +257,17 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
           aria-hidden="true"
         />
 
-        {row.history.map((event) => (
+        {earlierEvents.length > 0 ? (
+          <IntakeHistoryOverflowMark events={earlierEvents} side="left" />
+        ) : null}
+
+        {visibleEvents.map((event) => (
           <IntakeHistoryMark key={event.id} event={event} window={window} />
         ))}
+
+        {laterEvents.length > 0 ? (
+          <IntakeHistoryOverflowMark events={laterEvents} side="right" />
+        ) : null}
 
         {/* The label sits on the page background so it covers the baseline
             rather than being crossed out by it. */}
@@ -260,7 +310,43 @@ function IntakeHistoryMark({
   event: IntakeHistoryEvent
   window: TimelineWindow
 }) {
-  const position = toPercent(event.date, window)
+  const color = INTAKE_STAGE_META[event.stage].color
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-default rounded-full border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+          style={{
+            left: markLeft(toPercent(event.date, window)),
+            // A milestone that already happened is solid; one still ahead of us
+            // is hollow, so a deadline never reads as a done deal.
+            backgroundColor: event.pending ? "var(--background)" : color,
+            borderColor: color,
+          }}
+        />
+      </TooltipTrigger>
+      <TooltipContent>{historyEventText(event)}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
+ * Stands in for every milestone that falls outside the visible window.
+ *
+ * The window is deliberately capped, so an old invitation has nowhere to sit.
+ * One marker per side, pointing outwards, keeps that history reachable instead
+ * of stacking invisible dots on the edge.
+ */
+function IntakeHistoryOverflowMark({
+  events,
+  side,
+}: {
+  events: IntakeHistoryEvent[]
+  side: "left" | "right"
+}) {
+  const Icon = side === "left" ? ChevronsLeft : ChevronsRight
 
   return (
     <Tooltip>
@@ -268,18 +354,28 @@ function IntakeHistoryMark({
         <span
           tabIndex={0}
           className={cn(
-            "absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground",
-            event.pending ? "bg-background" : "bg-fg-3",
+            "absolute top-1/2 flex -translate-y-1/2 cursor-default items-center bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground",
+            side === "left" ? "left-0" : "right-0",
           )}
-          style={{
-            left: `${position}%`,
-            borderColor: event.pending ? "var(--fg-3)" : undefined,
-          }}
-        />
+        >
+          <Icon className="size-3.5 text-fg-3" />
+        </span>
       </TooltipTrigger>
-      <TooltipContent>
-        {event.label} · {event.precise ? formatShortDateTime(event.date) : formatShortDate(event.date)}
+      <TooltipContent className="flex flex-col gap-0.5">
+        <span className="text-[10px] uppercase tracking-[.08em] opacity-70">
+          {side === "left" ? "Früher" : "Später"}
+        </span>
+        {events.map((event) => (
+          <span key={event.id}>{historyEventText(event)}</span>
+        ))}
       </TooltipContent>
     </Tooltip>
   )
+}
+
+function historyEventText(event: IntakeHistoryEvent): string {
+  const when = event.precise
+    ? formatShortDateTime(event.date)
+    : formatShortDate(event.date)
+  return `${event.label} · ${when}`
 }
