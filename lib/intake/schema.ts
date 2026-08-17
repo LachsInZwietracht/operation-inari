@@ -18,6 +18,7 @@ const dietExclusionSchema = z.enum(
 
 export const INTAKE_PRIMARY_GOALS = [
   "abnehmen",
+  "zunehmen",
   "gewicht_halten",
   "muskelaufbau",
   "gesuender_essen",
@@ -31,12 +32,24 @@ export const INTAKE_PRIMARY_GOAL_LABELS: Record<
   string
 > = {
   abnehmen: "Abnehmen",
+  zunehmen: "Zunehmen",
   gewicht_halten: "Gewicht halten",
   muskelaufbau: "Muskeln aufbauen",
   gesuender_essen: "Gesünder essen",
   mehr_energie: "Mehr Energie im Alltag",
   leistung_steigern: "Sportliche Leistung steigern",
   beschwerden_lindern: "Beschwerden lindern",
+};
+
+/** How often someone eats breakfast. "Manchmal" is the honest middle answer. */
+export const INTAKE_BREAKFAST_FREQUENCIES = ["ja", "manchmal", "nein"] as const;
+
+export type IntakeBreakfastFrequency = (typeof INTAKE_BREAKFAST_FREQUENCIES)[number];
+
+export const INTAKE_BREAKFAST_LABELS: Record<IntakeBreakfastFrequency, string> = {
+  ja: "Ja",
+  manchmal: "Manchmal",
+  nein: "Nein",
 };
 
 /** Conditions offered as chips. Free text stays available for anything else. */
@@ -88,7 +101,13 @@ export const intakePayloadSchema = z.object({
     phone: optionalText(50),
   }),
   goal: z.object({
+    /**
+     * The first of {@link primaryGoals}, kept because every submission already
+     * in the database has it and several readers still index labels by it.
+     * New writers must set both.
+     */
     primaryGoal: z.enum(INTAKE_PRIMARY_GOALS),
+    primaryGoals: z.array(z.enum(INTAKE_PRIMARY_GOALS)).min(1).max(INTAKE_PRIMARY_GOALS.length).optional(),
     motivation: optionalText(2_000),
     timeframe: optionalText(100),
   }),
@@ -139,7 +158,9 @@ export const intakePayloadSchema = z.object({
   habits: z
     .object({
       mealsPerDay: z.number().int().min(1).max(10).optional(),
+      /** Legacy companion to {@link breakfastFrequency}; "manchmal" reads as true. */
       eatsBreakfast: z.boolean().optional(),
+      breakfastFrequency: z.enum(INTAKE_BREAKFAST_FREQUENCIES).optional(),
       cookingSkill: z.enum(["wenig", "mittel", "viel"]).optional(),
       minutesPerMeal: z.number().int().min(0).max(240).optional(),
       eatsOutPerWeek: z.number().int().min(0).max(30).optional(),
@@ -173,6 +194,31 @@ export const intakeSubmitRequestSchema = z.object({
 });
 
 export type IntakePayloadInput = z.infer<typeof intakePayloadSchema>;
+
+/**
+ * Reads the goals off a submission of any age.
+ *
+ * Submissions written before goals became multi-select carry only
+ * `primaryGoal`. Both shapes live in the same table and always will, so every
+ * reader goes through here rather than reaching for one field and getting it
+ * wrong for half the records.
+ */
+export function readPrimaryGoals(goal: {
+  primaryGoal: (typeof INTAKE_PRIMARY_GOALS)[number];
+  primaryGoals?: readonly (typeof INTAKE_PRIMARY_GOALS)[number][];
+}): (typeof INTAKE_PRIMARY_GOALS)[number][] {
+  return goal.primaryGoals?.length ? [...goal.primaryGoals] : [goal.primaryGoal];
+}
+
+/** Same for breakfast, which used to be a yes/no boolean. */
+export function readBreakfastFrequency(habits?: {
+  eatsBreakfast?: boolean;
+  breakfastFrequency?: IntakeBreakfastFrequency;
+}): IntakeBreakfastFrequency | undefined {
+  if (habits?.breakfastFrequency) return habits.breakfastFrequency;
+  if (habits?.eatsBreakfast === undefined) return undefined;
+  return habits.eatsBreakfast ? "ja" : "nein";
+}
 
 /** Unknown catalog ids are dropped rather than failing the whole submission. */
 export function isKnownAllergenId(allergenId: string): boolean {

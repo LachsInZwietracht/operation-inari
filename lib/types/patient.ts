@@ -282,12 +282,15 @@ export interface PatientIntakeSubmission extends Timestamped {
 
 export type IntakePrimaryGoal =
   | "abnehmen"
+  | "zunehmen"
   | "gewicht_halten"
   | "muskelaufbau"
   | "gesuender_essen"
   | "mehr_energie"
   | "leistung_steigern"
   | "beschwerden_lindern";
+
+export type IntakeBreakfastFrequency = "ja" | "manchmal" | "nein";
 
 /**
  * Shape of `patient_intake_submissions.payload`. The authoritative runtime
@@ -303,7 +306,9 @@ export interface PatientIntakePayload {
     phone?: string;
   };
   goal: {
+    /** First of {@link primaryGoals}; still written so older readers keep working. */
     primaryGoal: IntakePrimaryGoal;
+    primaryGoals?: IntakePrimaryGoal[];
     motivation?: string;
     timeframe?: string;
   };
@@ -337,7 +342,9 @@ export interface PatientIntakePayload {
   }>;
   habits?: {
     mealsPerDay?: number;
+    /** Legacy companion to {@link breakfastFrequency}; "manchmal" reads as true. */
     eatsBreakfast?: boolean;
+    breakfastFrequency?: IntakeBreakfastFrequency;
     cookingSkill?: "wenig" | "mittel" | "viel";
     minutesPerMeal?: number;
     eatsOutPerWeek?: number;

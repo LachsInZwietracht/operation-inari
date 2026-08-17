@@ -1,5 +1,6 @@
 "use client"
 
+import { parseISO } from "date-fns"
 import Link from "next/link"
 import type React from "react"
 import { useMemo, useState, type CSSProperties } from "react"
@@ -20,6 +21,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -50,7 +52,11 @@ import {
 } from "@/lib/bmi"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS, resolveDietStyle } from "@/lib/diet-constants"
 import { formatDate, formatNumber } from "@/lib/format"
-import type { EnergySex } from "@/lib/nutrition/energy-calculation"
+import {
+  PATIENT_ENERGY_FORMULA,
+  type EnergySex,
+} from "@/lib/nutrition/energy-calculation"
+import { projectWeight } from "@/lib/nutrition/weight-projection"
 import {
   derivePatientIntakeStage,
   INTAKE_STAGE_META,
@@ -266,6 +272,10 @@ function BmiScale({ bmi, goalBmi }: { bmi: number; goalBmi?: number }) {
   )
 }
 
+/** Six months ahead: far enough to show a trend, near enough to still mean something. */
+const PROJECTION_WEEKS = 26
+const DAY_MS = 24 * 60 * 60 * 1000
+
 interface TimelineEvent {
   id: string
   date: string
@@ -297,10 +307,10 @@ export function PatientOverviewTab({
     [anthropometrics],
   )
   const latestMeasurement = sortedMeasurements.at(-1)
-  const chartData = useMemo(
+  const measuredPoints = useMemo(
     () =>
       sortedMeasurements.slice(-12).map((entry) => ({
-        date: formatDate(entry.date),
+        ts: parseISO(entry.date).getTime(),
         weight: entry.weight,
       })),
     [sortedMeasurements],
@@ -366,6 +376,77 @@ export function PatientOverviewTab({
     }
     return `${current} liegt im sinnvollen Bereich.`
   })()
+  // The calorie scenario lives here, not in the Energie card, because the
+  // weight chart draws the same one. Two owners would let the dashed line and
+  // the numbers under the slider disagree.
+  const maintenanceKcal = totalEnergyExpenditure ?? 0
+  const [targetKcal, setTargetKcal] = useState(patient.dailyCalorieGoal ?? maintenanceKcal)
+  const [lastEnergyInputs, setLastEnergyInputs] = useState(
+    `${patient.dailyCalorieGoal}:${maintenanceKcal}`,
+  )
+  const energyInputs = `${patient.dailyCalorieGoal}:${maintenanceKcal}`
+  if (energyInputs !== lastEnergyInputs) {
+    setLastEnergyInputs(energyInputs)
+    setTargetKcal(patient.dailyCalorieGoal ?? maintenanceKcal)
+  }
+
+  // Depends on the two numbers rather than the measurement object: the compiler
+  // cannot prove the object is never mutated, and bails out of memoising the
+  // whole component when it is named as a dependency.
+  const measuredWeight = latestMeasurement?.weight
+  const measuredHeight = latestMeasurement?.height
+  // Not wrapped in useMemo: React Compiler memoises this component, and a
+  // manual memo here referenced values it could not prove immutable, which made
+  // it bail out of optimising the whole file.
+  const projection =
+    measuredWeight && measuredHeight && totalEnergyExpenditure
+      ? projectWeight({
+          targetKcal,
+          weightKg: measuredWeight,
+          heightCm: measuredHeight,
+          ageYears,
+          sex: energySex,
+          formula: PATIENT_ENERGY_FORMULA,
+          pal: palValue,
+          goalWeightKg: patient.goalWeight,
+          weeks: PROJECTION_WEEKS,
+        })
+      : null
+
+  /**
+   * Measured weights, then the projection dashed on from the newest one.
+   *
+   * The projection never covers a stretch we already have readings for: it is
+   * re-anchored to the last measurement every time one arrives, so a plan made
+   * in May is not left drawn over what actually happened in June. The anchor
+   * point carries both series so the dashed line starts exactly where the solid
+   * one ends instead of floating next to it.
+   */
+  const weightChartData = (() => {
+    if (measuredPoints.length === 0) return []
+    const lastIndex = measuredPoints.length - 1
+    const anchorTs = measuredPoints[lastIndex].ts
+    const measured = measuredPoints.map((point, index) => ({
+      ts: point.ts,
+      weight: point.weight as number | undefined,
+      projected: index === lastIndex ? projection?.points[0].weightKg : undefined,
+    }))
+    const projected = (projection?.points ?? []).slice(1).map((point) => ({
+      ts: anchorTs + point.week * 7 * DAY_MS,
+      weight: undefined,
+      projected: point.weightKg,
+    }))
+    return [...measured, ...projected]
+  })()
+
+  // A narrow range needs a decimal or two ticks round to the same label; a wide
+  // one does not, and "97,0 kg" only adds noise.
+  const weightValues = weightChartData.flatMap((row) =>
+    [row.weight, row.projected].filter((value): value is number => value !== undefined),
+  )
+  const weightTickDecimals =
+    weightValues.length && Math.max(...weightValues) - Math.min(...weightValues) < 6 ? 1 : 0
+
   const currentStage = derivePatientIntakeStage({
     patient,
     links: intakeLinks,
@@ -662,21 +743,76 @@ export function PatientOverviewTab({
               Gewichtsverlauf
             </CardTitle>
             <CardDescription>
-              {chartData.length > 1 ? "Die letzten Messungen im Überblick." : "Nach der zweiten Messung erscheint hier der Verlauf."}
+              {weightChartData.length
+                ? projection
+                  ? "Gemessen durchgezogen, die Prognose zum Tagesziel gestrichelt."
+                  : "Die letzten Messungen im Überblick."
+                : "Nach der ersten Messung erscheint hier der Verlauf."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {chartData.length > 1 ? (
+            {weightChartData.length ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   {/* No negative left margin: it clawed back space by cutting
                       the leading digit off every tick, so 97,4 kg read 7,4 kg. */}
-                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <LineChart data={weightChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
-                    <YAxis tickLine={false} axisLine={false} fontSize={12} width={56} unit=" kg" domain={["dataMin - 1", "dataMax + 1"]} />
-                    <Tooltip formatter={(value) => [`${formatNumber(Number(value), 1)} kg`, "Gewicht"]} />
-                    <Line type="monotone" dataKey="weight" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    {/* A numeric time axis, not one category per row: measured
+                        and projected points are weeks apart and must not be
+                        spaced evenly. */}
+                    <XAxis
+                      dataKey="ts"
+                      type="number"
+                      scale="time"
+                      domain={["dataMin", "dataMax"]}
+                      tickFormatter={(value: number) => formatDate(new Date(value))}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={12}
+                    />
+                    {/* Integer bounds and rounded ticks. String domains like "dataMin - 1"
+                        let recharts pick ticks such as 77,75843, which the axis then
+                        renders as an unreadable run of digits. */}
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={12}
+                      width={56}
+                      unit=" kg"
+                      domain={[
+                        (min: number) => (weightTickDecimals ? min - 1 : Math.floor(min - 1)),
+                        (max: number) => (weightTickDecimals ? max + 1 : Math.ceil(max + 1)),
+                      ]}
+                      tickFormatter={(value: number) => formatNumber(value, weightTickDecimals)}
+                    />
+                    <Tooltip
+                      labelFormatter={(value) => formatDate(new Date(Number(value)))}
+                      formatter={(value, name) => [
+                        `${formatNumber(Number(value), 1)} kg`,
+                        name === "projected" ? "Prognose" : "Gemessen",
+                      ]}
+                    />
+                    {patient.goalWeight ? (
+                      <ReferenceLine
+                        y={patient.goalWeight}
+                        stroke="var(--color-muted-foreground)"
+                        strokeDasharray="2 4"
+                        label={{ value: "Ziel", position: "insideTopLeft", fontSize: 11 }}
+                      />
+                    ) : null}
+                    <Line type="monotone" dataKey="weight" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                    <Line
+                      type="monotone"
+                      dataKey="projected"
+                      stroke="var(--color-chart-1)"
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      strokeOpacity={0.75}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                      connectNulls
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -684,7 +820,7 @@ export function PatientOverviewTab({
               <div className="flex min-h-64 flex-col items-center justify-center text-center">
                 <Scale className="mb-3 h-8 w-8 text-muted-foreground" />
                 <p className="font-medium">Noch keine Verlaufskurve</p>
-                <p className="mt-1 max-w-sm text-sm text-muted-foreground">Erfasse mindestens zwei Messwerte, damit sich die Veränderung zeigt.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">Erfasse einen Messwert, dann erscheinen hier Verlauf und Prognose.</p>
               </div>
             )}
           </CardContent>
@@ -694,14 +830,14 @@ export function PatientOverviewTab({
           <div className="lg:col-span-3">
             <PatientEnergyCard
               weightKg={latestMeasurement.weight}
-              heightCm={latestMeasurement.height}
-              ageYears={ageYears}
-              sex={energySex}
               pal={palValue}
               basalMetabolicRate={basalMetabolicRate}
               totalEnergyExpenditure={totalEnergyExpenditure}
               dailyCalorieGoal={patient.dailyCalorieGoal}
               goalWeightKg={patient.goalWeight}
+              targetKcal={targetKcal}
+              onTargetChange={setTargetKcal}
+              projection={projection!}
               onSaveCalorieGoal={onSaveCalorieGoal}
             />
           </div>

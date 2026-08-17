@@ -1,7 +1,8 @@
 import { ALLERGEN_MAP } from "@/lib/allergen-constants"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS } from "@/lib/diet-constants"
 import { INTAKE_FOOD_PREFERENCE_MAP } from "@/lib/intake-food-preferences"
-import type { PatientIntakePayload } from "@/lib/types"
+import { INTAKE_PRIMARY_GOAL_LABELS, readPrimaryGoals } from "@/lib/intake/schema"
+import type { IntakePrimaryGoal, PatientIntakePayload } from "@/lib/types"
 
 export interface IntakeReviewWarning {
   id: string
@@ -58,6 +59,68 @@ function matchingFoods(keys: ReadonlySet<string>, active: ReadonlySet<string>): 
   return [...keys]
     .filter((key) => active.has(key))
     .map((key) => INTAKE_FOOD_PREFERENCE_MAP.get(key)?.label ?? key)
+}
+
+/** Below this a difference is rounding, not an intention. */
+const GOAL_WEIGHT_TOLERANCE_KG = 0.5
+
+/**
+ * Contradictions between the stated goals and the numbers next to them.
+ *
+ * Goals became multi-select, which is what makes "Abnehmen" and "Zunehmen" in
+ * one submission possible at all. The weight checks catch the commoner slip:
+ * someone types their current weight into the Wunschgewicht field, or misses
+ * the decimal point.
+ */
+function findGoalWarnings(payload: PatientIntakePayload): IntakeReviewWarning[] {
+  const warnings: IntakeReviewWarning[] = []
+  const goals = readPrimaryGoals(payload.goal)
+  const labels = (entries: IntakePrimaryGoal[]) =>
+    entries.map((goal) => `„${INTAKE_PRIMARY_GOAL_LABELS[goal]}“`).join(" und ")
+
+  const weightGoals = goals.filter((goal): goal is IntakePrimaryGoal =>
+    goal === "abnehmen" || goal === "zunehmen" || goal === "gewicht_halten",
+  )
+  if (weightGoals.length > 1) {
+    warnings.push({
+      id: "goal-conflict",
+      title: "Die Gewichtsziele widersprechen sich",
+      detail: `Angegeben wurden ${labels(weightGoals)}. Bitte klären, was gelten soll.`,
+    })
+  }
+
+  const { weightKg, goalWeightKg } = payload.body
+  if (goalWeightKg !== undefined) {
+    const difference = goalWeightKg - weightKg
+    const stated = `Aktuell ${weightKg} kg, Wunschgewicht ${goalWeightKg} kg`
+
+    if (goals.includes("abnehmen") && difference > GOAL_WEIGHT_TOLERANCE_KG) {
+      warnings.push({
+        id: "goal-weight-up-while-losing",
+        title: "Wunschgewicht passt nicht zum Ziel",
+        detail: `Als Ziel steht „Abnehmen“. ${stated} — das Wunschgewicht liegt darüber.`,
+      })
+    }
+    if (goals.includes("zunehmen") && difference < -GOAL_WEIGHT_TOLERANCE_KG) {
+      warnings.push({
+        id: "goal-weight-down-while-gaining",
+        title: "Wunschgewicht passt nicht zum Ziel",
+        detail: `Als Ziel steht „Zunehmen“. ${stated} — das Wunschgewicht liegt darunter.`,
+      })
+    }
+    if (
+      goals.includes("gewicht_halten") &&
+      Math.abs(difference) > GOAL_WEIGHT_TOLERANCE_KG
+    ) {
+      warnings.push({
+        id: "goal-weight-while-holding",
+        title: "Wunschgewicht passt nicht zum Ziel",
+        detail: `Als Ziel steht „Gewicht halten“. ${stated} — das sind ${Math.abs(difference).toFixed(1)} kg Unterschied.`,
+      })
+    }
+  }
+
+  return warnings
 }
 
 /**
@@ -137,6 +200,8 @@ export function findIntakeReviewWarnings(
       `Als Vorgabe steht „${DIET_EXCLUSION_LABELS.no_dairy}“`,
     )
   }
+
+  warnings.push(...findGoalWarnings(payload))
 
   for (const allergen of payload.allergens ?? []) {
     const restricted = ALLERGEN_FOOD_KEYS[allergen.allergenId]

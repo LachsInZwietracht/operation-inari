@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Flame, Minus, Save, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
@@ -10,17 +10,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { formatDate, formatNumber } from "@/lib/format"
-import {
-  PATIENT_ENERGY_FORMULA,
-  type EnergySex,
-} from "@/lib/nutrition/energy-calculation"
-import { isMaintenanceIntake, projectWeight } from "@/lib/nutrition/weight-projection"
+import { isMaintenanceIntake, type WeightProjection } from "@/lib/nutrition/weight-projection"
 
 /** Steps the slider in portions a practitioner would actually prescribe. */
 const STEP_KCAL = 25
 /** How far the intake may be moved either side of maintenance. */
 const RANGE_KCAL = 1000
-const PROJECTION_WEEKS = 26
 const MILESTONE_WEEKS = [4, 12] as const
 
 /**
@@ -60,14 +55,15 @@ function ProjectionRow({ label, value, muted }: { label: string; value: string; 
 
 interface PatientEnergyCardProps {
   weightKg: number
-  heightCm: number
-  ageYears: number
-  sex: EnergySex
   pal: number
   basalMetabolicRate: number
   totalEnergyExpenditure: number
   dailyCalorieGoal?: number
   goalWeightKg?: number
+  /** Owned by the overview, so the weight chart can draw the same scenario. */
+  targetKcal: number
+  onTargetChange: (kcal: number) => void
+  projection: WeightProjection
   onSaveCalorieGoal: (kcal: number) => Promise<void>
 }
 
@@ -84,52 +80,35 @@ interface PatientEnergyCardProps {
  */
 export function PatientEnergyCard({
   weightKg,
-  heightCm,
-  ageYears,
-  sex,
   pal,
   basalMetabolicRate,
   totalEnergyExpenditure,
   dailyCalorieGoal,
   goalWeightKg,
+  targetKcal,
+  onTargetChange,
+  projection,
   onSaveCalorieGoal,
 }: PatientEnergyCardProps) {
   const [today] = useState(() => new Date())
   const { min: minKcal, max: maxKcal } = calorieRange(totalEnergyExpenditure)
-  const savedTarget = dailyCalorieGoal ?? totalEnergyExpenditure
 
   const clamp = (value: number) => Math.min(maxKcal, Math.max(minKcal, Math.round(value)))
-  const initialTarget = clamp(savedTarget)
-  const [targetKcal, setTargetKcal] = useState(initialTarget)
-  const [draft, setDraft] = useState(() => String(initialTarget))
+  const [draft, setDraft] = useState(() => String(targetKcal))
   const [isSaving, setIsSaving] = useState(false)
 
-  // A new measurement moves maintenance, and with it both the slider's range
-  // and the saved goal's place on it. Adjusting during render rather than in an
-  // effect avoids the extra pass React would otherwise have to throw away.
-  const [lastInputs, setLastInputs] = useState(`${savedTarget}:${minKcal}:${maxKcal}`)
-  const inputs = `${savedTarget}:${minKcal}:${maxKcal}`
-  if (inputs !== lastInputs) {
-    setLastInputs(inputs)
-    setTargetKcal(initialTarget)
-    setDraft(String(initialTarget))
+  // Keeps the field in step when the target changes from outside — a new
+  // measurement shifts maintenance and with it the whole range.
+  const [lastTarget, setLastTarget] = useState(targetKcal)
+  if (targetKcal !== lastTarget) {
+    setLastTarget(targetKcal)
+    setDraft(String(targetKcal))
   }
 
-  const projection = useMemo(
-    () =>
-      projectWeight({
-        targetKcal,
-        weightKg,
-        heightCm,
-        ageYears,
-        sex,
-        formula: PATIENT_ENERGY_FORMULA,
-        pal,
-        goalWeightKg,
-        weeks: PROJECTION_WEEKS,
-      }),
-    [ageYears, goalWeightKg, heightCm, pal, sex, targetKcal, weightKg],
-  )
+  const setTarget = (value: number) => {
+    onTargetChange(value)
+    setDraft(String(value))
+  }
 
   const delta = targetKcal - totalEnergyExpenditure
   const flat = isMaintenanceIntake(projection)
@@ -144,9 +123,7 @@ export function PatientEnergyCard({
     const parsed = Number(draft.replace(",", "."))
     // Clamped but not snapped: the slider steps in 25s, the field accepts the
     // exact number a practitioner has in mind.
-    const next = Number.isFinite(parsed) ? clamp(parsed) : targetKcal
-    setTargetKcal(next)
-    setDraft(String(next))
+    setTarget(Number.isFinite(parsed) ? clamp(parsed) : targetKcal)
   }
 
   const handleSave = async () => {
@@ -252,10 +229,7 @@ export function PatientEnergyCard({
               max={maxKcal}
               step={STEP_KCAL}
               aria-label="Tagesziel in Kalorien"
-              onValueChange={(value) => {
-                setTargetKcal(value[0])
-                setDraft(String(value[0]))
-              }}
+              onValueChange={(value) => setTarget(value[0])}
             />
             <div className="flex justify-between text-[11px] text-muted-foreground">
               <span>{formatNumber(minKcal)}</span>

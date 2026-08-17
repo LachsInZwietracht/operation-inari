@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,6 +27,8 @@ import {
   INTAKE_FOOD_PREFERENCE_GROUPS,
 } from "@/lib/intake-food-preferences";
 import {
+  INTAKE_BREAKFAST_FREQUENCIES,
+  INTAKE_BREAKFAST_LABELS,
   INTAKE_CONDITION_OPTIONS,
   INTAKE_PRIMARY_GOALS,
   INTAKE_PRIMARY_GOAL_LABELS,
@@ -86,7 +88,9 @@ const formSchema = z.object({
   email: z.union([z.string().trim().email("Bitte gültige E-Mail angeben"), z.literal("")]),
   phone: z.string().trim().max(50),
 
-  primaryGoal: z.enum(INTAKE_PRIMARY_GOALS, { message: "Bitte ein Ziel auswählen" }),
+  primaryGoals: z
+    .array(z.enum(INTAKE_PRIMARY_GOALS))
+    .min(1, "Bitte mindestens ein Ziel auswählen"),
   motivation: z.string().trim().max(2_000),
   timeframe: z.string().trim().max(100),
 
@@ -113,7 +117,7 @@ const formSchema = z.object({
   foodPreferences: z.record(z.string(), z.enum(["gerne", "geht", "nie"])),
 
   mealsPerDay: optionalNumber(1, 10, "Bitte 1 bis 10 angeben"),
-  eatsBreakfast: z.enum(["", "ja", "nein"]),
+  eatsBreakfast: z.enum(["", ...INTAKE_BREAKFAST_FREQUENCIES]),
   cookingSkill: z.enum(["", "wenig", "mittel", "viel"]),
   minutesPerMeal: optionalNumber(0, 240, "Bitte 0 bis 240 Minuten angeben"),
   eatsOutPerWeek: optionalNumber(0, 30, "Bitte 0 bis 30 angeben"),
@@ -146,7 +150,7 @@ const DEFAULT_VALUES: FormValues = {
   gender: "w",
   email: "",
   phone: "",
-  primaryGoal: "gesuender_essen",
+  primaryGoals: [],
   motivation: "",
   timeframe: "",
   heightCm: "",
@@ -201,7 +205,7 @@ const STEPS: StepDefinition[] = [
     id: "goal",
     title: "Dein Ziel",
     description: "Das Wichtigste zuerst: Was soll sich ändern?",
-    fields: ["primaryGoal"],
+    fields: ["primaryGoals"],
   },
   {
     id: "body",
@@ -265,6 +269,34 @@ function draftKey(linkId: string) {
   return `inari_intake_draft_${linkId}`;
 }
 
+/**
+ * Brings a draft saved in a browser onto the current field shape.
+ *
+ * Someone can have a half-finished questionnaire open from before goals became
+ * multi-select. Carrying the old single goal over keeps their answer; forcing
+ * the array type matters more, because a non-array here would crash the goal
+ * step on `.includes` rather than fail politely.
+ */
+function migrateDraft(raw: unknown): Partial<FormValues> {
+  if (!raw || typeof raw !== "object") return {};
+  const draft = { ...(raw as Record<string, unknown>) };
+
+  if (!Array.isArray(draft.primaryGoals)) {
+    const legacy = draft.primaryGoal;
+    draft.primaryGoals =
+      typeof legacy === "string" &&
+      (INTAKE_PRIMARY_GOALS as readonly string[]).includes(legacy)
+        ? [legacy]
+        : [];
+  }
+  delete draft.primaryGoal;
+
+  if (!Array.isArray(draft.conditions)) draft.conditions = [];
+  if (!Array.isArray(draft.exclusions)) draft.exclusions = [];
+
+  return draft as Partial<FormValues>;
+}
+
 /* ------------------------------------------------------------------ */
 /* Payload conversion                                                  */
 /* ------------------------------------------------------------------ */
@@ -298,7 +330,10 @@ function toPayload(values: FormValues): IntakePayloadInput {
       phone: emptyToUndefined(values.phone),
     },
     goal: {
-      primaryGoal: values.primaryGoal,
+      // Both are written: the array is the truth, the scalar keeps readers that
+      // predate multi-select working against the same row.
+      primaryGoal: values.primaryGoals[0],
+      primaryGoals: values.primaryGoals,
       motivation: emptyToUndefined(values.motivation),
       timeframe: emptyToUndefined(values.timeframe),
     },
@@ -327,7 +362,8 @@ function toPayload(values: FormValues): IntakePayloadInput {
     habits: objectOrUndefined({
       mealsPerDay: parseNumber(values.mealsPerDay),
       eatsBreakfast:
-        values.eatsBreakfast === "" ? undefined : values.eatsBreakfast === "ja",
+        values.eatsBreakfast === "" ? undefined : values.eatsBreakfast !== "nein",
+      breakfastFrequency: values.eatsBreakfast || undefined,
       cookingSkill: values.cookingSkill || undefined,
       minutesPerMeal: parseNumber(values.minutesPerMeal),
       eatsOutPerWeek: parseNumber(values.eatsOutPerWeek),
@@ -378,6 +414,69 @@ function ChoiceButton({
     >
       {children}
     </Button>
+  );
+}
+
+/**
+ * Free-text conditions, on top of the chips.
+ *
+ * Its own state, so typing does not re-render the whole 11-step form on every
+ * keystroke; only a confirmed entry reaches the form.
+ */
+function CustomConditionInput({
+  entries,
+  onAdd,
+  onRemove,
+}: {
+  entries: string[];
+  onAdd: (entry: string) => boolean;
+  onRemove: (entry: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    if (onAdd(draft)) setDraft("");
+  };
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          maxLength={120}
+          placeholder="Sonstiges, z. B. Rheuma"
+          aria-label="Sonstige Erkrankung"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter would otherwise walk the wizard to the next step.
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={commit} disabled={!draft.trim()}>
+          Hinzufügen
+        </Button>
+      </div>
+      {entries.length ? (
+        <div className="flex flex-wrap gap-2">
+          {entries.map((entry) => (
+            <Button
+              key={entry}
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => onRemove(entry)}
+              aria-label={`${entry} entfernen`}
+            >
+              {entry}
+              <X className="ml-1 h-3 w-3" />
+            </Button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -436,8 +535,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
     try {
       const raw = window.localStorage.getItem(draftKey(linkId));
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<FormValues>;
-        reset({ ...DEFAULT_VALUES, ...parsed });
+        reset({ ...DEFAULT_VALUES, ...migrateDraft(JSON.parse(raw)) });
       }
     } catch {
       // A corrupt draft is not worth surfacing; start clean.
@@ -514,6 +612,46 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
       setValue(field, next, { shouldDirty: true });
     },
     [getValues, setValue],
+  );
+
+  const toggleGoal = useCallback(
+    (goal: FormValues["primaryGoals"][number]) => {
+      const current = getValues("primaryGoals");
+      const next = current.includes(goal)
+        ? current.filter((item) => item !== goal)
+        : [...current, goal];
+      setValue("primaryGoals", next, { shouldDirty: true });
+    },
+    [getValues, setValue],
+  );
+
+  /**
+   * Adds a condition the chips do not cover.
+   *
+   * These land in the same `conditions` array as the chips, so a dietitian
+   * reading the record sees one list rather than having to check a second
+   * "other" field for anything important.
+   */
+  const addCondition = useCallback(
+    (raw: string) => {
+      const entry = raw.trim().slice(0, 120);
+      if (!entry) return false;
+      const current = getValues("conditions");
+      if (current.some((item) => item.toLowerCase() === entry.toLowerCase())) return true;
+      if (current.length >= 30) return false;
+      setValue("conditions", [...current, entry], { shouldDirty: true });
+      return true;
+    },
+    [getValues, setValue],
+  );
+
+  // Everything the chip list does not already offer.
+  const customConditions = useMemo(
+    () =>
+      values.conditions.filter(
+        (entry) => !INTAKE_CONDITION_OPTIONS.includes(entry as (typeof INTAKE_CONDITION_OPTIONS)[number]),
+      ),
+    [values.conditions],
   );
 
   const answeredFoodCount = useMemo(
@@ -641,15 +779,20 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
 
         {step.id === "goal" && (
           <div className="space-y-4">
-            <Field label="Was ist dein wichtigstes Ziel?" error={errors.primaryGoal?.message}>
+            <Field
+              label="Was möchtest du erreichen?"
+              hint="Mehrfachauswahl. Das erste Ziel gilt als das wichtigste."
+              error={errors.primaryGoals?.message}
+            >
               <div className="grid gap-2">
                 {INTAKE_PRIMARY_GOALS.map((goal) => (
                   <Button
                     key={goal}
                     type="button"
-                    variant={values.primaryGoal === goal ? "default" : "outline"}
+                    variant={values.primaryGoals.includes(goal) ? "default" : "outline"}
                     className="justify-start"
-                    onClick={() => setValue("primaryGoal", goal, { shouldDirty: true })}
+                    aria-pressed={values.primaryGoals.includes(goal)}
+                    onClick={() => toggleGoal(goal)}
                   >
                     {INTAKE_PRIMARY_GOAL_LABELS[goal]}
                   </Button>
@@ -752,7 +895,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
           <div className="space-y-4">
             <Field
               label="Bestehende Erkrankungen (optional)"
-              hint="Mehrfachauswahl. Alles Weitere kannst du unten frei ergänzen."
+              hint="Mehrfachauswahl. Was hier fehlt, kannst du darunter ergänzen."
             >
               <div className="flex flex-wrap gap-2">
                 {INTAKE_CONDITION_OPTIONS.map((condition) => (
@@ -765,6 +908,11 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
                   </ChoiceButton>
                 ))}
               </div>
+              <CustomConditionInput
+                entries={customConditions}
+                onAdd={addCondition}
+                onRemove={(entry) => toggleInArray("conditions", entry)}
+              />
             </Field>
             <Field label="Medikamente (optional)" htmlFor="medications">
               <Textarea id="medications" rows={2} {...form.register("medications")} />
@@ -916,12 +1064,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
             </Field>
             <Field label="Frühstückst du? (optional)">
               <div className="flex gap-2">
-                {(
-                  [
-                    ["ja", "Ja"],
-                    ["nein", "Nein"],
-                  ] as const
-                ).map(([value, label]) => (
+                {INTAKE_BREAKFAST_FREQUENCIES.map((value) => (
                   <ChoiceButton
                     key={value}
                     active={values.eatsBreakfast === value}
@@ -931,7 +1074,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
                       })
                     }
                   >
-                    {label}
+                    {INTAKE_BREAKFAST_LABELS[value]}
                   </ChoiceButton>
                 ))}
               </div>

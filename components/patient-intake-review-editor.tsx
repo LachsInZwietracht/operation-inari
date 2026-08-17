@@ -13,7 +13,7 @@ import { ALLERGEN_DEFINITIONS, ALLERGEN_TYPE_LABELS } from "@/lib/allergen-const
 import { DIET_EXCLUSIONS, DIET_EXCLUSION_LABELS, DIET_STYLES, DIET_STYLE_LABELS } from "@/lib/diet-constants"
 import { INTAKE_FOOD_PREFERENCES } from "@/lib/intake-food-preferences"
 import { findIntakeReviewWarnings } from "@/lib/intake/review-rules"
-import { INTAKE_PRIMARY_GOALS, INTAKE_PRIMARY_GOAL_LABELS } from "@/lib/intake/schema"
+import { INTAKE_PRIMARY_GOALS, INTAKE_PRIMARY_GOAL_LABELS, readPrimaryGoals } from "@/lib/intake/schema"
 import type { DietExclusion, DietStyle, Gender, PatientIntakePayload, PatientIntakeSubmission } from "@/lib/types"
 
 interface PatientIntakeReviewEditorProps {
@@ -55,6 +55,24 @@ export function PatientIntakeReviewEditor({
     value: PatientIntakePayload["body"][K],
   ) {
     onPayloadChange({ ...payload, body: { ...payload.body, [key]: value } })
+  }
+
+  const selectedGoals = readPrimaryGoals(payload.goal)
+
+  /**
+   * Writes both goal fields together. The scalar stays in step with the array's
+   * first entry so the two never disagree about what the patient came for.
+   * Deselecting the last goal is refused — the record has to say something.
+   */
+  function toggleGoal(goal: PatientIntakePayload["goal"]["primaryGoal"]) {
+    const next = selectedGoals.includes(goal)
+      ? selectedGoals.filter((entry) => entry !== goal)
+      : [...selectedGoals, goal]
+    if (next.length === 0) return
+    onPayloadChange({
+      ...payload,
+      goal: { ...payload.goal, primaryGoal: next[0], primaryGoals: next },
+    })
   }
 
   function updateFoodRating(foodKey: string, rating: "" | "gerne" | "geht" | "nie") {
@@ -151,14 +169,24 @@ export function PatientIntakeReviewEditor({
 
           <EditorSection title="Ziel und Körper">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Ziel">
-                <select
-                  className={fieldClass}
-                  value={payload.goal.primaryGoal}
-                  onChange={(event) => onPayloadChange({ ...payload, goal: { ...payload.goal, primaryGoal: event.target.value as PatientIntakePayload["goal"]["primaryGoal"] } })}
-                >
-                  {INTAKE_PRIMARY_GOALS.map((goal) => <option key={goal} value={goal}>{INTAKE_PRIMARY_GOAL_LABELS[goal]}</option>)}
-                </select>
+              <Field label="Ziele">
+                <div className="flex flex-wrap gap-1.5">
+                  {INTAKE_PRIMARY_GOALS.map((goal) => {
+                    const active = selectedGoals.includes(goal)
+                    return (
+                      <Button
+                        key={goal}
+                        type="button"
+                        size="sm"
+                        variant={active ? "default" : "outline"}
+                        aria-pressed={active}
+                        onClick={() => toggleGoal(goal)}
+                      >
+                        {INTAKE_PRIMARY_GOAL_LABELS[goal]}
+                      </Button>
+                    )
+                  })}
+                </div>
               </Field>
               <Field label="Zeithorizont">
                 <Input value={payload.goal.timeframe ?? ""} onChange={(event) => onPayloadChange({ ...payload, goal: { ...payload.goal, timeframe: event.target.value || undefined } })} />

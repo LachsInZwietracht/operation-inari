@@ -3,6 +3,7 @@ import { isDietExclusion } from "@/lib/diet-constants";
 import { INTAKE_FOOD_PREFERENCE_MAP } from "@/lib/intake-food-preferences";
 import {
   INTAKE_PRIMARY_GOAL_LABELS,
+  readPrimaryGoals,
   isKnownAllergenId,
   isKnownFoodKey,
   type IntakePayloadInput,
@@ -73,9 +74,15 @@ const DEFAULT_SEVERITY: Record<"allergy" | "intolerance", "moderate" | "mild"> =
 
 const SELF_REPORTED_NOTE = "Selbstauskunft aus dem Onboarding, ärztlich nicht bestätigt.";
 
+function goalLabels(payload: IntakePayloadInput): string {
+  return readPrimaryGoals(payload.goal)
+    .map((goal) => INTAKE_PRIMARY_GOAL_LABELS[goal])
+    .join(", ");
+}
+
 function buildPatientGoals(payload: IntakePayloadInput): string | null {
-  const goalLabel = INTAKE_PRIMARY_GOAL_LABELS[payload.goal.primaryGoal];
-  const parts = [`Ziel: ${goalLabel}`];
+  const goals = readPrimaryGoals(payload.goal);
+  const parts = [`${goals.length > 1 ? "Ziele" : "Ziel"}: ${goalLabels(payload)}`];
 
   if (payload.goal.timeframe) {
     parts.push(`Zeithorizont: ${payload.goal.timeframe}`);
@@ -137,7 +144,7 @@ export function buildIntakeApplyPlan(
       diet_style: payload.diet?.style ?? null,
       nutrition_preferences: exclusions,
       patient_goals: buildPatientGoals(payload),
-      intake_reason: INTAKE_PRIMARY_GOAL_LABELS[payload.goal.primaryGoal],
+      intake_reason: goalLabels(payload),
       goal_weight: payload.body.goalWeightKg ?? null,
       digital_protocol_consent: payload.consent.dataProcessing,
     },

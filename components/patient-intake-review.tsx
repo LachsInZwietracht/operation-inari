@@ -10,7 +10,12 @@ import {
   INTAKE_FOOD_PREFERENCE_MAP,
 } from "@/lib/intake-food-preferences"
 import { describeAllergen } from "@/lib/intake/apply-submission"
-import { INTAKE_PRIMARY_GOAL_LABELS } from "@/lib/intake/schema"
+import {
+  INTAKE_BREAKFAST_LABELS,
+  INTAKE_PRIMARY_GOAL_LABELS,
+  readBreakfastFrequency,
+  readPrimaryGoals,
+} from "@/lib/intake/schema"
 import type { PatientIntakeSubmission } from "@/lib/types"
 
 const GENDER_LABELS: Record<string, string> = {
@@ -111,7 +116,12 @@ export function PatientIntakeReview({ submission }: PatientIntakeReviewProps) {
       </Section>
 
       <Section title="Ziel">
-        <Line label="Ziel" value={INTAKE_PRIMARY_GOAL_LABELS[payload.goal.primaryGoal]} />
+        <Line
+          label={readPrimaryGoals(payload.goal).length > 1 ? "Ziele" : "Ziel"}
+          value={readPrimaryGoals(payload.goal)
+            .map((goal) => INTAKE_PRIMARY_GOAL_LABELS[goal])
+            .join(", ")}
+        />
         <Line label="Zeithorizont" value={payload.goal.timeframe} />
         <Line label="Motivation" value={payload.goal.motivation} />
       </Section>
@@ -211,13 +221,10 @@ export function PatientIntakeReview({ submission }: PatientIntakeReviewProps) {
           <Line label="Mahlzeiten/Tag" value={payload.habits.mealsPerDay} />
           <Line
             label="Frühstück"
-            value={
-              payload.habits.eatsBreakfast === undefined
-                ? undefined
-                : payload.habits.eatsBreakfast
-                  ? "ja"
-                  : "nein"
-            }
+            value={(() => {
+              const frequency = readBreakfastFrequency(payload.habits);
+              return frequency ? INTAKE_BREAKFAST_LABELS[frequency] : undefined;
+            })()}
           />
           <Line
             label="Kochen"
