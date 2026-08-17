@@ -5,6 +5,15 @@ export type EnergyFormula = "mifflin" | "harris"
 
 export const KCAL_PER_KG_WEIGHT_CHANGE = 7700
 
+/**
+ * The formula the patient record calculates with.
+ *
+ * Shared so the energy panel, the overview card and any projection built on top
+ * of them cannot drift onto different equations and quote a patient two
+ * different Grundumsatz values on two tabs.
+ */
+export const PATIENT_ENERGY_FORMULA: EnergyFormula = "mifflin"
+
 export interface EnergyCalculationInput {
   sex: EnergySex
   formula: EnergyFormula

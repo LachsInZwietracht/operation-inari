@@ -39,7 +39,7 @@ import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
 import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
-import { calculateEnergy } from "@/lib/nutrition/energy-calculation"
+import { calculateEnergy, PATIENT_ENERGY_FORMULA } from "@/lib/nutrition/energy-calculation"
 
 /** Sentinel for "no style selected" — Radix Select rejects an empty value. */
 const DIET_STYLE_NONE = "__none__"
@@ -85,7 +85,7 @@ interface PatientTabsProps {
 }
 
 export function PatientTabs({ patient, initialData, newMeasurementRequest }: PatientTabsProps) {
-  const { getPatient, updatePatient } = usePatients({ initialPatients: [patient] })
+  const { getPatient, updatePatient, savePatient } = usePatients({ initialPatients: [patient] })
   const currentPatient = getPatient(patient.id) ?? patient
   const {
     getForPatient: getAnthroForPatient,
@@ -220,7 +220,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     () =>
       calculateEnergy({
         sex: patient.gender === "m" ? "male" : patient.gender === "w" ? "female" : "diverse",
-        formula: "mifflin",
+        formula: PATIENT_ENERGY_FORMULA,
         weightKg: weight,
         heightCm: height,
         ageYears,
@@ -230,6 +230,15 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   )
   const basalMetabolicRate = Math.round(energy.basalMetabolicRate)
   const totalEnergyExpenditure = Math.round(energy.totalEnergyExpenditure)
+
+  // Writes the single column, and waits, so the overview card can report an
+  // honest result instead of an optimistic one.
+  const handleSaveCalorieGoal = useCallback(
+    async (kcal: number) => {
+      await savePatient(patient.id, { dailyCalorieGoal: kcal })
+    },
+    [patient.id, savePatient],
+  )
 
   useEffect(() => {
     if (latestAnthro && !targetWeightInput) {
@@ -518,6 +527,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           totalEnergyExpenditure={latestAnthro ? totalEnergyExpenditure : undefined}
           palValue={pal}
           onAddMeasurement={() => setMeasurementOpen(true)}
+          onSaveCalorieGoal={handleSaveCalorieGoal}
         />
       </TabsContent>
 

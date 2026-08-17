@@ -26,6 +26,7 @@ import {
   YAxis,
 } from "recharts"
 
+import { PatientEnergyCard } from "@/components/patient-energy-card"
 import { PatientIntakeReview } from "@/components/patient-intake-review"
 import { IntakeStageProgress } from "@/components/intake-stage-progress"
 import { Badge } from "@/components/ui/badge"
@@ -49,6 +50,7 @@ import {
 } from "@/lib/bmi"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS, resolveDietStyle } from "@/lib/diet-constants"
 import { formatDate, formatNumber } from "@/lib/format"
+import type { EnergySex } from "@/lib/nutrition/energy-calculation"
 import {
   derivePatientIntakeStage,
   INTAKE_STAGE_META,
@@ -81,6 +83,7 @@ interface PatientOverviewTabProps {
   totalEnergyExpenditure?: number
   palValue: number
   onAddMeasurement: () => void
+  onSaveCalorieGoal: (kcal: number) => Promise<void>
 }
 
 function Detail({ label, value }: { label: string; value?: string }) {
@@ -286,6 +289,7 @@ export function PatientOverviewTab({
   totalEnergyExpenditure,
   palValue,
   onAddMeasurement,
+  onSaveCalorieGoal,
 }: PatientOverviewTabProps) {
   const [todayDate] = useState(() => new Date())
   const sortedMeasurements = useMemo(
@@ -331,6 +335,8 @@ export function PatientOverviewTab({
     0,
     Math.floor((todayDate.getTime() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
   )
+  const energySex: EnergySex =
+    patient.gender === "m" ? "male" : patient.gender === "w" ? "female" : "diverse"
   const currentBmiCategory = bmiCategory(latestMeasurement?.bmi ?? 0)
   const healthyWeight = latestMeasurement
     ? healthyWeightRange(latestMeasurement.height, ageYears)
@@ -649,7 +655,7 @@ export function PatientOverviewTab({
       </section>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Scale className="h-4 w-4 text-primary" />
@@ -663,10 +669,12 @@ export function PatientOverviewTab({
             {chartData.length > 1 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  {/* No negative left margin: it clawed back space by cutting
+                      the leading digit off every tick, so 97,4 kg read 7,4 kg. */}
+                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
-                    <YAxis tickLine={false} axisLine={false} fontSize={12} unit=" kg" domain={["dataMin - 1", "dataMax + 1"]} />
+                    <YAxis tickLine={false} axisLine={false} fontSize={12} width={56} unit=" kg" domain={["dataMin - 1", "dataMax + 1"]} />
                     <Tooltip formatter={(value) => [`${formatNumber(Number(value), 1)} kg`, "Gewicht"]} />
                     <Line type="monotone" dataKey="weight" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                   </LineChart>
@@ -682,35 +690,42 @@ export function PatientOverviewTab({
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Flame className="h-4 w-4 text-primary" />
-              Energie
-            </CardTitle>
-            <CardDescription>Berechnung aus den aktuellen Messwerten und dem Aktivitätswert.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {latestMeasurement && basalMetabolicRate && totalEnergyExpenditure ? (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <Detail label="Grundumsatz" value={`${formatNumber(basalMetabolicRate)} kcal`} />
-                  <Detail label="Gesamtumsatz" value={`${formatNumber(totalEnergyExpenditure)} kcal`} />
-                  <Detail label="Aktivitätswert" value={formatNumber(palValue, 1)} />
-                  <Detail label="Kalorienziel" value={patient.dailyCalorieGoal ? `${formatNumber(patient.dailyCalorieGoal)} kcal` : undefined} />
-                </div>
-                <Button variant="outline" className="w-full" asChild>
-                  <Link href={`/patienten/${patient.id}?tab=aktivitaet`}>Energie und Ziel bearbeiten</Link>
-                </Button>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Für die Berechnung fehlen aktuelle Größe und Gewicht.</p>
-                <Button variant="outline" className="w-full" onClick={onAddMeasurement}>Messwerte erfassen</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {latestMeasurement && basalMetabolicRate && totalEnergyExpenditure ? (
+          <div className="lg:col-span-3">
+            <PatientEnergyCard
+              weightKg={latestMeasurement.weight}
+              heightCm={latestMeasurement.height}
+              ageYears={ageYears}
+              sex={energySex}
+              pal={palValue}
+              basalMetabolicRate={basalMetabolicRate}
+              totalEnergyExpenditure={totalEnergyExpenditure}
+              dailyCalorieGoal={patient.dailyCalorieGoal}
+              goalWeightKg={patient.goalWeight}
+              onSaveCalorieGoal={onSaveCalorieGoal}
+            />
+          </div>
+        ) : (
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Flame className="h-4 w-4 text-primary" />
+                Energie und Kalorienziel
+              </CardTitle>
+              <CardDescription>
+                Berechnung aus den aktuellen Messwerten und dem Aktivitätswert.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Für die Berechnung fehlen aktuelle Größe und Gewicht.
+              </p>
+              <Button variant="outline" className="w-full" onClick={onAddMeasurement}>
+                Messwerte erfassen
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
