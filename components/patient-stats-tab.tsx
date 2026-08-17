@@ -30,6 +30,7 @@ import { differenceInCalendarDays, parseISO } from "date-fns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { bmiCategory } from "@/lib/bmi"
 import { formatDate, formatNumber } from "@/lib/format"
 import { estimateActivityEnergy, matchActivityByName } from "@/lib/energy-expenditure"
 import type { ActivityEntry, AnthropometricEntry, CounselingSession, Patient } from "@/lib/types"
@@ -117,13 +118,6 @@ function formatAxisDate(value: number | string): string {
   const timestamp = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(timestamp)) return ""
   return formatDate(new Date(timestamp))
-}
-
-function bmiCategory(bmi: number): string {
-  if (bmi < 18.5) return "Untergewicht"
-  if (bmi < 25) return "Normalgewicht"
-  if (bmi < 30) return "Übergewicht"
-  return "Adipositas"
 }
 
 function DeltaBadge({ delta, unit }: { delta: number; unit: string }) {
@@ -376,7 +370,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
             </StatCard>
             <StatCard icon={Target} label="BMI" value={formatNumber(latest.bmi, 1)}>
               <span className="text-xs text-muted-foreground">
-                {bmiCategory(latest.bmi)}
+                {bmiCategory(latest.bmi).label}
                 {filtered.length > 1 ? (
                   <>
                     {" · "}

@@ -9,7 +9,6 @@ import {
   ChevronRight,
   FileText,
   Flame,
-  HeartPulse,
   Ruler,
   Scale,
   Send,
@@ -41,6 +40,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { ALLERGEN_MAP, ALLERGEN_TYPE_LABELS } from "@/lib/allergen-constants"
+import {
+  BMI_CATEGORIES,
+  bmiBandWidth,
+  bmiCategory,
+  bmiScalePosition,
+  healthyWeightRange,
+} from "@/lib/bmi"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS, resolveDietStyle } from "@/lib/diet-constants"
 import { formatDate, formatNumber } from "@/lib/format"
 import {
@@ -151,66 +157,110 @@ function SummaryActionRow({
   )
 }
 
-function MetricCard({
-  icon: Icon,
+/** One of the three plain body facts: a number, its unit, and where it came from. */
+function BodyFact({
   label,
   value,
+  unit,
   note,
-  progress,
-  progressLabel,
-  accentColor = "var(--primary)",
 }: {
-  icon: typeof Scale
   label: string
   value: string
-  note?: string
-  progress?: number
-  progressLabel?: string
-  accentColor?: string
+  unit?: string
+  note: string
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
-            {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
-          </div>
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-            style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 14%, transparent)`, color: accentColor }}
-          >
-            <Icon className="h-4 w-4" />
-          </span>
-        </div>
-        {progress !== undefined ? (
-          <div className="mt-4 space-y-1.5">
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${Math.max(0, Math.min(progress, 100))}%`, backgroundColor: accentColor }}
-              />
-            </div>
-            {progressLabel ? <p className="text-[11px] text-muted-foreground">{progressLabel}</p> : null}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">
+        {value}
+        {unit ? <span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span> : null}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
+    </div>
   )
 }
 
-function bmiProgress(bmi?: number): number | undefined {
-  if (bmi === undefined) return undefined
-  return Math.max(0, Math.min(((bmi - 12) / 28) * 100, 100))
+/**
+ * Keeps an item from being cut off at the ends of the scale.
+ *
+ * A marker sitting at 0% or 100% would hang half outside its track. Shifting it
+ * by half its width at the edges, and by nothing in the middle, keeps it whole
+ * without visibly moving it where there is room.
+ */
+function pinLeft(percent: number, widthPx: number): string {
+  const shift = widthPx / 2 - (percent / 100) * widthPx
+  return `calc(${percent}% + ${shift}px)`
 }
 
-function bmiLabel(bmi?: number): string | undefined {
-  if (bmi === undefined) return undefined
-  if (bmi < 18.5) return "BMI-Skala: unter 18,5"
-  if (bmi < 25) return "BMI-Skala: 18,5–24,9"
-  if (bmi < 30) return "BMI-Skala: 25,0–29,9"
-  return "BMI-Skala: ab 30,0"
+const BMI_TICKS = [18.5, 25, 30, 35]
+
+/**
+ * The WHO bands as a coloured track, with the patient's BMI on it.
+ *
+ * A bare progress bar answered "how far along some scale" — a question nobody
+ * asks about BMI. What a practitioner needs to see is which band the value
+ * falls into and how far it is from the next one, so the bands are drawn to
+ * scale and the value sits on them.
+ */
+function BmiScale({ bmi, goalBmi }: { bmi: number; goalBmi?: number }) {
+  return (
+    <div>
+      <div className="relative h-2.5">
+        <div className="flex h-full overflow-hidden rounded-full">
+          {/* The hairline is what separates the two Adipositas bands, whose
+              reds sit close together on purpose. */}
+          {BMI_CATEGORIES.map((category) => (
+            <div
+              key={category.id}
+              className="border-r-2 border-card last:border-r-0"
+              style={{ width: `${bmiBandWidth(category)}%`, backgroundColor: category.color }}
+            />
+          ))}
+        </div>
+        {/* A hollow dot, so it cannot be mistaken for the solid needle even
+            when the two land close together. */}
+        {goalBmi !== undefined ? (
+          <span
+            className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full border-2 border-foreground bg-background"
+            style={{ left: pinLeft(bmiScalePosition(goalBmi), 12) }}
+            aria-hidden="true"
+          />
+        ) : null}
+        <span
+          className="absolute top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-foreground ring-2 ring-background"
+          style={{ left: pinLeft(bmiScalePosition(bmi), 4) }}
+          aria-hidden="true"
+        />
+      </div>
+      <div className="relative mt-2 h-4" aria-hidden="true">
+        {BMI_TICKS.map((tick) => (
+          <span
+            key={tick}
+            className="absolute -translate-x-1/2 text-[10px] tabular-nums text-muted-foreground"
+            style={{ left: `${bmiScalePosition(tick)}%` }}
+          >
+            {formatNumber(tick, 1)}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-1 rounded-full bg-foreground" aria-hidden="true" />
+          Jetzt {formatNumber(bmi, 1)}
+        </span>
+        {goalBmi !== undefined ? (
+          <span className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-full border-2 border-foreground"
+              aria-hidden="true"
+            />
+            Ziel {formatNumber(goalBmi, 1)}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 interface TimelineEvent {
@@ -281,6 +331,35 @@ export function PatientOverviewTab({
     0,
     Math.floor((todayDate.getTime() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
   )
+  const currentBmiCategory = bmiCategory(latestMeasurement?.bmi ?? 0)
+  const healthyWeight = latestMeasurement
+    ? healthyWeightRange(latestMeasurement.height, ageYears)
+    : null
+  // Drawn on the scale next to the current value, so the gap is visible rather
+  // than only stated in kilograms.
+  const goalBmi =
+    patient.goalWeight && latestMeasurement?.height
+      ? patient.goalWeight / (latestMeasurement.height / 100) ** 2
+      : undefined
+  const goalDistance =
+    patient.goalWeight && latestMeasurement
+      ? latestMeasurement.weight - patient.goalWeight
+      : undefined
+  // The WHO badge and the sensible range can disagree — a 74-year-old at BMI
+  // 21,6 reads "Normalgewicht" while sitting below the range recommended at
+  // that age. Saying where the weight actually falls settles it.
+  const rangePosition = (() => {
+    if (!latestMeasurement || !healthyWeight) return "Ohne Größe lässt sich kein Bereich berechnen."
+    const weight = latestMeasurement.weight
+    const current = `${formatNumber(weight, 1)} kg`
+    if (weight < healthyWeight.min) {
+      return `${current} liegt ${formatNumber(healthyWeight.min - weight, 1)} kg unter dem sinnvollen Bereich.`
+    }
+    if (weight > healthyWeight.max) {
+      return `${current} liegt ${formatNumber(weight - healthyWeight.max, 1)} kg darüber.`
+    }
+    return `${current} liegt im sinnvollen Bereich.`
+  })()
   const currentStage = derivePatientIntakeStage({
     patient,
     links: intakeLinks,
@@ -463,48 +542,110 @@ export function PatientOverviewTab({
         </CardContent>
       </Card>
 
-      <section aria-label="Körperwerte" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard
-          icon={HeartPulse}
-          label="Alter"
-          value={`${ageYears} Jahre`}
-          note={`Geboren am ${formatDate(patient.dateOfBirth)}`}
-          progress={ageYears}
-          progressLabel="Altersskala von 0 bis 100 Jahren"
-          accentColor={stageMeta.color}
-        />
-        <MetricCard
-          icon={Scale}
-          label="Gewicht"
-          value={latestMeasurement ? `${formatNumber(latestMeasurement.weight, 1)} kg` : "–"}
-          note={latestMeasurement ? `vom ${formatDate(latestMeasurement.date)}` : "Messwert fehlt"}
-          accentColor={stageMeta.color}
-        />
-        <MetricCard
-          icon={Ruler}
-          label="Größe"
-          value={latestMeasurement ? `${formatNumber(latestMeasurement.height)} cm` : "–"}
-          note={latestMeasurement ? "aus letzter Messung" : "Messwert fehlt"}
-          progress={latestMeasurement ? ((latestMeasurement.height - 120) / 100) * 100 : undefined}
-          progressLabel={latestMeasurement ? "Größenskala von 120 bis 220 cm" : undefined}
-          accentColor={stageMeta.color}
-        />
-        <MetricCard
-          icon={HeartPulse}
-          label="BMI"
-          value={latestMeasurement ? formatNumber(latestMeasurement.bmi, 1) : "–"}
-          note={latestWeightChange === undefined ? "Verlauf nach Messung sichtbar" : `${latestWeightChange > 0 ? "+" : ""}${formatNumber(latestWeightChange, 1)} kg seit erster Messung`}
-          progress={bmiProgress(latestMeasurement?.bmi)}
-          progressLabel={bmiLabel(latestMeasurement?.bmi)}
-          accentColor={stageMeta.color}
-        />
-        <MetricCard
-          icon={Target}
-          label="Zielgewicht"
-          value={patient.goalWeight ? `${formatNumber(patient.goalWeight, 1)} kg` : "–"}
-          note={patient.goalWeight && latestMeasurement ? `${formatNumber(Math.abs(latestMeasurement.weight - patient.goalWeight), 1)} kg bis zum Ziel` : patient.goalWeight ? "in der Patientenakte festgelegt" : "Ziel noch nicht festgelegt"}
-          accentColor={stageMeta.color}
-        />
+      <section aria-label="Körperwerte" className="grid gap-3 lg:grid-cols-5">
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Ruler className="h-4 w-4 text-primary" />
+              Körperdaten
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-3 gap-3">
+            <BodyFact
+              label="Alter"
+              value={`${ageYears}`}
+              unit="Jahre"
+              note={`geb. ${formatDate(patient.dateOfBirth)}`}
+            />
+            <BodyFact
+              label="Gewicht"
+              value={latestMeasurement ? formatNumber(latestMeasurement.weight, 1) : "–"}
+              unit={latestMeasurement ? "kg" : undefined}
+              note={
+                latestWeightChange !== undefined
+                  ? `${latestWeightChange > 0 ? "+" : ""}${formatNumber(latestWeightChange, 1)} kg seit Beginn`
+                  : latestMeasurement
+                    ? `gemessen am ${formatDate(latestMeasurement.date)}`
+                    : "noch nicht gemessen"
+              }
+            />
+            <BodyFact
+              label="Größe"
+              value={latestMeasurement ? formatNumber(latestMeasurement.height) : "–"}
+              unit={latestMeasurement ? "cm" : undefined}
+              note={latestMeasurement ? "aus letzter Messung" : "noch nicht gemessen"}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Target className="h-4 w-4 text-primary" />
+              BMI und Zielgewicht
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {latestMeasurement ? (
+              <>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="text-3xl font-semibold tabular-nums">
+                    {formatNumber(latestMeasurement.bmi, 1)}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    style={{ borderColor: currentBmiCategory.color, color: currentBmiCategory.color }}
+                  >
+                    {currentBmiCategory.label}
+                  </Badge>
+                </div>
+                <BmiScale bmi={latestMeasurement.bmi} goalBmi={goalBmi} />
+                <div className="grid gap-x-8 [&>*:last-child]:border-b-0 sm:grid-cols-2 sm:[&>*:nth-last-child(-n+2)]:border-b-0">
+                  <SummaryRow
+                    label="Sinnvoller Bereich"
+                    value={
+                      healthyWeight
+                        ? `${formatNumber(healthyWeight.min, 1)}–${formatNumber(healthyWeight.max, 1)} kg`
+                        : "Größe fehlt"
+                    }
+                    muted={!healthyWeight}
+                  />
+                  <SummaryRow
+                    label="Zielgewicht"
+                    value={
+                      patient.goalWeight
+                        ? `${formatNumber(patient.goalWeight, 1)} kg`
+                        : "Nicht festgelegt"
+                    }
+                    muted={!patient.goalWeight}
+                  />
+                </div>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p>
+                    {rangePosition}
+                    {goalDistance !== undefined
+                      ? ` Noch ${formatNumber(Math.abs(goalDistance), 1)} kg ${goalDistance > 0 ? "abzunehmen" : "zuzunehmen"} bis zum Ziel.`
+                      : ""}
+                  </p>
+                  <p>
+                    {healthyWeight?.ageAdjusted
+                      ? "Ab 65 Jahren liegt der empfohlene Bereich höher (BMI 22–27), weil dort ein zu niedriges Gewicht das größere Risiko ist."
+                      : "Bereich nach WHO-Grenzen. Der BMI ist ein Screeningwert, keine Diagnose."}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Für den BMI fehlen Gewicht und Größe.
+                </p>
+                <Button variant="outline" className="w-full" onClick={onAddMeasurement}>
+                  Messwerte erfassen
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-5">
