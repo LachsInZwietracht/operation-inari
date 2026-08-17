@@ -33,6 +33,7 @@ import { BeratungenTab } from "@/components/patient-tabs/beratungen-tab"
 import { DiagnosenTab } from "@/components/patient-tabs/diagnosen-tab"
 import { StammdatenTab } from "@/components/patient-tabs/stammdaten-tab"
 import { AktivitaetTab } from "@/components/patient-tabs/aktivitaet-tab"
+import { MeasurementDialog } from "@/components/measurement-dialog"
 import { PatientIntakePanel } from "@/components/patient-intake-panel"
 import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
@@ -465,10 +466,12 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
   const initialTabParam = searchParams.get("tab")
   const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "overview"
   const [activeTab, setActiveTab] = useState(initialTab)
+  // Recording a measurement is a small, self-contained task: it opens over
+  // whatever you were reading instead of moving you to another tab.
+  const [measurementOpen, setMeasurementOpen] = useState(false)
   useEffect(() => {
     if (newMeasurementRequest == null) return
-    setActiveTab("anthropometrie")
-    setShowAnthroForm(true)
+    setMeasurementOpen(true)
   }, [newMeasurementRequest])
 
   const profileTriggerValue = PROFILE_TAB_VALUES.includes(activeTab as (typeof PROFILE_TAB_VALUES)[number])
@@ -514,10 +517,7 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           basalMetabolicRate={latestAnthro ? basalMetabolicRate : undefined}
           totalEnergyExpenditure={latestAnthro ? totalEnergyExpenditure : undefined}
           palValue={pal}
-          onAddMeasurement={() => {
-            setActiveTab("anthropometrie")
-            setShowAnthroForm(true)
-          }}
+          onAddMeasurement={() => setMeasurementOpen(true)}
         />
       </TabsContent>
 
@@ -672,6 +672,14 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
           sessions={sessions}
         />
       </TabsContent>
+
+      <MeasurementDialog
+        open={measurementOpen}
+        onOpenChange={setMeasurementOpen}
+        patientId={patient.id}
+        defaultHeight={latestAnthro?.height}
+        onSubmit={addAnthroEntry}
+      />
     </Tabs>
   )
 }

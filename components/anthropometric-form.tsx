@@ -1,11 +1,13 @@
 "use client"
 
-import { useForm } from "react-hook-form"
+import { useEffect, useMemo, useState } from "react"
+import { useForm, useWatch } from "react-hook-form"
 import { z } from "zod"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { formatDate } from "@/lib/format"
 import { typedZodResolver } from "@/lib/forms"
 import {
   Form,
@@ -38,9 +40,50 @@ const anthroSchema = z.object({
 
 type AnthroFormValues = z.infer<typeof anthroSchema>
 
+/**
+ * A half-filled measurement, kept between visits.
+ *
+ * Sixteen fields is a lot to re-enter, and a consultation gets interrupted.
+ * The draft lives in `localStorage` rather than the database on purpose: it is
+ * unvalidated, possibly wrong input, and must never look like a recorded
+ * measurement until the practitioner saves it.
+ */
+interface StoredDraft {
+  savedAt: string
+  values: Partial<AnthroFormValues>
+}
+
+function readDraft(key?: string): StoredDraft | null {
+  if (!key || typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as StoredDraft
+    return parsed && typeof parsed === "object" && parsed.values ? parsed : null
+  } catch {
+    // Corrupt or unavailable storage must never block recording a measurement.
+    return null
+  }
+}
+
+function clearDraft(key?: string) {
+  if (!key || typeof window === "undefined") return
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Nothing to do — the draft simply outlives this attempt to drop it.
+  }
+}
+
 interface AnthropometricFormProps {
   patientId: string
   defaultHeight?: number
+  /**
+   * Storage key for keeping unsaved input. Omit to disable drafting entirely.
+   * Callers pass a per-patient key so one patient's draft can never surface in
+   * another's record.
+   */
+  draftKey?: string
   onSubmit: (entry: Omit<AnthropometricEntry, "id" | "createdAt" | "updatedAt">) => void
   onCancel: () => void
 }
@@ -48,12 +91,12 @@ interface AnthropometricFormProps {
 export function AnthropometricForm({
   patientId,
   defaultHeight,
+  draftKey,
   onSubmit,
   onCancel,
 }: AnthropometricFormProps) {
-  const form = useForm<AnthroFormValues>({
-    resolver: typedZodResolver(anthroSchema),
-    defaultValues: {
+  const emptyValues = useMemo<AnthroFormValues>(
+    () => ({
       date: format(new Date(), "yyyy-MM-dd"),
       weight: 0,
       height: defaultHeight ?? 0,
@@ -70,8 +113,47 @@ export function AnthropometricForm({
       proteinPercentage: "",
       bmrKcal: "",
       metabolicAgeYears: "",
-    },
+    }),
+    [defaultHeight],
+  )
+
+  // Read once, during the first render: the restored values have to be in place
+  // before the form initialises, and a later effect would overwrite typing.
+  const [restoredDraft, setRestoredDraft] = useState(() => readDraft(draftKey))
+
+  const form = useForm<AnthroFormValues>({
+    resolver: typedZodResolver(anthroSchema),
+    defaultValues: { ...emptyValues, ...restoredDraft?.values },
   })
+
+  // `useWatch` rather than `form.watch(callback)`: the callback form hands back
+  // a subscription the React Compiler cannot reason about, and it opts the
+  // whole component out of memoisation.
+  const watchedValues = useWatch({ control: form.control })
+  const isDirty = form.formState.isDirty
+
+  useEffect(() => {
+    // An untouched form must not leave a draft behind, or reopening a record
+    // would always claim there was unsaved work.
+    if (!draftKey || !isDirty) return
+    try {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          savedAt: new Date().toISOString(),
+          values: watchedValues,
+        } satisfies StoredDraft),
+      )
+    } catch {
+      // Full or blocked storage costs the draft, not the measurement.
+    }
+  }, [draftKey, isDirty, watchedValues])
+
+  function handleDiscardDraft() {
+    clearDraft(draftKey)
+    setRestoredDraft(null)
+    form.reset(emptyValues)
+  }
 
   function handleSubmit(values: AnthroFormValues) {
     const heightM = values.height / 100
@@ -99,11 +181,34 @@ export function AnthropometricForm({
       bmrKcal: typeof values.bmrKcal === "number" ? values.bmrKcal : undefined,
       metabolicAgeYears: typeof values.metabolicAgeYears === "number" ? values.metabolicAgeYears : undefined,
     })
+
+    // The values are recorded now, so the draft has served its purpose.
+    clearDraft(draftKey)
+    setRestoredDraft(null)
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        {restoredDraft ? (
+          // Restored values must announce themselves. Numbers appearing in a
+          // clinical form without explanation is how a stale draft becomes a
+          // recorded measurement.
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Nicht gespeicherter Entwurf vom {formatDate(restoredDraft.savedAt)} wiederhergestellt.
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              onClick={handleDiscardDraft}
+            >
+              Entwurf verwerfen
+            </Button>
+          </div>
+        ) : null}
         <div className="grid gap-4 sm:grid-cols-3">
           <FormField
             control={form.control}

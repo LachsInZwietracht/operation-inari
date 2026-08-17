@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { measurementDraftKey } from "@/components/measurement-dialog"
 import { formatDate, formatNumber } from "@/lib/format"
 import type { AnthropometricEntry, Patient } from "@/lib/types"
 
@@ -245,6 +246,9 @@ export function AnthropometrieTab({
             <div className="mb-6 rounded-lg border p-4">
               <AnthropometricForm
                 patientId={patient.id}
+                // The same key the dialog uses: one draft per patient, whether
+                // it was started here or from the overview.
+                draftKey={measurementDraftKey(patient.id)}
                 defaultHeight={latestAnthro?.height}
                 onSubmit={(entry) => {
                   onAddEntry(entry)

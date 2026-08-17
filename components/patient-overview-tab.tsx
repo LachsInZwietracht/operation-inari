@@ -381,7 +381,9 @@ export function PatientOverviewTab({
   return (
     <div className="space-y-4">
       <Card style={phaseStyle}>
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 pb-3">
+        {/* `flex` is needed as well as `flex-row`: CardHeader is a grid by
+            default, and flex-direction alone does not override display. */}
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 pb-3">
           <div className="flex items-center gap-2.5">
             <CardTitle className="text-base">Aktueller Stand</CardTitle>
             <Badge style={{ backgroundColor: stageMeta.color, color: "white" }}>

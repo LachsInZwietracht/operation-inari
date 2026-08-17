@@ -28,6 +28,8 @@ const LABEL_FLIP_PERCENT = 68
 const LABEL_BEFORE_MIN_PERCENT = 28
 /** Rendered size of a history mark, in px. Must match the `size-*` class below. */
 const MARK_SIZE_PX = 10
+/** Keeps a stage that started moments ago from rendering as nothing at all. */
+const MIN_SEGMENT_PERCENT = 0.6
 
 interface TimelineWindow {
   startMs: number
@@ -176,7 +178,6 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
   const meta = INTAKE_STAGE_META[row.stage]
   const left = toPercent(row.enteredStageAt, window)
   const right = toPercent(row.runsUntil, window)
-  const width = Math.max(right - left, 0.6)
 
   /*
    * Where the label goes, in order of preference:
@@ -208,6 +209,8 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
     else if (zone === "after") laterEvents.push(event)
     else visibleEvents.push(event)
   }
+
+  const segments = resolveSegments(row, window, right)
 
   return (
     <div
@@ -247,15 +250,18 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
         <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
         <span className="absolute left-1/2 top-0 h-full w-px bg-fg-4" aria-hidden="true" />
 
-        <span
-          className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full"
-          style={{
-            left: `${left}%`,
-            width: `${width}%`,
-            backgroundColor: meta.color,
-          }}
-          aria-hidden="true"
-        />
+        {segments.map((segment) => (
+          <span
+            key={segment.id}
+            className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full"
+            style={{
+              left: `${segment.left}%`,
+              width: `${segment.width}%`,
+              backgroundColor: segment.color,
+            }}
+            aria-hidden="true"
+          />
+        ))}
 
         {earlierEvents.length > 0 ? (
           <IntakeHistoryOverflowMark events={earlierEvents} side="left" />
@@ -298,6 +304,61 @@ function IntakeTimelineRow({ row, window, onReview, disabled }: IntakeTimelineRo
   )
 }
 
+interface TimelineSegment {
+  id: string
+  left: number
+  width: number
+  color: string
+}
+
+/**
+ * Splits the row into one coloured bar per stage this person passed through.
+ *
+ * A single bar for the current stage left everything before it as bare track,
+ * so the row said "ready for 5 days" without showing the weeks of waiting that
+ * led there. Each milestone opens a segment that runs to the next one, carrying
+ * the colour of the stage that was live during it; the final segment runs to
+ * the row's end and takes the current stage's colour.
+ */
+function resolveSegments(
+  row: IntakeRow,
+  window: TimelineWindow,
+  endPercent: number,
+): TimelineSegment[] {
+  const currentColor = INTAKE_STAGE_META[row.stage].color
+
+  // Deadlines and bookings are points in the future, not the start of a stage
+  // somebody has already reached — they must not open a segment.
+  const anchors = row.history.filter((event) => !event.pending)
+
+  if (anchors.length === 0) {
+    const left = toPercent(row.enteredStageAt, window)
+    return [
+      {
+        id: "current",
+        left,
+        width: Math.max(endPercent - left, MIN_SEGMENT_PERCENT),
+        color: currentColor,
+      },
+    ]
+  }
+
+  return anchors.map((anchor, index) => {
+    const isCurrent = index === anchors.length - 1
+    const left = toPercent(anchor.date, window)
+    const right = isCurrent ? endPercent : toPercent(anchors[index + 1].date, window)
+
+    return {
+      id: anchor.id,
+      left,
+      // Two milestones on the same day produce a zero-width segment. That is
+      // correct — the marks still show both — so this is not padded out.
+      width: Math.max(right - left, isCurrent ? MIN_SEGMENT_PERCENT : 0),
+      color: isCurrent ? currentColor : INTAKE_STAGE_META[anchor.stage].color,
+    }
+  })
+}
+
 /**
  * One dated milestone, marked on the row's own line rather than folded into
  * the current-stage bar — so a practitioner can see the whole way here, not
@@ -321,9 +382,11 @@ function IntakeHistoryMark({
           style={{
             left: markLeft(toPercent(event.date, window)),
             // A milestone that already happened is solid; one still ahead of us
-            // is hollow, so a deadline never reads as a done deal.
+            // is hollow, so a deadline never reads as a done deal. The ring is
+            // the page background either way: marks now sit on top of the
+            // stage bars, and a same-coloured mark on its own bar is invisible.
             backgroundColor: event.pending ? "var(--background)" : color,
-            borderColor: color,
+            borderColor: event.pending ? color : "var(--background)",
           }}
         />
       </TooltipTrigger>
