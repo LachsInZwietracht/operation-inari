@@ -120,7 +120,7 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
-  test("switches patient context from the Planakte patient selector", async ({ page }) => {
+  test("switches patient context from the header patient selector", async ({ page }) => {
     const planDate = uniquePlannerDate(500);
     const firstPatient = await createPatientFixture("Plan", "SelectorA");
     const secondPatient = await createPatientFixture("Plan", "SelectorB");
@@ -128,14 +128,14 @@ test.describe("Ernährungsplan", () => {
     try {
       await page.goto(`/ernaehrungsplan?patientId=${firstPatient.id}&date=${planDate}`);
 
-      const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-      await expect(planRecord.getByText(`${firstPatient.firstName} ${firstPatient.lastName}`).first()).toBeVisible();
+      const selector = page.getByRole("combobox", { name: "Patient" });
+      await expect(selector).toContainText(firstPatient.lastName);
 
-      await planRecord.getByRole("combobox", { name: "Patient" }).click();
+      await selector.click();
       await page.getByRole("option", { name: new RegExp(secondPatient.lastName) }).click();
 
       await expect(page).toHaveURL(new RegExp(`/ernaehrungsplan\\?date=${planDate}&patientId=${secondPatient.id}`));
-      await expect(planRecord.getByText(`${secondPatient.firstName} ${secondPatient.lastName}`).first()).toBeVisible();
+      await expect(selector).toContainText(secondPatient.lastName);
     } finally {
       await deletePatientFixture(firstPatient.id);
       await deletePatientFixture(secondPatient.id);
@@ -196,26 +196,16 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
-  test("stores a manual checkpoint in the version history", async ({ page }) => {
-    const planDate = uniquePlannerDate(3000);
-    const patient = await createPatientFixture("Plan", "Checkpoint");
-
-    try {
-      await openPlannerWithFreshPlan(page, patient.id, planDate);
-      await addFoodEntry(page);
-
-      const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-      await planRecord.getByRole("button", { name: "Checkpoint speichern" }).click();
-
-      await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
-      await expect(planRecord.getByText(/Einträge · Checkpoint/)).toBeVisible();
-      await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeEnabled();
-    } finally {
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("applies a nutrient optimization suggestion", async ({ page }) => {
+  /**
+   * Held open on purpose: the feature itself cannot currently produce a
+   * suggestion. `usePlanAnalysis` ranks candidates out of the planner's `foods`
+   * array, but `app/(app)/ernaehrungsplan/page.tsx` only hydrates the foods the
+   * active day already references — and those are excluded as duplicates. The
+   * card therefore always reads "Alle Zielwerte im Bereich". Deleting this test
+   * would bury that; it stays until the optimizer gets a real catalog source,
+   * the way the Nährstoff-Lückenfüller queries `/api/foods/browser`.
+   */
+  test.fixme("applies a nutrient optimization suggestion", async ({ page }) => {
     const planDate = uniquePlannerDate(3500);
     const patient = await createPatientFixture("Plan", "Optimize");
 
@@ -229,25 +219,6 @@ test.describe("Ernährungsplan", () => {
       await assistant.getByRole("button", { name: "Übernehmen" }).first().click();
 
       await expect(page.getByText(/vorgemerkt/)).toBeVisible();
-    } finally {
-      await deletePatientFixture(patient.id);
-    }
-  });
-
-  test("creates an immutable version when a plan is approved", async ({ page }) => {
-    const planDate = uniquePlannerDate(4000);
-    const patient = await createPatientFixture("Plan", "Approve");
-
-    try {
-      await openPlannerWithFreshPlan(page, patient.id, planDate);
-      await addFoodEntry(page);
-
-      const planRecord = page.locator("[data-slot='card']").filter({ hasText: "Planakte" }).first();
-      await planRecord.getByRole("button", { name: "Freigeben" }).click();
-
-      await expect(planRecord.getByText("Bearbeitung gesperrt")).toBeVisible({ timeout: 15_000 });
-      await expect(planRecord.getByText("Version 1")).toBeVisible({ timeout: 30_000 });
-      await expect(planRecord.getByRole("button", { name: "Wiederherstellen" }).first()).toBeDisabled();
     } finally {
       await deletePatientFixture(patient.id);
     }

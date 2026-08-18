@@ -746,7 +746,7 @@ export function PatientOverviewTab({
               {weightChartData.length
                 ? projection
                   ? "Gemessen durchgezogen, die Prognose zum Tagesziel gestrichelt."
-                  : "Die letzten Messungen im Überblick."
+                  : "Die letzten Messungen."
                 : "Nach der ersten Messung erscheint hier der Verlauf."}
             </CardDescription>
           </CardHeader>
@@ -890,7 +890,7 @@ export function PatientOverviewTab({
           <CardContent className="space-y-3">
             <div className="rounded-lg border p-3">
               <p className="text-sm font-medium">{nextAppointment ? nextAppointment.title : "Kein Termin geplant"}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{nextAppointment ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)} Uhr` : "Plane die nächste Beratung direkt im Kalender."}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{nextAppointment ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)} Uhr` : "Noch kein Termin vereinbart."}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" asChild><Link href={`/kalender?patientId=${patient.id}`}>Termin planen</Link></Button>

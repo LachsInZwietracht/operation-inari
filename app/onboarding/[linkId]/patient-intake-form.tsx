@@ -781,7 +781,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
           <div className="space-y-4">
             <Field
               label="Was möchtest du erreichen?"
-              hint="Mehrfachauswahl. Das erste Ziel gilt als das wichtigste."
+              hint="Du kannst mehrere anklicken — das erste zählt als das wichtigste."
               error={errors.primaryGoals?.message}
             >
               <div className="grid gap-2">
@@ -895,7 +895,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
           <div className="space-y-4">
             <Field
               label="Bestehende Erkrankungen (optional)"
-              hint="Mehrfachauswahl. Was hier fehlt, kannst du darunter ergänzen."
+              hint="Mehreres ist möglich. Was hier fehlt, trägst du darunter ein."
             >
               <div className="flex flex-wrap gap-2">
                 {INTAKE_CONDITION_OPTIONS.map((condition) => (
@@ -998,7 +998,7 @@ export function PatientIntakeForm({ linkId }: PatientIntakeFormProps) {
             </Field>
             <Field
               label="Was kommt nicht auf den Teller? (optional)"
-              hint="Mehrfachauswahl."
+              hint="Mehreres ist möglich."
             >
               <div className="flex flex-wrap gap-2">
                 {DIET_EXCLUSIONS.map((exclusion) => (

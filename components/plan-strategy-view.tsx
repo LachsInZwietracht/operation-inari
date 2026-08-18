@@ -111,7 +111,7 @@ export function PlanStrategyView({
             Umsetzung
           </CardTitle>
           <CardDescription>
-            Die Strategie sagt, wohin es geht. Der Tagesplan ist ein Weg dorthin.
+            Der Tagesplan setzt die Zielwerte oben in Mahlzeiten um.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-4">
@@ -146,15 +146,15 @@ function GoalCard({ patient }: { patient?: Patient }) {
           <Flag className="h-4 w-4" />
           Ziel
         </CardTitle>
-        <CardDescription>Was mit diesem Plan erreicht werden soll.</CardDescription>
+        <CardDescription>Wohin die Beratung führen soll.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {goalText ? (
           <p className="text-sm whitespace-pre-line">{goalText}</p>
         ) : (
           <p className="text-muted-foreground text-sm">
-            Für diesen Patienten ist kein Ziel hinterlegt. Es kommt aus dem
-            Aufnahmebogen oder wird in der Patientenakte eingetragen.
+            Noch kein Ziel hinterlegt. Es kommt aus dem Aufnahmebogen oder wird in
+            der Patientenakte eingetragen.
           </p>
         )}
 
@@ -240,8 +240,8 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Zielwerte</CardTitle>
         <CardDescription>
-          Die Zahlen, an denen jeder Tag gemessen wird. Sie gelten für den
-          Patienten, nicht nur für diesen Plan.
+          Jeder Tag wird an diesen Zahlen gemessen. Sie hängen am Patienten und
+          gelten deshalb auch für jeden weiteren Plan.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -306,8 +306,8 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">
-            Ohne Kalorienziel gibt es keine Gramm-Zielwerte. Tragen Sie oben einen
-            Wert ein oder berechnen Sie ihn im Kalorienrechner.
+            Gramm-Zielwerte entstehen erst aus dem Kalorienziel. Tragen Sie oben
+            einen Wert ein oder holen Sie ihn aus dem Kalorienrechner.
           </p>
         )}
 
@@ -366,7 +366,7 @@ function FrameCard({ patient, allergies, exclusions, dietLine }: FrameCardProps)
           <ShieldAlert className="h-4 w-4" />
           Rahmen
         </CardTitle>
-        <CardDescription>Was in keinem Tag vorkommen darf.</CardDescription>
+        <CardDescription>Was auf keinen Teller darf.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {hasFrame ? (

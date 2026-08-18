@@ -166,8 +166,8 @@ export function PatientEnergyCard({
           Energie und Kalorienziel
         </CardTitle>
         <CardDescription>
-          Aus den aktuellen Messwerten und dem Aktivitätswert. Verschiebe das Tagesziel, um zu
-          sehen, wohin es führt.
+          Aus den aktuellen Messwerten und dem Aktivitätswert. Zieh am Tagesziel, die
+          Prognose rechnet mit.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
