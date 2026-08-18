@@ -219,7 +219,9 @@ test.describe("in the diary", () => {
     await expect(breakfast.getByText(/60 g · 210 kcal/)).toBeVisible();
 
     // Nothing is eaten yet, so the day is still empty.
-    const totals = page.locator("[data-slot=card]").first();
+    // Identified by content, not by position: the check-in card sits above the
+    // totals in the diary, so "the first card" is no longer this one.
+    const totals = page.locator("[data-slot=card]").filter({ hasText: "Eiweiß" }).first();
     await expect(totals.getByText("0", { exact: true })).toBeVisible();
 
     // One tap is the whole answer.
@@ -256,7 +258,9 @@ test.describe("in the diary", () => {
     await page.getByRole("menuitem", { name: "Nicht gegessen" }).click();
 
     await expect(breakfast.locator(".line-through")).toBeVisible();
-    const totals = page.locator("[data-slot=card]").first();
+    // Identified by content, not by position: the check-in card sits above the
+    // totals in the diary, so "the first card" is no longer this one.
+    const totals = page.locator("[data-slot=card]").filter({ hasText: "Eiweiß" }).first();
     await expect(totals.getByText("0", { exact: true })).toBeVisible();
   });
 });

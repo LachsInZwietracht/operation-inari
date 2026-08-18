@@ -26,13 +26,20 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { todayIsoDate } from "@/lib/client-mode"
-import { isClientModuleEnabled } from "@/lib/client-modules"
+import { isClientCapabilityEnabled, isClientModuleEnabled } from "@/lib/client-modules"
+import {
+  resolveClientMetricPreferences,
+  type ClientMetricPreferences,
+} from "@/lib/client-metrics"
+import { ClientCheckinTrends } from "@/components/client/client-checkin-trends"
+import { ClientCorrelationView } from "@/components/client/client-correlation-view"
+import { fetchClientMetricPreferences } from "@/lib/data/client-checkin-client"
 import { formatSet } from "@/lib/client-training"
 import { ClientNutrientTrends } from "@/components/client/client-nutrient-trends"
 import { ClientTrainingSummary } from "@/components/client/client-training-summary"
 import { PatientStatsTab } from "@/components/patient-stats-tab"
 import { summarizeNutrientTrends } from "@/lib/client-micronutrients"
-import { CLIENT_STATS_WINDOW_DAYS } from "@/lib/client-stats"
+import { CLIENT_CHECKIN_WINDOW_DAYS, CLIENT_STATS_WINDOW_DAYS } from "@/lib/client-stats"
 import { fetchClientStats, type ClientStats } from "@/lib/data/client-stats-client"
 import {
   fetchClientPatientHistory,
@@ -110,6 +117,8 @@ function shortDate(iso: string) {
 export function ClientStatsView({ clientUserId }: { clientUserId: string | null }) {
   const [stats, setStats] = useState<ClientStats | null>(null)
   const [history, setHistory] = useState<ClientPatientHistory | null>(null)
+  const [preferences, setPreferences] = useState<ClientMetricPreferences | null>(null)
+  const [windowDays, setWindowDays] = useState<number>(CLIENT_CHECKIN_WINDOW_DAYS)
   const [isLoading, setIsLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -121,9 +130,10 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
       // Both sides of the picture, but independently: the measurement history
       // only exists when a counselor keeps one, and its absence must not stop
       // the client's own numbers from rendering.
-      const [ownStats, patientHistory] = await Promise.allSettled([
-        fetchClientStats(clientUserId, todayIsoDate()),
+      const [ownStats, patientHistory, metricPreferences] = await Promise.allSettled([
+        fetchClientStats(clientUserId, todayIsoDate(), undefined, windowDays),
         fetchClientPatientHistory(),
+        fetchClientMetricPreferences(),
       ])
 
       if (ownStats.status === "fulfilled") setStats(ownStats.value)
@@ -131,10 +141,16 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
 
       if (patientHistory.status === "fulfilled") setHistory(patientHistory.value)
       else console.error("Failed to load patient history:", patientHistory.reason)
+
+      setPreferences(
+        resolveClientMetricPreferences(
+          metricPreferences.status === "fulfilled" ? metricPreferences.value : [],
+        ),
+      )
     } finally {
       setIsLoading(false)
     }
-  }, [clientUserId])
+  }, [clientUserId, windowDays])
 
   useEffect(() => {
     void load()
@@ -235,6 +251,26 @@ export function ClientStatsView({ clientUserId }: { clientUserId: string | null 
           activities={history.activities}
           sessions={[]}
         />
+      )}
+
+      {isClientCapabilityEnabled("befinden") && preferences && (
+        <>
+          <SectionHeading>Befinden</SectionHeading>
+
+          <ClientCheckinTrends
+            rows={stats?.dayFacts ?? []}
+            notesByDate={stats?.notesByDate ?? new Map()}
+            preferences={preferences}
+            windowDays={windowDays}
+            onWindowChange={setWindowDays}
+          />
+
+          <ClientCorrelationView
+            rows={stats?.dayFacts ?? []}
+            preferences={preferences}
+            windowDays={windowDays}
+          />
+        </>
       )}
 
       <SectionHeading>Ernährung</SectionHeading>

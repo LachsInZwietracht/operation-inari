@@ -50,10 +50,16 @@ export function ClientInviteAccept({
           <p>Wenn du zustimmst, darf {counselorName}:</p>
           <ul className="list-disc space-y-1 pl-5">
             <li>dein Ernährungstagebuch lesen</li>
+            <li>
+              sehen, wie es dir an einem Tag ging — Wohlbefinden, Schlaf und was du sonst im
+              Check-in einträgst
+            </li>
           </ul>
           <p>
             Deine Einträge gehören weiterhin dir. Deine Beratung kann nichts für dich eintragen
-            oder löschen, und du kannst die Verbindung jederzeit unter „Betreuung“ beenden.
+            oder löschen, und du kannst die Verbindung jederzeit unter „Betreuung“ beenden. Was
+            von deinem Befinden geteilt wird, entscheidest du einzeln in den Einstellungen — und
+            die Freigabe dafür kannst du unter „Betreuung“ auch allein zurückziehen.
           </p>
         </div>
 

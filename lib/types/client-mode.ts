@@ -21,6 +21,8 @@ export interface ClientLink extends Timestamped {
   status: ClientLinkStatus;
   consentNutrition: boolean;
   consentTraining: boolean;
+  /** Whether the counselor may see check-in data at all. */
+  consentWellbeing: boolean;
   consentedAt?: string;
   revokedAt?: string;
 }
@@ -68,6 +70,35 @@ export interface ClientFoodLogDay {
   waterMl?: number;
   entries: ClientFoodLogEntry[];
 }
+
+/**
+ * One self-reported day.
+ *
+ * Every value is optional and an absent one means "not answered" — never a
+ * zero and never a low value. `sleepMinutes` belongs to the night ONTO
+ * `date`, which is what the check-in labels and what keeps the evaluation
+ * from mixing "slept badly, then ate" with "ate, then slept badly".
+ */
+export type ClientCheckin = {
+  id: ID;
+  date: string; // ISO date YYYY-MM-DD
+  wellbeing?: number;
+  energy?: number;
+  mood?: number;
+  digestion?: number;
+  sleepMinutes?: number;
+  sleepQuality?: number;
+  /** Standardgläser à 10 g ethanol. A quantity, never an energy. */
+  alcoholUnits?: number;
+};
+
+/** The three switches a client sets per metric. Absent rows are defaults. */
+export type ClientMetricPreferenceRow = {
+  metricKey: string;
+  tracked: boolean;
+  shown: boolean;
+  shared: boolean;
+};
 
 /** One component of a saved meal — the same shape as a diary entry. */
 export interface ClientSavedMealItem {

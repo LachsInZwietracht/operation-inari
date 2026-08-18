@@ -18,10 +18,12 @@ import {
 } from "@/components/ui/card"
 import { calculateClientLogNutrients } from "@/lib/client-food-log"
 import { formatInviteCode, todayIsoDate } from "@/lib/client-mode"
-import { isClientModuleEnabled } from "@/lib/client-modules"
+import { isClientCapabilityEnabled, isClientModuleEnabled } from "@/lib/client-modules"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { fetchClientFoodLogDays } from "@/lib/data/client-food-log-client"
 import { hydrateClientFoods } from "@/lib/data/client-custom-foods-client"
+import { fetchClientWellbeingSeries } from "@/lib/data/client-checkin-client"
+import { formatMetricValue, getClientMetric, isClientMetricKey } from "@/lib/client-metrics"
 import { fetchClientRecipeFacts } from "@/lib/data/client-plan-nutrition-client"
 import { fetchClientAdherence } from "@/lib/data/client-plan-client"
 import { fetchClientWorkoutSessions } from "@/lib/data/client-training-client"
@@ -77,6 +79,9 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
   const [link, setLink] = useState<ClientLink | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [days, setDays] = useState<ClientFoodLogDay[]>([])
+  const [wellbeing, setWellbeing] = useState<Map<string, { date: string; value: number }[]>>(
+    new Map(),
+  )
   const [foods, setFoods] = useState<Map<string, Food>>(new Map())
   const [recipeFacts, setRecipeFacts] = useState<
     Map<string, { name: string; perPortion: NutrientValue[] }>
@@ -121,6 +126,13 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
       // and the section stays hidden rather than showing an empty shell.
       if (isClientModuleEnabled("training")) {
         setWorkouts(await fetchClientWorkoutSessions(clientUserId, 5, supabase))
+      }
+
+      // Read through the function, never the table: which metrics come back is
+      // the client's decision, expressed per metric, and the table itself has
+      // no policy that would let this side see any of it.
+      if (isClientCapabilityEnabled("befinden")) {
+        setWellbeing(await fetchClientWellbeingSeries(patient.id, range, supabase))
       }
 
       // Includes the client's own products, which the by-ids endpoint strips —
@@ -350,6 +362,44 @@ export function KlientenAppTab({ patient }: { patient: Patient }) {
                   </li>
                 )
               })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {link?.status === "active" && isClientCapabilityEnabled("befinden") && wellbeing.size > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Befinden der letzten {LOG_WINDOW_DAYS} Tage</CardTitle>
+            <CardDescription>
+              Vom Klienten selbst angegeben und einzeln freigegeben — was hier fehlt, wurde nicht
+              geteilt.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {[...wellbeing.entries()]
+                .filter(([metricKey]) => isClientMetricKey(metricKey))
+                .map(([metricKey, series]) => {
+                  const metric = getClientMetric(metricKey as Parameters<typeof getClientMetric>[0])
+                  const average =
+                    series.reduce((sum, point) => sum + point.value, 0) / series.length
+                  const latest = series[series.length - 1]
+                  return (
+                    <li key={metricKey} className="flex items-center justify-between gap-2 py-2">
+                      <div>
+                        <p className="text-sm font-medium">{metric.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {series.length} {series.length === 1 ? "Angabe" : "Angaben"} · zuletzt{" "}
+                          {format(parseISO(latest.date), "d. MMMM", { locale: de })}
+                        </p>
+                      </div>
+                      <p className="text-sm tabular-nums">
+                        ⌀ {formatMetricValue(metric, average)}
+                      </p>
+                    </li>
+                  )
+                })}
             </ul>
           </CardContent>
         </Card>

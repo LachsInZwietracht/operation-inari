@@ -3,6 +3,19 @@ import { format, parseISO, startOfWeek, subDays, subWeeks } from "date-fns";
 /** Two weeks: long enough to show a pattern, short enough to read on a phone. */
 export const CLIENT_STATS_WINDOW_DAYS = 14;
 
+/**
+ * How far back the check-in sections look.
+ *
+ * Two weeks is the right window for "what have I been eating"; it is the wrong
+ * one for comparing two metrics, where fourteen points is barely more than the
+ * floor a comparison is allowed to speak from at all. Eight weeks is also the
+ * grain the training section already uses.
+ */
+export const CLIENT_CHECKIN_WINDOW_DAYS = 56;
+
+/** The windows the check-in sections offer, shortest first. */
+export const CLIENT_CHECKIN_WINDOW_OPTIONS = [14, 28, 56] as const;
+
 export interface ClientKcalDay {
   date: string;
   kcal: number;

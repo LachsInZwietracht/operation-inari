@@ -27,6 +27,7 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Clinic IT integrations: LDAP/AD, FHIR | `docs/clinic-it-integration-plan.md` | P1 integration contracts and implementation boundaries. |
 | Client mode: client accounts, tracking, counselor/client linking | `docs/client-mode-plan.md` | Proposal, not implemented. Second product surface; own priority line next to the clinic-first roadmap. |
 | Patient intake, client dashboard, calorie calculator, calendar, plan suggestions | `docs/patient-dashboard-plan.md` | Phased plan from intake truth through the patient overview and safe plan generation. |
+| Client check-in: wellbeing, sleep, alcohol, and the correlation surface | `docs/client-befinden-plan.md` | Shipped (M8 of client mode). Metric registry, per-metric sharing, and the no-recommendations positioning. |
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
 | Public repository release | `docs/public-release.md` | Clean-snapshot release process, security settings, and history warning. |
 | Billing/subscription work | `.agent/docs/billing.md` | Billing is preview-only unless code proves otherwise. |

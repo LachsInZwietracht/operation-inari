@@ -113,11 +113,26 @@ export function isClientModuleEnabled(id: ClientModuleId): boolean {
  *   app/api/foods/barcode/[code]/         lookup endpoint
  *   components/client/client-barcode-*    UI
  *   tests/client-barcode*.spec.ts         tests
+ *
+ * The check-in is a capability for the same reason, and owns schema besides —
+ * the one thing the barcode entry does not. What makes it a capability rather
+ * than a module is that it has no route: it renders inside the diary, because
+ * a wellbeing score people have to navigate to is a wellbeing score people
+ * stop filling in. Switching it off removes the card, the settings section and
+ * the evaluation, and leaves every stored row untouched.
+ *
+ *   lib/client-metrics.ts                 the metric registry
+ *   lib/client-checkin.ts                 day facts and comparison math
+ *   lib/data/client-checkin-client.ts     data access
+ *   supabase/migrations/*_client_daily_checkins, *_client_metric_preferences
+ *   components/client/client-checkin-card.tsx, client-metric-settings.tsx
+ *   tests/client-checkin*.spec.ts         tests
  */
-export type ClientCapabilityId = "barcode";
+export type ClientCapabilityId = "barcode" | "befinden";
 
 const CLIENT_CAPABILITIES: Record<ClientCapabilityId, boolean> = {
   barcode: true,
+  befinden: true,
 };
 
 export function isClientCapabilityEnabled(id: ClientCapabilityId): boolean {

@@ -326,6 +326,29 @@ bar that fills up is an instruction to fill it.
    `…89`) *and* marks the plan entry skipped, which leaves adherence
    arithmetic untouched and gives the counselor "statt Linsensuppe: Döner".
 
+**M8 — Der Tages-Check-in und die Auswertung**: ✅ shipped, detailed in
+`docs/client-befinden-plan.md`.
+
+A mandatory wellbeing score (1–10) plus optional sub-scores (Energie, Stimmung,
+Verdauung), sleep duration and quality, and alcohol in Standardgläser — in a new
+`client_daily_checkins` table with its own `consent_wellbeing` area. On top of
+it an evaluation surface that puts any two metrics next to each other: a
+time-axis chart with a −3…+3 day shift control, and a bucket comparison ("an
+Tagen mit 7–8 h Schlaf: Ø Wohlbefinden 7,2, n=9").
+
+Three things fix the shape of it. The client alone decides what is tracked,
+shown and shared, per metric, which makes sharing column-level and therefore
+impossible to express in RLS — the counselor reads through a `SECURITY DEFINER`
+function emitting long format instead of the table. Sleep belongs to the night
+*onto* a day, declared in the metric registry, so a pairing gets its time
+direction without the user setting a lag. And the app never searches for
+correlations, ranks them or recommends anything: it is an evaluation tool, the
+user picks the pair, and interpretation happens with the counselor.
+
+Erfassung shipped alone first (M8.1) — the evaluation needs weeks of history
+that does not exist on launch day, and the sections above it are built to say
+"noch {n} Tage" rather than to draw four points.
+
 **Later candidates**: photo meal logging, weight/measurement self-entry feeding `patient_anthropometrics`, counselor→client messages and nudges, missed-log reminders, client-visible goals.
 
 ## Risks

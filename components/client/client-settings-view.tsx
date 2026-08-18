@@ -15,6 +15,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { todayIsoDate } from "@/lib/client-mode"
+import { isClientCapabilityEnabled } from "@/lib/client-modules"
+import {
+  resolveClientMetricPreferences,
+  type ClientMetricPreferences,
+} from "@/lib/client-metrics"
+import { ClientMetricSettings } from "@/components/client/client-metric-settings"
+import { fetchClientMetricPreferences } from "@/lib/data/client-checkin-client"
+import { fetchActiveLinksForClient } from "@/lib/data/client-links"
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client"
 import { recordClientWeight } from "@/lib/data/client-anthropometrics-client"
 import {
   fetchClientPatientHistory,
@@ -42,6 +51,8 @@ import type { ClientSavedMeal } from "@/lib/types"
 export function ClientSettingsView({ clientUserId }: { clientUserId: string | null }) {
   const [history, setHistory] = useState<ClientPatientHistory | null>(null)
   const [meals, setMeals] = useState<ClientSavedMeal[]>([])
+  const [preferences, setPreferences] = useState<ClientMetricPreferences | null>(null)
+  const [canShare, setCanShare] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -50,13 +61,26 @@ export function ClientSettingsView({ clientUserId }: { clientUserId: string | nu
       return
     }
     try {
-      // Independently: someone without a counselor still has saved meals.
-      const [patientHistory, savedMeals] = await Promise.allSettled([
+      // Independently: someone without a counselor still has saved meals, and
+      // still decides what they track.
+      const [patientHistory, savedMeals, metricPreferences, links] = await Promise.allSettled([
         fetchClientPatientHistory(),
         fetchClientSavedMeals(),
+        fetchClientMetricPreferences(),
+        fetchActiveLinksForClient(createBrowserSupabaseClient(), clientUserId),
       ])
       if (patientHistory.status === "fulfilled") setHistory(patientHistory.value)
       if (savedMeals.status === "fulfilled") setMeals(savedMeals.value)
+      setPreferences(
+        resolveClientMetricPreferences(
+          metricPreferences.status === "fulfilled" ? metricPreferences.value : [],
+        ),
+      )
+      // Sharing can only ever narrow the consent given at link time, so the
+      // switches stay inert until there is a consent to narrow.
+      setCanShare(
+        links.status === "fulfilled" && links.value.some((link) => link.consentWellbeing),
+      )
     } finally {
       setIsLoading(false)
     }
@@ -101,6 +125,14 @@ export function ClientSettingsView({ clientUserId }: { clientUserId: string | nu
         heightCm={latest?.height}
         onSaved={() => void load()}
       />
+
+      {isClientCapabilityEnabled("befinden") && preferences && (
+        <ClientMetricSettings
+          preferences={preferences}
+          canShare={canShare}
+          shareHint="Teilen wird möglich, sobald du mit einer Beratung verbunden bist und der Einsicht in dein Befinden zugestimmt hast."
+        />
+      )}
 
       <SavedMealsCard
         meals={meals}

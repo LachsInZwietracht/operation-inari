@@ -7,7 +7,11 @@ import { de } from "date-fns/locale"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { redeemClientInviteAction, revokeClientLinkAsClientAction } from "@/app/(client)/actions"
+import {
+  redeemClientInviteAction,
+  revokeClientLinkAsClientAction,
+  setClientWellbeingConsentAction,
+} from "@/app/(client)/actions"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,6 +22,8 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { isClientCapabilityEnabled } from "@/lib/client-modules"
 import { formatInviteCode } from "@/lib/client-mode"
 import type { ClientLinkWithCounselor } from "@/lib/types"
 
@@ -36,6 +42,18 @@ export function ClientCareView({ links }: { links: ClientLinkWithCounselor[] }) 
       }
       toast.success("Verbindung hergestellt.")
       setCode("")
+      router.refresh()
+    })
+  }
+
+  function handleWellbeingConsent(linkId: string, consent: boolean) {
+    startTransition(async () => {
+      const result = await setClientWellbeingConsentAction({ linkId, consent })
+      if (result.status === "error") {
+        toast.error(result.message ?? "Die Freigabe konnte nicht geändert werden.")
+        return
+      }
+      toast.success(result.message ?? "Freigabe geändert.")
       router.refresh()
     })
   }
@@ -90,6 +108,27 @@ export function ClientCareView({ links }: { links: ClientLinkWithCounselor[] }) 
                 Freigegeben: dein Ernährungstagebuch. Deine Beratung kann mitlesen, aber nichts
                 für dich eintragen oder löschen.
               </p>
+
+              {/* Its own switch, because how someone felt is not a list of
+                  foods and ending the whole connection is too blunt an answer
+                  to "das möchte ich gerade nicht teilen". */}
+              {isClientCapabilityEnabled("befinden") && (
+                <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium">Befinden freigeben</p>
+                    <p className="text-xs text-muted-foreground">
+                      Wohlbefinden, Schlaf und was du sonst im Check-in einträgst. Welche
+                      einzelnen Werte dazugehören, entscheidest du in den Einstellungen.
+                    </p>
+                  </div>
+                  <Switch
+                    aria-label="Befinden freigeben"
+                    checked={link.consentWellbeing}
+                    disabled={isPending}
+                    onCheckedChange={(checked) => handleWellbeingConsent(link.id, checked)}
+                  />
+                </div>
+              )}
               <Button
                 variant="outline"
                 size="sm"

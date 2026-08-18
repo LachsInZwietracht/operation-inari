@@ -1,10 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { format, parseISO, subDays } from "date-fns";
 
-import { collectClientDayParts } from "@/lib/client-food-log";
+import { collectClientDayParts, eatenAmount } from "@/lib/client-food-log";
+import { buildClientDayFactRows, type ClientDayFactInput, type ClientDayFactRow } from "@/lib/client-checkin";
+import { fetchClientCheckins } from "@/lib/data/client-checkin-client";
+import { isClientCapabilityEnabled } from "@/lib/client-modules";
 import {
   averageOfLoggedDays,
   buildKcalSeries,
+  CLIENT_CHECKIN_WINDOW_DAYS,
   CLIENT_STATS_WINDOW_DAYS,
   summarizeTrainingWeeks,
   type ClientKcalDay,
@@ -30,6 +34,7 @@ import { getNutrientValue, sumNutrients } from "@/lib/nutrients";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type {
   ClientAdherenceDay,
+  ClientCheckin,
   ClientExerciseProgress,
   ClientMealCompletion,
   ClientPlanDay,
@@ -66,6 +71,17 @@ export interface ClientStats {
   trainingWeeks: ClientTrainingWeek[];
   /** Best set ever per exercise, newest first. */
   records: ClientPersonalRecord[];
+  /**
+   * The longer window as one row per date, every metric that day can speak to.
+   *
+   * Separate from `kcalByDay` and `dayParts` on purpose: those two answer "what
+   * have I been eating lately" over a fortnight, this one is the raw material
+   * for comparing two metrics, which needs weeks rather than days to say
+   * anything. One fetch covers both — the shorter series are slices of it.
+   */
+  dayFacts: ClientDayFactRow[];
+  /** Day notes in the long window, so an outlier stays explainable. */
+  notesByDate: Map<string, string>;
 }
 
 function resolveClient(supabase?: SupabaseClient) {
@@ -79,11 +95,19 @@ function resolveClient(supabase?: SupabaseClient) {
  * ticked off the plan. Reading only the diary was what made a client who
  * followed their plan perfectly show up here as a flat zero.
  */
+type ClientDayAggregate = {
+  parts: NutrientValue[][];
+  /** Meals of the day that had something in them, planned or logged. */
+  mealCount: number;
+  waterMl?: number;
+  notes?: string;
+};
+
 async function loadDayParts(
   clientUserId: string,
   range: { from: string; to: string },
   supabase: SupabaseClient,
-): Promise<Map<string, NutrientValue[][]>> {
+): Promise<Map<string, ClientDayAggregate>> {
   const days = await fetchClientFoodLogDays(clientUserId, range, supabase);
 
   const foodIds = [
@@ -136,17 +160,35 @@ async function loadDayParts(
   // which sources carried data for what, and re-walking the window a second
   // time to find out would risk the two views describing different days.
   return new Map(
-    dates.map((date) => [
-      date,
-      collectClientDayParts({
-        entries: logByDate.get(date)?.entries ?? [],
-        foods,
-        recipeFacts,
-        planEntries: planByDate.get(date)?.entries ?? [],
-        completions,
-        planFacts,
-      }),
-    ]),
+    dates.map((date) => {
+      const day = logByDate.get(date);
+      const planEntries = planByDate.get(date)?.entries ?? [];
+
+      // Slots rather than items: three entries at breakfast are one meal. A
+      // planned meal counts once it was actually answered as eaten.
+      const slots = new Set<string>();
+      for (const entry of day?.entries ?? []) slots.add(entry.slotType);
+      for (const entry of planEntries) {
+        if (eatenAmount(entry, completions.get(entry.id)) > 0) slots.add(entry.slotType);
+      }
+
+      return [
+        date,
+        {
+          parts: collectClientDayParts({
+            entries: day?.entries ?? [],
+            foods,
+            recipeFacts,
+            planEntries,
+            completions,
+            planFacts,
+          }),
+          mealCount: slots.size,
+          waterMl: day?.waterMl,
+          notes: day?.notes,
+        },
+      ];
+    }),
   );
 }
 
@@ -160,32 +202,42 @@ export async function fetchClientStats(
   clientUserId: string,
   today: string,
   supabase?: SupabaseClient,
+  /**
+   * How far back to read. The default covers the check-in sections; the
+   * fortnight-long series are sliced out of the same rows, so widening this
+   * costs one wider query rather than a second one.
+   */
+  windowDays: number = CLIENT_CHECKIN_WINDOW_DAYS,
 ): Promise<ClientStats> {
   const client = resolveClient(supabase);
   const range = {
-    from: format(subDays(parseISO(today), CLIENT_STATS_WINDOW_DAYS - 1), "yyyy-MM-dd"),
+    from: format(subDays(parseISO(today), windowDays - 1), "yyyy-MM-dd"),
     to: today,
   };
 
-  const partsByDate = isClientModuleEnabled("tagebuch")
+  const aggregateByDate = isClientModuleEnabled("tagebuch")
     ? await loadDayParts(clientUserId, range, client)
-    : new Map<string, NutrientValue[][]>();
+    : new Map<string, ClientDayAggregate>();
 
+  // Unchanged at a fortnight: this is the "what have I been eating" view, and
+  // stretching it to eight weeks would squeeze it into an unreadable smear on
+  // a phone.
   const kcalByDay = buildKcalSeries(
     new Map(
-      [...partsByDate].map(([date, parts]) => [
+      [...aggregateByDate].map(([date, aggregate]) => [
         date,
-        getNutrientValue(sumNutrients(parts), "energie"),
+        getNutrientValue(sumNutrients(aggregate.parts), "energie"),
       ]),
     ),
     range.to,
+    CLIENT_STATS_WINDOW_DAYS,
   );
 
   const averageKcal = averageOfLoggedDays(kcalByDay);
 
   const dayParts = kcalByDay.map((day) => ({
     date: day.date,
-    parts: partsByDate.get(day.date) ?? [],
+    parts: aggregateByDate.get(day.date)?.parts ?? [],
   }));
 
   let adherence: ClientAdherenceDay[] = [];
@@ -200,11 +252,15 @@ export async function fetchClientStats(
   }
 
   let progress: ClientExerciseProgress[] = [];
+  let sessionsInWindow: Awaited<ReturnType<typeof fetchClientWorkoutSessions>> = [];
   let burnedByDay: ClientKcalDay[] = [];
   let trainingWeeks: ClientTrainingWeek[] = [];
   let records: ClientPersonalRecord[] = [];
   if (isClientModuleEnabled("training")) {
-    const sessions = await fetchClientWorkoutSessions(clientUserId, 60, client);
+    // Never narrower than the 60 days the progression and records sections
+    // were already reading; a wider check-in window may widen it.
+    const sessions = await fetchClientWorkoutSessions(clientUserId, Math.max(60, windowDays), client);
+    sessionsInWindow = sessions;
     progress = summarizeExerciseProgress(sessions);
     records = [...findPersonalRecords(sessions).values()].sort((a, b) =>
       b.date.localeCompare(a.date),
@@ -240,7 +296,54 @@ export async function fetchClientStats(
       if (!energy) continue;
       burnedByDate.set(session.date, (burnedByDate.get(session.date) ?? 0) + energy.netKcal);
     }
-    burnedByDay = buildKcalSeries(burnedByDate, range.to);
+    burnedByDay = buildKcalSeries(burnedByDate, range.to, CLIENT_STATS_WINDOW_DAYS);
+  }
+
+  // Per-day training, for the comparison rather than the weekly summary. A day
+  // with no session trained zero minutes; a session nobody timed did not.
+  const trainingByDate = new Map<string, { minutes?: number; kcal: number }>();
+  if (isClientModuleEnabled("training")) {
+    for (const session of sessionsInWindow) {
+      const current = trainingByDate.get(session.date) ?? { kcal: 0 };
+      if (session.durationMinutes) {
+        current.minutes = (current.minutes ?? 0) + session.durationMinutes;
+      }
+      const energy = estimateActivityEnergy({
+        activityId: session.activityKind,
+        intensity: session.intensity,
+        minutes: session.durationMinutes,
+        weightKg: session.bodyWeightKg,
+      });
+      current.kcal += energy?.netKcal ?? 0;
+      trainingByDate.set(session.date, current);
+    }
+  }
+
+  let checkins: ClientCheckin[] = [];
+  if (isClientCapabilityEnabled("befinden")) {
+    checkins = await fetchClientCheckins(range, client);
+  }
+  const checkinByDate = new Map(checkins.map((checkin) => [checkin.date, checkin]));
+
+  const factInputs: ClientDayFactInput[] = [];
+  const notesByDate = new Map<string, string>();
+  for (let offset = windowDays - 1; offset >= 0; offset--) {
+    const date = format(subDays(parseISO(today), offset), "yyyy-MM-dd");
+    const aggregate = aggregateByDate.get(date);
+    const training = trainingByDate.get(date);
+
+    if (aggregate?.notes) notesByDate.set(date, aggregate.notes);
+
+    factInputs.push({
+      date,
+      checkin: checkinByDate.get(date),
+      parts: aggregate?.parts ?? [],
+      mealCount: aggregate?.mealCount,
+      waterMl: aggregate?.waterMl,
+      hasTraining: isClientModuleEnabled("training") ? training !== undefined : undefined,
+      trainingMinutes: training?.minutes,
+      trainingKcal: training ? Math.round(training.kcal) : undefined,
+    });
   }
 
   return {
@@ -252,5 +355,7 @@ export async function fetchClientStats(
     progress,
     trainingWeeks,
     records,
+    dayFacts: buildClientDayFactRows(factInputs),
+    notesByDate,
   };
 }

@@ -119,6 +119,7 @@ export async function redeemClientInviteAction(
         status: "active",
         consent_nutrition: true,
         consent_training: true,
+        consent_wellbeing: true,
         consented_at: now,
         updated_at: now,
       })
@@ -180,5 +181,48 @@ export async function revokeClientLinkAsClientAction(
   } catch (error) {
     console.error("Failed to revoke client link:", error);
     return { status: "error", message: "Die Verbindung konnte nicht beendet werden." };
+  }
+}
+
+/**
+ * Turns the check-in area of an existing link on or off.
+ *
+ * The one consent area with a switch of its own, because it is the one whose
+ * content is not a list of foods. Off means the counselor sees nothing from
+ * the check-in regardless of the per-metric switches in the settings — those
+ * can only narrow this, never widen it.
+ */
+export async function setClientWellbeingConsentAction(
+  input: { linkId: string; consent: boolean },
+): Promise<ClientModeActionResult> {
+  try {
+    const supabase = await createClient();
+    const user = await getVerifiedUser(supabase);
+
+    if (!user) {
+      return { status: "error", message: "Bitte melde dich an." };
+    }
+
+    const service = await createServiceClient();
+    const { error } = await service
+      .from("client_links")
+      .update({ consent_wellbeing: input.consent, updated_at: new Date().toISOString() })
+      // Scoped to the caller's own link: a client may only change their own.
+      .eq("id", input.linkId)
+      .eq("client_user_id", user.id)
+      .eq("status", "active");
+
+    if (error) {
+      return { status: "error", message: "Die Freigabe konnte nicht geändert werden." };
+    }
+
+    revalidatePath("/klient/betreuung");
+    return {
+      status: "success",
+      message: input.consent ? "Befinden freigegeben." : "Freigabe zurückgezogen.",
+    };
+  } catch (error) {
+    console.error("Failed to update wellbeing consent:", error);
+    return { status: "error", message: "Die Freigabe konnte nicht geändert werden." };
   }
 }

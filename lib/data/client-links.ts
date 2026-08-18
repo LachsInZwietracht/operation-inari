@@ -17,6 +17,7 @@ export interface ClientLinkRow {
   status: ClientLink["status"];
   consent_nutrition: boolean;
   consent_training: boolean;
+  consent_wellbeing: boolean;
   consented_at: string | null;
   revoked_at: string | null;
   created_at: string;
@@ -24,7 +25,7 @@ export interface ClientLinkRow {
 }
 
 export const CLIENT_LINK_COLUMNS =
-  "id,patient_id,counselor_user_id,client_user_id,invite_code,invite_expires_at,status,consent_nutrition,consent_training,consented_at,revoked_at,created_at,updated_at";
+  "id,patient_id,counselor_user_id,client_user_id,invite_code,invite_expires_at,status,consent_nutrition,consent_training,consent_wellbeing,consented_at,revoked_at,created_at,updated_at";
 
 export function mapClientLinkRow(row: ClientLinkRow): ClientLink {
   return {
@@ -37,6 +38,7 @@ export function mapClientLinkRow(row: ClientLinkRow): ClientLink {
     status: row.status,
     consentNutrition: row.consent_nutrition,
     consentTraining: row.consent_training,
+    consentWellbeing: row.consent_wellbeing,
     consentedAt: row.consented_at ?? undefined,
     revokedAt: row.revoked_at ?? undefined,
     createdAt: row.created_at,

@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner"
 
 import { ClientAddEntryDialog } from "@/components/client/client-add-entry-dialog"
+import { ClientCheckinCard } from "@/components/client/client-checkin-card"
 import { ClientDayContext } from "@/components/client/client-day-context"
 import { ClientDaySummary } from "@/components/client/client-day-summary"
 import {
@@ -53,7 +54,7 @@ import { scaleNutrients, sumNutrients } from "@/lib/nutrients"
 import { summarizeDay } from "@/lib/client-day-summary"
 import { buildSlotRows } from "@/lib/client-slot-rows"
 import { resolveClientDayTarget } from "@/lib/client-targets"
-import { isClientModuleEnabled } from "@/lib/client-modules"
+import { isClientCapabilityEnabled, isClientModuleEnabled } from "@/lib/client-modules"
 import { todayIsoDate } from "@/lib/client-mode"
 import {
   addClientFoodLogEntry,
@@ -621,6 +622,10 @@ export function ClientFoodLogView({
           </Button>
         )}
       </div>
+
+      {/* Above the totals, not below them: someone who reads their kcal balance
+          first ends up rating the balance instead of the day. */}
+      {isClientCapabilityEnabled("befinden") && <ClientCheckinCard date={date} />}
 
       <ClientDayTotals
         totals={totals}
