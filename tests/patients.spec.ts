@@ -433,11 +433,9 @@ test.describe("Patient Management", () => {
       await openPatientDetail(page, patient);
 
       await expect(page.getByRole("tab", { name: "Übersicht" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Ablauf" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Ernährungsplan" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Beratung" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Statistiken" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Übersicht" })).toHaveAttribute("data-state", "active");
       // The phase now sits next to the patient's name; the card that used to
       // restate it was replaced by the status band below the tabs.
@@ -454,7 +452,7 @@ test.describe("Patient Management", () => {
     }
   });
 
-  test("shows derived workflow progress for a patient journey", async ({ page }) => {
+  test("folds the former Ablauf and Statistiken tabs into the overview", async ({ page }) => {
     const patient = await createPatientFixture({
       firstName: "Workflow",
       lastName: "Journey",
@@ -465,17 +463,18 @@ test.describe("Patient Management", () => {
     try {
       await openPatientDetail(page, patient);
 
+      // Ablauf derived the same phase the header now shows next to the name,
+      // and Statistiken restated the weight the overview already draws.
+      await expect(page.getByRole("tab", { name: "Ablauf" })).toHaveCount(0);
+      await expect(page.getByRole("tab", { name: "Statistiken" })).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Übersicht" })).toHaveAttribute("data-state", "active");
-      await page.getByRole("tab", { name: "Ablauf" }).click();
-      await expect(page.getByText("2/4 Schritte abgeschlossen")).toBeVisible();
-      await expect(page.getByText("Ein patientenbezogener Kontrolltermin ist bereits im Kalender hinterlegt.")).toBeVisible();
-      await expect(page.getByText("Messwerte und Screenings sind dokumentiert.")).toBeVisible();
-      await expect(
-        // The summary shows twice: on the stage card and in the "next step" card.
-        page.getByText("Es gibt noch keinen Klienten-Zugang; der Patient kann nichts selbst erfassen.").first(),
-      ).toBeVisible();
-      await expect(page.getByRole("link", { name: "Plan anlegen" }).first()).toHaveAttribute("href", `/patienten/${patient.id}?tab=ernaehrungsplan`);
-      await expect(page.getByText("Quick Links")).toHaveCount(0);
+
+      // What is left of both: the phase by the name, and the analytics section.
+      await expect(page.getByText("Verlauf und Statistik")).toBeVisible();
+      await expect(page.getByText("BMI-Verlauf", { exact: true })).toBeVisible();
+      await expect(page.getByText("Ø Trend / Woche")).toBeVisible();
+      // The overview's own weight chart is the only one on the page now.
+      await expect(page.getByText("Gewichtsverlauf")).toHaveCount(1);
     } finally {
       await deleteWorkflowFixture(patient.id, fixture);
       await deletePatientFixture(patient.id);

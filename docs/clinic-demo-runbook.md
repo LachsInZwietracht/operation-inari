@@ -52,14 +52,13 @@ Use:
 
 Demo actions:
 - Open the patient overview and show the dense worklist before secondary demo/mail-merge tools.
-- Open a patient and use the `Workflow` tab.
+- Open a patient; the phase sits next to the name in the header.
 - Generate a digital protocol link from the patient workspace.
 - Open the public protocol URL in a separate browser context or mobile viewport.
 - Submit a simple food diary entry.
 - Return to the patient workspace and show the incoming submission state.
 
 Implementation references:
-- `components/patient-workflow-tab.tsx`
 - `components/patient-tabs.tsx`
 - `app/protokoll/[linkId]/patient-protocol-form.tsx`
 - `app/api/protokoll/submit/route.ts`
@@ -102,10 +101,10 @@ The standalone Berichte route and per-patient report archive were removed. Per-p
 analytics now live in the **Statistiken** patient tab.
 
 Use:
-- Open a patient, switch to the `Statistiken` tab.
+- Open a patient and scroll the overview to `Verlauf und Statistik`.
 
 Demo actions:
-- Show the weight/BMI development charts, KPI cards, and activity-energy chart.
+- Show the weight chart with its calorie projection, then the BMI, body-composition and activity-energy charts below it.
 - For plan PDF/CSV exports, use the `/ernaehrungsplan` day toolbar (still backed by `/api/exports/report`).
 
 Implementation references:

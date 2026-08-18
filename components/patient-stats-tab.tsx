@@ -47,6 +47,14 @@ interface PatientStatsTabProps {
   activities: ActivityEntry[]
   /** Counselor sessions are counted, never shown; empty in the client surface. */
   sessions: CounselingSession[]
+  /**
+   * Rendered inside the patient overview rather than as a tab of its own.
+   * The overview already carries the current weight, the BMI and a far bigger
+   * weight curve with the calorie projection drawn on it, so those three are
+   * dropped here — the point of folding this in was to stop saying the same
+   * number twice, not to stack two charts of it.
+   */
+  embedded?: boolean
 }
 
 interface ChartTooltipProps {
@@ -163,7 +171,13 @@ function StatCard({
   )
 }
 
-export function PatientStatsTab({ patient, entries, activities, sessions }: PatientStatsTabProps) {
+export function PatientStatsTab({
+  patient,
+  entries,
+  activities,
+  sessions,
+  embedded = false,
+}: PatientStatsTabProps) {
   const [timeRange, setTimeRange] = useState<TimeRangeValue>("all")
   // Mount-stable timestamp: Date.now() inside useMemo is impure.
   const [nowTs] = useState(() => Date.now())
@@ -313,7 +327,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
           </span>
           <p className="text-sm font-medium">Noch keine Statistiken verfügbar</p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            Sobald Messwerte für {patient.firstName} erfasst sind, erscheinen hier Gewichts- und Verlaufsanalysen.
+            Sobald Messwerte für {patient.firstName} erfasst sind, erscheinen hier Verlaufsanalysen.
           </p>
         </CardContent>
       </Card>
@@ -361,6 +375,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {!embedded && (
             <StatCard icon={Scale} label="Aktuelles Gewicht" value={`${formatNumber(latest.weight, 1)} kg`}>
               {filtered.length > 1 ? (
                 <DeltaBadge delta={weightDelta} unit="kg" />
@@ -368,6 +383,8 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
                 <span className="text-xs text-muted-foreground">Stand {formatDate(latest.date)}</span>
               )}
             </StatCard>
+            )}
+            {!embedded && (
             <StatCard icon={Target} label="BMI" value={formatNumber(latest.bmi, 1)}>
               <span className="text-xs text-muted-foreground">
                 {bmiCategory(latest.bmi).label}
@@ -380,6 +397,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
                 ) : null}
               </span>
             </StatCard>
+            )}
             <StatCard
               icon={ActivityIcon}
               label="Ø Trend / Woche"
@@ -414,6 +432,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
             </div>
           )}
 
+      {!embedded && (
       <Card>
         <CardHeader>
           <CardTitle>Gewichtsverlauf</CardTitle>
@@ -489,6 +508,7 @@ export function PatientStatsTab({ patient, entries, activities, sessions }: Pati
           </ResponsiveContainer>
         </CardContent>
       </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

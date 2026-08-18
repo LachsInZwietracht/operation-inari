@@ -28,6 +28,7 @@ import {
 } from "recharts"
 
 import { PatientEnergyCard } from "@/components/patient-energy-card"
+import { PatientStatsTab } from "@/components/patient-stats-tab"
 import { PatientIntakeReview } from "@/components/patient-intake-review"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -62,6 +63,7 @@ import {
 } from "@/lib/patient-journey"
 import { cn } from "@/lib/utils"
 import type {
+  ActivityEntry,
   AnthropometricEntry,
   CounselingSession,
   DailyMealPlan,
@@ -80,6 +82,8 @@ interface PatientOverviewTabProps {
   sessions: CounselingSession[]
   diagnoses: DiagnosisEntry[]
   patientAllergens: PatientAllergenEntry[]
+  /** Client-recorded activities, drawn in the Verlauf section at the bottom. */
+  activities: ActivityEntry[]
   mealPlans: DailyMealPlan[]
   intakeLinks: PatientIntakeLink[]
   intakeSubmissions: PatientIntakeSubmission[]
@@ -352,6 +356,7 @@ export function PatientOverviewTab({
   sessions,
   diagnoses,
   patientAllergens,
+  activities,
   mealPlans,
   intakeLinks,
   intakeSubmissions,
@@ -943,6 +948,26 @@ export function PatientOverviewTab({
           </CardContent>
         </Card>
       </div>
+
+      {/* Folded in from the former Statistiken tab. The tab restated the current
+          weight, the BMI and the weight curve, all of which are already above;
+          what is left — the trend, the BMI history, body composition and
+          activity energy — is worth a section, not a destination. */}
+      <section aria-label="Verlauf und Statistik" className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Verlauf und Statistik</h2>
+          <p className="text-sm text-muted-foreground">
+            Was sich seit der ersten Messung verändert hat.
+          </p>
+        </div>
+        <PatientStatsTab
+          embedded
+          patient={patient}
+          entries={anthropometrics}
+          activities={activities}
+          sessions={sessions}
+        />
+      </section>
 
       <Card>
         <CardHeader>

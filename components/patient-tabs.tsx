@@ -14,13 +14,11 @@ import { useMedications } from "@/hooks/use-medications"
 import { useLabValues } from "@/hooks/use-lab-values"
 import { useActivities } from "@/hooks/use-activities"
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles"
-import { useScreenings } from "@/hooks/use-screenings"
 import { useCounseling } from "@/hooks/use-counseling"
 import type {
   AnthropometricEntry,
   DietExclusion,
   DietStyle,
-  Food,
   Patient,
 } from "@/lib/types"
 import { toast } from "sonner"
@@ -51,9 +49,7 @@ const NUTRITION_TAB_VALUES = ["ernaehrungsplan"] as const
 
 const KNOWN_TAB_VALUES = new Set<string>([
   "overview",
-  "workflow",
   "beratungen",
-  "statistiken",
   "klienten-app",
   ...PROFILE_TAB_VALUES,
   ...NUTRITION_TAB_VALUES,
@@ -62,10 +58,6 @@ const KNOWN_TAB_VALUES = new Set<string>([
 const PatientOverviewTab = dynamic(
   () => import("@/components/patient-overview-tab").then((mod) => mod.PatientOverviewTab),
   { ssr: false, loading: () => <div className="h-[420px] rounded-md bg-muted/40" /> },
-)
-const PatientWorkflowTab = dynamic(
-  () => import("@/components/patient-workflow-tab").then((mod) => mod.PatientWorkflowTab),
-  { ssr: false },
 )
 // The planner is the heaviest view in the record, so it only loads when its
 // tab is opened.
@@ -76,10 +68,6 @@ const PatientMealPlanTab = dynamic(
 const KlientenAppTab = dynamic(
   () => import("@/components/patient-tabs/klienten-app-tab").then((mod) => mod.KlientenAppTab),
   { ssr: false },
-)
-const PatientStatsTab = dynamic(
-  () => import("@/components/patient-stats-tab").then((mod) => mod.PatientStatsTab),
-  { ssr: false, loading: () => <div className="h-[320px] rounded-md bg-muted/40" /> },
 )
 interface PatientTabsProps {
   patient: Patient
@@ -128,9 +116,6 @@ export function PatientTabs({
     initialEntries: initialData?.activities,
   })
   const { getPatientAssignment, setPal } = useReferenceProfiles()
-  const { getForPatient: getScreeningsForPatient } = useScreenings({
-    initialEntries: initialData?.screenings,
-  })
   const {
     getForPatient: getAllergensForPatient,
     addEntry: addAllergen,
@@ -192,7 +177,6 @@ export function PatientTabs({
   const medications = getMedicationsForPatient(patient.id)
   const labEntries = getLabValuesForPatient(patient.id)
   const activities = getActivitiesForPatient(patient.id)
-  const screenings = getScreeningsForPatient(patient.id)
   const entriesForSelectedLab = labEntries.filter((entry) => entry.parameterId === labParameterId)
   const anthropometricPending = isLoadingAnthropometric && anthroEntries.length === 0
   const diagnosesPending = isLoadingDiagnoses && diagnoses.length === 0
@@ -529,15 +513,16 @@ export function PatientTabs({
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       {/* The plan sits second: it is what the overview leads to, and the rest
-          of the record is reference the plan is built from. */}
+          of the record is reference the plan is built from. Ablauf derived the
+          same phase the overview already shows next to the name, and
+          Statistiken restated the weight and BMI it already draws — both were
+          folded into the overview rather than kept as destinations. */}
       <TabsList>
         <TabsTrigger value="overview">Übersicht</TabsTrigger>
         <TabsTrigger value={nutritionTriggerValue}>Ernährungsplan</TabsTrigger>
-        <TabsTrigger value="workflow">Ablauf</TabsTrigger>
         <TabsTrigger value={profileTriggerValue}>Profil</TabsTrigger>
         <TabsTrigger value="beratungen">Beratung</TabsTrigger>
         <TabsTrigger value="klienten-app">Klienten-App</TabsTrigger>
-        <TabsTrigger value="statistiken">Statistiken</TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" className="space-y-4">
@@ -548,6 +533,7 @@ export function PatientTabs({
           sessions={sessions}
           diagnoses={diagnoses}
           patientAllergens={patientAllergens}
+          activities={activities}
           mealPlans={initialData?.mealPlans ?? []}
           intakeLinks={intakeLinks}
           intakeSubmissions={intakeSubmissions}
@@ -556,18 +542,6 @@ export function PatientTabs({
           palValue={pal}
           onAddMeasurement={() => setMeasurementOpen(true)}
           onSaveCalorieGoal={handleSaveCalorieGoal}
-        />
-      </TabsContent>
-
-      <TabsContent value="workflow" className="space-y-4">
-        <PatientWorkflowTab
-          patient={patient}
-          sessions={sessions}
-          anthroEntries={anthroEntries}
-          screenings={screenings}
-          appointments={patientAppointments}
-          mealPlans={initialData?.mealPlans ?? []}
-          counselingPending={counselingPending}
         />
       </TabsContent>
 
@@ -700,15 +674,6 @@ export function PatientTabs({
 
       <TabsContent value="klienten-app" className="space-y-4">
         <KlientenAppTab patient={patient} />
-      </TabsContent>
-
-      <TabsContent value="statistiken" className="space-y-4">
-        <PatientStatsTab
-          patient={patient}
-          entries={anthroEntries}
-          activities={activities}
-          sessions={sessions}
-        />
       </TabsContent>
 
       <MeasurementDialog
