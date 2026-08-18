@@ -74,6 +74,7 @@ import { PlanExchangeTool } from "@/components/plan-exchange-tool"
 import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
+import { PlanStrategyView } from "@/components/plan-strategy-view"
 import { toast } from "sonner"
 
 // Secondary views load lazily so the (default) day view ships less code
@@ -126,7 +127,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const router = useRouter()
   const serverFoods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
-  const { patients, getPatient } = usePatients()
+  const { patients, getPatient, savePatient } = usePatients()
   const patient = patientId ? getPatient(patientId) : undefined
   const patientIndications = useMemo(() => getPatientIndications(patient), [patient])
   const defaultPlanMetadata = useMemo(
@@ -477,6 +478,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const {
     planAllergenSummary,
     entryAllergenWarnings,
+    dailyNutrients,
     refConfig,
     dietLineMacros,
     dietLineCompliance,
@@ -516,6 +518,30 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   const visiblePatientAllergens = useMemo(
     () => (visiblePatient ? getAllergensForPatient(visiblePatient.id) : []),
     [visiblePatient, getAllergensForPatient],
+  )
+
+  // The day's totals, keyed by nutrient id, so the strategy view can mark each
+  // principle as reached or still open on the day currently in the Tag view.
+  const dayTotals = useMemo(() => {
+    const totals: Record<string, number> = {}
+    for (const nutrient of dailyNutrients) {
+      totals[nutrient.nutrientId] = nutrient.amount
+    }
+    return totals
+  }, [dailyNutrients])
+
+  /** The strategy's energy target, shown in the tactical views as a reminder. */
+  const strategyKcalTarget = visiblePatient?.dailyCalorieGoal
+
+  // Strategy values (calorie target, macro split) live on the patient record,
+  // so editing them here writes to the same fields the Kalorienrechner and the
+  // patient overview read.
+  const handleSaveStrategy = useCallback(
+    async (updates: Partial<Patient>) => {
+      if (!visiblePatient) return
+      await savePatient(visiblePatient.id, updates)
+    },
+    [visiblePatient, savePatient],
   )
 
   const openPatientContext = useCallback(
@@ -757,13 +783,36 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         <>
       <Tabs value={view} onValueChange={setView}>
         <TabsList>
+          <TabsTrigger value="strategy">Strategie</TabsTrigger>
           <TabsTrigger value="day">Tag</TabsTrigger>
           <TabsTrigger value="week">Woche</TabsTrigger>
         </TabsList>
 
+        {/* The strategy sits outside the library grid below: it plans the
+            patient, not a single day, so the food library would only be noise
+            next to it. */}
+        <TabsContent value="strategy" className="mt-2">
+          <PlanStrategyView
+            patient={visiblePatient}
+            patientAllergens={visiblePatientAllergens}
+            dietLine={dietLine}
+            dayTotals={dayTotals}
+            dayLabel={formattedDate}
+            onOpenDay={() => setView("day")}
+            onSavePatient={handleSaveStrategy}
+          />
+        </TabsContent>
+
         {/* The library is the shared build source for the day and week views:
-            the same items can be dragged (or click-added) into either view. */}
-        <div className="mt-2 grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]">
+            the same items can be dragged (or click-added) into either view.
+            Hidden rather than unmounted on the strategy tab so its search and
+            scroll position survive a look at the targets. */}
+        <div
+          className={cn(
+            "mt-2 grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]",
+            view === "strategy" && "hidden",
+          )}
+        >
           {/* Col 1: the shared library on the left. At xl it fills the planner
               column's height (absolute inside a relative track cell) so it ends
               level with the meal plan and scrolls internally rather than running
@@ -833,6 +882,17 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
                 <span className="sr-only">Nächster Tag</span>
               </Button>
             </div>
+
+            {strategyKcalTarget ? (
+              <button
+                type="button"
+                onClick={() => setView("strategy")}
+                className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
+              >
+                Strategie: {formatNumber(strategyKcalTarget)} kcal · heute{" "}
+                {formatNumber(Math.round(dayTotals.energie ?? 0))} kcal
+              </button>
+            ) : null}
 
             {planAllergenSummary.totalConflicts > 0 && (
               <Badge
@@ -904,7 +964,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
             foodMap={foodMap}
             recipeMap={recipeMap}
             activeDate={currentDate}
-            energyTarget={energyTargetValue}
+            energyTarget={energyTargetValue ?? strategyKcalTarget}
             onSelectDay={setDate}
             onOpenDay={(date) => {
               setDate(date)

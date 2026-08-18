@@ -43,7 +43,7 @@ export interface PrincipleInput {
 }
 
 /** DGE reference intake for adults. */
-const FIBER_TARGET_G = 30;
+export const FIBER_TARGET_G = 30;
 
 /**
  * Fallback protein target when no macro split is available. 1.5 g per kg body
