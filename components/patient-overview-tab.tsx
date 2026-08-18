@@ -10,7 +10,6 @@ import {
   ChevronRight,
   FileText,
   Flame,
-  Ruler,
   Scale,
   Send,
   Stethoscope,
@@ -30,7 +29,6 @@ import {
 
 import { PatientEnergyCard } from "@/components/patient-energy-card"
 import { PatientIntakeReview } from "@/components/patient-intake-review"
-import { IntakeStageProgress } from "@/components/intake-stage-progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -131,42 +129,68 @@ function SummaryRow({
 }
 
 /**
- * A summary row that opens something. Same shape as {@link SummaryRow}.
+ * One cell of the status strip: a label over its answer.
+ *
+ * The strip replaced a full card that spent a header, a badge and six rows on
+ * facts that fit in one line each. Stacking label over value lets all of them
+ * share a single row, which is the whole point — the phase now lives next to
+ * the patient's name, so this band only has to carry the dates.
+ */
+function FactCell({
+  label,
+  value,
+  muted,
+  className,
+  children,
+}: {
+  label: string
+  value?: string
+  muted?: boolean
+  className?: string
+  /** Replaces the plain value when the cell has to be clickable. */
+  children?: React.ReactNode
+}) {
+  return (
+    <div className={cn("min-w-0 px-4 py-2.5", className)}>
+      <p className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      {children ?? (
+        <p className={cn("truncate text-sm font-medium", muted && "text-muted-foreground")}>
+          {value}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The clickable half of {@link FactCell}.
  *
  * Spreads the remaining props onto the button so it can serve as a
  * `DialogTrigger asChild` child — Radix passes its handlers down that way, and
  * swallowing them here would leave the trigger inert.
  */
-function SummaryActionRow({
-  label,
+function FactButton({
   value,
   muted,
   ...props
-}: React.ComponentProps<"button"> & {
-  label: string
-  value: string
-  muted?: boolean
-}) {
+}: React.ComponentProps<"button"> & { value: string; muted?: boolean }) {
   return (
     <button
       type="button"
       {...props}
-      className="group flex w-full items-baseline justify-between gap-3 border-b py-2 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex w-full items-center gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
+      <span className={cn("truncate text-sm font-medium", muted && "text-muted-foreground")}>
+        {value}
       </span>
-      <span className="flex items-baseline gap-1.5">
-        <span className={cn("text-sm font-medium tabular-nums", muted && "text-muted-foreground")}>
-          {value}
-        </span>
-        <ChevronRight className="size-3.5 shrink-0 self-center text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-      </span>
+      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
     </button>
   )
 }
 
-/** One of the three plain body facts: a number, its unit, and where it came from. */
+/** One of the three plain body facts, on the line above the weight chart. */
 function BodyFact({
   label,
   value,
@@ -179,13 +203,49 @@ function BodyFact({
   note: string
 }) {
   return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums">
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-sm font-semibold tabular-nums">
         {value}
-        {unit ? <span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span> : null}
-      </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
+        {unit ? <span className="ml-0.5 font-normal text-muted-foreground">{unit}</span> : null}
+      </span>
+      <span className="text-xs text-muted-foreground">{note}</span>
+    </div>
+  )
+}
+
+/**
+ * The weight chart's tooltip.
+ *
+ * Recharts' built-in tooltip paints itself white with hard-coded inline
+ * styles, which is unreadable in dark mode. Every other chart in the app draws
+ * its own on theme tokens; this one now does too.
+ */
+function WeightTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: Array<{ value?: number; color?: string; dataKey?: string | number }>
+  label?: string | number
+}) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-lg border bg-background px-3 py-2 shadow-md">
+      <p className="mb-1 text-sm font-medium">{formatDate(new Date(Number(label)))}</p>
+      {payload.map((entry) => (
+        <p key={String(entry.dataKey)} className="text-sm text-muted-foreground">
+          <span
+            className="mr-2 inline-block size-2.5 rounded-sm align-middle"
+            style={{ backgroundColor: entry.color }}
+          />
+          {entry.dataKey === "projected" ? "Prognose" : "Gemessen"}:{" "}
+          {formatNumber(Number(entry.value ?? 0), 1)} kg
+        </p>
+      ))}
     </div>
   )
 }
@@ -546,98 +606,100 @@ export function PatientOverviewTab({
 
   return (
     <div className="space-y-4">
-      <Card style={phaseStyle}>
-        {/* `flex` is needed as well as `flex-row`: CardHeader is a grid by
-            default, and flex-direction alone does not override display. */}
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 pb-3">
-          <div className="flex items-center gap-2.5">
-            <CardTitle className="text-base">Aktueller Stand</CardTitle>
-            <Badge style={{ backgroundColor: stageMeta.color, color: "white" }}>
-              {stageMeta.label}
-            </Badge>
-          </div>
-          <IntakeStageProgress stage={currentStage} />
-        </CardHeader>
-        <CardContent className="border-t pt-2">
-          {/* The closing row of the grid carries no divider — one column on
-              small screens, two from `sm` up, so the count differs per layout. */}
-          <div className="grid gap-x-8 [&>*:last-child]:border-b-0 sm:grid-cols-2 sm:[&>*:nth-last-child(-n+2)]:border-b-0">
-            <SummaryRow
-              label="Letzter Kontakt"
-              value={latestSession ? formatDate(latestSession.date) : "Nicht erfasst"}
-              muted={!latestSession}
-            />
-            <SummaryRow
-              label="Nächster Termin"
-              value={
-                nextAppointment
-                  ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)}`
-                  : "Nicht geplant"
-              }
-              muted={!nextAppointment}
-            />
-            <SummaryRow
-              label="Aktueller Plan"
-              value={currentPlan ? (currentPlan.title ?? "Ernährungsplan") : "Kein Plan"}
-              muted={!currentPlan}
-            />
-            <SummaryRow
-              label="Kalorienziel"
-              value={
-                patient.dailyCalorieGoal
-                  ? `${formatNumber(patient.dailyCalorieGoal)} kcal`
-                  : "Nicht festgelegt"
-              }
-              muted={!patient.dailyCalorieGoal}
-            />
-            {intakeSubmission ? (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <SummaryActionRow
-                    label="Originalaufnahme"
-                    value={formatDate(intakeSubmission.submittedAt)}
-                  />
-                </DialogTrigger>
-                <DialogContent
-                  className="max-h-[85vh] max-w-3xl overflow-y-auto"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <DialogHeader>
-                    <DialogTitle>Originalaufnahme</DialogTitle>
-                    <DialogDescription>
-                      Eingegangen am {formatDate(intakeSubmission.submittedAt)}. Diese Angaben
-                      bleiben als Quelle erhalten.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <PatientIntakeReview submission={intakeSubmission} />
-                </DialogContent>
-              </Dialog>
+      {/* One band, one line per fact. The phase badge and its progress moved up
+          next to the patient's name, so nothing here restates the phase. */}
+      <Card style={phaseStyle} className="overflow-hidden py-0">
+        <div className="grid divide-y sm:grid-cols-2 sm:divide-x lg:grid-cols-4 [&>*]:border-border">
+          <FactCell
+            label="Letzter Kontakt"
+            value={latestSession ? formatDate(latestSession.date) : "Nicht erfasst"}
+            muted={!latestSession}
+          />
+          <FactCell
+            label="Nächster Termin"
+            value={
+              nextAppointment
+                ? `${formatDate(nextAppointment.date)} · ${nextAppointment.startTime.slice(0, 5)}`
+                : "Nicht geplant"
+            }
+            muted={!nextAppointment}
+          />
+          <FactCell label="Aktueller Plan">
+            {currentPlan ? (
+              <Link
+                href={`/patienten/${patient.id}?tab=ernaehrungsplan`}
+                className="group flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
+              >
+                <span className="truncate">{currentPlan.title ?? "Ernährungsplan"}</span>
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </Link>
             ) : (
-              <SummaryRow label="Originalaufnahme" value="Nicht vorhanden" muted />
+              <Link
+                href={`/patienten/${patient.id}?tab=ernaehrungsplan`}
+                className="group flex items-center gap-1 text-sm font-medium text-muted-foreground underline-offset-4 hover:underline"
+              >
+                <span className="truncate">Plan erstellen</span>
+                <ChevronRight className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
+              </Link>
             )}
-            <SummaryActionRow
-              label="Messwerte erfassen"
-              value={
-                latestMeasurement
-                  ? `Zuletzt ${formatDate(latestMeasurement.date)}`
-                  : "Keine Messung"
-              }
-              muted={!latestMeasurement}
-              onClick={onAddMeasurement}
-            />
-          </div>
-        </CardContent>
+          </FactCell>
+          <FactCell label={intakeSubmission ? "Aufnahme & Messwerte" : "Messwerte"}>
+            <div className="flex items-center gap-3">
+              {intakeSubmission ? (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <FactButton value={`Aufnahme ${formatDate(intakeSubmission.submittedAt)}`} />
+                  </DialogTrigger>
+                  <DialogContent
+                    className="max-h-[85vh] max-w-3xl overflow-y-auto"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <DialogHeader>
+                      <DialogTitle>Originalaufnahme</DialogTitle>
+                      <DialogDescription>
+                        Eingegangen am {formatDate(intakeSubmission.submittedAt)}. Diese Angaben
+                        bleiben als Quelle erhalten.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <PatientIntakeReview submission={intakeSubmission} />
+                  </DialogContent>
+                </Dialog>
+              ) : null}
+              <FactButton
+                value={
+                  latestMeasurement
+                    ? `Messung ${formatDate(latestMeasurement.date)}`
+                    : "Messwerte erfassen"
+                }
+                muted={!latestMeasurement}
+                onClick={onAddMeasurement}
+              />
+            </div>
+          </FactCell>
+        </div>
       </Card>
 
-      <section aria-label="Körperwerte" className="grid gap-3 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Ruler className="h-4 w-4 text-primary" />
-              Körperdaten
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3">
+      {/* The curve is the thing a practitioner points at during a session, so
+          it gets the full width and the room to be read from across a desk. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Scale className="h-4 w-4 text-primary" />
+            Gewichtsverlauf
+          </CardTitle>
+          <CardDescription>
+            {weightChartData.length
+              ? projection
+                ? "Gemessen durchgezogen, die Prognose zum Tagesziel gestrichelt."
+                : "Die letzten Messungen."
+              : "Nach der ersten Messung erscheint hier der Verlauf."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Age, weight and height used to hold a card of their own for three
+              numbers. They are context for the curve below, so they read as one
+              line above it. */}
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b pb-3">
             <BodyFact
               label="Alter"
               value={`${ageYears}`}
@@ -662,10 +724,119 @@ export function PatientOverviewTab({
               unit={latestMeasurement ? "cm" : undefined}
               note={latestMeasurement ? "aus letzter Messung" : "noch nicht gemessen"}
             />
-          </CardContent>
-        </Card>
+          </div>
+          {weightChartData.length ? (
+            <div className="h-[360px]">
+              <ResponsiveContainer width="100%" height="100%">
+                {/* No negative left margin: it clawed back space by cutting
+                    the leading digit off every tick, so 97,4 kg read 7,4 kg. */}
+                <LineChart data={weightChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  {/* A numeric time axis, not one category per row: measured
+                      and projected points are weeks apart and must not be
+                      spaced evenly. */}
+                  <XAxis
+                    dataKey="ts"
+                    type="number"
+                    scale="time"
+                    domain={["dataMin", "dataMax"]}
+                    tickFormatter={(value: number) => formatDate(new Date(value))}
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={12}
+                  />
+                  {/* Integer bounds and rounded ticks. String domains like "dataMin - 1"
+                      let recharts pick ticks such as 77,75843, which the axis then
+                      renders as an unreadable run of digits. */}
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={12}
+                    width={56}
+                    unit=" kg"
+                    domain={[
+                      (min: number) => (weightTickDecimals ? min - 1 : Math.floor(min - 1)),
+                      (max: number) => (weightTickDecimals ? max + 1 : Math.ceil(max + 1)),
+                    ]}
+                    tickFormatter={(value: number) => formatNumber(value, weightTickDecimals)}
+                  />
+                  <Tooltip
+                    content={<WeightTooltip />}
+                    cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }}
+                  />
+                  {patient.goalWeight ? (
+                    <ReferenceLine
+                      y={patient.goalWeight}
+                      stroke="var(--color-muted-foreground)"
+                      strokeDasharray="2 4"
+                      label={{ value: "Ziel", position: "insideTopLeft", fontSize: 11 }}
+                    />
+                  ) : null}
+                  <Line type="monotone" dataKey="weight" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                  <Line
+                    type="monotone"
+                    dataKey="projected"
+                    stroke="var(--color-chart-1)"
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    strokeOpacity={0.75}
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
+              <Scale className="mb-3 h-8 w-8 text-muted-foreground" />
+              <p className="font-medium">Noch keine Verlaufskurve</p>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">Erfasse einen Messwert, dann erscheinen hier Verlauf und Prognose.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <Card className="lg:col-span-3">
+      {/* Below it, the two levers: what to eat on the left, where that lands on
+          the right. */}
+      <div className="grid gap-4 lg:grid-cols-5">
+        {latestMeasurement && basalMetabolicRate && totalEnergyExpenditure ? (
+          <div className="lg:col-span-3">
+            <PatientEnergyCard
+              weightKg={latestMeasurement.weight}
+              pal={palValue}
+              basalMetabolicRate={basalMetabolicRate}
+              totalEnergyExpenditure={totalEnergyExpenditure}
+              dailyCalorieGoal={patient.dailyCalorieGoal}
+              goalWeightKg={patient.goalWeight}
+              targetKcal={targetKcal}
+              onTargetChange={setTargetKcal}
+              projection={projection!}
+              onSaveCalorieGoal={onSaveCalorieGoal}
+            />
+          </div>
+        ) : (
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Flame className="h-4 w-4 text-primary" />
+                Energie und Kalorienziel
+              </CardTitle>
+              <CardDescription>
+                Berechnung aus den aktuellen Messwerten und dem Aktivitätswert.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Für die Berechnung fehlen aktuelle Größe und Gewicht.
+              </p>
+              <Button variant="outline" className="w-full" onClick={onAddMeasurement}>
+                Messwerte erfassen
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+        <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Target className="h-4 w-4 text-primary" />
@@ -687,7 +858,7 @@ export function PatientOverviewTab({
                   </Badge>
                 </div>
                 <BmiScale bmi={latestMeasurement.bmi} goalBmi={goalBmi} />
-                <div className="grid gap-x-8 [&>*:last-child]:border-b-0 sm:grid-cols-2 sm:[&>*:nth-last-child(-n+2)]:border-b-0">
+                <div className="[&>*:last-child]:border-b-0">
                   <SummaryRow
                     label="Sinnvoller Bereich"
                     value={
@@ -733,136 +904,8 @@ export function PatientOverviewTab({
             )}
           </CardContent>
         </Card>
-      </section>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Scale className="h-4 w-4 text-primary" />
-              Gewichtsverlauf
-            </CardTitle>
-            <CardDescription>
-              {weightChartData.length
-                ? projection
-                  ? "Gemessen durchgezogen, die Prognose zum Tagesziel gestrichelt."
-                  : "Die letzten Messungen."
-                : "Nach der ersten Messung erscheint hier der Verlauf."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {weightChartData.length ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  {/* No negative left margin: it clawed back space by cutting
-                      the leading digit off every tick, so 97,4 kg read 7,4 kg. */}
-                  <LineChart data={weightChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    {/* A numeric time axis, not one category per row: measured
-                        and projected points are weeks apart and must not be
-                        spaced evenly. */}
-                    <XAxis
-                      dataKey="ts"
-                      type="number"
-                      scale="time"
-                      domain={["dataMin", "dataMax"]}
-                      tickFormatter={(value: number) => formatDate(new Date(value))}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                    />
-                    {/* Integer bounds and rounded ticks. String domains like "dataMin - 1"
-                        let recharts pick ticks such as 77,75843, which the axis then
-                        renders as an unreadable run of digits. */}
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                      width={56}
-                      unit=" kg"
-                      domain={[
-                        (min: number) => (weightTickDecimals ? min - 1 : Math.floor(min - 1)),
-                        (max: number) => (weightTickDecimals ? max + 1 : Math.ceil(max + 1)),
-                      ]}
-                      tickFormatter={(value: number) => formatNumber(value, weightTickDecimals)}
-                    />
-                    <Tooltip
-                      labelFormatter={(value) => formatDate(new Date(Number(value)))}
-                      formatter={(value, name) => [
-                        `${formatNumber(Number(value), 1)} kg`,
-                        name === "projected" ? "Prognose" : "Gemessen",
-                      ]}
-                    />
-                    {patient.goalWeight ? (
-                      <ReferenceLine
-                        y={patient.goalWeight}
-                        stroke="var(--color-muted-foreground)"
-                        strokeDasharray="2 4"
-                        label={{ value: "Ziel", position: "insideTopLeft", fontSize: 11 }}
-                      />
-                    ) : null}
-                    <Line type="monotone" dataKey="weight" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
-                    <Line
-                      type="monotone"
-                      dataKey="projected"
-                      stroke="var(--color-chart-1)"
-                      strokeWidth={2}
-                      strokeDasharray="5 4"
-                      strokeOpacity={0.75}
-                      dot={false}
-                      activeDot={{ r: 4 }}
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="flex min-h-64 flex-col items-center justify-center text-center">
-                <Scale className="mb-3 h-8 w-8 text-muted-foreground" />
-                <p className="font-medium">Noch keine Verlaufskurve</p>
-                <p className="mt-1 max-w-sm text-sm text-muted-foreground">Erfasse einen Messwert, dann erscheinen hier Verlauf und Prognose.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {latestMeasurement && basalMetabolicRate && totalEnergyExpenditure ? (
-          <div className="lg:col-span-3">
-            <PatientEnergyCard
-              weightKg={latestMeasurement.weight}
-              pal={palValue}
-              basalMetabolicRate={basalMetabolicRate}
-              totalEnergyExpenditure={totalEnergyExpenditure}
-              dailyCalorieGoal={patient.dailyCalorieGoal}
-              goalWeightKg={patient.goalWeight}
-              targetKcal={targetKcal}
-              onTargetChange={setTargetKcal}
-              projection={projection!}
-              onSaveCalorieGoal={onSaveCalorieGoal}
-            />
-          </div>
-        ) : (
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Flame className="h-4 w-4 text-primary" />
-                Energie und Kalorienziel
-              </CardTitle>
-              <CardDescription>
-                Berechnung aus den aktuellen Messwerten und dem Aktivitätswert.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Für die Berechnung fehlen aktuelle Größe und Gewicht.
-              </p>
-              <Button variant="outline" className="w-full" onClick={onAddMeasurement}>
-                Messwerte erfassen
-              </Button>
-            </CardContent>
-          </Card>
-        )}
       </div>
+
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -895,7 +938,7 @@ export function PatientOverviewTab({
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" asChild><Link href={`/kalender?patientId=${patient.id}`}>Termin planen</Link></Button>
               <Button variant="outline" asChild><Link href={`/patienten/${patient.id}?tab=beratungen`}>Beratung dokumentieren</Link></Button>
-              <Button asChild><Link href={currentPlan ? `/ernaehrungsplan?patientId=${patient.id}` : `/ernaehrungsplan?patientId=${patient.id}`}>{currentPlan ? <FileText className="mr-2 h-4 w-4" /> : <UtensilsCrossed className="mr-2 h-4 w-4" />}{currentPlan ? "Plan öffnen" : "Plan erstellen"}</Link></Button>
+              <Button asChild><Link href={`/patienten/${patient.id}?tab=ernaehrungsplan`}>{currentPlan ? <FileText className="mr-2 h-4 w-4" /> : <UtensilsCrossed className="mr-2 h-4 w-4" />}{currentPlan ? "Plan öffnen" : "Plan erstellen"}</Link></Button>
             </div>
           </CardContent>
         </Card>

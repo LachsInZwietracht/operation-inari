@@ -225,7 +225,7 @@ export function PatientIntakePanel({ patientId, defaultLabel }: PatientIntakePan
                         </Link>
                       </Button>
                       <Button type="button" size="sm" variant="outline" asChild>
-                        <Link href={`/ernaehrungsplan?patientId=${submission.appliedPatientId}`}>
+                        <Link href={`/patienten/${submission.appliedPatientId}?tab=ernaehrungsplan`}>
                           Ernährungsplan erstellen
                         </Link>
                       </Button>

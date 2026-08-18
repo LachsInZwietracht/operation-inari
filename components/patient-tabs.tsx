@@ -40,13 +40,14 @@ import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
 import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
 import { calculateEnergy, PATIENT_ENERGY_FORMULA } from "@/lib/nutrition/energy-calculation"
+import { derivePatientIntakeStage, type IntakeStage } from "@/lib/patient-journey"
 
 /** Sentinel for "no style selected" — Radix Select rejects an empty value. */
 const DIET_STYLE_NONE = "__none__"
 
 
 const PROFILE_TAB_VALUES = ["stammdaten", "anthropometrie", "diagnosen", "laborwerte", "aktivitaet"] as const
-const NUTRITION_TAB_VALUES = ["ernaehrungsplaene"] as const
+const NUTRITION_TAB_VALUES = ["ernaehrungsplan"] as const
 
 const KNOWN_TAB_VALUES = new Set<string>([
   "overview",
@@ -66,9 +67,11 @@ const PatientWorkflowTab = dynamic(
   () => import("@/components/patient-workflow-tab").then((mod) => mod.PatientWorkflowTab),
   { ssr: false },
 )
-const PatientMealPlansTab = dynamic(
-  () => import("@/components/patient-meal-plans-tab").then((mod) => mod.PatientMealPlansTab),
-  { ssr: false },
+// The planner is the heaviest view in the record, so it only loads when its
+// tab is opened.
+const PatientMealPlanTab = dynamic(
+  () => import("@/components/patient-meal-plan-tab").then((mod) => mod.PatientMealPlanTab),
+  { ssr: false, loading: () => <div className="h-[520px] rounded-md bg-muted/40" /> },
 )
 const KlientenAppTab = dynamic(
   () => import("@/components/patient-tabs/klienten-app-tab").then((mod) => mod.KlientenAppTab),
@@ -82,9 +85,21 @@ interface PatientTabsProps {
   patient: Patient
   initialData?: PatientWorkspaceData | null
   newMeasurementRequest?: number
+  /**
+   * Reports the derived phase upwards so the page header can show it next to
+   * the patient's name. The workspace hooks live here, and the server payload
+   * is not always complete (an unresolved patient returns empty collections),
+   * so this is the only place the phase can be read reliably.
+   */
+  onStageChange?: (stage: IntakeStage) => void
 }
 
-export function PatientTabs({ patient, initialData, newMeasurementRequest }: PatientTabsProps) {
+export function PatientTabs({
+  patient,
+  initialData,
+  newMeasurementRequest,
+  onStageChange,
+}: PatientTabsProps) {
   const { getPatient, updatePatient, savePatient } = usePatients({ initialPatients: [patient] })
   const currentPatient = getPatient(patient.id) ?? patient
   const {
@@ -483,12 +498,23 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
     setMeasurementOpen(true)
   }, [newMeasurementRequest])
 
+  const currentStage = derivePatientIntakeStage({
+    patient: currentPatient,
+    links: intakeLinks,
+    submissions: intakeSubmissions,
+    sessions,
+    appointments: patientAppointments,
+  })
+  useEffect(() => {
+    onStageChange?.(currentStage)
+  }, [currentStage, onStageChange])
+
   const profileTriggerValue = PROFILE_TAB_VALUES.includes(activeTab as (typeof PROFILE_TAB_VALUES)[number])
     ? activeTab
     : "stammdaten"
   const nutritionTriggerValue = NUTRITION_TAB_VALUES.includes(activeTab as (typeof NUTRITION_TAB_VALUES)[number])
     ? activeTab
-    : "ernaehrungsplaene"
+    : "ernaehrungsplan"
 
   const profileSubNav = (
     <TabsList>
@@ -502,11 +528,13 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {/* The plan sits second: it is what the overview leads to, and the rest
+          of the record is reference the plan is built from. */}
       <TabsList>
         <TabsTrigger value="overview">Übersicht</TabsTrigger>
+        <TabsTrigger value={nutritionTriggerValue}>Ernährungsplan</TabsTrigger>
         <TabsTrigger value="workflow">Ablauf</TabsTrigger>
         <TabsTrigger value={profileTriggerValue}>Profil</TabsTrigger>
-        <TabsTrigger value={nutritionTriggerValue}>Ernährung</TabsTrigger>
         <TabsTrigger value="beratungen">Beratung</TabsTrigger>
         <TabsTrigger value="klienten-app">Klienten-App</TabsTrigger>
         <TabsTrigger value="statistiken">Statistiken</TabsTrigger>
@@ -543,10 +571,10 @@ export function PatientTabs({ patient, initialData, newMeasurementRequest }: Pat
         />
       </TabsContent>
 
-      <TabsContent value="ernaehrungsplaene" className="space-y-4">
-        <PatientMealPlansTab
-          patient={patient}
-          initialPlans={initialData?.mealPlans ?? []}
+      <TabsContent value="ernaehrungsplan" className="space-y-4">
+        <PatientMealPlanTab
+          patient={currentPatient}
+          plans={initialData?.mealPlans ?? []}
           foods={initialData?.mealPlanFoods ?? []}
           recipes={initialData?.recipes ?? []}
         />

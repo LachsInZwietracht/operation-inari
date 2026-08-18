@@ -507,7 +507,7 @@ export function AufnahmenPageClient({
                   <Link href={`/patienten/${appliedPatient.id}`}>Patientenakte öffnen</Link>
                 </Button>
                 <Button asChild variant="outline">
-                  <Link href={`/ernaehrungsplan?patientId=${appliedPatient.id}`}>
+                  <Link href={`/patienten/${appliedPatient.id}?tab=ernaehrungsplan`}>
                     Ernährungsplan erstellen
                   </Link>
                 </Button>

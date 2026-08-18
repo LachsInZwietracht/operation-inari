@@ -1,4 +1,4 @@
-import { ErnaehrungsplanPageClient } from "./ernaehrungsplan-client";
+import { MealPlanPlanner } from "@/components/meal-plan-planner";
 import { fetchFoodsByIdsCached } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
@@ -105,7 +105,7 @@ export default async function ErnaehrungsplanPage({
 
   return (
     <FoodsProvider foods={foods}>
-      <ErnaehrungsplanPageClient
+      <MealPlanPlanner
         recipes={recipes}
         initialPlans={mealPlans}
         initialTemplates={templates}

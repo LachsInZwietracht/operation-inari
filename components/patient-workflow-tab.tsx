@@ -101,10 +101,12 @@ const MEAL_PLAN_STATUS_META: Record<NonNullable<DailyMealPlan["status"]>, { labe
   },
 }
 
-function mealPlanHref(patientId: string, plan?: DailyMealPlan | null) {
-  const params = new URLSearchParams({ patientId })
-  if (plan?.date) params.set("date", plan.date)
-  return `/ernaehrungsplan?${params.toString()}`
+/**
+ * The plan lives in the record now, so this stays inside the patient rather
+ * than sending the practitioner to a route that asks who the plan is for.
+ */
+function mealPlanHref(patientId: string) {
+  return `/patienten/${patientId}?tab=ernaehrungsplan`
 }
 
 function countPlanEntries(plan: DailyMealPlan) {
@@ -255,7 +257,7 @@ export function PatientWorkflowTab({
               ? "Ein aktiver patientengebundener Ernährungsplan liegt vor."
               : "Ein patientengebundener Ernährungsplan ist als Entwurf vorhanden.",
         dateLabel: formatDate(latestPlan.date),
-        primaryAction: buildAction("Ernährungsplan öffnen", mealPlanHref(patient.id, latestPlan)),
+        primaryAction: buildAction("Ernährungsplan öffnen", mealPlanHref(patient.id)),
         secondaryAction: buildAction("Neue Beratung", `/patienten/${patient.id}/beratungen/neu`, undefined, "outline"),
       }
     }
@@ -378,7 +380,7 @@ export function PatientWorkflowTab({
         date: plan.date,
         title: plan.title ?? "Ernährungsplan",
         description: `${MEAL_PLAN_STATUS_META[status].label} · ${countPlanEntries(plan)} Einträge`,
-        href: mealPlanHref(patient.id, plan),
+        href: mealPlanHref(patient.id),
         tone: status === "approved" || status === "active" ? "success" : "default",
       })
     })

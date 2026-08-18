@@ -3,10 +3,12 @@
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
+import { IntakeStageProgress } from "@/components/intake-stage-progress"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -22,6 +24,11 @@ import {
 import { usePatients } from "@/hooks/use-patients"
 import { useAuth } from "@/hooks/use-auth"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
+import {
+  derivePatientIntakeStage,
+  INTAKE_STAGE_META,
+  type IntakeStage,
+} from "@/lib/patient-journey"
 
 const PatientTabs = dynamic(
   () => import("@/components/patient-tabs").then((mod) => mod.PatientTabs),
@@ -56,6 +63,26 @@ export function PatientDetailClient({
   const [newMeasurementRequest, setNewMeasurementRequest] = useState<number>()
   const patient = initialData?.patient ?? getPatient(patientId)
   const resolvedInitialData = initialData?.patient ? initialData : undefined
+  // The phase belongs next to the name: it is the one fact that decides what to
+  // do next, and the header is what gets read first. Seeded from the server
+  // payload so it does not pop in, then kept current by the tabs, which own the
+  // live workspace hooks. The server copy can be empty when the patient only
+  // resolves client-side, which is why this cannot simply be derived here.
+  const [stage, setStage] = useState<IntakeStage | null>(() =>
+    resolvedInitialData && initialData?.patient
+      ? derivePatientIntakeStage({
+          patient: initialData.patient,
+          links: resolvedInitialData.intakeLinks,
+          submissions: resolvedInitialData.intakeSubmissions,
+          sessions: resolvedInitialData.counselingSessions,
+          appointments: resolvedInitialData.appointments,
+        })
+      : null,
+  )
+  const handleStageChange = useCallback((next: IntakeStage) => {
+    setStage((previous) => (previous === next ? previous : next))
+  }, [])
+  const stageMeta = stage ? INTAKE_STAGE_META[stage] : null
 
   if (!patient && (authLoading || (isAuthenticated && isLoadingRemote))) {
     return (
@@ -98,6 +125,25 @@ export function PatientDetailClient({
       <PageHeader
         title={`${patient.firstName} ${patient.lastName}`}
         description={getPatientDescription(patient)}
+        leading={
+          stageMeta ? (
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: stageMeta.color }}
+              aria-hidden="true"
+            />
+          ) : undefined
+        }
+        titleSuffix={
+          stage && stageMeta ? (
+            <span className="flex items-center gap-2">
+              <Badge style={{ backgroundColor: stageMeta.color, color: "white" }}>
+                {stageMeta.label}
+              </Badge>
+              <IntakeStageProgress stage={stage} />
+            </span>
+          ) : undefined
+        }
       >
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setNewMeasurementRequest(Date.now())}>
@@ -146,6 +192,7 @@ export function PatientDetailClient({
         patient={patient}
         initialData={resolvedInitialData}
         newMeasurementRequest={newMeasurementRequest}
+        onStageChange={handleStageChange}
       />
     </div>
   )

@@ -108,7 +108,7 @@ function getPatientIndications(patient?: Patient): string[] {
   return record.indication ? [record.indication] : []
 }
 
-interface ErnaehrungsplanPageClientProps {
+interface MealPlanPlannerProps {
   recipes: Recipe[]
   initialPlans: DailyMealPlan[]
   initialTemplates?: MealPlanTemplate[]
@@ -121,9 +121,35 @@ interface ErnaehrungsplanPageClientProps {
    * URL without the param so a refresh does not re-apply silently.
    */
   initialApplyTemplateId?: string
+  /**
+   * Renders inside a patient record rather than on its own route: the page
+   * header, the patient picker and the "no patient chosen" state all belong to
+   * the standalone page and are dropped here, because the record around it
+   * already answers whose plan this is.
+   */
+  embedded?: boolean
+  /**
+   * One more view alongside Strategie/Tag/Woche — the patient's plan list.
+   * Rendered with a handle back into the planner so opening a plan switches
+   * to its day here instead of navigating out of the record.
+   */
+  extraTab?: {
+    value: string
+    label: string
+    render: (api: { openDay: (date: string) => void }) => React.ReactNode
+  }
 }
 
-export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTemplates, patientId, initialDate, initialApplyTemplateId }: ErnaehrungsplanPageClientProps) {
+export function MealPlanPlanner({
+  recipes,
+  initialPlans,
+  initialTemplates,
+  patientId,
+  initialDate,
+  initialApplyTemplateId,
+  embedded = false,
+  extraTab,
+}: MealPlanPlannerProps) {
   const router = useRouter()
   const serverFoods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
@@ -192,11 +218,13 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
       dietLineId: template.dietLineId ?? undefined,
       targetProfileId: template.targetProfileId ?? undefined,
     })
+    if (embedded) return
     const params = new URLSearchParams()
     params.set("date", currentDate)
     if (patientId) params.set("patientId", patientId)
     router.replace(`/ernaehrungsplan?${params.toString()}`)
   }, [
+    embedded,
     initialApplyTemplateId,
     mealPlanTemplates,
     applyTemplateToDate,
@@ -722,7 +750,8 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
   )
 
   return (
-    <div className="space-y-6">
+    <div className={embedded ? "space-y-4" : "space-y-6"}>
+      {!embedded && (
       <PageHeader
         title="Ernährungsplan"
         helpText="Planen Sie Mahlzeiten für einzelne Tage, Wochen oder Zyklen und vergleichen Sie die Nährstoffzufuhr mit Zielprofilen und DGE-Referenzwerten."
@@ -768,8 +797,9 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
           </>
         )}
       </PageHeader>
+      )}
 
-      {!hasSelectedPatient && (
+      {!embedded && !hasSelectedPatient && (
         <div className="rounded-lg border border-dashed px-6 py-16 text-center">
           <UserRound className="text-muted-foreground mx-auto h-8 w-8" />
           <p className="mt-3 text-sm font-medium">Kein Patient ausgewählt</p>
@@ -779,14 +809,39 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         </div>
       )}
 
-      {hasSelectedPatient && (
+      {(embedded || hasSelectedPatient) && (
         <>
       <Tabs value={view} onValueChange={setView}>
-        <TabsList>
-          <TabsTrigger value="strategy">Strategie</TabsTrigger>
-          <TabsTrigger value="day">Tag</TabsTrigger>
-          <TabsTrigger value="week">Woche</TabsTrigger>
-        </TabsList>
+        {/* Embedded, the sub-navigation shares its row with the one action the
+            page header used to carry, so the planner opens no taller than the
+            tab strip it replaces. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="strategy">Strategie</TabsTrigger>
+            <TabsTrigger value="day">Tag</TabsTrigger>
+            <TabsTrigger value="week">Woche</TabsTrigger>
+            {extraTab ? (
+              <TabsTrigger value={extraTab.value}>{extraTab.label}</TabsTrigger>
+            ) : null}
+          </TabsList>
+          {embedded && visiblePatient ? (
+            <Button variant="outline" size="sm" onClick={() => setSuggestionDialogOpen(true)}>
+              <Sparkles className="mr-1.5 h-4 w-4" />
+              Planvorschlag
+            </Button>
+          ) : null}
+        </div>
+
+        {extraTab ? (
+          <TabsContent value={extraTab.value} className="mt-2">
+            {extraTab.render({
+              openDay: (date) => {
+                setDate(date)
+                setView("day")
+              },
+            })}
+          </TabsContent>
+        ) : null}
 
         {/* The strategy sits outside the library grid below: it plans the
             patient, not a single day, so the food library would only be noise
@@ -810,7 +865,7 @@ export function ErnaehrungsplanPageClient({ recipes, initialPlans, initialTempla
         <div
           className={cn(
             "mt-2 grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]",
-            view === "strategy" && "hidden",
+            (view === "strategy" || view === extraTab?.value) && "hidden",
           )}
         >
           {/* Col 1: the shared library on the left. At xl it fills the planner

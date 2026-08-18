@@ -11,14 +11,26 @@ interface PageHeaderProps {
   title: string
   description?: string
   helpText?: string
+  /** Sits immediately before the title — a status dot or colour chip. */
+  leading?: React.ReactNode
+  /** Sits immediately after the title — status that belongs to the name itself. */
+  titleSuffix?: React.ReactNode
   children?: React.ReactNode
 }
 
-export function PageHeader({ title, description, helpText, children }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  helpText,
+  leading,
+  titleSuffix,
+  children,
+}: PageHeaderProps) {
   return (
     <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {leading}
           <h1 className="min-w-0 break-words text-2xl font-bold tracking-tight">{title}</h1>
           {helpText && (
             <Popover>
@@ -36,6 +48,7 @@ export function PageHeader({ title, description, helpText, children }: PageHeade
               </PopoverContent>
             </Popover>
           )}
+          {titleSuffix}
         </div>
         {description && (
           <p className="text-muted-foreground max-w-prose text-sm">{description}</p>

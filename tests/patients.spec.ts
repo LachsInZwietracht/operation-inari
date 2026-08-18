@@ -435,11 +435,14 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("tab", { name: "Übersicht" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Ablauf" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Ernährung" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Ernährungsplan" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Beratung" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Statistiken" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Übersicht" })).toHaveAttribute("data-state", "active");
-      await expect(page.getByText("Aktueller Stand")).toBeVisible();
+      // The phase now sits next to the patient's name; the card that used to
+      // restate it was replaced by the status band below the tabs.
+      await expect(page.getByText("Letzter Kontakt")).toBeVisible();
+      await expect(page.getByText("Aktueller Plan")).toBeVisible();
       await expect(page.getByText("Gewichtsverlauf")).toBeVisible();
       await page.getByRole("button", { name: "Löschen" }).click();
       await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
@@ -471,7 +474,7 @@ test.describe("Patient Management", () => {
         // The summary shows twice: on the stage card and in the "next step" card.
         page.getByText("Es gibt noch keinen Klienten-Zugang; der Patient kann nichts selbst erfassen.").first(),
       ).toBeVisible();
-      await expect(page.getByRole("link", { name: "Plan anlegen" }).first()).toHaveAttribute("href", `/ernaehrungsplan?patientId=${patient.id}`);
+      await expect(page.getByRole("link", { name: "Plan anlegen" }).first()).toHaveAttribute("href", `/patienten/${patient.id}?tab=ernaehrungsplan`);
       await expect(page.getByText("Quick Links")).toHaveCount(0);
     } finally {
       await deleteWorkflowFixture(patient.id, fixture);

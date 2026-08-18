@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import {
   Archive,
+  ArrowRight,
   CalendarDays,
   Copy,
   ExternalLink,
@@ -62,6 +63,14 @@ interface PatientMealPlansTabProps {
   initialPlans?: DailyMealPlan[]
   foods?: Food[]
   recipes?: Recipe[]
+  /**
+   * Set when the list runs inside the planner: opening a plan switches the
+   * planner to that day rather than navigating to the standalone route, which
+   * would drop the practitioner out of the patient record.
+   */
+  onOpenPlan?: (plan: DailyMealPlan) => void
+  /** Same idea for "new plan": jump to today's day view instead of a route. */
+  onCreatePlan?: () => void
 }
 
 function isoDateToday() {
@@ -133,6 +142,8 @@ export function PatientMealPlansTab({
   initialPlans,
   foods = [],
   recipes = [],
+  onOpenPlan,
+  onCreatePlan,
 }: PatientMealPlansTabProps) {
   const {
     plans,
@@ -269,12 +280,19 @@ export function PatientMealPlansTab({
                 Vergleichen
               </Link>
             </Button>
-            <Button asChild size="sm">
-              <Link href={mealPlanHref(patient.id)}>
+            {onCreatePlan ? (
+              <Button size="sm" onClick={onCreatePlan}>
                 <Plus className="mr-2 h-4 w-4" />
                 Plan anlegen
-              </Link>
-            </Button>
+              </Button>
+            ) : (
+              <Button asChild size="sm">
+                <Link href={mealPlanHref(patient.id)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Plan anlegen
+                </Link>
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -324,12 +342,19 @@ export function PatientMealPlansTab({
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link prefetch={false} href={mealPlanHref(patient.id, plan)}>
+                      {onOpenPlan ? (
+                        <Button size="sm" variant="outline" onClick={() => onOpenPlan(plan)}>
                           Öffnen
-                          <ExternalLink className="ml-2 h-4 w-4" />
-                        </Link>
-                      </Button>
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button asChild size="sm" variant="outline">
+                          <Link prefetch={false} href={mealPlanHref(patient.id, plan)}>
+                            Öffnen
+                            <ExternalLink className="ml-2 h-4 w-4" />
+                          </Link>
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => void duplicatePlan(plan)}>
                         <Copy className="mr-2 h-4 w-4" />
                         Duplizieren
@@ -399,12 +424,19 @@ export function PatientMealPlansTab({
                 erscheint danach hier als Verlauf.
               </p>
             </div>
-            <Button asChild>
-              <Link href={mealPlanHref(patient.id)}>
+            {onCreatePlan ? (
+              <Button onClick={onCreatePlan}>
                 <Plus className="mr-2 h-4 w-4" />
                 Ernährungsplan anlegen
-              </Link>
-            </Button>
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link href={mealPlanHref(patient.id)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Ernährungsplan anlegen
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

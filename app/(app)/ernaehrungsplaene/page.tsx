@@ -1,81 +1,50 @@
-import Link from "next/link";
-import { ArrowLeftRight, ArrowRight, BookMarked, CalendarDays, Sigma } from "lucide-react";
+import { ErnaehrungsplaenePageClient } from "./ernaehrungsplaene-client";
+import { fetchMealPlans } from "@/lib/data/meal-plans";
+import { fetchPatients } from "@/lib/data/patients";
+import { createClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import type { DailyMealPlan, Patient } from "@/lib/types";
 
-import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+/**
+ * Every plan the practice has built, filed under the patient it belongs to.
+ *
+ * The page used to be four navigation tiles, which answered "where do I go"
+ * and never "what have I already made". A plan only ever exists for a patient,
+ * so the patient is the heading and the plans sit under it.
+ */
+async function loadInitialData(): Promise<{
+  patients: Patient[];
+  plans: DailyMealPlan[];
+} | null> {
+  const authOptional =
+    !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true" || authOptional) {
+    return null;
+  }
 
-const PLAN_HEADER = {
-  title: "Ernährungspläne",
-  description: "Pläne erstellen, aus Vorlagen starten und Varianten vergleichen.",
-  helpText:
-    "Hier laufen alle Ernährungsplan-Workflows zusammen: Erstellen Sie einen neuen Plan, starten Sie aus einer gespeicherten Vorlage oder vergleichen Sie mehrere Pläne nebeneinander.",
-};
+  const supabase = await createClient();
+  const user = await getVerifiedUser(supabase);
+  if (!user) return null;
 
-interface PlanTile {
-  label: string;
-  description: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  route: string;
+  try {
+    const [patients, plans] = await Promise.all([
+      fetchPatients(supabase),
+      fetchMealPlans({ supabase, userId: user.id, includeSystem: false }),
+    ]);
+    return { patients, plans };
+  } catch (error) {
+    console.warn("Failed to load meal plan overview:", error);
+    return null;
+  }
 }
 
-const PLAN_TILES: PlanTile[] = [
-  {
-    label: "Ernährungsplan erstellen",
-    description: "Einen neuen Tages- oder Wochenplan zusammenstellen und analysieren.",
-    icon: CalendarDays,
-    route: "/ernaehrungsplan",
-  },
-  {
-    label: "Planvorlagen",
-    description: "Aus gespeicherten Vorlagen starten und wiederverwenden.",
-    icon: BookMarked,
-    route: "/ernaehrungsplan/bibliothek",
-  },
-  {
-    label: "Pläne vergleichen",
-    description: "Mehrere Pläne nebeneinander stellen und Nährwerte gegenüberstellen.",
-    icon: Sigma,
-    route: "/ernaehrungsplan/vergleich",
-  },
-  {
-    label: "Austauschtabellen",
-    description: "Geeignete Lebensmittel-Alternativen mit Austauschmengen finden.",
-    icon: ArrowLeftRight,
-    route: "/austauschtabellen",
-  },
-];
+export default async function ErnaehrungsplaenePage() {
+  const initialData = await loadInitialData();
 
-export default function ErnaehrungsplaenePage() {
   return (
-    <div className="space-y-6">
-      <PageHeader {...PLAN_HEADER} />
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {PLAN_TILES.map((tile) => (
-          <Link
-            key={tile.route}
-            href={tile.route}
-            className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <Card className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-accent/40">
-              <CardHeader>
-                <div className="bg-primary/10 text-primary mb-2 flex size-10 items-center justify-center rounded-lg">
-                  <tile.icon className="size-5" aria-hidden="true" />
-                </div>
-                <CardTitle className="flex items-center gap-2">
-                  {tile.label}
-                  <ArrowRight
-                    className="size-4 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100"
-                    aria-hidden="true"
-                  />
-                </CardTitle>
-                <CardDescription>{tile.description}</CardDescription>
-              </CardHeader>
-              <CardContent />
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </div>
+    <ErnaehrungsplaenePageClient
+      initialPatients={initialData?.patients ?? []}
+      initialPlans={initialData?.plans ?? []}
+    />
   );
 }
