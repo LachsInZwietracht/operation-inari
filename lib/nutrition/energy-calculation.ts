@@ -14,6 +14,20 @@ export const KCAL_PER_KG_WEIGHT_CHANGE = 7700
  */
 export const PATIENT_ENERGY_FORMULA: EnergyFormula = "mifflin"
 
+/**
+ * The activity factors offered anywhere a PAL can be picked.
+ *
+ * Shared so the patient overview and the Aktivität tab cannot drift onto two
+ * different ladders and describe 1,6 as two different lives.
+ */
+export const PAL_LEVELS = [
+  { value: "1.2", short: "Ruhig / Büro", label: "1.2 · Ruhig/Büro" },
+  { value: "1.4", short: "Leichte Aktivität", label: "1.4 · Leichte Aktivität" },
+  { value: "1.6", short: "Aktiv (Pflege, Handel)", label: "1.6 · Aktiv (Pflege, Handel)" },
+  { value: "1.8", short: "Sportlich", label: "1.8 · Sportlich" },
+  { value: "2.0", short: "Leistungssport", label: "2.0 · Leistungssport" },
+] as const
+
 export interface EnergyCalculationInput {
   sex: EnergySex
   formula: EnergyFormula

@@ -37,7 +37,11 @@ import { usePatientIntake } from "@/hooks/use-patient-intake"
 import { DIET_EXCLUSIONS, resolveDietStyle } from "@/lib/diet-constants"
 import { LaborwerteTab } from "@/components/patient-tabs/laborwerte-tab"
 import type { PatientWorkspaceData } from "@/lib/data/patient-workspace"
-import { calculateEnergy, PATIENT_ENERGY_FORMULA } from "@/lib/nutrition/energy-calculation"
+import {
+  calculateEnergy,
+  PAL_LEVELS,
+  PATIENT_ENERGY_FORMULA,
+} from "@/lib/nutrition/energy-calculation"
 import { derivePatientIntakeStage, type IntakeStage } from "@/lib/patient-journey"
 
 /** Sentinel for "no style selected" — Radix Select rejects an empty value. */
@@ -227,8 +231,13 @@ export function PatientTabs({
       }),
     [ageYears, height, pal, patient.gender, weight],
   )
-  const basalMetabolicRate = Math.round(energy.basalMetabolicRate)
-  const totalEnergyExpenditure = Math.round(energy.totalEnergyExpenditure)
+  // Mifflin-St Jeor is what the app calculates; the override is what the
+  // practitioner knows. Everything downstream — the energy card, the weight
+  // projection, the client's diary — resolves in that order.
+  const calculatedBasalMetabolicRate = Math.round(energy.basalMetabolicRate)
+  const basalOverride = currentPatient.basalMetabolicRateOverride
+  const basalMetabolicRate = basalOverride ?? calculatedBasalMetabolicRate
+  const totalEnergyExpenditure = Math.round(basalMetabolicRate * pal)
 
   // Writes the single column, and waits, so the overview card can report an
   // honest result instead of an optimistic one.
@@ -237,6 +246,22 @@ export function PatientTabs({
       await savePatient(patient.id, { dailyCalorieGoal: kcal })
     },
     [patient.id, savePatient],
+  )
+
+  // `undefined` clears the override and hands the number back to the formula.
+  // savePatient merges by spread, so the key has to be present either way.
+  const handleSaveBasalOverride = useCallback(
+    async (kcal: number | undefined) => {
+      await savePatient(patient.id, { basalMetabolicRateOverride: kcal })
+    },
+    [patient.id, savePatient],
+  )
+
+  const handlePalValueChange = useCallback(
+    (next: number) => {
+      void setPal(next, patient.id)
+    },
+    [patient.id, setPal],
   )
 
   useEffect(() => {
@@ -412,13 +437,7 @@ export function PatientTabs({
     toast.success("Notizen zu Ernährungsvorlieben gespeichert")
   }, [currentPatient.nutritionPreferenceNotes, nutritionPreferenceNotes, patient.id, updatePatient])
 
-  const palOptions = [
-    { value: "1.2", label: "1.2 · Ruhig/Büro" },
-    { value: "1.4", label: "1.4 · Leichte Aktivität" },
-    { value: "1.6", label: "1.6 · Aktiv (Pflege, Handel)" },
-    { value: "1.8", label: "1.8 · Sportlich" },
-    { value: "2.0", label: "2.0 · Leistungssport" },
-  ]
+  const palOptions = PAL_LEVELS.map((level) => ({ value: level.value, label: level.label }))
 
 
   const handleDiagnosisSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -538,8 +557,12 @@ export function PatientTabs({
           intakeLinks={intakeLinks}
           intakeSubmissions={intakeSubmissions}
           basalMetabolicRate={latestAnthro ? basalMetabolicRate : undefined}
+          calculatedBasalMetabolicRate={latestAnthro ? calculatedBasalMetabolicRate : undefined}
+          basalOverride={basalOverride}
           totalEnergyExpenditure={latestAnthro ? totalEnergyExpenditure : undefined}
           palValue={pal}
+          onPalChange={handlePalValueChange}
+          onSaveBasalOverride={handleSaveBasalOverride}
           onAddMeasurement={() => setMeasurementOpen(true)}
           onSaveCalorieGoal={handleSaveCalorieGoal}
         />

@@ -511,6 +511,10 @@ export function PatientStatsTab({
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {/* Embedded in the patient overview this chart is the weight curve a
+            second time: BMI is weight over a constant, and the overview chart
+            already carries it on its right-hand axis. */}
+        {!embedded && (
         <Card>
           <CardHeader>
             <CardTitle>BMI-Verlauf</CardTitle>
@@ -560,6 +564,7 @@ export function PatientStatsTab({
             </ResponsiveContainer>
           </CardContent>
         </Card>
+        )}
 
         {availableBodyMetrics.length > 0 && (
           <Card>
@@ -632,6 +637,9 @@ export function PatientStatsTab({
           </Card>
         )}
 
+        {/* Lives in Profil → Aktivität & Energie. On the overview it was a
+            fourth chart competing with the three that answer the question. */}
+        {!embedded && (
         <Card>
           <CardHeader>
             <CardTitle>Aktivitätsenergie</CardTitle>
@@ -662,6 +670,7 @@ export function PatientStatsTab({
             )}
           </CardContent>
           </Card>
+        )}
         </div>
         </>
       )}

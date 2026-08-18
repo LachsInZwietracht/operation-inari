@@ -45,6 +45,15 @@ export interface WeightProjectionInput {
   sex: EnergySex
   formula: EnergyFormula
   pal: number
+  /**
+   * Basal rate the counselor set by hand, in kcal at the *starting* weight.
+   *
+   * Applied as a ratio rather than a constant: the whole point of this module
+   * is that expenditure falls as the body gets lighter, and pinning the basal
+   * rate to one number would flatten that back into a straight line. The
+   * override shifts the curve, the formula still shapes it.
+   */
+  basalOverrideKcal?: number
   goalWeightKg?: number
   /** How many weeks to simulate. */
   weeks?: number
@@ -69,6 +78,26 @@ function clampWeight(weightKg: number): number {
   return Math.min(MAX_WEIGHT_KG, Math.max(MIN_WEIGHT_KG, weightKg))
 }
 
+/**
+ * How far the hand-set basal rate sits from the formula at the starting weight.
+ *
+ * 1 when nothing was overridden, so the maths below is unchanged for everyone
+ * who never touched the field.
+ */
+function basalScale(input: WeightProjectionInput): number {
+  const override = input.basalOverrideKcal
+  if (override === undefined || override <= 0) return 1
+  const calculated = calculateBasalMetabolicRate(
+    input.sex,
+    input.formula,
+    input.weightKg,
+    input.heightCm,
+    input.ageYears,
+  )
+  if (!Number.isFinite(calculated) || calculated <= 0) return 1
+  return override / calculated
+}
+
 /** Total daily energy expenditure the patient would have at `weightKg`. */
 function expenditureAt(weightKg: number, input: WeightProjectionInput): number {
   const basal = calculateBasalMetabolicRate(
@@ -78,7 +107,7 @@ function expenditureAt(weightKg: number, input: WeightProjectionInput): number {
     input.heightCm,
     input.ageYears,
   )
-  return Math.max(0, basal) * Math.max(0, input.pal)
+  return Math.max(0, basal) * basalScale(input) * Math.max(0, input.pal)
 }
 
 /**

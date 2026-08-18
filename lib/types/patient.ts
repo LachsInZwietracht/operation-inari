@@ -55,6 +55,14 @@ export interface Patient extends Timestamped {
   goalWeight?: number;
   /** Selected macro distribution preset id (e.g. "balanced", "lowcarb"). */
   macroPreset?: string;
+  /**
+   * Basal metabolic rate in kcal/day, set by hand.
+   *
+   * Mifflin-St Jeor is a population formula, and a practitioner with a
+   * calorimetry reading knows better. Undefined is the normal state and keeps
+   * the calculated value; every consumer resolves the same way, override first.
+   */
+  basalMetabolicRateOverride?: number;
   /** Single diet style, e.g. "vegan" or "keto". */
   dietStyle?: DietStyle;
   /** Non-medical exclusions, e.g. "no_dairy". */

@@ -32,6 +32,7 @@ interface PatientRow {
   daily_calorie_goal: number | null;
   goal_weight: number | null;
   macro_preset: string | null;
+  basal_metabolic_rate_override: number | null;
   nutrition_preferences: Patient["nutritionPreferences"] | null;
   nutrition_preference_notes: string | null;
   diet_style: Patient["dietStyle"] | null;
@@ -79,6 +80,7 @@ const PATIENT_BASE_COLUMNS = [
   "daily_calorie_goal",
   "goal_weight",
   "macro_preset",
+  "basal_metabolic_rate_override",
   "status",
   "care_setting",
   "external_patient_number",
@@ -209,6 +211,7 @@ function mapPatientRow(row: PatientRow): Patient {
     dailyCalorieGoal: row.daily_calorie_goal ?? undefined,
     goalWeight: row.goal_weight ?? undefined,
     macroPreset: row.macro_preset ?? undefined,
+    basalMetabolicRateOverride: row.basal_metabolic_rate_override ?? undefined,
     nutritionPreferences: row.nutrition_preferences ?? undefined,
     nutritionPreferenceNotes: row.nutrition_preference_notes ?? undefined,
     dietStyle: row.diet_style ?? undefined,
@@ -317,6 +320,7 @@ function toPatientUpsertPayload(
     daily_calorie_goal: patient.dailyCalorieGoal ?? null,
     goal_weight: patient.goalWeight ?? null,
     macro_preset: patient.macroPreset ?? null,
+    basal_metabolic_rate_override: patient.basalMetabolicRateOverride ?? null,
     ...(includeNutritionPreferenceColumns
       ? {
           nutrition_preferences: patient.nutritionPreferences ?? [],
