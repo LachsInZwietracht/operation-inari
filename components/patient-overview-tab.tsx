@@ -657,7 +657,12 @@ export function PatientOverviewTab({
             {intakeSubmission ? (
               <Dialog>
                 <DialogTrigger asChild>
-                  <FactButton value={formatDate(intakeSubmission.submittedAt)} />
+                  {/* The visible text is a date, so the button needs a name
+                      that says what opening it does. */}
+                  <FactButton
+                    value={formatDate(intakeSubmission.submittedAt)}
+                    aria-label={`Originalaufnahme vom ${formatDate(intakeSubmission.submittedAt)} öffnen`}
+                  />
                 </DialogTrigger>
                 <DialogContent
                   className="max-h-[85vh] max-w-3xl overflow-y-auto"

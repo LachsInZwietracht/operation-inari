@@ -278,6 +278,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `user_reference_preferences` | Default reference selection for generic app views | `user_id`, `standard_id`, `profile_id`, `age_group_id`, `gender`, `life_stage` |
 | `patient_reference_assignments` | Patient-specific reference overrides | `patient_id`, `user_id`, `standard_id`, `profile_id`, `life_stage` |
 | `patients` intake extensions | Patient intake, clinic identifiers, consent, and contact context | `status`, `care_setting`, `external_patient_number`, `case_number`, preferred contact/language, consent flags, referrer/department, intake reason, patient goals, clinical/admin notes, emergency contact fields |
+| `patients` plan strategy | Targets and rules the meal plan is built against | `daily_calorie_goal`, `goal_weight`, `macro_preset` (a preset id **or** `custom:carbs/fat/protein`), `basal_metabolic_rate_override` (`20260818000090`, CHECK 500–6000, NULL = Mifflin-St Jeor), `plan_principles` (`20260818000092`, JSONB differences from the derived principles) |
 | `off_staging` | Open Food Facts quarantine | `barcode`, source/product metadata, `raw_product`, `nutriments` (JSONB), `data_quality_score`, `validated`, `promoted` |
 | `recipes` | User/community recipes | `user_id`, `source_type`, `servings`, `instructions` |
 | `recipe_ingredients` | Recipe → food links | `recipe_id`, `food_id`, `amount` (grams) |

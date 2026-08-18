@@ -471,10 +471,12 @@ test.describe("Patient Management", () => {
 
       // What is left of both: the phase by the name, and the analytics section.
       await expect(page.getByText("Verlauf und Statistik")).toBeVisible();
-      await expect(page.getByText("BMI-Verlauf", { exact: true })).toBeVisible();
       await expect(page.getByText("Ø Trend / Woche")).toBeVisible();
-      // The overview's own weight chart is the only one on the page now.
+      // The overview's own weight chart is the only one on the page now, and
+      // it carries the BMI on its right-hand axis — a separate BMI curve would
+      // be the same shape at a different scale.
       await expect(page.getByText("Gewichtsverlauf")).toHaveCount(1);
+      await expect(page.getByText("BMI-Verlauf", { exact: true })).toHaveCount(0);
     } finally {
       await deleteWorkflowFixture(patient.id, fixture);
       await deletePatientFixture(patient.id);

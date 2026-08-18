@@ -32,6 +32,48 @@ const CONTACT_CHANNEL_LABELS: Record<PreferredContactChannel, string> = {
   none: "Keine Angabe",
 }
 
+/**
+ * One recorded fact, label over value.
+ *
+ * The profile used to give every fact a full row of a two-column definition
+ * list, which turned twelve short answers into a screen of scrolling. Stacked
+ * tight in a four-column grid they read as what they are: a reference sheet.
+ */
+function Fact({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value?: ReactNode
+  className?: string
+}) {
+  if (value === undefined || value === null || value === "") return null
+  return (
+    <div className={className}>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-sm font-medium">{value}</dd>
+    </div>
+  )
+}
+
+/** A block of free text — kept apart from the facts, which are one line each. */
+function Note({ label, text }: { label: string; text?: string }) {
+  if (!text) return null
+  return (
+    <div>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 whitespace-pre-wrap text-sm">{text}</p>
+    </div>
+  )
+}
+
+const FACT_GRID = "grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4"
+
 interface StammdatenTabProps {
   patient: Patient
   profileSubNav: ReactNode
@@ -53,225 +95,174 @@ export function StammdatenTab({
   correctedWeight,
   correctedBmi,
 }: StammdatenTabProps) {
+  const address = patient.street
+    ? [patient.street, [patient.zip, patient.city].filter(Boolean).join(" ")]
+        .filter(Boolean)
+        .join(", ")
+    : undefined
+  const emergencyContact = [
+    patient.emergencyContactName,
+    patient.emergencyContactRelationship,
+    patient.emergencyContactPhone,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+
   return (
     <>
       {profileSubNav}
+
       <Card>
-        <CardHeader>
-          <CardTitle>Persönliche Daten</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Person und Kontakt</CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <dt className="text-sm text-muted-foreground">Geburtsdatum</dt>
-              <dd className="text-sm font-medium">{formatDate(patient.dateOfBirth)}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Geschlecht</dt>
-              <dd className="text-sm font-medium">
-                {patient.gender === "m" ? "Männlich" : patient.gender === "w" ? "Weiblich" : "Divers"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Status</dt>
-              <dd className="text-sm font-medium">
-                <Badge variant={patient.status === "active" || !patient.status ? "secondary" : "outline"}>
+          <dl className={FACT_GRID}>
+            <Fact label="Geburtsdatum" value={formatDate(patient.dateOfBirth)} />
+            <Fact
+              label="Geschlecht"
+              value={
+                patient.gender === "m"
+                  ? "Männlich"
+                  : patient.gender === "w"
+                    ? "Weiblich"
+                    : "Divers"
+              }
+            />
+            <Fact
+              label="Status"
+              value={
+                <Badge
+                  variant={
+                    patient.status === "active" || !patient.status ? "secondary" : "outline"
+                  }
+                >
                   {PATIENT_STATUS_LABELS[patient.status ?? "active"]}
                 </Badge>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Versorgungskontext</dt>
-              <dd className="text-sm font-medium">{CARE_SETTING_LABELS[patient.careSetting ?? "ambulatory"]}</dd>
-            </div>
-            {patient.externalPatientNumber && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Patientennummer</dt>
-                <dd className="text-sm font-medium">{patient.externalPatientNumber}</dd>
-              </div>
-            )}
-            {patient.caseNumber && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Fallnummer</dt>
-                <dd className="text-sm font-medium">{patient.caseNumber}</dd>
-              </div>
-            )}
-            {patient.email && (
-              <div>
-                <dt className="text-sm text-muted-foreground">E-Mail</dt>
-                <dd className="text-sm font-medium">{patient.email}</dd>
-              </div>
-            )}
-            {patient.phone && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Telefon</dt>
-                <dd className="text-sm font-medium">{patient.phone}</dd>
-              </div>
-            )}
-            {patient.preferredContactChannel && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Bevorzugter Kontakt</dt>
-                <dd className="text-sm font-medium">{CONTACT_CHANNEL_LABELS[patient.preferredContactChannel]}</dd>
-              </div>
-            )}
-            {patient.preferredLanguage && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Sprache</dt>
-                <dd className="text-sm font-medium">{patient.preferredLanguage}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-sm text-muted-foreground">Kontaktfreigabe</dt>
-              <dd className="text-sm font-medium">{patient.communicationConsent ? "Ja" : "Nein"}</dd>
-            </div>
-            {patient.street && (
-              <div className="sm:col-span-2">
-                <dt className="text-sm text-muted-foreground">Adresse</dt>
-                <dd className="text-sm font-medium">
-                  {patient.street}, {patient.zip} {patient.city}
-                </dd>
-              </div>
-            )}
-            {(patient.emergencyContactName || patient.emergencyContactPhone) && (
-              <div className="sm:col-span-2">
-                <dt className="text-sm text-muted-foreground">Kontaktperson</dt>
-                <dd className="text-sm font-medium">
-                  {[patient.emergencyContactName, patient.emergencyContactRelationship, patient.emergencyContactPhone]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </dd>
-              </div>
-            )}
+              }
+            />
+            <Fact
+              label="Versorgung"
+              value={CARE_SETTING_LABELS[patient.careSetting ?? "ambulatory"]}
+            />
+            <Fact label="E-Mail" value={patient.email} />
+            <Fact label="Telefon" value={patient.phone} />
+            <Fact
+              label="Bevorzugter Kontakt"
+              value={
+                patient.preferredContactChannel
+                  ? CONTACT_CHANNEL_LABELS[patient.preferredContactChannel]
+                  : undefined
+              }
+            />
+            <Fact label="Sprache" value={patient.preferredLanguage} />
+            <Fact label="Kontaktfreigabe" value={patient.communicationConsent ? "Ja" : "Nein"} />
+            <Fact label="Adresse" value={address} className="col-span-2" />
+            <Fact label="Kontaktperson" value={emergencyContact || undefined} className="col-span-2" />
+            <Fact label="Patientennummer" value={patient.externalPatientNumber} />
+            <Fact label="Fallnummer" value={patient.caseNumber} />
           </dl>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Versicherung & Medizinisches</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Versicherung und Medizinisches</CardTitle>
         </CardHeader>
-        <CardContent>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            {patient.insuranceProvider && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Krankenkasse</dt>
-                <dd className="text-sm font-medium">{patient.insuranceProvider}</dd>
-              </div>
-            )}
-            {patient.insuranceNumber && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Versichertennummer</dt>
-                <dd className="text-sm font-medium">{patient.insuranceNumber}</dd>
-              </div>
-            )}
-            {patient.indications && patient.indications.length > 0 && (
-              <div>
-                <dt className="text-sm text-muted-foreground">
-                  {patient.indications.length === 1 ? "Indikation" : "Indikationen"}
-                </dt>
-                <dd className="mt-1 flex flex-wrap gap-1.5 text-sm font-medium">
-                  {patient.indications.map((indication) => (
-                    <Badge key={indication} variant="secondary">
-                      {indication}
-                    </Badge>
-                  ))}
-                </dd>
-              </div>
-            )}
-            {patient.referrerName && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Zuweiser</dt>
-                <dd className="text-sm font-medium">{patient.referrerName}</dd>
-              </div>
-            )}
-            {patient.department && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Fachbereich / Station</dt>
-                <dd className="text-sm font-medium">{patient.department}</dd>
-              </div>
-            )}
-            {amputationDescriptions.length > 0 && (
-              <div className="sm:col-span-2">
-                <dt className="text-sm text-muted-foreground">Amputationen</dt>
-                <dd className="mt-1 flex flex-wrap gap-2">
-                  {amputationDescriptions.map((label) => (
-                    <Badge key={label} variant="outline">
-                      {label.replace(/\s*\([^)]*\)/, "")}
-                    </Badge>
-                  ))}
-                </dd>
-                <p className="text-xs text-muted-foreground">
-                  BMI-Korrektur: {(amputationFactor * 100).toFixed(1)} %
-                </p>
-              </div>
-            )}
+        <CardContent className="space-y-4">
+          <dl className={FACT_GRID}>
+            <Fact label="Krankenkasse" value={patient.insuranceProvider} />
+            <Fact label="Versichertennummer" value={patient.insuranceNumber} />
+            <Fact label="Zuweiser" value={patient.referrerName} />
+            <Fact label="Fachbereich / Station" value={patient.department} />
+            <Fact
+              label={patient.indications?.length === 1 ? "Indikation" : "Indikationen"}
+              className="col-span-2"
+              value={
+                patient.indications?.length ? (
+                  <span className="flex flex-wrap gap-1.5">
+                    {patient.indications.map((indication) => (
+                      <Badge key={indication} variant="secondary">
+                        {indication}
+                      </Badge>
+                    ))}
+                  </span>
+                ) : undefined
+              }
+            />
+            <Fact
+              label="Amputationen"
+              className="col-span-2"
+              value={
+                amputationDescriptions.length ? (
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {amputationDescriptions.map((label) => (
+                      <Badge key={label} variant="outline">
+                        {label.replace(/\s*\([^)]*\)/, "")}
+                      </Badge>
+                    ))}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      BMI-Korrektur {(amputationFactor * 100).toFixed(1)} %
+                    </span>
+                  </span>
+                ) : undefined
+              }
+            />
           </dl>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {patient.intakeReason && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Aufnahmegrund</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.intakeReason}</dd>
-              </div>
-            )}
-            {patient.patientGoals && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Patientenziele</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.patientGoals}</dd>
-              </div>
-            )}
-            {(patient.clinicalNotes || patient.notes) && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Klinische Notizen</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.clinicalNotes ?? patient.notes}</dd>
-              </div>
-            )}
-            {patient.adminNotes && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Administrative Notizen</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">{patient.adminNotes}</dd>
-              </div>
-            )}
-          </div>
+
+          {patient.intakeReason ||
+          patient.patientGoals ||
+          patient.clinicalNotes ||
+          patient.notes ||
+          patient.adminNotes ? (
+            <div className="grid gap-4 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Note label="Aufnahmegrund" text={patient.intakeReason} />
+              <Note label="Patientenziele" text={patient.patientGoals} />
+              <Note label="Klinische Notizen" text={patient.clinicalNotes ?? patient.notes} />
+              <Note label="Administrative Notizen" text={patient.adminNotes} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
-      {latestAnthro && (
+      {/* Only when the amputation correction has something to say. The plain
+          weight, height, BMI and measurement date are already the first thing
+          the overview shows, and repeating them here was a card of nothing. */}
+      {latestAnthro && hasAmputation && (
         <Card>
-          <CardHeader>
-            <CardTitle>Aktuelle Messwerte</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Korrigierte Messwerte</CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid gap-3 sm:grid-cols-4">
-              <div>
-                <dt className="text-sm text-muted-foreground">Gewicht</dt>
-                <dd className="text-lg font-semibold">
-                  {formatNumber(latestAnthro.weight, 1)} kg
-                </dd>
-                {hasAmputation && correctedWeight && (
-                  <p className="text-xs text-muted-foreground">
-                    Korrigiert: {formatNumber(correctedWeight, 1)} kg
-                  </p>
-                )}
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">Größe</dt>
-                <dd className="text-lg font-semibold">{formatNumber(latestAnthro.height, 0)} cm</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">BMI</dt>
-                <dd className="text-lg font-semibold">
-                  {formatNumber(correctedBmi ?? latestAnthro.bmi, 1)}
-                </dd>
-                {hasAmputation && (
-                  <p className="text-xs text-muted-foreground">
-                    Gemessen: {formatNumber(latestAnthro.bmi, 1)}
-                  </p>
-                )}
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">Datum</dt>
-                <dd className="text-lg font-semibold">{formatDate(latestAnthro.date)}</dd>
-              </div>
+            <dl className={FACT_GRID}>
+              <Fact
+                label="Gewicht korrigiert"
+                value={
+                  correctedWeight ? (
+                    <>
+                      {formatNumber(correctedWeight, 1)} kg
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        gemessen {formatNumber(latestAnthro.weight, 1)} kg
+                      </span>
+                    </>
+                  ) : undefined
+                }
+              />
+              <Fact
+                label="BMI korrigiert"
+                value={
+                  correctedBmi ? (
+                    <>
+                      {formatNumber(correctedBmi, 1)}
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        gemessen {formatNumber(latestAnthro.bmi, 1)}
+                      </span>
+                    </>
+                  ) : undefined
+                }
+              />
+              <Fact label="Größe" value={`${formatNumber(latestAnthro.height, 0)} cm`} />
+              <Fact label="Stand" value={formatDate(latestAnthro.date)} />
             </dl>
           </CardContent>
         </Card>
