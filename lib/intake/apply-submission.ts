@@ -60,6 +60,8 @@ export interface IntakeApplyPlan {
   allergens: IntakeAllergenRow[];
   foodPreferences: IntakeFoodPreferenceRow[];
   anthropometrics: IntakeAnthropometrics;
+  /** Activity factor implied by the patient's answers, when they gave any. */
+  palValue?: number;
 }
 
 /**
@@ -100,6 +102,40 @@ export function calculateBmi(weightKg: number, heightCm: number): number {
   return Math.round((weightKg / (heightM * heightM)) * 10) / 10;
 }
 
+/**
+ * The activity factor the patient's own answers imply.
+ *
+ * The intake asks what someone does at work and how often they train, then the
+ * answers sat in the submission unread while a counselor picked a PAL by hand
+ * from the same two facts. The ladder below is the one offered everywhere else
+ * in the app (`PAL_LEVELS`), so a derived value and a picked one are the same
+ * kind of number.
+ *
+ * Deliberately coarse. A PAL is a bracket, not a measurement, and pretending to
+ * two decimals from a questionnaire would be false precision.
+ */
+export function derivePalFromActivity(activity?: {
+  jobActivity?: "sitzend" | "stehend" | "koerperlich";
+  trainingDaysPerWeek?: number;
+}): number | undefined {
+  if (!activity?.jobActivity && activity?.trainingDaysPerWeek === undefined) {
+    return undefined;
+  }
+
+  const base =
+    activity.jobActivity === "koerperlich"
+      ? 1.6
+      : activity.jobActivity === "stehend"
+        ? 1.4
+        : 1.2;
+
+  // Training adds one step from three sessions a week, two from six.
+  const days = activity.trainingDaysPerWeek ?? 0;
+  const bump = days >= 6 ? 0.4 : days >= 3 ? 0.2 : 0;
+
+  return Math.min(2.0, Math.round((base + bump) * 10) / 10);
+}
+
 export function buildIntakeApplyPlan(
   payload: IntakePayloadInput,
   submittedAt: string,
@@ -134,6 +170,7 @@ export function buildIntakeApplyPlan(
   const submissionDate = submittedAt.slice(0, 10);
 
   return {
+    palValue: derivePalFromActivity(payload.activity),
     patientFields: {
       first_name: payload.person.firstName,
       last_name: payload.person.lastName,

@@ -74,7 +74,10 @@ import { PlanExchangeTool } from "@/components/plan-exchange-tool"
 import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
-import { PlanStrategyView } from "@/components/plan-strategy-view"
+import {
+  PlanStrategyView,
+  type PatientEnergyContext,
+} from "@/components/plan-strategy-view"
 import { toast } from "sonner"
 
 // Secondary views load lazily so the (default) day view ships less code
@@ -100,6 +103,15 @@ type PatientWithLegacyIndication = Patient & {
   indication?: string
   indications?: string[]
 }
+
+/**
+ * Whether the plan suggestion is offered in the interface.
+ *
+ * The suggestion drafts a whole day from the patient's targets. It is a tool
+ * for us while the generator earns its keep, not something to put in front of a
+ * counselor who would then have to check every line of it.
+ */
+const SHOW_PLAN_SUGGESTION = process.env.NODE_ENV === "development"
 
 function getPatientIndications(patient?: Patient): string[] {
   if (!patient) return []
@@ -138,6 +150,12 @@ interface MealPlanPlannerProps {
     label: string
     render: (api: { openDay: (date: string) => void }) => React.ReactNode
   }
+  /**
+   * The patient's current energy figures, when the surrounding record already
+   * holds them. Lets the strategy say what a calorie target *means* — a deficit
+   * or a surplus — instead of quoting a bare number.
+   */
+  energyContext?: PatientEnergyContext
 }
 
 export function MealPlanPlanner({
@@ -149,6 +167,7 @@ export function MealPlanPlanner({
   initialApplyTemplateId,
   embedded = false,
   extraTab,
+  energyContext,
 }: MealPlanPlannerProps) {
   const router = useRouter()
   const serverFoods = useFoods()
@@ -238,7 +257,9 @@ export function MealPlanPlanner({
   // When adding from the week board a target day is set; null means the active day.
   const [activeAddDate, setActiveAddDate] = useState<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
-  const [view, setView] = useState("day")
+  // Embedded in the record the plan is opened to decide something, and that
+  // decision is the strategy. Standalone, the planner is a day editor.
+  const [view, setView] = useState(embedded ? "strategy" : "day")
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
@@ -783,10 +804,12 @@ export function MealPlanPlanner({
         </Select>
         {visiblePatient && (
           <>
-            <Button variant="outline" onClick={() => setSuggestionDialogOpen(true)}>
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Planvorschlag
-            </Button>
+            {SHOW_PLAN_SUGGESTION ? (
+              <Button variant="outline" onClick={() => setSuggestionDialogOpen(true)}>
+                <Sparkles className="mr-1.5 h-4 w-4" />
+                Planvorschlag
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               onClick={() => router.push(`/patienten/${visiblePatient.id}`)}
@@ -824,7 +847,7 @@ export function MealPlanPlanner({
               <TabsTrigger value={extraTab.value}>{extraTab.label}</TabsTrigger>
             ) : null}
           </TabsList>
-          {embedded && visiblePatient ? (
+          {SHOW_PLAN_SUGGESTION && embedded && visiblePatient ? (
             <Button variant="outline" size="sm" onClick={() => setSuggestionDialogOpen(true)}>
               <Sparkles className="mr-1.5 h-4 w-4" />
               Planvorschlag
@@ -850,6 +873,7 @@ export function MealPlanPlanner({
           <PlanStrategyView
             patient={visiblePatient}
             patientAllergens={visiblePatientAllergens}
+            energyContext={energyContext}
             dietLine={dietLine}
             dayTotals={dayTotals}
             dayLabel={formattedDate}

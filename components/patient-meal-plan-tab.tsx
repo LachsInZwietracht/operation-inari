@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { FoodsProvider } from "@/components/foods-provider"
 import { MealPlanPlanner } from "@/components/meal-plan-planner"
+import type { PatientEnergyContext } from "@/components/plan-strategy-view"
 import { PatientMealPlansTab } from "@/components/patient-meal-plans-tab"
 import { fetchRecipesClient } from "@/lib/data/recipes-client"
 import type { DailyMealPlan, Food, Patient, Recipe } from "@/lib/types"
@@ -15,6 +16,12 @@ interface PatientMealPlanTabProps {
   foods: Food[]
   /** Recipes referenced by this patient's plans, used until the full set lands. */
   recipes: Recipe[]
+  /**
+   * Energy figures the record already computed. Passed down rather than
+   * recomputed so the plan strategy and the overview cannot quote the patient
+   * two different maintenance requirements.
+   */
+  energyContext?: PatientEnergyContext
 }
 
 /**
@@ -30,7 +37,13 @@ interface PatientMealPlanTabProps {
  * server payload would have made every visit to the overview pay for a planner
  * nobody opened.
  */
-export function PatientMealPlanTab({ patient, plans, foods, recipes }: PatientMealPlanTabProps) {
+export function PatientMealPlanTab({
+  patient,
+  plans,
+  foods,
+  recipes,
+  energyContext,
+}: PatientMealPlanTabProps) {
   // The library needs the whole catalogue, not just what this patient's plans
   // already reference — the referenced ones are only a head start.
   const [allRecipes, setAllRecipes] = useState<Recipe[]>(recipes)
@@ -55,6 +68,7 @@ export function PatientMealPlanTab({ patient, plans, foods, recipes }: PatientMe
       <MealPlanPlanner
         embedded
         patientId={patient.id}
+        energyContext={energyContext}
         recipes={allRecipes}
         initialPlans={plans}
         extraTab={{

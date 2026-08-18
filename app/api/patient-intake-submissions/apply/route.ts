@@ -210,6 +210,40 @@ export async function POST(request: Request) {
     }
   }
 
+  // The intake already asked what this person does all day; deriving the PAL
+  // from it saves the counselor from re-answering the same question by hand.
+  // Never overwrites a value that is already there — a practitioner who set one
+  // knows something the questionnaire does not.
+  if (plan.palValue !== undefined) {
+    const { data: assignment } = await supabase
+      .from("patient_reference_assignments")
+      .select("pal_value")
+      .eq("patient_id", patientId)
+      .maybeSingle();
+
+    if (assignment?.pal_value == null) {
+      const { error: palError } = await supabase
+        .from("patient_reference_assignments")
+        .upsert(
+          {
+            patient_id: patientId,
+            user_id: user.id,
+            // The table requires exactly one of standard/profile; DGE is the
+            // default the reference hooks fall back to as well.
+            standard_id: "dge",
+            life_stage: "none",
+            pal_value: plan.palValue,
+          },
+          { onConflict: "patient_id" },
+        );
+
+      if (palError) {
+        // Non-fatal: the counselor can still pick an activity level by hand.
+        console.error("Failed to store intake-derived PAL:", palError);
+      }
+    }
+  }
+
   const { error: anthropometricError } = await supabase
     .from("patient_anthropometrics")
     .insert({
@@ -251,6 +285,7 @@ export async function POST(request: Request) {
       allergenCount: plan.allergens.length,
       foodPreferenceCount: plan.foodPreferences.length,
       correctedBeforeApply: Boolean(parsed.data.payload),
+      derivedPal: plan.palValue ?? null,
       hasReviewerNotes: Boolean(reviewerNotes),
     },
   });

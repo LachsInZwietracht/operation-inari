@@ -1,6 +1,6 @@
 import { DIET_STYLE_LABELS } from "@/lib/diet-constants";
 import { MACRO_KCAL_PER_GRAM, findMacroPreset } from "@/lib/nutrition/macro-presets";
-import type { DietExclusion, DietStyle } from "@/lib/types";
+import type { DietExclusion, DietStyle, PlanPrincipleOverrides } from "@/lib/types";
 
 /**
  * Turns a patient's targets into a handful of sentences they can act on without
@@ -24,6 +24,8 @@ export interface Principle {
   comparison?: PrincipleComparison;
   /** Where the number came from, shown as a tooltip/subline for the dietitian. */
   source: string;
+  /** True for a rule the counselor wrote rather than one derived from the record. */
+  isCustom?: boolean;
 }
 
 export interface PrincipleInput {
@@ -186,6 +188,60 @@ export function buildPrinciples(input: PrincipleInput): Principle[] {
   }
 
   return principles.slice(0, MAX_PRINCIPLES);
+}
+
+/**
+ * Rewrites the sentence of a principle whose target the counselor replaced.
+ *
+ * The text is generated from the number, so leaving it alone would show
+ * "Mindestens 120 g Eiweiß" next to a target of 150 — the row would disagree
+ * with itself. Only the digits are swapped; the wording around them stands.
+ */
+function retarget(principle: Principle, value: number): Principle {
+  const original = principle.targetValue;
+  const text =
+    original === undefined
+      ? principle.text
+      : principle.text.replace(formatNumber(original), formatNumber(value));
+  return {
+    ...principle,
+    targetValue: value,
+    text,
+    source: `${principle.source} · von Hand auf ${formatNumber(value)}${
+      principle.unit ? ` ${principle.unit}` : ""
+    } gesetzt`,
+  };
+}
+
+/**
+ * Folds the counselor's edits into the derived list.
+ *
+ * Overrides are stored as differences rather than as a replacement list, so a
+ * patient whose calorie goal changes still gets a fresh energy principle — only
+ * the rules that were actually touched stay touched.
+ */
+export function applyPrincipleOverrides(
+  derived: Principle[],
+  overrides?: PlanPrincipleOverrides,
+): Principle[] {
+  if (!overrides) return derived;
+
+  const hidden = new Set(overrides.hidden ?? []);
+  const kept = derived
+    .filter((principle) => !hidden.has(principle.id))
+    .map((principle) => {
+      const target = overrides.targets?.[principle.id];
+      return target === undefined ? principle : retarget(principle, target);
+    });
+
+  const custom: Principle[] = (overrides.custom ?? []).map((entry) => ({
+    id: entry.id,
+    text: entry.text,
+    source: "Von der Beratung ergänzt",
+    isCustom: true,
+  }));
+
+  return [...kept, ...custom];
 }
 
 /**

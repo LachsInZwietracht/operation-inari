@@ -574,6 +574,12 @@ export function PatientTabs({
           plans={initialData?.mealPlans ?? []}
           foods={initialData?.mealPlanFoods ?? []}
           recipes={initialData?.recipes ?? []}
+          energyContext={{
+            weightKg: latestAnthro?.weight,
+            basalMetabolicRate: latestAnthro ? basalMetabolicRate : undefined,
+            totalEnergyExpenditure: latestAnthro ? totalEnergyExpenditure : undefined,
+            pal,
+          }}
         />
       </TabsContent>
 

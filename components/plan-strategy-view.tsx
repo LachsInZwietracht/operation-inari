@@ -1,7 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, Flag, Scale, ShieldAlert, Utensils } from "lucide-react"
+import {
+  ArrowRight,
+  Flag,
+  Minus,
+  Scale,
+  ShieldAlert,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  Utensils,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { PlanPrinciplesCard } from "@/components/plan-principles-card"
@@ -27,7 +37,15 @@ import { ALLERGEN_MAP, ALLERGEN_TYPE_LABELS } from "@/lib/allergen-constants"
 import { macroGramsFromKcal } from "@/lib/client-targets"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS } from "@/lib/diet-constants"
 import { formatNumber } from "@/lib/format"
-import { MACRO_PRESETS, findMacroPreset } from "@/lib/nutrition/macro-presets"
+import {
+  CUSTOM_MACRO_LABEL,
+  MACRO_PRESETS,
+  findMacroPreset,
+  isCustomMacroPreset,
+  isValidMacroSplit,
+  serializeMacroSplit,
+  type MacroSplit,
+} from "@/lib/nutrition/macro-presets"
 import { FIBER_TARGET_G } from "@/lib/nutrition/principles"
 import type { DietLinePreset, Patient, PatientAllergenEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -37,10 +55,69 @@ const MIN_KCAL = 800
 const MAX_KCAL = 6000
 
 const NO_PRESET_VALUE = "__none__"
+const CUSTOM_SELECT_VALUE = "__custom__"
+
+/** Steps a counselor would actually prescribe either side of maintenance. */
+const DEFICIT_KCAL = 500
+const SURPLUS_KCAL = 300
+/** Below this the target is close enough to maintenance to call it flat. */
+const FLAT_KCAL = 75
+
+/**
+ * The patient's current energy figures, handed down from the record.
+ *
+ * The plan strategy needs them to say what a calorie target *means*. Passed in
+ * rather than recomputed so the planner and the patient overview cannot quote
+ * two different maintenance requirements for the same person.
+ */
+export interface PatientEnergyContext {
+  weightKg?: number
+  basalMetabolicRate?: number
+  totalEnergyExpenditure?: number
+  pal?: number
+}
+
+type Direction = "reduce" | "hold" | "build"
+
+interface DirectionMeta {
+  id: Direction
+  label: string
+  Icon: typeof TrendingDown
+  tone: string
+}
+
+const DIRECTIONS: Record<Direction, DirectionMeta> = {
+  reduce: { id: "reduce", label: "Abnehmen", Icon: TrendingDown, tone: "text-sky-500" },
+  hold: { id: "hold", label: "Gewicht halten", Icon: Minus, tone: "text-muted-foreground" },
+  build: { id: "build", label: "Aufbauen", Icon: TrendingUp, tone: "text-amber-600" },
+}
+
+/**
+ * Which way the weight is supposed to go, from the two facts on the record.
+ *
+ * Read from the goal weight against the current one rather than from the free
+ * text in "Ziel": a counselor writing "Muskeln aufbauen" means something the
+ * app cannot verify, while 91 kg heading for 95 kg is a fact it can.
+ */
+function intendedDirection(goalWeightKg?: number, currentWeightKg?: number): Direction | null {
+  if (goalWeightKg === undefined || currentWeightKg === undefined) return null
+  const difference = goalWeightKg - currentWeightKg
+  if (Math.abs(difference) < 0.5) return "hold"
+  return difference > 0 ? "build" : "reduce"
+}
+
+/** Which way the calorie target actually points, against maintenance. */
+function targetDirection(calorieGoal?: number, maintenance?: number): Direction | null {
+  if (!calorieGoal || !maintenance) return null
+  const delta = calorieGoal - maintenance
+  if (Math.abs(delta) < FLAT_KCAL) return "hold"
+  return delta > 0 ? "build" : "reduce"
+}
 
 interface PlanStrategyViewProps {
   patient?: Patient
   patientAllergens: PatientAllergenEntry[]
+  energyContext?: PatientEnergyContext
   /** Active Kostform, the one plan-level rule set that belongs to the strategy. */
   dietLine?: DietLinePreset
   /** Nutrient totals of the day currently open in the Tag view, by nutrient id. */
@@ -63,6 +140,7 @@ interface PlanStrategyViewProps {
 export function PlanStrategyView({
   patient,
   patientAllergens,
+  energyContext,
   dietLine,
   dayTotals,
   dayLabel,
@@ -77,14 +155,18 @@ export function PlanStrategyView({
   const allergies = patientAllergens.filter((entry) => entry.type !== "preference")
   const exclusions = patient?.nutritionPreferences ?? []
 
+  const goalDirection = intendedDirection(patient?.goalWeight, energyContext?.weightKg)
+
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
-      <GoalCard patient={patient} />
+      <GoalCard patient={patient} direction={goalDirection} />
 
       <TargetsCard
         patient={patient}
         preset={preset}
         macros={macros}
+        energyContext={energyContext}
+        goalDirection={goalDirection}
         onSavePatient={onSavePatient}
       />
 
@@ -100,8 +182,13 @@ export function PlanStrategyView({
         macroPreset={patient?.macroPreset}
         dietStyle={patient?.dietStyle}
         exclusions={exclusions}
+        weightKg={energyContext?.weightKg}
         dietLineTargets={dietLine?.targets}
         dayTotals={dayTotals}
+        overrides={patient?.planPrinciples}
+        onSaveOverrides={
+          patient ? (next) => onSavePatient({ planPrinciples: next }) : undefined
+        }
       />
 
       <Card className="lg:col-span-2">
@@ -135,9 +222,11 @@ export function PlanStrategyView({
 }
 
 /** What is supposed to happen, in the patient's own terms. */
-function GoalCard({ patient }: { patient?: Patient }) {
+function GoalCard({ patient, direction }: { patient?: Patient; direction: Direction | null }) {
   const goalText = patient?.patientGoals?.trim() || patient?.intakeReason?.trim()
   const indications = patient?.indications ?? []
+  const meta = direction ? DIRECTIONS[direction] : null
+  const DirectionIcon = meta?.Icon
 
   return (
     <Card>
@@ -149,6 +238,16 @@ function GoalCard({ patient }: { patient?: Patient }) {
         <CardDescription>Wohin die Beratung führen soll.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* The direction, drawn from the goal weight rather than from the free
+            text: it is the half of the goal the plan can actually be checked
+            against. */}
+        {meta && DirectionIcon ? (
+          <div className="flex items-center gap-2">
+            <DirectionIcon className={cn("h-4 w-4", meta.tone)} />
+            <span className="text-sm font-medium">{meta.label}</span>
+          </div>
+        ) : null}
+
         {goalText ? (
           <p className="text-sm whitespace-pre-line">{goalText}</p>
         ) : (
@@ -186,6 +285,8 @@ interface TargetsCardProps {
   patient?: Patient
   preset?: { id: string; label: string; carbs: number; fat: number; protein: number }
   macros: { protein?: number; fat?: number; carbs?: number }
+  energyContext?: PatientEnergyContext
+  goalDirection: Direction | null
   onSavePatient: (updates: Partial<Patient>) => Promise<void>
 }
 
@@ -194,7 +295,14 @@ interface TargetsCardProps {
  * editing them here changes the strategy everywhere — the Kalorienrechner and
  * the patient overview read the same fields.
  */
-function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProps) {
+function TargetsCard({
+  patient,
+  preset,
+  macros,
+  energyContext,
+  goalDirection,
+  onSavePatient,
+}: TargetsCardProps) {
   const calorieGoal = patient?.dailyCalorieGoal
   const [draft, setDraft] = useState(calorieGoal ? String(calorieGoal) : "")
   const [isSaving, setIsSaving] = useState(false)
@@ -209,6 +317,7 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
   }
 
   const disabled = !patient || isSaving
+  const maintenance = energyContext?.totalEnergyExpenditure
 
   const save = async (updates: Partial<Patient>) => {
     if (!patient) return
@@ -223,17 +332,30 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
     }
   }
 
-  const commitCalories = () => {
+  const commitCalories = (value: number) => {
+    const clamped = Math.min(MAX_KCAL, Math.max(MIN_KCAL, Math.round(value)))
+    setDraft(String(clamped))
+    if (clamped === calorieGoal) return
+    void save({ dailyCalorieGoal: clamped })
+  }
+
+  const commitDraft = () => {
     const parsed = Number.parseInt(draft, 10)
     if (!Number.isFinite(parsed)) {
       setDraft(calorieGoal ? String(calorieGoal) : "")
       return
     }
-    const clamped = Math.min(MAX_KCAL, Math.max(MIN_KCAL, parsed))
-    setDraft(String(clamped))
-    if (clamped === calorieGoal) return
-    void save({ dailyCalorieGoal: clamped })
+    commitCalories(parsed)
   }
+
+  const delta = calorieGoal && maintenance ? calorieGoal - maintenance : undefined
+  const actualDirection = targetDirection(calorieGoal, maintenance)
+  // Worth saying out loud: the record says one thing, the number says another.
+  const conflict =
+    goalDirection !== null &&
+    actualDirection !== null &&
+    goalDirection !== actualDirection &&
+    goalDirection !== "hold"
 
   return (
     <Card>
@@ -260,7 +382,7 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
                 disabled={disabled}
                 placeholder="—"
                 onChange={(event) => setDraft(event.target.value)}
-                onBlur={commitCalories}
+                onBlur={commitDraft}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault()
@@ -273,29 +395,85 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="strategy-macro">Makroverteilung</Label>
-            <Select
-              value={patient?.macroPreset ?? NO_PRESET_VALUE}
-              disabled={disabled}
-              onValueChange={(value) =>
-                void save({ macroPreset: value === NO_PRESET_VALUE ? undefined : value })
-              }
-            >
-              <SelectTrigger id="strategy-macro" className="w-full">
-                <SelectValue placeholder="Keine gewählt" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_PRESET_VALUE}>Keine gewählt</SelectItem>
-                {MACRO_PRESETS.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <MacroField patient={patient} preset={preset} disabled={disabled} onSave={save} />
         </div>
+
+        {/* What the number means. A bare "2.100 kcal" says nothing about
+            whether this plan is meant to take weight off or put it on. */}
+        {maintenance ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              {actualDirection ? (
+                <>
+                  {(() => {
+                    const Icon = DIRECTIONS[actualDirection].Icon
+                    return (
+                      <Icon className={cn("h-4 w-4", DIRECTIONS[actualDirection].tone)} />
+                    )
+                  })()}
+                  <span className="font-medium">{DIRECTIONS[actualDirection].label}</span>
+                </>
+              ) : null}
+              {delta !== undefined ? (
+                <span className="text-muted-foreground tabular-nums">
+                  {delta > 0 ? "+" : delta < 0 ? "−" : ""}
+                  {formatNumber(Math.abs(delta))} kcal gegenüber dem Erhaltungsbedarf von{" "}
+                  {formatNumber(maintenance)} kcal
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Erhaltungsbedarf {formatNumber(maintenance)} kcal
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={disabled}
+                onClick={() => commitCalories(maintenance - DEFICIT_KCAL)}
+              >
+                Defizit −{formatNumber(DEFICIT_KCAL)}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={disabled}
+                onClick={() => commitCalories(maintenance)}
+              >
+                Erhalt
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={disabled}
+                onClick={() => commitCalories(maintenance + SURPLUS_KCAL)}
+              >
+                Aufbau +{formatNumber(SURPLUS_KCAL)}
+              </Button>
+            </div>
+
+            {conflict && goalDirection ? (
+              <p className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-500">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Das Ziel lautet {DIRECTIONS[goalDirection].label.toLowerCase()}, das
+                  Tagesziel liegt aber{" "}
+                  {actualDirection === "hold"
+                    ? "beim Erhaltungsbedarf"
+                    : actualDirection === "reduce"
+                      ? "darunter"
+                      : "darüber"}
+                  .
+                </span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {calorieGoal ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -318,6 +496,181 @@ function TargetsCard({ patient, preset, macros, onSavePatient }: TargetsCardProp
         ) : null}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * The macro split: one of the presets, or three percentages typed by hand.
+ *
+ * The presets cover the common cases and nothing else, which made the field
+ * useless the moment a counselor wanted 45/25/30. A hand-set split is stored in
+ * the same column as the preset ids (`custom:45/25/30`), so everything that
+ * already reads that column keeps working.
+ */
+function MacroField({
+  patient,
+  preset,
+  disabled,
+  onSave,
+}: {
+  patient?: Patient
+  preset?: { carbs: number; fat: number; protein: number }
+  disabled: boolean
+  onSave: (updates: Partial<Patient>) => Promise<void>
+}) {
+  const isCustom = isCustomMacroPreset(patient?.macroPreset)
+  const [split, setSplit] = useState<MacroSplit>(() => ({
+    carbs: preset?.carbs ?? 50,
+    fat: preset?.fat ?? 30,
+    protein: preset?.protein ?? 20,
+  }))
+  const [showCustom, setShowCustom] = useState(isCustom)
+
+  // Follow the record when it changes underneath us — a patient switch, or a
+  // preset picked somewhere else — without an effect.
+  const [lastPresetId, setLastPresetId] = useState(patient?.macroPreset)
+  if (patient?.macroPreset !== lastPresetId) {
+    setLastPresetId(patient?.macroPreset)
+    setShowCustom(isCustomMacroPreset(patient?.macroPreset))
+    if (preset) setSplit({ carbs: preset.carbs, fat: preset.fat, protein: preset.protein })
+  }
+
+  const sum = split.carbs + split.fat + split.protein
+  const valid = isValidMacroSplit(split)
+
+  const setPart = (key: keyof MacroSplit, raw: string) => {
+    const parsed = Number.parseInt(raw, 10)
+    setSplit((previous) => ({
+      ...previous,
+      [key]: Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 0,
+    }))
+  }
+
+  const commitSplit = () => {
+    if (!valid) return
+    const serialized = serializeMacroSplit(split)
+    if (serialized === patient?.macroPreset) return
+    void onSave({ macroPreset: serialized })
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="strategy-macro">Makroverteilung</Label>
+      <Select
+        value={
+          showCustom
+            ? CUSTOM_SELECT_VALUE
+            : (patient?.macroPreset ?? NO_PRESET_VALUE)
+        }
+        disabled={disabled}
+        onValueChange={(value) => {
+          if (value === CUSTOM_SELECT_VALUE) {
+            setShowCustom(true)
+            return
+          }
+          setShowCustom(false)
+          void onSave({ macroPreset: value === NO_PRESET_VALUE ? undefined : value })
+        }}
+      >
+        <SelectTrigger id="strategy-macro" className="w-full">
+          <SelectValue placeholder="Keine gewählt" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_PRESET_VALUE}>Keine gewählt</SelectItem>
+          {MACRO_PRESETS.map((item) => (
+            <SelectItem key={item.id} value={item.id}>
+              {item.label}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_SELECT_VALUE}>{CUSTOM_MACRO_LABEL}</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {showCustom ? (
+        <div className="space-y-1.5 pt-1">
+          <div className="grid grid-cols-3 gap-2">
+            <MacroPercentInput
+              id="macro-carbs"
+              label="KH"
+              value={split.carbs}
+              disabled={disabled}
+              onChange={(raw) => setPart("carbs", raw)}
+              onCommit={commitSplit}
+            />
+            <MacroPercentInput
+              id="macro-fat"
+              label="Fett"
+              value={split.fat}
+              disabled={disabled}
+              onChange={(raw) => setPart("fat", raw)}
+              onCommit={commitSplit}
+            />
+            <MacroPercentInput
+              id="macro-protein"
+              label="Eiweiß"
+              value={split.protein}
+              disabled={disabled}
+              onChange={(raw) => setPart("protein", raw)}
+              onCommit={commitSplit}
+            />
+          </div>
+          <p
+            className={cn(
+              "text-xs tabular-nums",
+              valid ? "text-muted-foreground" : "text-destructive",
+            )}
+          >
+            Summe {sum} % {valid ? "" : "— muss 100 % ergeben"}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MacroPercentInput({
+  id,
+  label,
+  value,
+  disabled,
+  onChange,
+  onCommit,
+}: {
+  id: string
+  label: string
+  value: number
+  disabled: boolean
+  onChange: (raw: string) => void
+  onCommit: () => void
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
+        {label}
+      </Label>
+      <div className="flex items-center gap-1">
+        <Input
+          id={id}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={100}
+          step={5}
+          value={String(value)}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={onCommit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              event.currentTarget.blur()
+            }
+          }}
+          className="h-8 w-full px-2 tabular-nums"
+        />
+        <span className="text-xs text-muted-foreground">%</span>
+      </div>
+    </div>
   )
 }
 

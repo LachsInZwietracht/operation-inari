@@ -32,6 +32,22 @@ export type DietExclusion =
   | "halal"
   | "kosher";
 
+/** A rule the counselor wrote themselves, alongside the derived ones. */
+export interface CustomPlanPrinciple {
+  id: string;
+  text: string;
+}
+
+/** Differences from the derived plan principles. Absent means "as derived". */
+export interface PlanPrincipleOverrides {
+  /** Ids of derived principles the counselor took off the list. */
+  hidden?: string[];
+  /** Target values replaced by hand, keyed by principle id. */
+  targets?: Record<string, number>;
+  /** Rules added by hand. */
+  custom?: CustomPlanPrinciple[];
+}
+
 export interface Patient extends Timestamped {
   id: ID;
   legacyId?: ID;
@@ -55,6 +71,15 @@ export interface Patient extends Timestamped {
   goalWeight?: number;
   /** Selected macro distribution preset id (e.g. "balanced", "lowcarb"). */
   macroPreset?: string;
+  /**
+   * Counselor edits to the derived plan principles.
+   *
+   * The principles themselves are derived from the calorie goal, the macro
+   * split and the diet line, so every rule can be traced to its source. This
+   * holds only the differences, which keeps a raised protein target for one
+   * patient from rewriting the split for every plan they will ever get.
+   */
+  planPrinciples?: PlanPrincipleOverrides;
   /**
    * Basal metabolic rate in kcal/day, set by hand.
    *
