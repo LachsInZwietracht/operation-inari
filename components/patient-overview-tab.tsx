@@ -49,6 +49,7 @@ import {
 } from "@/lib/bmi"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS, resolveDietStyle } from "@/lib/diet-constants"
 import { formatDate, formatNumber } from "@/lib/format"
+import { parsePatientGoals } from "@/lib/intake/patient-goals"
 import {
   PATIENT_ENERGY_FORMULA,
   type EnergySex,
@@ -559,7 +560,10 @@ export function PatientOverviewTab({
     }),
   ]
 
-  const goalText = patient.patientGoals?.trim() || patient.intakeReason?.trim()
+  // Only the goal itself — the intake stores it behind its own "Ziel:" label,
+  // and the cell below already carries that word. See lib/intake/patient-goals.
+  const goals = parsePatientGoals(patient.patientGoals)
+  const goalText = goals.goal ?? patient.intakeReason?.trim() ?? undefined
   const planHref = `/patienten/${patient.id}?tab=ernaehrungsplan`
 
   return (
@@ -589,14 +593,18 @@ export function PatientOverviewTab({
                   />
                 </Link>
               </HoverCardTrigger>
+              {/* Everything the cell cannot show. The goal itself is not
+                  repeated here — it is the line the pointer is already on. */}
               <HoverCardContent className="w-72" side="bottom" align="start">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Ziel der Beratung
-                </p>
-                <p className="mt-1 whitespace-pre-line text-sm">
-                  {goalText ?? "Noch nichts hinterlegt. Kommt aus dem Aufnahmebogen oder der Akte."}
-                </p>
-                <div className="mt-2">
+                {goalText ? null : (
+                  <p className="mb-2 text-sm text-muted-foreground">
+                    Noch nichts hinterlegt. Kommt aus dem Aufnahmebogen oder der Akte.
+                  </p>
+                )}
+                <div>
+                  {goals.timeframe ? (
+                    <SummaryRow label="Zeithorizont" value={goals.timeframe} />
+                  ) : null}
                   <SummaryRow
                     label="Zielgewicht"
                     value={
@@ -616,6 +624,11 @@ export function PatientOverviewTab({
                     muted={!patient.dailyCalorieGoal}
                   />
                 </div>
+                {goals.motivation ? (
+                  <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                    „{goals.motivation}“
+                  </p>
+                ) : null}
               </HoverCardContent>
             </HoverCard>
           </FactCell>

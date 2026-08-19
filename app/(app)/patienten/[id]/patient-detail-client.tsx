@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useState } from "react"
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { useAppBreadcrumb } from "@/components/app-breadcrumb"
 import { PageHeader } from "@/components/page-header"
 import { IntakeStageProgress } from "@/components/intake-stage-progress"
 import { Badge } from "@/components/ui/badge"
@@ -63,6 +64,16 @@ export function PatientDetailClient({
   const [newMeasurementRequest, setNewMeasurementRequest] = useState<number>()
   const patient = initialData?.patient ?? getPatient(patientId)
   const resolvedInitialData = initialData?.patient ? initialData : undefined
+  // The URL only carries the uuid, so the header trail would otherwise stop at
+  // "Patienten". This is the only place that knows whose record this is.
+  useAppBreadcrumb(
+    patient
+      ? [
+          { label: "Patienten", href: "/patienten" },
+          { label: `${patient.firstName} ${patient.lastName}` },
+        ]
+      : null,
+  )
   // The phase belongs next to the name: it is the one fact that decides what to
   // do next, and the header is what gets read first. Seeded from the server
   // payload so it does not pop in, then kept current by the tabs, which own the

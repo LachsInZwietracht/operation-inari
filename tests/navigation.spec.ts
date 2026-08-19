@@ -101,6 +101,27 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL(/\/dashboard/, { timeout: navTimeout });
   });
 
+  /**
+   * The header trail is the only thing on screen that says where a page sits.
+   * It is derived from the URL, so a route that gains a segment has to keep
+   * naming it — a silent empty trail is the failure mode worth catching.
+   */
+  test("header trail names the current route and links its parent", async ({ page }) => {
+    await page.goto("/patienten/aufnahmen", { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
+
+    // Scoped to the header: list pages render a breadcrumb of their own.
+    const trail = page.locator("header nav[aria-label='breadcrumb']");
+    await expect(trail).toBeVisible({ timeout: 30_000 });
+    await expect(trail).toContainText("Aufnahmen");
+
+    const parent = trail.getByRole("link", { name: "Patienten" });
+    await expect(parent).toHaveAttribute("href", "/patienten");
+    await parent.click();
+    await expect(page).toHaveURL(/\/patienten$/, { timeout: 30_000 });
+    await expect(trail).toContainText("Patienten");
+  });
+
   test("global command palette opens with Cmd+K and navigates", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded", timeout: 30_000 });
     await page.waitForLoadState("networkidle");

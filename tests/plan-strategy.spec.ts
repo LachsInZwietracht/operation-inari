@@ -40,7 +40,9 @@ async function createStrategyPatient() {
       macro_preset: "balanced",
       diet_style: "vegetarisch",
       nutrition_preferences: ["no_alcohol"],
-      patient_goals: "Ziel: Abnehmen bis zur Reha im Frühjahr.",
+      // Stored the way the intake writes it: a labelled line per answer.
+      patient_goals:
+        "Ziel: Abnehmen bis zur Reha im Frühjahr.\nZeithorizont: 6 Monate\nMotivation: Wieder Treppen steigen können.",
     })
     .select("id")
     .single();
@@ -68,9 +70,14 @@ test.describe("Ernährungsplan strategy view", () => {
     await page.goto(`/ernaehrungsplan?patientId=${patientId}`);
     await page.getByRole("tab", { name: "Strategie" }).click();
 
+    // The card is titled "Ziel", so the stored "Ziel:" label is stripped rather
+    // than printed under it. The other answers get their own rows.
+    await expect(page.getByText("Abnehmen bis zur Reha im Frühjahr.")).toBeVisible();
     await expect(
       page.getByText("Ziel: Abnehmen bis zur Reha im Frühjahr."),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(page.getByText("6 Monate")).toBeVisible();
+    await expect(page.getByText("Wieder Treppen steigen können.")).toBeVisible();
     await expect(page.getByText("72 kg")).toBeVisible();
     await expect(page.getByText("Adipositas").first()).toBeVisible();
 

@@ -1,20 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import {
-  ArrowRight,
-  Flag,
-  Minus,
-  Scale,
-  ShieldAlert,
-  TrendingDown,
-  TrendingUp,
-  TriangleAlert,
-  Utensils,
-} from "lucide-react"
+import { ArrowRight, CalendarRange, Scale, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 import { PlanPrinciplesCard } from "@/components/plan-principles-card"
+import { DirectionIcon, StrategyIcon } from "@/components/strategy-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -37,6 +28,7 @@ import { ALLERGEN_MAP, ALLERGEN_TYPE_LABELS } from "@/lib/allergen-constants"
 import { macroGramsFromKcal } from "@/lib/client-targets"
 import { DIET_EXCLUSION_LABELS, DIET_STYLE_LABELS } from "@/lib/diet-constants"
 import { formatNumber } from "@/lib/format"
+import { parsePatientGoals } from "@/lib/intake/patient-goals"
 import {
   CUSTOM_MACRO_LABEL,
   MACRO_PRESETS,
@@ -82,14 +74,13 @@ type Direction = "reduce" | "hold" | "build"
 interface DirectionMeta {
   id: Direction
   label: string
-  Icon: typeof TrendingDown
   tone: string
 }
 
 const DIRECTIONS: Record<Direction, DirectionMeta> = {
-  reduce: { id: "reduce", label: "Abnehmen", Icon: TrendingDown, tone: "text-sky-500" },
-  hold: { id: "hold", label: "Gewicht halten", Icon: Minus, tone: "text-muted-foreground" },
-  build: { id: "build", label: "Aufbauen", Icon: TrendingUp, tone: "text-amber-600" },
+  reduce: { id: "reduce", label: "Abnehmen", tone: "text-sky-500" },
+  hold: { id: "hold", label: "Gewicht halten", tone: "text-muted-foreground" },
+  build: { id: "build", label: "Aufbauen", tone: "text-amber-600" },
 }
 
 /**
@@ -194,7 +185,7 @@ export function PlanStrategyView({
       <Card className="lg:col-span-2">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Utensils className="h-4 w-4" />
+            <StrategyIcon name="umsetzung" />
             Umsetzung
           </CardTitle>
           <CardDescription>
@@ -223,16 +214,18 @@ export function PlanStrategyView({
 
 /** What is supposed to happen, in the patient's own terms. */
 function GoalCard({ patient, direction }: { patient?: Patient; direction: Direction | null }) {
-  const goalText = patient?.patientGoals?.trim() || patient?.intakeReason?.trim()
+  // The card is already titled "Ziel", so the intake's own "Ziel:" label is
+  // stripped off rather than printed under it. See lib/intake/patient-goals.
+  const goals = parsePatientGoals(patient?.patientGoals)
+  const goalText = goals.goal ?? patient?.intakeReason?.trim()
   const indications = patient?.indications ?? []
   const meta = direction ? DIRECTIONS[direction] : null
-  const DirectionIcon = meta?.Icon
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Flag className="h-4 w-4" />
+          <StrategyIcon name="ziel" />
           Ziel
         </CardTitle>
         <CardDescription>Wohin die Beratung führen soll.</CardDescription>
@@ -241,9 +234,9 @@ function GoalCard({ patient, direction }: { patient?: Patient; direction: Direct
         {/* The direction, drawn from the goal weight rather than from the free
             text: it is the half of the goal the plan can actually be checked
             against. */}
-        {meta && DirectionIcon ? (
+        {meta ? (
           <div className="flex items-center gap-2">
-            <DirectionIcon className={cn("h-4 w-4", meta.tone)} />
+            <DirectionIcon direction={meta.id} className={meta.tone} />
             <span className="text-sm font-medium">{meta.label}</span>
           </div>
         ) : null}
@@ -265,6 +258,23 @@ function GoalCard({ patient, direction }: { patient?: Patient; direction: Direct
               <span className="font-medium">{formatNumber(patient.goalWeight)} kg</span>
             </span>
           </div>
+        ) : null}
+
+        {goals.timeframe ? (
+          <div className="flex items-center gap-2 text-sm">
+            <CalendarRange className="text-muted-foreground h-4 w-4" />
+            <span>
+              Zeithorizont <span className="font-medium">{goals.timeframe}</span>
+            </span>
+          </div>
+        ) : null}
+
+        {/* In the patient's own words. It decides nothing, and it is the line a
+            counselor wants in front of them when the plan gets hard. */}
+        {goals.motivation ? (
+          <p className="text-muted-foreground border-l-2 pl-3 text-sm whitespace-pre-line">
+            {goals.motivation}
+          </p>
         ) : null}
 
         {indications.length > 0 ? (
@@ -360,7 +370,10 @@ function TargetsCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Zielwerte</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <StrategyIcon name="zielwerte" />
+          Zielwerte
+        </CardTitle>
         <CardDescription>
           Jeder Tag wird an diesen Zahlen gemessen. Sie hängen am Patienten und
           gelten deshalb auch für jeden weiteren Plan.
@@ -405,12 +418,10 @@ function TargetsCard({
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
               {actualDirection ? (
                 <>
-                  {(() => {
-                    const Icon = DIRECTIONS[actualDirection].Icon
-                    return (
-                      <Icon className={cn("h-4 w-4", DIRECTIONS[actualDirection].tone)} />
-                    )
-                  })()}
+                  <DirectionIcon
+                    direction={actualDirection}
+                    className={DIRECTIONS[actualDirection].tone}
+                  />
                   <span className="font-medium">{DIRECTIONS[actualDirection].label}</span>
                 </>
               ) : null}
@@ -716,7 +727,7 @@ function FrameCard({ patient, allergies, exclusions, dietLine }: FrameCardProps)
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldAlert className="h-4 w-4" />
+          <StrategyIcon name="rahmen" />
           Rahmen
         </CardTitle>
         <CardDescription>Was auf keinen Teller darf.</CardDescription>

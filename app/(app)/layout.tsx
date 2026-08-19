@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AppCommandPalette } from "@/components/app-command-palette"
+import { AppBreadcrumb, AppBreadcrumbProvider } from "@/components/app-breadcrumb"
 import { KonamiEasterEgg } from "@/components/easter-egg/konami-easter-egg"
 import { Separator } from "@/components/ui/separator"
 import { FoodSearchProvider } from "@/components/foods-provider"
@@ -46,20 +47,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <AuthProvider initialUser={appShellAuth.user}>
       <FoodSearchProvider foods={[]}>
-        <SidebarProvider>
-          <AppSidebar canAccessInstitution={canAccessInstitution} />
-          <SidebarInset>
-            <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b px-3 sm:gap-3 sm:px-4">
-              <SidebarTrigger className="-ml-1 shrink-0" />
-              <Separator orientation="vertical" className="mr-1 h-4 shrink-0 sm:mr-2" />
-              <div className="min-w-0 flex-1 sm:flex-none">
-                <AppCommandPalette canAccessInstitution={canAccessInstitution} />
-              </div>
-            </header>
-            <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
-            <KonamiEasterEgg />
-          </SidebarInset>
-        </SidebarProvider>
+        <AppBreadcrumbProvider>
+          <SidebarProvider>
+            <AppSidebar canAccessInstitution={canAccessInstitution} />
+            <SidebarInset>
+              <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b px-3 sm:gap-3 sm:px-4">
+                <SidebarTrigger className="-ml-1 shrink-0" />
+                <Separator orientation="vertical" className="mr-1 h-4 shrink-0 sm:mr-2" />
+                <div className="min-w-0 flex-1 sm:flex-none">
+                  <AppCommandPalette canAccessInstitution={canAccessInstitution} />
+                </div>
+                {/* Where you are, next to the way out. On a narrow screen the
+                    search takes the whole row and the trail steps aside. */}
+                <div className="hidden min-w-0 flex-1 sm:flex">
+                  <AppBreadcrumb />
+                </div>
+              </header>
+              <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+              <KonamiEasterEgg />
+            </SidebarInset>
+          </SidebarProvider>
+        </AppBreadcrumbProvider>
       </FoodSearchProvider>
     </AuthProvider>
   )
