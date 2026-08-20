@@ -56,12 +56,12 @@ test.describe("what a day says about itself", () => {
     const [row] = buildClientDayFactRows([
       {
         date: "2026-08-10",
-        checkin: { id: "a", date: "2026-08-10", wellbeing: 7 },
+        checkin: { id: "a", date: "2026-08-10", mood: 4 },
       },
     ]);
 
-    expect(row.facts.wellbeing).toBe(7);
-    expect(row.facts.mood).toBeUndefined();
+    expect(row.facts.mood).toBe(4);
+    expect(row.facts.energy).toBeUndefined();
     expect(row.facts.sleep_minutes).toBeUndefined();
   });
 
@@ -146,38 +146,38 @@ test.describe("buckets", () => {
 });
 
 test.describe("comparing two metrics", () => {
-  function sleepDay(date: string, minutes: number, wellbeing: number): ClientDayFactInput {
-    return { date, checkin: { id: date, date, sleepMinutes: minutes, wellbeing } };
+  function sleepDay(date: string, minutes: number, mood: number): ClientDayFactInput {
+    return { date, checkin: { id: date, date, sleepMinutes: minutes, mood } };
   }
 
   test("groups by the first metric and averages the second", () => {
     const rows = buildClientDayFactRows([
-      ...[1, 2, 3, 4].map((n) => sleepDay(`2026-08-0${n}`, 300, 4)),
-      ...[5, 6, 7, 8].map((n) => sleepDay(`2026-08-0${n}`, 450, 8)),
-      ...[10, 11, 12, 13, 14, 15].map((n) => sleepDay(`2026-08-${n}`, 500, 7)),
+      ...[1, 2, 3, 4].map((n) => sleepDay(`2026-08-0${n}`, 300, 2)),
+      ...[5, 6, 7, 8].map((n) => sleepDay(`2026-08-0${n}`, 450, 5)),
+      ...[10, 11, 12, 13, 14, 15].map((n) => sleepDay(`2026-08-${n}`, 500, 4)),
     ]);
 
-    const comparison = compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "wellbeing" });
+    const comparison = compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "mood" });
 
     expect(comparison.pairedDays).toBe(14);
     expect(comparison.hasEnoughData).toBe(true);
-    expect(comparison.buckets[0]).toMatchObject({ label: "< 6 h", count: 4, average: 4 });
-    expect(comparison.buckets[2]).toMatchObject({ label: "7–8 h", count: 4, average: 8 });
-    expect(comparison.buckets[3]).toMatchObject({ label: "> 8 h", count: 6, average: 7 });
+    expect(comparison.buckets[0]).toMatchObject({ label: "< 6 h", count: 4, average: 2 });
+    expect(comparison.buckets[2]).toMatchObject({ label: "7–8 h", count: 4, average: 5 });
+    expect(comparison.buckets[3]).toMatchObject({ label: "> 8 h", count: 6, average: 4 });
   });
 
   test("a bucket too thin to describe is shown without a value, never dropped", () => {
     const rows = buildClientDayFactRows([
       ...Array.from({ length: 13 }, (_, index) =>
-        sleepDay(`2026-08-${String(index + 1).padStart(2, "0")}`, 450, 7),
+        sleepDay(`2026-08-${String(index + 1).padStart(2, "0")}`, 450, 4),
       ),
       // Two days of short sleep: below the floor, and a hidden bucket would be
       // a lie about the shape of the window.
-      sleepDay("2026-08-20", 300, 3),
-      sleepDay("2026-08-21", 300, 3),
+      sleepDay("2026-08-20", 300, 1),
+      sleepDay("2026-08-21", 300, 1),
     ]);
 
-    const comparison = compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "wellbeing" });
+    const comparison = compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "mood" });
     const short = comparison.buckets[0];
 
     expect(short.count).toBe(2);
@@ -188,11 +188,11 @@ test.describe("comparing two metrics", () => {
   test("below the floor of paired days the comparison refuses to state anything", () => {
     const rows = buildClientDayFactRows(
       Array.from({ length: MIN_PAIRED_DAYS - 1 }, (_, index) =>
-        sleepDay(`2026-08-${String(index + 1).padStart(2, "0")}`, 450, 7),
+        sleepDay(`2026-08-${String(index + 1).padStart(2, "0")}`, 450, 4),
       ),
     );
 
-    const comparison = compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "wellbeing" });
+    const comparison = compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "mood" });
     expect(comparison.pairedDays).toBe(MIN_PAIRED_DAYS - 1);
     expect(comparison.hasEnoughData).toBe(false);
   });
@@ -201,12 +201,12 @@ test.describe("comparing two metrics", () => {
     const rows = buildClientDayFactRows([
       { date: "2026-08-01", checkin: { id: "1", date: "2026-08-01", sleepMinutes: 300 } },
       { date: "2026-08-02", checkin: { id: "2", date: "2026-08-02", sleepMinutes: 300 } },
-      { date: "2026-08-03", checkin: { id: "3", date: "2026-08-03", wellbeing: 4 } },
-      { date: "2026-08-04", checkin: { id: "4", date: "2026-08-04", wellbeing: 5 } },
+      { date: "2026-08-03", checkin: { id: "3", date: "2026-08-03", mood: 2 } },
+      { date: "2026-08-04", checkin: { id: "4", date: "2026-08-04", mood: 3 } },
     ]);
 
-    // Same day: sleep and wellbeing never fall on the same date here.
-    expect(compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "wellbeing" }).pairedDays).toBe(
+    // Same day: sleep and mood never fall on the same date here.
+    expect(compareClientMetrics({ rows, xKey: "sleep_minutes", yKey: "mood" }).pairedDays).toBe(
       0,
     );
 
@@ -214,7 +214,7 @@ test.describe("comparing two metrics", () => {
     const shifted = compareClientMetrics({
       rows,
       xKey: "sleep_minutes",
-      yKey: "wellbeing",
+      yKey: "mood",
       shiftDays: 2,
     });
     expect(shifted.pairedDays).toBe(2);

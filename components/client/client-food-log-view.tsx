@@ -8,7 +8,6 @@ import {
   BookmarkPlus,
   ChevronLeft,
   ChevronRight,
-  CopyPlus,
   Loader2,
   Plus,
   Trash2,
@@ -43,7 +42,6 @@ import {
   collectClientDayParts,
   collectRecentEntries,
   eatenAmount,
-  previousDayEntries,
 } from "@/lib/client-food-log"
 import {
   micronutrientDataShare,
@@ -57,7 +55,6 @@ import { resolveClientDayTarget } from "@/lib/client-targets"
 import { isClientCapabilityEnabled, isClientModuleEnabled } from "@/lib/client-modules"
 import { todayIsoDate } from "@/lib/client-mode"
 import {
-  addClientFoodLogEntry,
   deleteClientFoodLogEntry,
   ensureClientFoodLogDay,
   fetchClientFoodLogDay,
@@ -459,34 +456,6 @@ export function ClientFoodLogView({
     [plan],
   )
 
-  /** Copies a slot from the most recent earlier day — the "same as always" case. */
-  const copyPreviousDay = useCallback(
-    async (slot: MealSlotType) => {
-      const source = previousDayEntries(recentDays, date, slot)
-      if (source.length === 0) return
-
-      try {
-        const resolvedDayId = day?.id ?? (await ensureClientFoodLogDay(date)).id
-        for (const entry of source) {
-          await addClientFoodLogEntry({
-            dayId: resolvedDayId,
-            slotType: slot,
-            sourceType: entry.sourceType,
-            foodId: entry.foodId,
-            customName: entry.customName,
-            customNutrients: entry.customNutrients,
-            amount: entry.amount,
-          })
-        }
-        await refreshDay()
-      } catch (error) {
-        console.error("Failed to copy the previous day:", error)
-        toast.error("Konnte nicht übernommen werden.")
-      }
-    },
-    [recentDays, date, day, refreshDay],
-  )
-
   const saveEntryAmount = useCallback(
     async (entry: ClientFoodLogEntry, amount: number) => {
       try {
@@ -637,10 +606,6 @@ export function ClientFoodLogView({
       {SLOT_ORDER.map((slot) => {
         const entries = entriesBySlot.get(slot) ?? []
         const planned = plannedBySlot.get(slot) ?? []
-        // Offered only where it would actually save work: an empty slot today
-        // that was not empty the day before.
-        const repeatable =
-          entries.length === 0 && previousDayEntries(recentDays, date, slot).length > 0
 
         return (
           <Card key={slot}>
@@ -655,12 +620,6 @@ export function ClientFoodLogView({
                     onClick={() => void saveSlotAsMeal(slot, entries)}
                   >
                     <BookmarkPlus className="h-4 w-4" />
-                  </Button>
-                )}
-                {repeatable && (
-                  <Button variant="ghost" size="sm" onClick={() => void copyPreviousDay(slot)}>
-                    <CopyPlus className="mr-1 h-4 w-4" />
-                    Wie gestern
                   </Button>
                 )}
                 <Button variant="ghost" size="sm" onClick={() => setAddSlot({ slot })}>

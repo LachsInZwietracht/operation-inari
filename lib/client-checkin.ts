@@ -77,7 +77,6 @@ function assignIfNumber(facts: ClientDayFacts, key: ClientMetricKey, value?: num
 export function buildClientDayFacts(input: ClientDayFactInput): ClientDayFacts {
   const facts: ClientDayFacts = {};
 
-  assignIfNumber(facts, "wellbeing", input.checkin?.wellbeing);
   assignIfNumber(facts, "energy", input.checkin?.energy);
   assignIfNumber(facts, "mood", input.checkin?.mood);
   assignIfNumber(facts, "digestion", input.checkin?.digestion);

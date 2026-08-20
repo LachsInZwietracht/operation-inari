@@ -117,7 +117,7 @@ export function ClientCareView({ links }: { links: ClientLinkWithCounselor[] }) 
                   <div className="min-w-0 space-y-1">
                     <p className="text-sm font-medium">Befinden freigeben</p>
                     <p className="text-xs text-muted-foreground">
-                      Wohlbefinden, Schlaf und was du sonst im Check-in einträgst. Welche
+                      Energie, Stimmung, Schlaf und was du sonst im Check-in einträgst. Welche
                       einzelnen Werte dazugehören, entscheidest du in den Einstellungen.
                     </p>
                   </div>

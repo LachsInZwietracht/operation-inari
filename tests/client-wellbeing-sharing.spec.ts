@@ -108,7 +108,7 @@ test.describe("what a counselor may read from the check-in", () => {
     await admin.from("client_daily_checkins").insert({
       client_user_id: clientUser.id,
       checkin_date: "2026-08-18",
-      wellbeing: 7,
+      energy: 4,
       mood: 2,
       sleep_minutes: 435,
     });
@@ -134,7 +134,7 @@ test.describe("what a counselor may read from the check-in", () => {
     const rows = await readSeries(counselor);
     const keys = rows.map((row) => row.metric_key).sort();
 
-    expect(keys).toEqual(["mood", "sleep_minutes", "wellbeing"]);
+    expect(keys).toEqual(["energy", "mood", "sleep_minutes"]);
     // Unanswered values never travel — there is no row for them to hide in.
     expect(rows.every((row) => row.value !== null)).toBe(true);
   });
@@ -152,7 +152,7 @@ test.describe("what a counselor may read from the check-in", () => {
 
     // Absent, not nulled: long format means an unshared metric has no row to
     // be forgotten and rendered.
-    expect(keys).toEqual(["sleep_minutes", "wellbeing"]);
+    expect(keys).toEqual(["energy", "sleep_minutes"]);
   });
 
   test("a stranger gets nothing, whatever they pass in", async () => {

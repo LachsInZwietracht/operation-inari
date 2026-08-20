@@ -96,7 +96,7 @@ test.describe("who may read a check-in", () => {
     await admin.from("client_daily_checkins").insert({
       client_user_id: clientUser.id,
       checkin_date: "2026-08-18",
-      wellbeing: 7,
+      energy: 3,
       mood: 4,
       sleep_minutes: 435,
     });
@@ -124,16 +124,16 @@ test.describe("who may read a check-in", () => {
     const client = await signedInClient(clientUser);
     const { data, error } = await client
       .from("client_daily_checkins")
-      .select("checkin_date,wellbeing,sleep_minutes");
+      .select("checkin_date,energy,sleep_minutes");
 
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
-    expect(data![0].wellbeing).toBe(7);
+    expect(data![0].energy).toBe(3);
   });
 
   test("a stranger reads nothing", async () => {
     const client = await signedInClient(outsider);
-    const { data } = await client.from("client_daily_checkins").select("wellbeing");
+    const { data } = await client.from("client_daily_checkins").select("energy");
     expect(data ?? []).toHaveLength(0);
 
     const { data: preferences } = await client
@@ -147,7 +147,7 @@ test.describe("who may read a check-in", () => {
 
     // The link is active and consent_wellbeing is true. The table still
     // answers with nothing, because sharing is decided per metric elsewhere.
-    const { data } = await client.from("client_daily_checkins").select("wellbeing");
+    const { data } = await client.from("client_daily_checkins").select("energy");
     expect(data ?? []).toHaveLength(0);
 
     const { data: preferences } = await client
@@ -161,7 +161,7 @@ test.describe("who may read a check-in", () => {
     const { error } = await client.from("client_daily_checkins").insert({
       client_user_id: clientUser.id,
       checkin_date: "2026-08-19",
-      wellbeing: 1,
+      energy: 1,
     });
 
     expect(error).not.toBeNull();
@@ -171,17 +171,17 @@ test.describe("who may read a check-in", () => {
     const client = await signedInClient(clientUser);
     const { error } = await client
       .from("client_daily_checkins")
-      .update({ wellbeing: 9, mood: null })
+      .update({ energy: 5, mood: null })
       .eq("checkin_date", "2026-08-18");
     expect(error).toBeNull();
 
     const { data } = await client
       .from("client_daily_checkins")
-      .select("wellbeing,mood")
+      .select("energy,mood")
       .eq("checkin_date", "2026-08-18")
       .single();
 
-    expect(data!.wellbeing).toBe(9);
+    expect(data!.energy).toBe(5);
     // Cleared is unanswered, not a low score.
     expect(data!.mood).toBeNull();
   });

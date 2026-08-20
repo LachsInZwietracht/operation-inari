@@ -12,7 +12,6 @@
  */
 
 export type ClientMetricKey =
-  | "wellbeing"
   | "energy"
   | "mood"
   | "digestion"
@@ -47,7 +46,7 @@ export type ClientMetricSource = "checkin" | "foodlog" | "workout" | "anthropome
  * Which stretch of time a value describes.
  *
  * The whole reason this field exists: sleep entered on Tuesday happened in the
- * night onto Tuesday, while the food, the training and the wellbeing score
+ * night onto Tuesday, while the food, the training and the day's own scores
  * belong to Tuesday itself. A comparison that ignores this mixes "how I slept
  * after eating that" with "how I ate after sleeping badly" and reads as noise.
  */
@@ -68,8 +67,12 @@ export type ClientBucketRule =
   | { kind: "binary"; falseLabel: string; trueLabel: string };
 
 export type ClientMetricDefaults = {
-  tracked: boolean;
-  shown: boolean;
+  /**
+   * Recorded and displayed. One flag, not two: a field someone fills in every
+   * evening and then never looks at is a field they would rather not have, and
+   * splitting the two only ever produced the combination nobody wants.
+   */
+  visible: boolean;
   shared: boolean;
 };
 
@@ -86,13 +89,10 @@ export type ClientMetric = {
   buckets: ClientBucketRule | null;
   decimals: number;
   /**
-   * Answered by hand in the check-in. Derived metrics (the diary, the training
-   * log, the scale) have no `tracked` switch — you cannot untrack a number
-   * computed from data you already entered.
+   * Answered by hand in the check-in. Switching a derived metric off only
+   * hides it — the number keeps being computed from data entered elsewhere.
    */
   selfReported: boolean;
-  /** Always rendered, cannot be switched off. True for the one core score. */
-  mandatory?: boolean;
   defaults: ClientMetricDefaults;
 };
 
@@ -107,29 +107,6 @@ const ORDINAL_FIVE: ClientBucketRule = {
 
 export const CLIENT_METRICS: ClientMetric[] = [
   {
-    key: "wellbeing",
-    label: "Wohlbefinden",
-    group: "befinden",
-    source: "checkin",
-    scale: { min: 1, max: 10 },
-    window: "day",
-    // Ten steps grouped into four: single steps on a ten-point scale produce
-    // buckets of two days each, and a bucket of two days says nothing.
-    buckets: {
-      kind: "ordinal",
-      groups: [
-        { label: "1–4", min: 1, max: 4 },
-        { label: "5–6", min: 5, max: 6 },
-        { label: "7–8", min: 7, max: 8 },
-        { label: "9–10", min: 9, max: 10 },
-      ],
-    },
-    decimals: 0,
-    selfReported: true,
-    mandatory: true,
-    defaults: { tracked: true, shown: true, shared: true },
-  },
-  {
     key: "energy",
     label: "Energie",
     group: "befinden",
@@ -139,7 +116,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: ORDINAL_FIVE,
     decimals: 0,
     selfReported: true,
-    defaults: { tracked: false, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "mood",
@@ -151,7 +128,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: ORDINAL_FIVE,
     decimals: 0,
     selfReported: true,
-    defaults: { tracked: false, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "digestion",
@@ -163,7 +140,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: ORDINAL_FIVE,
     decimals: 0,
     selfReported: true,
-    defaults: { tracked: false, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "sleep_minutes",
@@ -181,7 +158,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     },
     decimals: 0,
     selfReported: true,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "sleep_quality",
@@ -193,7 +170,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: ORDINAL_FIVE,
     decimals: 0,
     selfReported: true,
-    defaults: { tracked: false, shown: true, shared: true },
+    defaults: { visible: false, shared: true },
   },
   {
     key: "alcohol_units",
@@ -210,7 +187,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     },
     decimals: 1,
     selfReported: true,
-    defaults: { tracked: false, shown: true, shared: true },
+    defaults: { visible: false, shared: true },
   },
   {
     key: "water_ml",
@@ -229,7 +206,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "kcal",
@@ -243,7 +220,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "protein_g",
@@ -256,7 +233,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "fat_g",
@@ -269,7 +246,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "carbs_g",
@@ -283,7 +260,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "sugar_g",
@@ -296,7 +273,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "fiber_g",
@@ -309,7 +286,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "meal_count",
@@ -325,7 +302,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "training_day",
@@ -337,7 +314,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "binary", falseLabel: "ohne Training", trueLabel: "mit Training" },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "training_minutes",
@@ -352,7 +329,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile", positiveOnly: true },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "training_kcal",
@@ -365,7 +342,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: { kind: "quartile", positiveOnly: true },
     decimals: 0,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
   {
     key: "weight_kg",
@@ -381,7 +358,7 @@ export const CLIENT_METRICS: ClientMetric[] = [
     buckets: null,
     decimals: 1,
     selfReported: false,
-    defaults: { tracked: true, shown: true, shared: true },
+    defaults: { visible: true, shared: true },
   },
 ];
 
@@ -408,8 +385,12 @@ export type ClientMetricPreferences = Map<ClientMetricKey, ClientMetricPreferenc
  * Stored rows over registry defaults.
  *
  * A missing row is the default, which is what keeps the table proportional to
- * the decisions a person actually made. The mandatory metric ignores a stored
- * `tracked: false` outright rather than trusting that no client ever wrote one.
+ * the decisions a person actually made.
+ *
+ * The row still carries the two columns `tracked` and `shown` from when they
+ * were separate switches. They are written together now, and a stored row that
+ * still has them apart is read as off — the older pair only ever diverged when
+ * someone switched one of the two off, and that was always meant as "away".
  */
 export function resolveClientMetricPreferences(
   rows: { metricKey: string; tracked: boolean; shown: boolean; shared: boolean }[],
@@ -422,8 +403,7 @@ export function resolveClientMetricPreferences(
       return [
         metric.key,
         {
-          tracked: metric.mandatory ? true : (row?.tracked ?? metric.defaults.tracked),
-          shown: row?.shown ?? metric.defaults.shown,
+          visible: row ? row.tracked && row.shown : metric.defaults.visible,
           shared: row?.shared ?? metric.defaults.shared,
         },
       ];
@@ -439,13 +419,13 @@ export function clientMetricPreference(
 }
 
 /** Which fields the check-in card renders, in registry order. */
-export function trackedCheckinMetrics(preferences: ClientMetricPreferences): ClientMetric[] {
-  return CHECKIN_METRICS.filter((metric) => clientMetricPreference(preferences, metric.key).tracked);
+export function visibleCheckinMetrics(preferences: ClientMetricPreferences): ClientMetric[] {
+  return CHECKIN_METRICS.filter((metric) => clientMetricPreference(preferences, metric.key).visible);
 }
 
 /** Which metrics the Verlauf and the pair picker offer, in registry order. */
 export function shownClientMetrics(preferences: ClientMetricPreferences): ClientMetric[] {
-  return CLIENT_METRICS.filter((metric) => clientMetricPreference(preferences, metric.key).shown);
+  return CLIENT_METRICS.filter((metric) => clientMetricPreference(preferences, metric.key).visible);
 }
 
 /** Minutes as people say them: 7:15, not 435 and not 7,25. */

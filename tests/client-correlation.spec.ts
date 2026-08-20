@@ -31,16 +31,16 @@ function isoDaysAgo(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** Wellbeing groups into 1–4 / 5–6 / 7–8 / 9–10; sleep is what gets averaged. */
-const SEED: { offset: number; wellbeing: number; sleepMinutes: number }[] = [
+/** Energy groups into 1–2 / 3 / 4–5; sleep is what gets averaged. */
+const SEED: { offset: number; energy: number; sleepMinutes: number }[] = [
   ...Array.from({ length: 8 }, (_, index) => ({
     offset: index + 2,
-    wellbeing: 3,
+    energy: 1,
     sleepMinutes: 300,
   })),
   ...Array.from({ length: 10 }, (_, index) => ({
     offset: index + 12,
-    wellbeing: 7,
+    energy: 3,
     sleepMinutes: 450,
   })),
   // Two good days: under the bucket's floor of three, so it keeps its row and
@@ -48,7 +48,7 @@ const SEED: { offset: number; wellbeing: number; sleepMinutes: number }[] = [
   // what makes a shift cost pairs.
   ...Array.from({ length: 2 }, (_, index) => ({
     offset: index + 24,
-    wellbeing: 10,
+    energy: 5,
     sleepMinutes: 480,
   })),
 ];
@@ -59,7 +59,7 @@ async function seed(rows: typeof SEED) {
     rows.map((row) => ({
       client_user_id: userId,
       checkin_date: isoDaysAgo(row.offset),
-      wellbeing: row.wellbeing,
+      energy: row.energy,
       sleep_minutes: row.sleepMinutes,
     })),
   );
@@ -106,21 +106,21 @@ test("with enough days it groups them and averages the second metric", async ({ 
 
   await expect(card.getByText("20 mit beiden Werten")).toBeVisible();
 
-  // Eight days rated 1–4, all on five hours of sleep.
-  const low = card.locator("div").filter({ hasText: /^1–4/ }).first();
+  // Eight days rated 1–2, all on five hours of sleep.
+  const low = card.locator("[data-bucket='1–2']");
   await expect(low).toContainText("5:00 h");
   await expect(low).toContainText("n=8");
 
-  const good = card.locator("div").filter({ hasText: /^7–8/ }).first();
-  await expect(good).toContainText("7:30 h");
-  await expect(good).toContainText("n=10");
+  const middle = card.locator("[data-bucket='3']");
+  await expect(middle).toContainText("7:30 h");
+  await expect(middle).toContainText("n=10");
 });
 
 test("a bucket with too few days keeps its row and loses its number", async ({ page }) => {
   await page.goto("/klient/statistik");
   const card = page.locator("[data-slot=card]").filter({ hasText: "Zusammenhänge" });
 
-  const thin = card.locator("div").filter({ hasText: /^9–10/ }).first();
+  const thin = card.locator("[data-bucket='4–5']");
   // Drawn, because a hidden bucket is a lie about the shape of the window.
   await expect(thin).toContainText("n=2");
   await expect(thin).toContainText("zu wenige");

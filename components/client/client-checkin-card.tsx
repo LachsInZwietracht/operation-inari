@@ -4,17 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { ChevronDown, Minus, Plus, Settings2 } from "lucide-react"
+import { Minus, Plus, Settings2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
 import {
-  CHECKIN_METRICS,
-  clientMetricPreference,
   formatSleepDuration,
   resolveClientMetricPreferences,
+  visibleCheckinMetrics,
   type ClientMetricKey,
   type ClientMetricPreferences,
 } from "@/lib/client-metrics"
@@ -36,9 +35,11 @@ import type { ClientCheckin } from "@/lib/types"
  * day's totals, because someone who first reads their kcal balance rates the
  * balance instead of the day.
  *
- * Only the fields this client tracks are rendered. Everything else lives one
- * link away in the settings, so there is exactly one place where this is
- * configured rather than an inline picker competing with it.
+ * Only the fields this client kept switched on are rendered, and all of them
+ * at once — a sub-score behind a fold is a sub-score that stays empty.
+ * Everything else lives one link away in the settings, so there is exactly one
+ * place where this is configured rather than an inline picker competing
+ * with it.
  */
 
 /** Long enough to tap through a scale without writing ten rows. */
@@ -53,7 +54,6 @@ const ALCOHOL_STEP = 0.5
 const ALCOHOL_MAX = 20
 
 type CheckinDraft = {
-  wellbeing?: number
   energy?: number
   mood?: number
   digestion?: number
@@ -64,7 +64,6 @@ type CheckinDraft = {
 
 function draftFromCheckin(checkin: ClientCheckin | null): CheckinDraft {
   return {
-    wellbeing: checkin?.wellbeing,
     energy: checkin?.energy,
     mood: checkin?.mood,
     digestion: checkin?.digestion,
@@ -77,7 +76,6 @@ function draftFromCheckin(checkin: ClientCheckin | null): CheckinDraft {
 export function ClientCheckinCard({ date }: { date: string }) {
   const [draft, setDraft] = useState<CheckinDraft>({})
   const [preferences, setPreferences] = useState<ClientMetricPreferences | null>(null)
-  const [showDetail, setShowDetail] = useState(false)
 
   // Merged rather than queued: tapping 6 and then 7 must write 7 once, not
   // both in order.
@@ -100,12 +98,6 @@ export function ClientCheckinCard({ date }: { date: string }) {
           preferenceRows.status === "fulfilled" ? preferenceRows.value : [],
         ),
       )
-      // Opened when it already has content, so a filled sub-score is never
-      // hidden behind a fold the client has to remember to open.
-      if (checkin.status === "fulfilled" && checkin.value) {
-        const value = checkin.value
-        if (value.energy || value.mood || value.digestion) setShowDetail(true)
-      }
     }
 
     void load()
@@ -157,22 +149,29 @@ export function ClientCheckinCard({ date }: { date: string }) {
     [queue],
   )
 
-  const tracked = useMemo(() => {
+  const visible = useMemo(() => {
     if (!preferences) return new Set<ClientMetricKey>()
-    return new Set(
-      CHECKIN_METRICS.filter((metric) => clientMetricPreference(preferences, metric.key).tracked).map(
-        (metric) => metric.key,
-      ),
-    )
+    return new Set(visibleCheckinMetrics(preferences).map((metric) => metric.key))
   }, [preferences])
 
-  // Nothing is rendered before the preferences are known: fields appearing one
-  // after another under a thumb is worse than a beat of nothing.
-  if (!preferences) return null
+  // The fields are not known before the preferences are loaded, but the space
+  // they will take is — and a card that appears late pushes the whole diary
+  // down under the reader's thumb. So the room is claimed first and filled
+  // afterwards. The height is the default set; someone who switched fields off
+  // sees a small settle, which is the smaller of the two problems.
+  if (!preferences) {
+    return (
+      <Card>
+        <CardContent className="py-4">
+          <div className="h-[362px] animate-pulse rounded-md bg-muted/40" />
+        </CardContent>
+      </Card>
+    )
+  }
 
-  const showsSleep = tracked.has("sleep_minutes") || tracked.has("sleep_quality")
-  const showsDetail =
-    tracked.has("energy") || tracked.has("mood") || tracked.has("digestion")
+  const showsSleep = visible.has("sleep_minutes") || visible.has("sleep_quality")
+  const showsScores =
+    visible.has("energy") || visible.has("mood") || visible.has("digestion")
   const nightLabel = format(parseISO(date), "EEEE, d.M.", { locale: de })
 
   return (
@@ -182,7 +181,7 @@ export function ClientCheckinCard({ date }: { date: string }) {
           <section className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Nacht auf {nightLabel}</p>
 
-            {tracked.has("sleep_minutes") && (
+            {visible.has("sleep_minutes") && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm">Schlaf</span>
@@ -206,7 +205,7 @@ export function ClientCheckinCard({ date }: { date: string }) {
               </div>
             )}
 
-            {tracked.has("sleep_quality") && (
+            {visible.has("sleep_quality") && (
               <ScoreRow
                 label="Schlafqualität"
                 max={5}
@@ -217,68 +216,51 @@ export function ClientCheckinCard({ date }: { date: string }) {
           </section>
         )}
 
-        <section className="space-y-3">
-          <ScoreRow
-            label="Wie ging es dir heute?"
-            max={10}
-            value={draft.wellbeing}
-            onChange={(value) => setScore("wellbeing", "wellbeing", value)}
-            emphasized
+        {showsScores && (
+          <section className="space-y-3">
+            <p className="text-sm font-medium">Wie ging es dir heute?</p>
+
+            {visible.has("energy") && (
+              <ScoreRow
+                label="Energie"
+                max={5}
+                value={draft.energy}
+                onChange={(value) => setScore("energy", "energy", value)}
+              />
+            )}
+            {visible.has("mood") && (
+              <ScoreRow
+                label="Stimmung"
+                max={5}
+                value={draft.mood}
+                onChange={(value) => setScore("mood", "mood", value)}
+              />
+            )}
+            {visible.has("digestion") && (
+              <ScoreRow
+                label="Verdauung"
+                max={5}
+                value={draft.digestion}
+                onChange={(value) => setScore("digestion", "digestion", value)}
+              />
+            )}
+          </section>
+        )}
+
+        {visible.has("alcohol_units") && (
+          <AlcoholRow
+            value={draft.alcoholUnits}
+            onChange={(value) => setScore("alcoholUnits", "alcoholUnits", value)}
           />
+        )}
 
-          {showsDetail && (
-            <div>
-              <button
-                type="button"
-                className="flex items-center gap-1 text-xs text-muted-foreground"
-                aria-expanded={showDetail}
-                onClick={() => setShowDetail((open) => !open)}
-              >
-                Genauer
-                <ChevronDown
-                  className={cn("h-3.5 w-3.5 transition-transform", showDetail && "rotate-180")}
-                  aria-hidden
-                />
-              </button>
-
-              {showDetail && (
-                <div className="mt-2 space-y-2">
-                  {tracked.has("energy") && (
-                    <ScoreRow
-                      label="Energie"
-                      max={5}
-                      value={draft.energy}
-                      onChange={(value) => setScore("energy", "energy", value)}
-                    />
-                  )}
-                  {tracked.has("mood") && (
-                    <ScoreRow
-                      label="Stimmung"
-                      max={5}
-                      value={draft.mood}
-                      onChange={(value) => setScore("mood", "mood", value)}
-                    />
-                  )}
-                  {tracked.has("digestion") && (
-                    <ScoreRow
-                      label="Verdauung"
-                      max={5}
-                      value={draft.digestion}
-                      onChange={(value) => setScore("digestion", "digestion", value)}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {tracked.has("alcohol_units") && (
-            <AlcoholRow
-              value={draft.alcoholUnits}
-              onChange={(value) => setScore("alcoholUnits", "alcoholUnits", value)}
-            />
-          )}
-        </section>
+        {/* Everything switched off is a decision, not a broken card — but the
+            way back has to stay in sight, or the check-in is gone for good. */}
+        {!showsSleep && !showsScores && !visible.has("alcohol_units") && (
+          <p className="text-sm text-muted-foreground">
+            Du hältst gerade keine Werte zum Tag fest.
+          </p>
+        )}
 
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
           <Link href="/klient/einstellungen">
@@ -302,17 +284,15 @@ function ScoreRow({
   max,
   value,
   onChange,
-  emphasized,
 }: {
   label: string
   max: number
   value?: number
   onChange: (value: number | undefined) => void
-  emphasized?: boolean
 }) {
   return (
     <div className="space-y-1.5">
-      <p className={cn("text-sm", emphasized ? "font-medium" : "text-muted-foreground")}>{label}</p>
+      <p className="text-sm text-muted-foreground">{label}</p>
       <div className="flex gap-1" role="group" aria-label={label}>
         {Array.from({ length: max }, (_, index) => index + 1).map((step) => (
           <button

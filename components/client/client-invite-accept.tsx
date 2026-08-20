@@ -51,8 +51,8 @@ export function ClientInviteAccept({
           <ul className="list-disc space-y-1 pl-5">
             <li>dein Ernährungstagebuch lesen</li>
             <li>
-              sehen, wie es dir an einem Tag ging — Wohlbefinden, Schlaf und was du sonst im
-              Check-in einträgst
+              sehen, wie es dir an einem Tag ging — Energie, Stimmung, Schlaf und was du sonst
+              im Check-in einträgst
             </li>
           </ul>
           <p>

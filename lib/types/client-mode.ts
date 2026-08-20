@@ -82,7 +82,6 @@ export interface ClientFoodLogDay {
 export type ClientCheckin = {
   id: ID;
   date: string; // ISO date YYYY-MM-DD
-  wellbeing?: number;
   energy?: number;
   mood?: number;
   digestion?: number;
@@ -92,7 +91,13 @@ export type ClientCheckin = {
   alcoholUnits?: number;
 };
 
-/** The three switches a client sets per metric. Absent rows are defaults. */
+/**
+ * One metric's stored preference. Absent rows are the registry defaults.
+ *
+ * `tracked` and `shown` are two columns and one switch: the settings write
+ * them together, so a row where they differ was written before they were
+ * merged.
+ */
 export type ClientMetricPreferenceRow = {
   metricKey: string;
   tracked: boolean;

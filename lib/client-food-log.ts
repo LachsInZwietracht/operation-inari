@@ -229,18 +229,6 @@ export function collectRecentEntries(
     .slice(0, limit);
 }
 
-/** The entries of one slot on the day before `date` — the "wie gestern" source. */
-export function previousDayEntries(
-  days: ClientFoodLogDay[],
-  date: string,
-  slot: MealSlotType,
-): ClientFoodLogEntry[] {
-  const previous = [...days]
-    .filter((day) => day.date < date)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
-  return (previous?.entries ?? []).filter((entry) => entry.slotType === slot);
-}
-
 /** Display label for an entry, independent of whether the catalog knows it. */
 export function clientLogEntryLabel(
   entry: ClientFoodLogEntry,

@@ -14,7 +14,6 @@ import { withTimeout } from "@/lib/data/utils";
 type CheckinRow = {
   id: string;
   checkin_date: string;
-  wellbeing: number | null;
   energy: number | null;
   mood: number | null;
   digestion: number | null;
@@ -24,7 +23,7 @@ type CheckinRow = {
 };
 
 const CHECKIN_COLUMNS =
-  "id,checkin_date,wellbeing,energy,mood,digestion,sleep_minutes,sleep_quality,alcohol_units";
+  "id,checkin_date,energy,mood,digestion,sleep_minutes,sleep_quality,alcohol_units";
 
 function resolveClient(supabase?: SupabaseClient) {
   return supabase ?? createBrowserSupabaseClient();
@@ -48,7 +47,6 @@ function mapCheckinRow(row: CheckinRow): ClientCheckin {
   return {
     id: row.id,
     date: row.checkin_date,
-    wellbeing: optionalNumber(row.wellbeing),
     energy: optionalNumber(row.energy),
     mood: optionalNumber(row.mood),
     digestion: optionalNumber(row.digestion),
@@ -98,10 +96,9 @@ export async function fetchClientCheckins(
  *
  * `undefined` leaves a value alone, `null` clears it back to unanswered. The
  * distinction is the whole point: someone correcting their sleep must not
- * silently wipe the wellbeing score they gave the same evening.
+ * silently wipe the mood score they gave the same evening.
  */
 export type ClientCheckinPatch = {
-  wellbeing?: number | null;
   energy?: number | null;
   mood?: number | null;
   digestion?: number | null;
@@ -111,7 +108,6 @@ export type ClientCheckinPatch = {
 };
 
 const PATCH_COLUMNS: Record<keyof ClientCheckinPatch, string> = {
-  wellbeing: "wellbeing",
   energy: "energy",
   mood: "mood",
   digestion: "digestion",
@@ -182,15 +178,16 @@ export async function fetchClientMetricPreferences(
 }
 
 /**
- * Writes the full triple for one metric.
+ * Writes both switches for one metric.
  *
- * All three switches are stored together because the row only exists to record
- * a deviation, and a half-written row would leave the other two switches
- * silently tracking a default the client already moved away from.
+ * The table still has `tracked` and `shown` as separate columns from when the
+ * settings offered them separately. The UI has one switch for both now, so
+ * both columns are written from it — keeping the column pair means no
+ * migration of rows that were written under the old semantics.
  */
 export async function saveClientMetricPreference(
   metricKey: string,
-  preference: { tracked: boolean; shown: boolean; shared: boolean },
+  preference: { visible: boolean; shared: boolean },
   supabase?: SupabaseClient,
 ): Promise<void> {
   const client = resolveClient(supabase);
@@ -200,8 +197,8 @@ export async function saveClientMetricPreference(
     {
       client_user_id: userId,
       metric_key: metricKey,
-      tracked: preference.tracked,
-      shown: preference.shown,
+      tracked: preference.visible,
+      shown: preference.visible,
       shared: preference.shared,
     },
     { onConflict: "client_user_id,metric_key", ignoreDuplicates: false },

@@ -1,7 +1,8 @@
 # Client Check-in and Correlations (M8)
 
-Status: shipped (M8.1–M8.4; migrations `20260818000093`–`…095`). Owner decision record for the wellbeing/context
-layer of client mode. Read `docs/client-mode-plan.md` first — this document
+Status: shipped (M8.1–M8.4; migrations `20260818000093`–`…096`). Owner decision record for the wellbeing/context
+layer of client mode. Two decisions below were reversed after the first days of
+use — see "Revised after use" at the end. Read `docs/client-mode-plan.md` first — this document
 assumes the module architecture, the link table and the RLS shape described
 there.
 
@@ -38,9 +39,9 @@ fills up as an instruction to fill it.
 
 | Question | Decision |
 |---|---|
-| Score design | One mandatory overall score (1–10) plus three optional sub-scores (Energie, Stimmung, Verdauung, each 1–5) |
+| Score design | ~~One mandatory overall score (1–10) plus three optional sub-scores~~ → Energie, Stimmung, Verdauung (1–5 each), all three on by default, no overall score |
 | Who decides what is tracked | The client, in `/klient/einstellungen`. No counselor-prescribed trackers in v1 |
-| Per-metric control | Three switches per metric: **tracken**, **anzeigen**, **teilen** |
+| Per-metric control | ~~Three switches per metric~~ → two: **anzeigen** (track and display) and **teilen** |
 | Counselor visibility | Yes, behind a new `consent_wellbeing` flag *and* the per-metric `shared` switch |
 | Evaluation surface | Time-axis chart with a shift control **and** bucket comparison, both user-driven |
 | Nutrition metrics in v1 | Energy, the three macros, sugar, fibre, meal count. Micronutrients deferred |
@@ -72,7 +73,7 @@ export interface ClientMetric {
   window: "day" | "night-before";
   /** Fixed edges, ordinal grouping, or quartiles of this person's own data. */
   buckets: BucketRule | null;     // null = chartable but not bucketable
-  defaults: { tracked: boolean; shown: boolean; shared: boolean };
+  defaults: { visible: boolean; shared: boolean };   // visible = tracked and shown
 }
 ```
 
@@ -80,7 +81,6 @@ export interface ClientMetric {
 
 | Key | Label | Scale | Source | Window | Buckets |
 |---|---|---|---|---|---|
-| `wellbeing` | Wohlbefinden | 1–10 | checkin | day | 1–4 / 5–6 / 7–8 / 9–10 |
 | `energy` | Energie | 1–5 | checkin | day | 1–2 / 3 / 4–5 |
 | `mood` | Stimmung | 1–5 | checkin | day | 1–2 / 3 / 4–5 |
 | `digestion` | Verdauung | 1–5 | checkin | day | 1–2 / 3 / 4–5 |
@@ -123,7 +123,6 @@ CREATE TABLE client_daily_checkins (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   checkin_date   DATE NOT NULL,
-  wellbeing      SMALLINT CHECK (wellbeing    BETWEEN 1 AND 10),
   energy         SMALLINT CHECK (energy       BETWEEN 1 AND 5),
   mood           SMALLINT CHECK (mood         BETWEEN 1 AND 5),
   digestion      SMALLINT CHECK (digestion    BETWEEN 1 AND 5),
@@ -170,11 +169,9 @@ and makes a new metric appear with sensible switches for everyone without a
 backfill. The accepted cost: changing a default in code changes behaviour for
 users who never touched that switch, so defaults are changed only deliberately.
 
-Defaults in v1: `wellbeing` and `sleep_minutes` tracked; sub-scores,
-`sleep_quality` and `alcohol_units` off until switched on; everything derived
-(diary, training, weight) is always available and has no `tracked` switch — you
-cannot untrack a number that is computed from data you already entered. `shown`
-and `shared` default to true.
+Defaults: the three scores and `sleep_minutes` on; `sleep_quality` and
+`alcohol_units` off until switched on; everything derived (diary, training,
+weight) on. `shared` defaults to true.
 
 ### Why the counselor does not read the table (migration `…000095`, M8.4)
 
@@ -250,37 +247,37 @@ Rules:
 
 - Only tracked metrics render. "Weitere Felder" links to settings rather than
   offering an inline picker; there is one place where this is configured.
-- **The wellbeing question is asked above the day's totals**, never next to
-  them. Someone who first sees their kcal balance rates the balance.
+- **The scores are asked above the day's totals**, never next to them. Someone
+  who first sees their kcal balance rates the balance.
 - Every field saves on change, debounced like the day note. There is no save
   button and no modal.
 - Any past date can be filled or corrected, without limit and without marking.
   A late entry is not worth less than a timely one; refusing it just produces
   gaps.
-- Nothing is mandatory in the sense of blocking. "Mandatory" for `wellbeing`
-  means it is always visible and cannot be switched off, not that a day is
-  rejected without it.
+- Nothing is mandatory. Every field can be switched off, including all of them;
+  the card then holds nothing but the way back to the settings.
 
 ## Settings
 
 New section in `/klient/einstellungen`, one row per metric, grouped by
 `ClientMetric.group`:
 
-| | tracken | anzeigen | teilen |
-|---|---|---|---|
-| Wohlbefinden | fixed on | ☑ | ☑ |
-| Energie / Stimmung / Verdauung | ☐ | ☑ | ☑ |
-| Schlafdauer / Schlafqualität | ☑ / ☐ | ☑ | ☑ |
-| Alkohol | ☐ | ☑ | ☑ |
-| Ernährung, Training, Gewicht | derived | ☑ | ☑ |
+| | anzeigen | teilen |
+|---|---|---|
+| Energie / Stimmung / Verdauung | ☑ | ☑ |
+| Schlafdauer / Schlafqualität | ☑ / ☐ | ☑ |
+| Alkohol | ☐ | ☑ |
+| Ernährung, Training, Gewicht | ☑ | ☑ |
 
-- **tracken** — does the field appear in the check-in.
-- **anzeigen** — does the metric appear in the Verlauf and in the pair picker.
+- **anzeigen** — is the field asked for in the check-in and drawn in the Verlauf
+  and the pair picker. One decision, because recording something you never look
+  at and looking at something you never record are both combinations nobody
+  wants.
 - **teilen** — may the counselor see it. Greyed out with an explanation when no
   active link exists or `consent_wellbeing` is off; the per-metric switch can
   only ever narrow what the consent already permits, never widen it.
 
-Switching `tracked` off hides the field. It never deletes past values — the data
+Switching a metric off hides the field. It never deletes past values — the data
 stays, and switching back on reveals a complete history. A separate, explicit
 delete belongs to the DSGVO work, not to a preference switch.
 
@@ -396,10 +393,38 @@ consent UI for `consent_wellbeing`, section in the Klienten-App patient tab.
   metric each need a Playwright assertion. A wrong predicate here exposes mood
   data across accounts.
 - **Fill rate decides everything.** Every added field lowers it. The default set
-  is two fields for a reason.
+  is four fields for a reason.
 - **DSGVO.** Mood and sleep are health data with a separate consent basis;
   consent, revocation, export and deletion have to actually work.
 - **Statistical honesty is a product feature here.** The n rules, the grey
   buckets and the missing disclaimer are not polish — without them the feature
   produces confident nonsense, and the positioning as an evaluation tool is what
   keeps it out of advice territory.
+
+---
+
+## Revised after use (migration `…096`)
+
+Two decisions from the table above did not survive the first days of entering
+values, and both were reversed rather than tuned.
+
+**The overall wellbeing score is gone; the three sub-scores are the check-in.**
+Asked first and always, the 1–10 score was the one that got answered, while the
+three under the "Genauer" fold — the ones that say *what* was good or bad —
+stayed empty. That leaves an evaluation with a series that moves and nothing to
+read it against, which is the opposite of what this layer exists for. Energie,
+Stimmung and Verdauung are now asked directly, all three on by default, and the
+column was dropped rather than kept nullable: a column nobody writes becomes a
+column somebody reads and finds empty.
+
+The consent flag stays `consent_wellbeing` and the read function stays
+`client_wellbeing_series()`. Both name the area — how the day went — not the
+score that left it, and renaming a consent column has a much worse failure mode
+than a name that reads slightly wide.
+
+**Tracken and anzeigen merged into one switch.** Three switches per metric
+across nineteen rows read as a matrix to be understood before anything could be
+decided, and the two states the split made possible — recorded but hidden,
+displayed but never recorded — are ones nobody wants. `client_metric_preferences`
+keeps both columns and the settings write them together; a row counts as visible
+only when both are true, so rows written under the split keep their meaning.

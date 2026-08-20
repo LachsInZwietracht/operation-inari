@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { ClientWeightField } from "@/components/client/client-weight-field"
 import type { ClientWeighIn } from "@/lib/data/client-anthropometrics-client"
 
-/** One glass. The fast path counts glasses; the field next to it takes any amount. */
-const GLASS_ML = 250
+/** The step of the two buttons next to the field. A quarter litre. */
+const STEP_ML = 250
 const MAX_ML = 10000
 const NOTE_DEBOUNCE_MS = 800
 const WATER_DEBOUNCE_MS = 800
@@ -24,12 +24,12 @@ const WATER_DEBOUNCE_MS = 800
  * and it is what a dietitian reads first. The column has existed since the
  * module was built and never had a field.
  *
- * Water counts in glasses because that is how people drink it — but only on the
- * fast path. A glass is 250 ml by assumption, and that assumption is wrong for
- * anyone drinking from a 0,7-l bottle or refilling a 1,5-l one at their desk;
- * counting their day in quarter-litre steps turns a known number into an
- * estimate. So the litres sit in a field of their own and take any value, and
- * the buttons stay for the people the glass was right for.
+ * Water is litres and nothing else. Counting it in glasses meant deciding for
+ * everyone that a glass holds 250 ml, which is wrong for anyone drinking from
+ * a 0,7-l bottle or refilling a 1,5-l one at their desk — and a converted
+ * number standing next to the one you typed reads like a correction. So the
+ * field takes any amount, and the two buttons step it in quarter litres for
+ * the people who would rather tap than type.
  */
 export function ClientDayContext({
   date,
@@ -66,8 +66,6 @@ export function ClientDayContext({
 
     return () => window.clearTimeout(timer)
   }, [noteDraft, onNotesChange])
-
-  const glasses = Math.round((waterMl ?? 0) / GLASS_ML)
 
   // `null` means "not being typed in": the field then follows whatever the
   // buttons did. While it holds a string, the person is mid-entry and nothing
@@ -116,20 +114,15 @@ export function ClientDayContext({
               onChange={(event) => handleLitreInput(event.target.value)}
               onBlur={() => setLitreDraft(null)}
             />
-            <span className="text-sm text-muted-foreground">
-              l
-              <span className="ml-2 text-xs tabular-nums">
-                ≈ {glasses} {glasses === 1 ? "Glas" : "Gläser"}
-              </span>
-            </span>
+            <span className="text-sm text-muted-foreground">l</span>
           </div>
           <Button
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            aria-label="Ein Glas weniger"
+            aria-label="0,25 l weniger"
             disabled={(waterMl ?? 0) <= 0}
-            onClick={() => onWaterChange(Math.max(0, (waterMl ?? 0) - GLASS_ML))}
+            onClick={() => onWaterChange(Math.max(0, (waterMl ?? 0) - STEP_ML))}
           >
             <Minus className="h-4 w-4" />
           </Button>
@@ -137,9 +130,9 @@ export function ClientDayContext({
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            aria-label="Ein Glas mehr"
+            aria-label="0,25 l mehr"
             disabled={(waterMl ?? 0) >= MAX_ML}
-            onClick={() => onWaterChange(Math.min(MAX_ML, (waterMl ?? 0) + GLASS_ML))}
+            onClick={() => onWaterChange(Math.min(MAX_ML, (waterMl ?? 0) + STEP_ML))}
           >
             <Plus className="h-4 w-4" />
           </Button>

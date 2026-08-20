@@ -72,20 +72,31 @@ test("a tapped score is still there after a reload", async ({ page }) => {
   const question = page.getByText("Wie ging es dir heute?");
   await expect(question).toBeVisible();
 
-  await scoreAndWait(page, "Wie ging es dir heute?", 7, 10);
+  await scoreAndWait(page, "Energie", 4, 5);
 
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Wie ging es dir heute?: 7 von 10" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Energie: 4 von 5" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   const { data } = await admin
     .from("client_daily_checkins")
-    .select("wellbeing")
+    .select("energy")
     .eq("client_user_id", userId)
     .eq("checkin_date", TODAY)
     .single();
-  expect(data!.wellbeing).toBe(7);
+  expect(data!.energy).toBe(4);
+});
+
+test("the three scores are asked directly, not behind a fold", async ({ page }) => {
+  await page.goto("/klient");
+
+  // A sub-score one tap away is a sub-score that stays empty, and an empty
+  // one is a metric the evaluation cannot use.
+  await expect(page.getByRole("group", { name: "Energie" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Stimmung" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Verdauung" })).toBeVisible();
 });
 
 test("the question is asked before the day's numbers, not next to them", async ({ page }) => {
@@ -107,42 +118,32 @@ test("the question is asked before the day's numbers, not next to them", async (
 test("a missed day can be filled in later, without limit", async ({ page }) => {
   await page.goto(`/klient?datum=${BACKFILL_DATE}`);
 
-  await scoreAndWait(page, "Wie ging es dir heute?", 4, 10);
+  await scoreAndWait(page, "Energie", 2, 5);
 
   const { data } = await admin
     .from("client_daily_checkins")
-    .select("checkin_date,wellbeing")
+    .select("checkin_date,energy")
     .eq("client_user_id", userId)
     .order("checkin_date", { ascending: true });
 
   // Two separate days, and the older one did not overwrite today.
   expect(data).toHaveLength(2);
-  expect(data![0]).toMatchObject({ checkin_date: BACKFILL_DATE, wellbeing: 4 });
-  expect(data![1]).toMatchObject({ checkin_date: TODAY, wellbeing: 7 });
+  expect(data![0]).toMatchObject({ checkin_date: BACKFILL_DATE, energy: 2 });
+  expect(data![1]).toMatchObject({ checkin_date: TODAY, energy: 4 });
 });
 
 test("a field switched off disappears but keeps what it already holds", async ({ page }) => {
-  await page.goto("/klient/einstellungen");
+  await page.goto("/klient");
+  await scoreAndWait(page, "Verdauung", 5, 5);
 
-  const digestion = page.getByRole("switch", { name: "Verdauung tracken" });
+  await page.goto("/klient/einstellungen");
+  const digestion = page.getByRole("switch", { name: "Verdauung anzeigen" });
   await expect(digestion).toBeVisible();
   await Promise.all([
     page.waitForResponse((response) =>
       response.url().includes("/rest/v1/client_metric_preferences"),
     ),
     digestion.click(),
-  ]);
-
-  await page.goto("/klient");
-  await page.getByRole("button", { name: "Genauer" }).click();
-  await scoreAndWait(page, "Verdauung", 5, 5);
-
-  await page.goto("/klient/einstellungen");
-  await Promise.all([
-    page.waitForResponse((response) =>
-      response.url().includes("/rest/v1/client_metric_preferences"),
-    ),
-    page.getByRole("switch", { name: "Verdauung tracken" }).click(),
   ]);
 
   await page.goto("/klient");

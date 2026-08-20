@@ -141,7 +141,7 @@ export function ClientCorrelationView({
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Sobald zwei Dinge über mehrere Tage zusammenkommen — zum Beispiel dein Wohlbefinden und
+          Sobald zwei Dinge über mehrere Tage zusammenkommen — zum Beispiel deine Energie und
           dein Schlaf — kannst du sie hier nebeneinanderlegen.
         </CardContent>
       </Card>
@@ -356,7 +356,9 @@ function BucketTable({
       </p>
 
       {comparison.buckets.map((bucket) => (
-        <div key={bucket.label} className="flex items-center gap-2">
+        // The label is the row's identity here and in the tests: bucket edges
+        // are what a reader checks a claim against.
+        <div key={bucket.label} data-bucket={bucket.label} className="flex items-center gap-2">
           <span className="w-24 shrink-0 text-xs text-muted-foreground">{bucket.label}</span>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             {bucket.average !== null && (
