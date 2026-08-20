@@ -276,6 +276,70 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
+  test("releases a plan and starts later changes as a separate draft", async ({ page }) => {
+    const planDate = uniquePlannerDate(2750);
+    const patient = await createPatientFixture("Plan", "Release");
+    const title = `Freigabe ${Math.random().toString(36).slice(2, 8)}`;
+    let foodId: string | null = null;
+
+    try {
+      const userId = await getTestUserId();
+      const { data: food, error: foodError } = await admin
+        .from("foods")
+        .insert({
+          name: "Freigabe Testlebensmittel",
+          data_source_id: "bls",
+          source_food_id: `release-${Math.random().toString(36).slice(2, 10)}`,
+        })
+        .select("id")
+        .single();
+      if (foodError) throw new Error(foodError.message);
+      foodId = food.id;
+
+      const { data: plan, error: planError } = await admin
+        .from("daily_meal_plans")
+        .insert({
+          user_id: userId,
+          patient_id: patient.id,
+          date: planDate,
+          title,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (planError) throw new Error(planError.message);
+
+      const { error: entryError } = await admin.from("meal_entries").insert({
+        meal_plan_id: plan.id,
+        slot_type: "fruehstueck",
+        entry_type: "food",
+        reference_id: food.id,
+        amount: 100,
+        sort_order: 0,
+      });
+      if (entryError) throw new Error(entryError.message);
+
+      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
+      await page.getByRole("tab", { name: "Planvorlagen" }).click();
+
+      const draftCard = page.locator("[data-slot='card']").filter({ hasText: title }).first();
+      await draftCard.getByRole("button", { name: "Freigeben" }).click();
+      const releaseDialog = page.getByRole("alertdialog");
+      await releaseDialog.getByRole("button", { name: "Verbindlich freigeben" }).click();
+
+      await expect(draftCard.getByText("Freigegeben", { exact: true })).toBeVisible();
+      await draftCard.getByRole("button", { name: "Änderung beginnen" }).click();
+      await expect(page.getByRole("tab", { name: "Tag" })).toHaveAttribute("data-state", "active");
+
+      await page.getByRole("tab", { name: "Planvorlagen" }).click();
+      await expect(page.getByText("Änderungsentwurf", { exact: true })).toBeVisible();
+      await expect(page.getByText("Freigegeben", { exact: true })).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+      if (foodId) await admin.from("foods").delete().eq("id", foodId);
+    }
+  });
+
   test("does not describe an empty day as being within all targets", async ({ page }) => {
     const planDate = uniquePlannerDate(3000);
     const patient = await createPatientFixture("Plan", "EmptyTargets");

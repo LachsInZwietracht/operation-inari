@@ -251,7 +251,7 @@ export function ErnaehrungsplaenePageClient({
                           variant="outline"
                           className={cn(plan.status === "archived" && "text-muted-foreground")}
                         >
-                          {STATUS_META[plan.status ?? "draft"]}
+                          {plan.replacedAt ? "Ersetzt" : STATUS_META[plan.status ?? "draft"]}
                         </Badge>
                         <span className="text-muted-foreground w-24 shrink-0 text-right text-xs tabular-nums">
                           {countEntries(plan)} {countEntries(plan) === 1 ? "Eintrag" : "Einträge"}

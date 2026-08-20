@@ -61,6 +61,7 @@ test.describe("client plan RLS", () => {
   let approvedPlanId: string;
   let draftPlanId: string;
   let approvedEntryId: string;
+  let revisionPlanId: string | null = null;
   let foodId: string;
 
   test.beforeAll(async () => {
@@ -155,7 +156,10 @@ test.describe("client plan RLS", () => {
 
   test.afterAll(async () => {
     await admin.from("client_meal_completions").delete().eq("client_user_id", clientUser.id);
-    await admin.from("daily_meal_plans").delete().in("id", [approvedPlanId, draftPlanId]);
+    await admin
+      .from("daily_meal_plans")
+      .delete()
+      .in("id", [approvedPlanId, draftPlanId, revisionPlanId].filter(Boolean));
     await admin.from("client_links").delete().eq("id", linkId);
     await admin.from("patients").delete().eq("id", patientId);
     await admin.from("foods").delete().eq("id", foodId);
@@ -222,5 +226,93 @@ test.describe("client plan RLS", () => {
     expect(data ?? []).toHaveLength(0);
 
     await admin.from("client_links").update({ status: "active" }).eq("id", linkId);
+  });
+
+  test("a revision keeps the released stand visible until the successor is released", async () => {
+    const counselorClient = await signedInClient(counselor);
+    const linkedClient = await signedInClient(clientUser);
+
+    const { data: draftId, error: beginError } = await counselorClient.rpc(
+      "begin_meal_plan_revision",
+      { source_plan_id: approvedPlanId },
+    );
+    expect(beginError).toBeNull();
+    revisionPlanId = String(draftId);
+
+    const { data: beforeRelease } = await linkedClient
+      .from("daily_meal_plans")
+      .select("id");
+    const visibleBeforeRelease = (beforeRelease ?? []).map((row) => row.id);
+    expect(visibleBeforeRelease).toContain(approvedPlanId);
+    expect(visibleBeforeRelease).not.toContain(revisionPlanId);
+
+    const { error: releaseError } = await counselorClient.rpc(
+      "release_meal_plan_revision",
+      { target_plan_id: revisionPlanId },
+    );
+    expect(releaseError).toBeNull();
+
+    const { data: afterRelease } = await linkedClient
+      .from("daily_meal_plans")
+      .select("id");
+    const visibleAfterRelease = (afterRelease ?? []).map((row) => row.id);
+    expect(visibleAfterRelease).toContain(revisionPlanId);
+    expect(visibleAfterRelease).not.toContain(approvedPlanId);
+
+    const { data: revisions, error: revisionError } = await admin
+      .from("daily_meal_plans")
+      .select("id,status,revision_number,supersedes_plan_id,replaced_at")
+      .in("id", [approvedPlanId, revisionPlanId]);
+    expect(revisionError).toBeNull();
+    const formerRelease = revisions?.find((plan) => plan.id === approvedPlanId);
+    const currentRelease = revisions?.find((plan) => plan.id === revisionPlanId);
+    expect(formerRelease).toMatchObject({ status: "archived" });
+    expect(formerRelease?.replaced_at).not.toBeNull();
+    expect(currentRelease).toMatchObject({
+      status: "approved",
+      revision_number: 2,
+      supersedes_plan_id: approvedPlanId,
+    });
+
+    const { data: snapshots, error: snapshotError } = await admin
+      .from("meal_plan_versions")
+      .select("reason,snapshot")
+      .eq("meal_plan_id", revisionPlanId);
+    expect(snapshotError).toBeNull();
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots?.[0]).toMatchObject({
+      reason: "approved",
+      snapshot: { status: "approved" },
+    });
+
+    const { error: lockedPlanError } = await counselorClient
+      .from("daily_meal_plans")
+      .update({ title: "Still überschrieben" })
+      .eq("id", revisionPlanId)
+      .select("id")
+      .single();
+    expect(lockedPlanError).not.toBeNull();
+
+    const { error: lockedEntriesError } = await counselorClient
+      .from("meal_entries")
+      .delete()
+      .eq("meal_plan_id", revisionPlanId)
+      .select("id")
+      .single();
+    expect(lockedEntriesError).not.toBeNull();
+
+    const { error: archiveError } = await counselorClient.rpc(
+      "archive_meal_plan_revision",
+      { target_plan_id: revisionPlanId },
+    );
+    expect(archiveError).toBeNull();
+
+    const { error: releasedDeleteError } = await counselorClient
+      .from("daily_meal_plans")
+      .delete()
+      .eq("id", revisionPlanId)
+      .select("id")
+      .single();
+    expect(releasedDeleteError).not.toBeNull();
   });
 });

@@ -11,7 +11,9 @@ import {
   FileText,
   Flame,
   Loader2,
+  PencilLine,
   Plus,
+  Send,
   Trash2,
   UserPlus,
   Utensils,
@@ -96,6 +98,22 @@ const STATUS_META: Record<NonNullable<DailyMealPlan["status"]>, { label: string;
   },
 }
 
+function getStatusMeta(plan: DailyMealPlan) {
+  if (plan.replacedAt) {
+    return {
+      label: "Ersetzt",
+      className: "border-slate-200 bg-slate-50 text-slate-500",
+    }
+  }
+  if (plan.status === "draft" && plan.supersedesPlanId) {
+    return {
+      label: "Änderungsentwurf",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+    }
+  }
+  return STATUS_META[plan.status ?? "draft"]
+}
+
 function mealPlanHref(patientId: string, plan?: DailyMealPlan | null) {
   const params = new URLSearchParams({ patientId })
   if (plan?.date) params.set("date", plan.date)
@@ -159,6 +177,8 @@ export function PatientMealPlansTab({
     duplicatePlan,
     copyPlanToPatient,
     deletePlan,
+    releasePlan,
+    beginRevision,
   } = usePatientMealPlans(patient, initialPlans)
   const { patients } = usePatients()
   const [copyDialogPlan, setCopyDialogPlan] = useState<DailyMealPlan | null>(null)
@@ -169,6 +189,9 @@ export function PatientMealPlansTab({
   const [isCopying, setIsCopying] = useState(false)
   const [deleteDialogPlan, setDeleteDialogPlan] = useState<DailyMealPlan | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [releaseDialogPlan, setReleaseDialogPlan] = useState<DailyMealPlan | null>(null)
+  const [isReleasing, setIsReleasing] = useState(false)
+  const [startingRevisionId, setStartingRevisionId] = useState<string | null>(null)
 
   const foodMap = useMemo(() => {
     const map = new Map<string, Food>()
@@ -211,8 +234,13 @@ export function PatientMealPlansTab({
     return map
   }, [foodMap, foods, plans, recipeMap])
 
-  const approvedCount = plans.filter((plan) => plan.status === "approved").length
-  const archivedCount = plans.filter((plan) => plan.status === "archived").length
+  const approvedCount = plans.filter(
+    (plan) => plan.status === "approved" || plan.status === "active",
+  ).length
+  const replacedCount = plans.filter((plan) => Boolean(plan.replacedAt)).length
+  const archivedCount = plans.filter(
+    (plan) => plan.status === "archived" && !plan.replacedAt,
+  ).length
   const hasPlans = plans.length > 0
   const copyTargetPatients = patients.filter(
     (item) => item.id !== patient.id && item.legacyId !== patient.id && item.id !== patient.legacyId,
@@ -260,6 +288,27 @@ export function PatientMealPlansTab({
     }
   }
 
+  const handleReleasePlan = async () => {
+    if (!releaseDialogPlan) return
+    setIsReleasing(true)
+    try {
+      const released = await releasePlan(releaseDialogPlan)
+      if (released) setReleaseDialogPlan(null)
+    } finally {
+      setIsReleasing(false)
+    }
+  }
+
+  const handleBeginRevision = async (plan: DailyMealPlan) => {
+    setStartingRevisionId(plan.id)
+    try {
+      const draft = await beginRevision(plan)
+      if (draft) onOpenPlan?.(draft)
+    } finally {
+      setStartingRevisionId(null)
+    }
+  }
+
   if (isLoadingRemote && !hasPlans) {
     return (
       <div className="space-y-4">
@@ -302,10 +351,11 @@ export function PatientMealPlansTab({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-5">
             <PlanMetric label="Gesamt" value={`${plans.length}`} />
             <PlanMetric label="Aktiv sichtbar" value={`${activePlans.length}`} />
             <PlanMetric label="Freigegeben" value={`${approvedCount}`} />
+            <PlanMetric label="Ersetzt" value={`${replacedCount}`} />
             <PlanMetric label="Archiviert" value={`${archivedCount}`} />
           </div>
         </CardContent>
@@ -318,6 +368,12 @@ export function PatientMealPlansTab({
             const summary = summaries.get(plan.id)
             const dietLineName = getDietLineName(plan.dietLineId)
             const isArchived = status === "archived"
+            const isReplaced = Boolean(plan.replacedAt)
+            const isReleased = status === "approved" || status === "active"
+            const hasBeenReleased = isReleased || Boolean(plan.approvedAt)
+            const canOpen = !isArchived
+            const statusMeta = getStatusMeta(plan)
+            const entryCount = summary?.entryCount ?? countPlanEntries(plan)
 
             return (
               <Card key={plan.id}>
@@ -326,8 +382,11 @@ export function PatientMealPlansTab({
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <CardTitle className="text-base">{getPlanTitle(plan)}</CardTitle>
-                        <Badge variant="outline" className={STATUS_META[status].className}>
-                          {STATUS_META[status].label}
+                        <Badge variant="outline" className={statusMeta.className}>
+                          {statusMeta.label}
+                        </Badge>
+                        <Badge variant="secondary" className="font-normal">
+                          Stand {plan.revisionNumber ?? 1}
                         </Badge>
                         {dietLineName && (
                           <Badge variant="secondary" className="font-normal">
@@ -342,23 +401,49 @@ export function PatientMealPlansTab({
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Utensils className="h-3.5 w-3.5" />
-                          {summary?.entryCount ?? countPlanEntries(plan)} Einträge
+                          {entryCount} Einträge
                         </span>
                         {plan.approvedAt && <span>Freigabe {formatDate(plan.approvedAt)}</span>}
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {onOpenPlan ? (
+                      {canOpen && onOpenPlan ? (
                         <Button size="sm" variant="outline" onClick={() => onOpenPlan(plan)}>
                           Öffnen
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
-                      ) : (
+                      ) : canOpen ? (
                         <Button asChild size="sm" variant="outline">
                           <Link prefetch={false} href={mealPlanHref(patient.id, plan)}>
                             Öffnen
                             <ExternalLink className="ml-2 h-4 w-4" />
                           </Link>
+                        </Button>
+                      ) : null}
+                      {status === "draft" && (
+                        <Button
+                          size="sm"
+                          disabled={entryCount === 0}
+                          title={entryCount === 0 ? "Leere Pläne können nicht freigegeben werden" : undefined}
+                          onClick={() => setReleaseDialogPlan(plan)}
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          Freigeben
+                        </Button>
+                      )}
+                      {isReleased && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={startingRevisionId === plan.id}
+                          onClick={() => void handleBeginRevision(plan)}
+                        >
+                          {startingRevisionId === plan.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <PencilLine className="mr-2 h-4 w-4" />
+                          )}
+                          Änderung beginnen
                         </Button>
                       )}
                       <Button size="sm" variant="outline" onClick={() => void duplicatePlan(plan)}>
@@ -375,7 +460,7 @@ export function PatientMealPlansTab({
                           Archivieren
                         </Button>
                       )}
-                      {status !== "approved" && (
+                      {!hasBeenReleased && !isReplaced && (
                         <Button size="sm" variant="ghost" onClick={() => setDeleteDialogPlan(plan)}>
                           <Trash2 className="mr-2 h-4 w-4" />
                           Löschen
@@ -523,6 +608,35 @@ export function PatientMealPlansTab({
       </Dialog>
 
       <AlertDialog
+        open={Boolean(releaseDialogPlan)}
+        onOpenChange={(open) => !open && setReleaseDialogPlan(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Plan jetzt freigeben?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dieser Stand wird fachlich abgeschlossen, unveränderlich und für den verknüpften Klienten
+              sichtbar. Spätere Anpassungen beginnen als neuer Entwurf; bis zu dessen Freigabe bleibt dieser
+              Stand gültig.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isReleasing}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isReleasing}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleReleasePlan()
+              }}
+            >
+              {isReleasing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Verbindlich freigeben
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
         open={Boolean(deleteDialogPlan)}
         onOpenChange={(open) => !open && setDeleteDialogPlan(null)}
       >
@@ -531,8 +645,8 @@ export function PatientMealPlansTab({
             <AlertDialogTitle>Planvorlage endgültig löschen?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteDialogPlan ? `${getPlanTitle(deleteDialogPlan)} wird dauerhaft entfernt. ` : ""}
-              Einträge und Versionen dieser Vorlage werden ebenfalls gelöscht. Freigegebene Vorlagen können
-              nur archiviert werden.
+              Einträge und Versionen dieser Vorlage werden ebenfalls gelöscht. Übergebene Planstände bleiben
+              als Historie erhalten und können nicht gelöscht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

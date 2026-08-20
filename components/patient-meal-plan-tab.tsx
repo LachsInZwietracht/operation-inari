@@ -24,6 +24,15 @@ interface PatientMealPlanTabProps {
   energyContext?: PatientEnergyContext
 }
 
+function mergePlanSources(
+  initialPlans: DailyMealPlan[],
+  workspacePlans: DailyMealPlan[],
+) {
+  const merged = new Map(initialPlans.map((plan) => [plan.id, plan]))
+  for (const plan of workspacePlans) merged.set(plan.id, plan)
+  return Array.from(merged.values())
+}
+
 /**
  * The planner, inside the patient record.
  *
@@ -74,13 +83,13 @@ export function PatientMealPlanTab({
         extraTab={{
           value: "plans",
           label: "Planvorlagen",
-          render: ({ openDay }) => (
+          render: ({ openDay, openPlan, workspacePlans }) => (
             <PatientMealPlansTab
               patient={patient}
-              initialPlans={plans}
+              initialPlans={mergePlanSources(plans, workspacePlans)}
               foods={foods}
               recipes={allRecipes}
-              onOpenPlan={(plan) => openDay(plan.date)}
+              onOpenPlan={openPlan}
               onCreatePlan={() => openDay(new Date().toISOString().slice(0, 10))}
             />
           ),

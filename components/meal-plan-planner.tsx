@@ -154,7 +154,11 @@ interface MealPlanPlannerProps {
   extraTab?: {
     value: string
     label: string
-    render: (api: { openDay: (date: string) => void }) => React.ReactNode
+    render: (api: {
+      openDay: (date: string) => void
+      openPlan: (plan: DailyMealPlan) => void
+      workspacePlans: DailyMealPlan[]
+    }) => React.ReactNode
   }
   /**
    * The patient's current energy figures, when the surrounding record already
@@ -208,6 +212,7 @@ export function MealPlanPlanner({
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
+    setWorkspacePlan,
     setDate,
     goToNextDay,
     goToPreviousDay,
@@ -853,6 +858,12 @@ export function MealPlanPlanner({
                 setDate(date)
                 setView("day")
               },
+              openPlan: (plan) => {
+                setWorkspacePlan(plan)
+                setDate(plan.date)
+                setView("day")
+              },
+              workspacePlans: Object.values(allPlans),
             })}
           </TabsContent>
         ) : null}

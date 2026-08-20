@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, format, parseISO } from "date-fns"
 import { toast } from "sonner"
 
-import { deleteMealPlanClient, fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
+import {
+  archiveMealPlanRevisionClient,
+  beginMealPlanRevisionClient,
+  deleteMealPlanClient,
+  fetchMealPlansClient,
+  persistMealPlan,
+  releaseMealPlanRevisionClient,
+} from "@/lib/data/meal-plans-client"
 import { useAuth } from "@/hooks/use-auth"
 import type { DailyMealPlan, MealEntry, Patient } from "@/lib/types"
 
@@ -33,7 +40,18 @@ function nextAvailableDate(sourceDate: string, plans: DailyMealPlan[]) {
 }
 
 function sortPlans(plans: DailyMealPlan[]) {
-  return [...plans].sort((a, b) => b.date.localeCompare(a.date))
+  const priority = (plan: DailyMealPlan) => {
+    if (plan.status === "draft") return 0
+    if (plan.status === "active" || plan.status === "approved") return 1
+    if (plan.replacedAt) return 2
+    return 3
+  }
+  return [...plans].sort(
+    (a, b) =>
+      b.date.localeCompare(a.date) ||
+      priority(a) - priority(b) ||
+      (b.revisionNumber ?? 1) - (a.revisionNumber ?? 1),
+  )
 }
 
 function isPatientPlan(plan: DailyMealPlan, patientId: string, patientLegacyId?: string) {
@@ -86,7 +104,7 @@ export function usePatientMealPlans(
   }, [authLoading, isAuthenticated, patientId, patientLegacyId])
 
   const activePlans = useMemo(
-    () => plans.filter((plan) => plan.status !== "archived"),
+    () => plans.filter((plan) => plan.status === "active" || plan.status === "approved"),
     [plans],
   )
 
@@ -100,7 +118,7 @@ export function usePatientMealPlans(
       }
       setPlans((prev) => sortPlans(prev.map((item) => (item.id === plan.id ? nextPlan : item))))
       try {
-        const persisted = await persistMealPlan(nextPlan)
+        const persisted = await archiveMealPlanRevisionClient(plan.id)
         setPlans((prev) => sortPlans(prev.map((item) => (item.id === plan.id ? persisted : item))))
         toast.success("Planvorlage archiviert.")
       } catch (error) {
@@ -125,6 +143,9 @@ export function usePatientMealPlans(
         status: "draft",
         approvedAt: undefined,
         approvedBy: undefined,
+        revisionNumber: undefined,
+        supersedesPlanId: undefined,
+        replacedAt: undefined,
         slots: plan.slots.map((slot) => ({
           ...slot,
           entries: slot.entries.map(cloneEntry),
@@ -166,7 +187,8 @@ export function usePatientMealPlans(
         const targetHasPlanOnDate = remotePlans.some(
           (item) =>
             isPatientPlan(item, targetPatient.id, targetPatient.legacyId) &&
-            item.date === targetDate,
+            item.date === targetDate &&
+            item.status !== "archived",
         )
 
         if (targetHasPlanOnDate) {
@@ -191,6 +213,9 @@ export function usePatientMealPlans(
         dietLineId: options.includeDietLine ? plan.dietLineId : undefined,
         approvedAt: undefined,
         approvedBy: undefined,
+        revisionNumber: undefined,
+        supersedesPlanId: undefined,
+        replacedAt: undefined,
         slots: plan.slots.map((slot) => ({
           ...slot,
           entries: slot.entries.map(cloneEntry),
@@ -215,8 +240,13 @@ export function usePatientMealPlans(
 
   const deletePlan = useCallback(
     async (plan: DailyMealPlan) => {
-      if (plan.status === "approved") {
-        toast.error("Freigegebene Planvorlagen bitte archivieren statt löschen.")
+      if (
+        plan.status === "approved" ||
+        plan.status === "active" ||
+        plan.approvedAt ||
+        plan.replacedAt
+      ) {
+        toast.error("Übergebene Planstände bleiben als nachvollziehbare Historie erhalten.")
         return false
       }
 
@@ -241,6 +271,50 @@ export function usePatientMealPlans(
     [isAuthenticated],
   )
 
+  const releasePlan = useCallback(async (plan: DailyMealPlan) => {
+    try {
+      const released = await releaseMealPlanRevisionClient(plan.id)
+      setPlans((prev) =>
+        sortPlans(
+          prev.map((item) => {
+            if (item.id === released.id) return released
+            const sameHandoff =
+              item.patientId === released.patientId &&
+              item.date === released.date &&
+              (item.status === "active" || item.status === "approved")
+            return sameHandoff
+              ? { ...item, status: "archived", replacedAt: released.approvedAt }
+              : item
+          }),
+        ),
+      )
+      toast.success("Plan freigegeben und für den Klienten sichtbar.")
+      return released
+    } catch (error) {
+      console.error("Failed to release meal plan:", error)
+      const message = error instanceof Error && error.message.includes("EMPTY_PLAN")
+        ? "Ein leerer Plan kann nicht freigegeben werden."
+        : "Plan konnte nicht freigegeben werden."
+      toast.error(message)
+      return null
+    }
+  }, [])
+
+  const beginRevision = useCallback(async (plan: DailyMealPlan) => {
+    try {
+      const draft = await beginMealPlanRevisionClient(plan.id)
+      setPlans((prev) =>
+        sortPlans([draft, ...prev.filter((item) => item.id !== draft.id)]),
+      )
+      toast.success("Änderungsentwurf angelegt. Der freigegebene Stand bleibt gültig.")
+      return draft
+    } catch (error) {
+      console.error("Failed to begin meal plan revision:", error)
+      toast.error("Änderungsentwurf konnte nicht angelegt werden.")
+      return null
+    }
+  }, [])
+
   return {
     plans,
     activePlans,
@@ -250,5 +324,7 @@ export function usePatientMealPlans(
     duplicatePlan,
     copyPlanToPatient,
     deletePlan,
+    releasePlan,
+    beginRevision,
   }
 }

@@ -308,7 +308,7 @@ export function EinkaufslisteClient({
                                 </span>
                                 {plan.status && (
                                   <Badge variant="outline" className="text-xs">
-                                    {PLAN_STATUS_LABELS[plan.status]}
+                                    {plan.replacedAt ? "Ersetzt" : PLAN_STATUS_LABELS[plan.status]}
                                   </Badge>
                                 )}
                               </div>

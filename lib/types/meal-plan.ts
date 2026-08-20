@@ -33,6 +33,12 @@ export interface DailyMealPlan {
   dietLineId?: string;
   approvedAt?: string;
   approvedBy?: ID;
+  /** Monotonic stand number within one patient/date handoff chain. */
+  revisionNumber?: number;
+  /** Released stand this draft was created from. */
+  supersedesPlanId?: ID;
+  /** Set on a formerly released stand once a successor is handed off. */
+  replacedAt?: string;
   slots: MealSlot[];
 }
 

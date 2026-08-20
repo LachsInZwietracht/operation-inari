@@ -68,10 +68,33 @@ function clonePlanForDate(plan: DailyMealPlan, date: string): DailyMealPlan {
     status: plan.status === "approved" ? "draft" : plan.status,
     approvedAt: undefined,
     approvedBy: undefined,
+    revisionNumber: undefined,
+    supersedesPlanId: undefined,
+    replacedAt: undefined,
     slots: ensureAllSlots(plan).slots.map((slot) => ({
       ...slot,
       entries: slot.entries.map(cloneEntry),
     })),
+  }
+}
+
+function workspacePriority(plan: DailyMealPlan) {
+  if (plan.status === "draft") return 3
+  if (plan.status === "active" || plan.status === "approved") return 2
+  return 0
+}
+
+function assignWorkspacePlan(
+  record: Record<string, DailyMealPlan>,
+  plan: DailyMealPlan,
+  foods: Food[],
+) {
+  if (workspacePriority(plan) === 0) return
+  const normalized = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+  const key = getPlanKey(normalized.date, normalized.patientId)
+  const existing = record[key]
+  if (!existing || workspacePriority(normalized) > workspacePriority(existing)) {
+    record[key] = normalized
   }
 }
 
@@ -99,10 +122,10 @@ function buildInitialPlans(initialPlans: DailyMealPlan[], foods: Food[]): Record
 
   const merged: Record<string, DailyMealPlan> = {}
   for (const plan of initialPlans) {
-    merged[getPlanKey(plan.date, plan.patientId)] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+    assignWorkspacePlan(merged, plan, foods)
   }
   for (const [date, plan] of Object.entries(stored)) {
-    merged[getPlanKey(plan.date ?? date, plan.patientId)] = ensureAllSlots(plan)
+    assignWorkspacePlan(merged, { ...plan, date: plan.date ?? date }, foods)
   }
 
   return merged
@@ -152,16 +175,14 @@ export function useMealPlan(
 
         const nextPlans: Record<string, DailyMealPlan> = {}
         for (const plan of initialPlans) {
-          nextPlans[getPlanKey(plan.date, plan.patientId)] = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
+          assignWorkspacePlan(nextPlans, plan, foods)
         }
         for (const plan of persistedPlans) {
           const key = getPlanKey(plan.date, plan.patientId)
           const dirtyPlan = dirtyDatesRef.current.has(key)
             ? plansRef.current[key]
             : undefined
-          nextPlans[key] = ensureAllSlots(
-            normalizeMealPlanFoodReferences(dirtyPlan ?? plan, foods),
-          )
+          assignWorkspacePlan(nextPlans, dirtyPlan ?? plan, foods)
         }
 
         const localCandidates = Object.values(plansRef.current).filter(isLocalMigrationCandidate)
@@ -544,6 +565,17 @@ export function useMealPlan(
     setCurrentDate(date)
   }, [])
 
+  const setWorkspacePlan = useCallback(
+    (plan: DailyMealPlan) => {
+      setPlans((prev) => {
+        const next = { ...prev }
+        assignWorkspacePlan(next, plan, foods)
+        return next
+      })
+    },
+    [foods],
+  )
+
   const goToNextDay = useCallback(() => {
     setCurrentDate((prev) => format(addDays(parseISO(prev), 1), "yyyy-MM-dd"))
   }, [])
@@ -570,6 +602,7 @@ export function useMealPlan(
     updatePlanMetadata,
     applyTemplateToDate,
     isPlanLocked,
+    setWorkspacePlan,
     setDate,
     goToNextDay,
     goToPreviousDay,

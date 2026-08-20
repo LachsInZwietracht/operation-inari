@@ -26,6 +26,9 @@ interface MealPlanRow {
   diet_line_id?: string | null;
   approved_at?: string | null;
   approved_by?: string | null;
+  revision_number?: number | null;
+  supersedes_plan_id?: string | null;
+  replaced_at?: string | null;
   meal_entries: MealEntryRow[] | null;
 }
 
@@ -105,6 +108,9 @@ function mapMealPlanRow(row: MealPlanRow): DailyMealPlan {
     dietLineId: row.diet_line_id ?? undefined,
     approvedAt: row.approved_at ?? undefined,
     approvedBy: row.approved_by ?? undefined,
+    revisionNumber: row.revision_number ?? undefined,
+    supersedesPlanId: row.supersedes_plan_id ?? undefined,
+    replacedAt: row.replaced_at ?? undefined,
     slots,
   };
 }
@@ -122,7 +128,7 @@ function baseMealPlanQuery(client: SupabaseClient) {
   return client
     .from("daily_meal_plans")
     .select(
-      "id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by,meal_entries(id,meal_plan_id,slot_type,entry_type,reference_id,amount,sort_order)",
+      "id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by,revision_number,supersedes_plan_id,replaced_at,meal_entries(id,meal_plan_id,slot_type,entry_type,reference_id,amount,sort_order)",
     )
     .order("date", { ascending: false });
 }
@@ -176,6 +182,9 @@ export async function persistMealPlan(
     diet_line_id: plan.dietLineId ?? null,
     approved_at: plan.approvedAt ?? null,
     approved_by: plan.approvedBy ?? null,
+    revision_number: plan.revisionNumber,
+    supersedes_plan_id: plan.supersedesPlanId ?? null,
+    replaced_at: plan.replacedAt ?? null,
   };
 
   let persistedPlan: MealPlanRow | null = null;
@@ -185,7 +194,7 @@ export async function persistMealPlan(
     const { data, error } = await client
       .from("daily_meal_plans")
       .upsert(planPayload, { onConflict: "id" })
-      .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by")
+      .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by,revision_number,supersedes_plan_id,replaced_at")
       .single();
     persistedPlan = data as MealPlanRow | null;
     planError = error;
@@ -195,6 +204,7 @@ export async function persistMealPlan(
       .select("id")
       .eq("user_id", userId)
       .eq("date", plan.date)
+      .eq("status", "draft")
       .limit(1);
 
     lookup = plan.patientId
@@ -217,7 +227,7 @@ export async function persistMealPlan(
             .insert(planPayload);
 
       const { data, error } = await request
-        .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by")
+        .select("id,date,user_id,legacy_id,patient_id,title,status,notes,target_profile_id,diet_line_id,approved_at,approved_by,revision_number,supersedes_plan_id,replaced_at")
         .single();
       persistedPlan = data as MealPlanRow | null;
       planError = error;
@@ -297,4 +307,52 @@ export async function deleteMealPlanClient(
   if (error) {
     throw new Error(error.message);
   }
+}
+
+async function runPlanLifecycleFunction(
+  functionName:
+    | "begin_meal_plan_revision"
+    | "release_meal_plan_revision"
+    | "archive_meal_plan_revision",
+  planId: string,
+  options: PersistMealPlanOptions = {},
+): Promise<DailyMealPlan> {
+  const client = resolveBrowserClient(options.supabase);
+  const userId = await getAuthenticatedUserId(client);
+  if (!userId) throw new Error("AUTH_REQUIRED");
+
+  const argumentName = functionName === "begin_meal_plan_revision" ? "source_plan_id" : "target_plan_id";
+  const { data: resultId, error } = await client.rpc(functionName, {
+    [argumentName]: planId,
+  });
+  if (error) throw new Error(error.message);
+
+  const { data, error: reloadError } = await withTimeout(
+    baseMealPlanQuery(client).eq("id", String(resultId)).single(),
+    5000,
+    "Supabase meal plan lifecycle lookup timed out",
+  );
+  if (reloadError) throw new Error(reloadError.message);
+  return mapMealPlanRow(data as MealPlanRow);
+}
+
+export function beginMealPlanRevisionClient(
+  planId: string,
+  options: PersistMealPlanOptions = {},
+) {
+  return runPlanLifecycleFunction("begin_meal_plan_revision", planId, options);
+}
+
+export function releaseMealPlanRevisionClient(
+  planId: string,
+  options: PersistMealPlanOptions = {},
+) {
+  return runPlanLifecycleFunction("release_meal_plan_revision", planId, options);
+}
+
+export function archiveMealPlanRevisionClient(
+  planId: string,
+  options: PersistMealPlanOptions = {},
+) {
+  return runPlanLifecycleFunction("archive_meal_plan_revision", planId, options);
 }
