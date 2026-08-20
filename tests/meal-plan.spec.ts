@@ -120,6 +120,34 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
+  test("keeps the mobile meal workspace primary and tools one action away", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const planDate = uniquePlannerDate(125);
+    const patient = await createPatientFixture("Plan", "Mobile");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+
+      await expect(page.getByRole("cell", { name: /Frühstück/ }).first()).toBeInViewport();
+      await expect(page.getByRole("button", { name: "Bibliothek", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Bilanz öffnen" })).toBeVisible();
+
+      await page.getByRole("button", { name: "Bibliothek", exact: true }).click();
+      await expect(page.getByRole("dialog", { name: "Bibliothek" })).toBeVisible();
+      await page.keyboard.press("Escape");
+
+      await page.getByRole("button", { name: "Bilanz öffnen" }).click();
+      await expect(page.getByRole("dialog", { name: "Tagesbilanz" })).toBeVisible();
+
+      const hasHorizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(hasHorizontalOverflow).toBe(false);
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("opens a selected week day in the day view", async ({ page }) => {
     const planDate = uniquePlannerDate(250);
     const patient = await createPatientFixture("Plan", "WeekToDay");

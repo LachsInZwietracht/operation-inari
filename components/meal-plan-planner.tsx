@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Download,
+  Library,
   Sparkles,
   UserPlus,
   UserRound,
@@ -36,6 +37,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { useMealPlan } from "@/hooks/use-meal-plan"
 import { useAllergenGuard } from "@/hooks/use-allergen-guard"
 import {
@@ -260,6 +269,7 @@ export function MealPlanPlanner({
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [planDataExchangeOpen, setPlanDataExchangeOpen] = useState(false)
   const [suggestionDialogOpen, setSuggestionDialogOpen] = useState(false)
+  const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
 
   useEffect(() => {
@@ -873,11 +883,64 @@ export function MealPlanPlanner({
             (view === "strategy" || view === extraTab?.value) && "hidden",
           )}
         >
+          <div className="flex items-center gap-2 md:hidden">
+            <Sheet open={mobileLibraryOpen} onOpenChange={setMobileLibraryOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="flex-1">
+                  <Library className="mr-1.5 h-4 w-4" />
+                  Bibliothek
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="h-[82dvh] gap-0 p-0">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Bibliothek</SheetTitle>
+                  <SheetDescription>
+                    Rezepte, Lebensmittel und Vorlagen für den aktiven Planungstag.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+                  <MealPlanLibrary
+                    className="min-h-full rounded-none border-0 shadow-none"
+                    foods={foodCommandSource}
+                    fullFoods={foods}
+                    recipes={recipes}
+                    templates={mealPlanTemplates}
+                    categoryLabels={foodCategoryLabels}
+                    isLocked={currentPlan.status === "approved"}
+                    onQuickAdd={(payload, slotType) => {
+                      void handleDropPayload(slotType, payload)
+                      setMobileLibraryOpen(false)
+                    }}
+                    onApplyTemplate={(template) => {
+                      handleApplyTemplate(template)
+                      setMobileLibraryOpen(false)
+                    }}
+                    onImportPlanFile={() => {
+                      setMobileLibraryOpen(false)
+                      setPlanDataExchangeOpen(true)
+                    }}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
+            <PlanBalanceRail
+              layout="mobile"
+              compliance={dietLineMacros}
+              micronutrients={micronutrientCompliance}
+              dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
+              dietLines={dietLines}
+              dietLineId={dietLineId}
+              onDietLineChange={handleDietLineChange}
+              dietLineDisabled={currentPlan.status === "approved"}
+              onManageDietLine={() => setDietLineDialogOpen(true)}
+            />
+          </div>
+
           {/* Col 1: the shared library on the left. At xl it fills the planner
               column's height (absolute inside a relative track cell) so it ends
               level with the meal plan and scrolls internally rather than running
               past it. Shared build source for day and week views. */}
-          <div className="relative min-w-0">
+          <div className="relative hidden min-w-0 md:block">
             <MealPlanLibrary
               className="min-h-0 xl:absolute xl:inset-0"
               foods={foodCommandSource}
@@ -1066,7 +1129,7 @@ export function MealPlanPlanner({
           {/* Pull the dock flush to the scroll bottom: cancel the trailing space
               below it (page padding + tab wrapper gap) so it no longer lifts off
               the bottom edge when scrolled all the way down. */}
-          <div className="sticky bottom-0 z-40 -mb-10 md:-mb-12 xl:col-span-2">
+          <div className="sticky bottom-0 z-40 -mb-12 hidden md:block xl:col-span-2">
             <PlanBalanceRail
               compliance={dietLineMacros}
               micronutrients={micronutrientCompliance}
