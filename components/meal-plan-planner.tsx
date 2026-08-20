@@ -526,6 +526,7 @@ export function MealPlanPlanner({
     micronutrientCompliance,
     energyTargetValue,
     optimizationSuggestions,
+    planFillState,
   } = usePlanAnalysis({
     plan: currentPlan,
     foods,
@@ -1041,6 +1042,7 @@ export function MealPlanPlanner({
             <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               <PlanFillSuggestions
                 suggestions={optimizationSuggestions}
+                state={planFillState}
                 onApplySuggestion={applyOptimizationSuggestion}
                 isLocked={currentPlan.status === "approved"}
               />

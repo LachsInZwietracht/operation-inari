@@ -248,6 +248,25 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
+  test("does not describe an empty day as being within all targets", async ({ page }) => {
+    const planDate = uniquePlannerDate(3000);
+    const patient = await createPatientFixture("Plan", "EmptyTargets");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+
+      const assistant = page
+        .locator("[data-slot='card']")
+        .filter({ hasText: "Vorschläge zum Auffüllen" })
+        .first();
+      await expect(assistant).toBeVisible();
+      await expect(assistant).not.toContainText("Alle Zielwerte im Bereich");
+      await expect(assistant).toContainText(/Offene Zielwerte erkannt|Noch keine Zielwerte hinterlegt/);
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   /**
    * Held open on purpose: the feature itself cannot currently produce a
    * suggestion. `usePlanAnalysis` ranks candidates out of the planner's `foods`

@@ -10,12 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import type { OptimizationSuggestion } from "@/hooks/use-plan-analysis"
+import type { OptimizationSuggestion, PlanFillState } from "@/hooks/use-plan-analysis"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { formatNutrient } from "@/lib/format"
 
 interface PlanFillSuggestionsProps {
   suggestions: OptimizationSuggestion[]
+  state: PlanFillState
   onApplySuggestion: (suggestion: OptimizationSuggestion) => void
   isLocked?: boolean
 }
@@ -23,9 +24,19 @@ interface PlanFillSuggestionsProps {
 /** Optimizer card: quick "fill open targets" picks for the active day. */
 export function PlanFillSuggestions({
   suggestions,
+  state,
   onApplySuggestion,
   isLocked,
 }: PlanFillSuggestionsProps) {
+  const description =
+    suggestions.length > 0
+      ? "Schließt offene Ziele automatisch"
+      : state === "in-range"
+        ? "Alle Zielwerte im Bereich – keine Vorschläge nötig."
+        : state === "no-targets"
+          ? "Noch keine Zielwerte hinterlegt. Lege zuerst ein Zielprofil fest."
+          : "Offene Zielwerte erkannt – automatische Vorschläge sind derzeit nicht verfügbar. Nutze den Nährstoff-Lückenfüller für eine gezielte Suche."
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -33,11 +44,7 @@ export function PlanFillSuggestions({
           <Sparkles className="text-primary h-4 w-4" />
           Vorschläge zum Auffüllen
         </CardTitle>
-        <CardDescription>
-          {suggestions.length > 0
-            ? "Schließt offene Ziele automatisch"
-            : "Alle Zielwerte im Bereich – keine Vorschläge nötig."}
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       {suggestions.length > 0 && (
         <CardContent className="space-y-2 text-sm">

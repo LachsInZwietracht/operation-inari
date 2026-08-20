@@ -50,6 +50,8 @@ export interface OptimizationSuggestion {
   allergens?: string[]
 }
 
+export type PlanFillState = "no-targets" | "open-targets" | "in-range"
+
 interface UsePlanAnalysisOptions {
   plan: DailyMealPlan
   foods: Food[]
@@ -415,6 +417,12 @@ export function usePlanAnalysis({
       .slice(0, 4)
   }, [plan, dietLine, dietLineCompliance, foods, patientAllergens, recipes])
 
+  const planFillState = useMemo<PlanFillState>(() => {
+    const targets = [...dietLineCompliance, ...micronutrientCompliance]
+    if (targets.length === 0) return "no-targets"
+    return targets.every((target) => target.status === "ok") ? "in-range" : "open-targets"
+  }, [dietLineCompliance, micronutrientCompliance])
+
   return {
     planAllergenSummary,
     entryAllergenWarnings,
@@ -435,5 +443,6 @@ export function usePlanAnalysis({
     energyTargetValue,
     weekBoardTargets,
     optimizationSuggestions,
+    planFillState,
   }
 }
