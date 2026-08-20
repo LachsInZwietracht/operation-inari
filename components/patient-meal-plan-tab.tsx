@@ -30,7 +30,7 @@ interface PatientMealPlanTabProps {
  * A meal plan only ever exists for one patient, so the plan belongs in the
  * record rather than on a route of its own where the patient has to be picked
  * again. The planner keeps its Strategie/Tag/Woche views and gains the
- * patient's plan list as a fourth.
+ * patient's plan-template list as a fourth.
  *
  * Nothing here is loaded by the patient route: the tab mounts lazily, and its
  * recipes and food index are fetched on that mount. Putting them in the route's
@@ -73,7 +73,7 @@ export function PatientMealPlanTab({
         initialPlans={plans}
         extraTab={{
           value: "plans",
-          label: "Pläne",
+          label: "Planvorlagen",
           render: ({ openDay }) => (
             <PatientMealPlansTab
               patient={patient}

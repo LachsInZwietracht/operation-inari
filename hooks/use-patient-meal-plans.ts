@@ -102,11 +102,11 @@ export function usePatientMealPlans(
       try {
         const persisted = await persistMealPlan(nextPlan)
         setPlans((prev) => sortPlans(prev.map((item) => (item.id === plan.id ? persisted : item))))
-        toast.success("Ernährungsplan archiviert.")
+        toast.success("Planvorlage archiviert.")
       } catch (error) {
         console.error("Failed to archive meal plan:", error)
         setPlans((prev) => sortPlans(prev.map((item) => (item.id === plan.id ? plan : item))))
-        toast.error("Ernährungsplan konnte nicht archiviert werden.")
+        toast.error("Planvorlage konnte nicht archiviert werden.")
       }
     },
     [],
@@ -121,7 +121,7 @@ export function usePatientMealPlans(
         legacyId: undefined,
         date,
         patientId,
-        title: `${plan.title ?? "Ernährungsplan"} (Kopie)`,
+        title: `${plan.title ?? "Planvorlage"} (Kopie)`,
         status: "draft",
         approvedAt: undefined,
         approvedBy: undefined,
@@ -137,12 +137,12 @@ export function usePatientMealPlans(
         setPlans((prev) =>
           sortPlans(prev.map((item) => (item.id === duplicatedPlan.id ? persisted : item))),
         )
-        toast.success("Ernährungsplan dupliziert.")
+        toast.success("Planvorlage dupliziert.")
         return persisted
       } catch (error) {
         console.error("Failed to duplicate meal plan:", error)
         setPlans((prev) => prev.filter((item) => item.id !== duplicatedPlan.id))
-        toast.error("Ernährungsplan konnte nicht dupliziert werden.")
+        toast.error("Planvorlage konnte nicht dupliziert werden.")
         return null
       }
     },
@@ -170,7 +170,7 @@ export function usePatientMealPlans(
         )
 
         if (targetHasPlanOnDate) {
-          toast.error("Der Zielpatient hat an diesem Datum bereits einen Ernährungsplan.")
+          toast.error("Der Zielpatient hat an diesem Datum bereits eine Planvorlage.")
           return null
         }
       } catch (error) {
@@ -185,7 +185,7 @@ export function usePatientMealPlans(
         legacyId: undefined,
         date: targetDate,
         patientId: targetPatient.id,
-        title: `${plan.title ?? "Ernährungsplan"} (Kopie)`,
+        title: `${plan.title ?? "Planvorlage"} (Kopie)`,
         status: "draft",
         notes: options.includeNotes ? plan.notes : undefined,
         dietLineId: options.includeDietLine ? plan.dietLineId : undefined,
@@ -202,11 +202,11 @@ export function usePatientMealPlans(
         if (isPatientPlan({ ...persisted, patientId: targetPatient.id }, patientId, patientLegacyId)) {
           setPlans((prev) => sortPlans([persisted, ...prev]))
         }
-        toast.success(`Ernährungsplan wurde für ${targetPatient.firstName} ${targetPatient.lastName} kopiert.`)
+        toast.success(`Planvorlage wurde für ${targetPatient.firstName} ${targetPatient.lastName} kopiert.`)
         return persisted
       } catch (error) {
         console.error("Failed to copy meal plan to patient:", error)
-        toast.error("Ernährungsplan konnte nicht kopiert werden.")
+        toast.error("Planvorlage konnte nicht kopiert werden.")
         return null
       }
     },
@@ -216,25 +216,25 @@ export function usePatientMealPlans(
   const deletePlan = useCallback(
     async (plan: DailyMealPlan) => {
       if (plan.status === "approved") {
-        toast.error("Freigegebene Pläne bitte archivieren statt löschen.")
+        toast.error("Freigegebene Planvorlagen bitte archivieren statt löschen.")
         return false
       }
 
       setPlans((prev) => prev.filter((item) => item.id !== plan.id))
 
       if (!isAuthenticated) {
-        toast.success("Ernährungsplan gelöscht.")
+        toast.success("Planvorlage gelöscht.")
         return true
       }
 
       try {
         await deleteMealPlanClient(plan.id)
-        toast.success("Ernährungsplan gelöscht.")
+        toast.success("Planvorlage gelöscht.")
         return true
       } catch (error) {
         console.error("Failed to delete meal plan:", error)
         setPlans((prev) => sortPlans([plan, ...prev]))
-        toast.error("Ernährungsplan konnte nicht gelöscht werden.")
+        toast.error("Planvorlage konnte nicht gelöscht werden.")
         return false
       }
     },

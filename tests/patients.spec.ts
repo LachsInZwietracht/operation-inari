@@ -445,6 +445,8 @@ test.describe("Patient Management", () => {
       await page.getByRole("button", { name: "Löschen" }).click();
       await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
+      await page.getByRole("tab", { name: "Ernährungsplan" }).click();
+      await expect(page.getByRole("tab", { name: "Planvorlagen" })).toBeVisible({ timeout: 30_000 });
       await page.getByRole("tab", { name: "Profil" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
     } finally {
