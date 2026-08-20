@@ -30,7 +30,6 @@ interface PlanWeekViewProps {
   recipeMap: Map<string, Recipe>
   activeDate: string
   energyTarget?: number
-  onSelectDay: (date: string) => void
   onOpenDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
@@ -56,7 +55,6 @@ export function PlanWeekView({
   recipeMap,
   activeDate,
   energyTarget,
-  onSelectDay,
   onOpenDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
@@ -109,7 +107,6 @@ export function PlanWeekView({
         activeDate={activeDate}
         energyTarget={energyTarget}
         getEntryLabel={weekEntryLabel}
-        onSelectDay={onSelectDay}
         onOpenDay={onOpenDay}
         onCopyCurrentToDay={onCopyCurrentToDay}
         onCopyToNextDay={onCopyToNextDay}

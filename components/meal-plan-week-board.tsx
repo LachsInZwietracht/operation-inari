@@ -56,7 +56,6 @@ interface MealPlanWeekBoardProps {
   /** Drives the per-day kcal progress bars in the board header. */
   energyTarget?: number
   getEntryLabel: (entry: MealEntry) => string
-  onSelectDay: (date: string) => void
   onOpenDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
@@ -71,7 +70,6 @@ export function MealPlanWeekBoard({
   activeDate,
   energyTarget,
   getEntryLabel,
-  onSelectDay,
   onOpenDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
@@ -112,7 +110,8 @@ export function MealPlanWeekBoard({
                 >
                   <button
                     type="button"
-                    onClick={() => onSelectDay(plan.date)}
+                    aria-label={`${format(parseISO(plan.date), "EEEE, d. MMMM yyyy", { locale: de })} in Tagesansicht öffnen`}
+                    onClick={() => onOpenDay(plan.date)}
                     className="flex w-full flex-col items-center gap-1.5 p-2 text-center"
                   >
                     <span

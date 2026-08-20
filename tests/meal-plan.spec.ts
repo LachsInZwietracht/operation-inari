@@ -120,6 +120,32 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
+  test("opens a selected week day in the day view", async ({ page }) => {
+    const planDate = uniquePlannerDate(250);
+    const patient = await createPatientFixture("Plan", "WeekToDay");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await page.getByRole("tab", { name: "Woche" }).click();
+
+      const dayHeaders = page.getByRole("button", { name: /in Tagesansicht öffnen$/ });
+      await expect(dayHeaders).toHaveCount(7);
+      const targetDay = dayHeaders.nth(1);
+      const targetLabel = (await targetDay.getAttribute("aria-label"))?.replace(
+        " in Tagesansicht öffnen",
+        "",
+      );
+      if (!targetLabel) throw new Error("Weekday header is missing its accessible date label");
+
+      await targetDay.click();
+
+      await expect(page.getByRole("tab", { name: "Tag" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByRole("button", { name: targetLabel, exact: true })).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("switches patient context from the header patient selector", async ({ page }) => {
     const planDate = uniquePlannerDate(500);
     const firstPatient = await createPatientFixture("Plan", "SelectorA");

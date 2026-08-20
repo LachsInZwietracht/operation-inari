@@ -1044,7 +1044,6 @@ export function MealPlanPlanner({
             recipeMap={recipeMap}
             activeDate={currentDate}
             energyTarget={energyTargetValue ?? strategyKcalTarget}
-            onSelectDay={setDate}
             onOpenDay={(date) => {
               setDate(date)
               setView("day")
