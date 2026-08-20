@@ -222,6 +222,32 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
+  test("keeps JSON exchange behind export and the template library", async ({ page }) => {
+    const planDate = uniquePlannerDate(2250);
+    const patient = await createPatientFixture("Plan", "JsonExchange");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+
+      await expect(page.getByRole("button", { name: "Aus Vorlage" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Plan-Datei", exact: true })).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Export" }).click();
+      const exportDialog = page.getByRole("dialog", { name: "Ernährungsplan exportieren" });
+      await exportDialog.getByRole("radio", { name: /Inari-Plan-Datei/ }).click();
+      const jsonDownload = page.waitForEvent("download");
+      await exportDialog.getByRole("button", { name: "JSON exportieren" }).click();
+      const json = await jsonDownload;
+      expect(await json.suggestedFilename()).toBe(`inari-plan-${planDate}.json`);
+
+      await page.getByRole("button", { name: "Vorlagen", exact: true }).click();
+      await page.getByRole("button", { name: "Plan-Datei importieren" }).click();
+      await expect(page.getByRole("dialog", { name: "Plan-Datei importieren" })).toBeVisible();
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   /**
    * Held open on purpose: the feature itself cannot currently produce a
    * suggestion. `usePlanAnalysis` ranks candidates out of the planner's `foods`

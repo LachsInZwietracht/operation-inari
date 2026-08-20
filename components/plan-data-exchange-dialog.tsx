@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState, type ChangeEvent } from "react"
-import { Download, FileUp, Loader2, ShieldCheck } from "lucide-react"
+import { FileUp, Loader2, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -16,36 +16,21 @@ import {
 } from "@/components/ui/dialog"
 import {
   countImportedEntries,
-  createMealPlanExchange,
   importedPlanSlotsToMealSlots,
   parseMealPlanExchange,
   type ImportedMealPlan,
 } from "@/lib/meal-plan-exchange"
-import type { DailyMealPlan, MealSlot } from "@/lib/types"
+import type { MealSlot } from "@/lib/types"
 
 interface PlanDataExchangeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  plan: DailyMealPlan
   onApply: (slots: MealSlot[], plan: ImportedMealPlan) => void
-}
-
-function downloadPlanFile(exchange: ReturnType<typeof createMealPlanExchange>, date: string) {
-  const blob = new Blob([JSON.stringify(exchange, null, 2)], { type: "application/json" })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement("a")
-  anchor.href = url
-  anchor.download = `inari-plan-${date}.json`
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(url)
 }
 
 export function PlanDataExchangeDialog({
   open,
   onOpenChange,
-  plan,
   onApply,
 }: PlanDataExchangeDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -91,27 +76,6 @@ export function PlanDataExchangeDialog({
     }
   }
 
-  const handleExport = async () => {
-    setIsChecking(true)
-    try {
-      const exchange = createMealPlanExchange(plan)
-      const response = await fetch("/api/meal-plan-exchange", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ operation: "export", payload: exchange }),
-      })
-      const responseBody = (await response.json().catch(() => null)) as { error?: string } | null
-      if (!response.ok) throw new Error(responseBody?.error ?? "Export konnte nicht geprüft werden.")
-      downloadPlanFile(exchange, plan.date)
-      toast.success("Plan-Datei wurde exportiert.")
-    } catch (error) {
-      console.error("Failed to export meal plan:", error)
-      toast.error(error instanceof Error ? error.message : "Plan-Datei konnte nicht exportiert werden.")
-    } finally {
-      setIsChecking(false)
-    }
-  }
-
   const handleApply = () => {
     if (!importedPlan) return
     // Regenerate entry ids now, only after the user confirms the preview.
@@ -124,26 +88,14 @@ export function PlanDataExchangeDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Plan-Datei importieren oder exportieren</DialogTitle>
+          <DialogTitle>Plan-Datei importieren</DialogTitle>
           <DialogDescription>
-            Das Inari-Format enthält nur Planinhalte. Patientendaten, Freigaben und alte Plan-IDs werden nicht übertragen.
+            Das Inari-Format enthält nur Planinhalte. Patientendaten, Freigaben und alte Plan-IDs werden nicht
+            übertragen.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="rounded-lg border bg-muted/30 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-medium">Aktuellen Tagesplan exportieren</p>
-                <p className="mt-1 text-sm text-muted-foreground">Für Austausch, Vorlage oder sichere Ablage als JSON-Datei.</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => void handleExport()} disabled={isChecking}>
-                <Download className="mr-1.5 h-4 w-4" />
-                Datei laden
-              </Button>
-            </div>
-          </div>
-
           <div className="rounded-lg border p-4">
             <p className="font-medium">Plan-Datei prüfen</p>
             <p className="mt-1 text-sm text-muted-foreground">Nur berechtigte Rollen können einen Plan importieren. Alle Lebensmittel und Rezepte werden vor dem Einsetzen geprüft.</p>

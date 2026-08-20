@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, type DragEvent } from "react"
-import { LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
+import { FileUp, LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -136,6 +136,8 @@ interface MealPlanLibraryProps {
   onQuickAdd?: (payload: MealPlanDragPayload, slotType: MealSlotType) => void
   /** Applies a day template to the active day. */
   onApplyTemplate?: (template: MealPlanTemplate) => void
+  /** Opens the portable Inari plan-file import for the active day. */
+  onImportPlanFile?: () => void
   className?: string
 }
 
@@ -186,6 +188,7 @@ export function MealPlanLibrary({
   isLocked,
   onQuickAdd,
   onApplyTemplate,
+  onImportPlanFile,
   className,
 }: MealPlanLibraryProps) {
   const [query, setQuery] = useState("")
@@ -491,6 +494,19 @@ export function MealPlanLibrary({
             </button>
           ))}
         </div>
+        {tab === "templates" && onImportPlanFile ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 justify-start px-2 text-xs text-muted-foreground"
+            disabled={isLocked}
+            onClick={onImportPlanFile}
+          >
+            <FileUp className="mr-1.5 h-3.5 w-3.5" />
+            Plan-Datei importieren
+          </Button>
+        ) : null}
         <div className="flex max-h-[520px] flex-col gap-2.5 overflow-y-auto xl:max-h-none xl:min-h-0 xl:flex-1">
           {tab === "recipes" &&
             filteredRecipes.map((recipe) => (

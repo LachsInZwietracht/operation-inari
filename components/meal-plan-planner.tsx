@@ -18,8 +18,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Download,
-  FileUp,
-  LayoutTemplate,
   Sparkles,
   UserPlus,
   UserRound,
@@ -64,7 +62,6 @@ import { usePatientAllergens } from "@/hooks/use-patient-allergens"
 import { PlanAllergenBanner } from "@/components/plan-allergen-banner"
 import { PlanAddEntryCommand } from "@/components/plan-add-entry-command"
 import { PlanAllergenWarningDialog } from "@/components/plan-allergen-warning-dialog"
-import { PlanApplyTemplateDialog } from "@/components/plan-apply-template-dialog"
 import { PlanDietLineDialog, type DietLineDraft } from "@/components/plan-diet-line-dialog"
 import { PlanExchangeDialog } from "@/components/plan-exchange-dialog"
 import { MealPlanLibrary } from "@/components/meal-plan-library"
@@ -174,7 +171,6 @@ export function MealPlanPlanner({
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
   const { patients, getPatient, savePatient } = usePatients()
   const patient = patientId ? getPatient(patientId) : undefined
-  const patientIndications = useMemo(() => getPatientIndications(patient), [patient])
   const defaultPlanMetadata = useMemo(
     () => ({
       patientId,
@@ -214,10 +210,7 @@ export function MealPlanPlanner({
     savePreset: saveDietLinePreset,
     deletePreset: deleteDietLinePreset,
   } = useDietLinePresets()
-  const {
-    templates: mealPlanTemplates,
-    isLoading: templatesLoading,
-  } = useMealPlanTemplates({ initialTemplates })
+  const { templates: mealPlanTemplates } = useMealPlanTemplates({ initialTemplates })
 
   // Planvorlagen deep-link handler. Applies a template once when the
   // planner mounts with `?template=…`, then rewrites the URL to drop the param
@@ -267,7 +260,6 @@ export function MealPlanPlanner({
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [planDataExchangeOpen, setPlanDataExchangeOpen] = useState(false)
   const [suggestionDialogOpen, setSuggestionDialogOpen] = useState(false)
-  const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
 
   useEffect(() => {
@@ -712,10 +704,6 @@ export function MealPlanPlanner({
     [],
   )
 
-  const openApplyTemplateDialog = useCallback(() => {
-    setApplyTemplateDialogOpen(true)
-  }, [])
-
   const handleApplyTemplate = useCallback(
     (template: MealPlanTemplate) => {
       applyTemplateToDate(currentDate, template.slots, {
@@ -728,7 +716,6 @@ export function MealPlanPlanner({
             : template.name),
         notes: currentPlan.notes ?? template.notes ?? undefined,
       })
-      setApplyTemplateDialogOpen(false)
       toast.success(`Vorlage "${template.name}" auf den Tagesplan angewendet.`)
     },
     [
@@ -750,13 +737,6 @@ export function MealPlanPlanner({
       Export
     </Button>
   )
-  const planDataExchangeMenu = (
-    <Button variant="outline" size="sm" onClick={() => setPlanDataExchangeOpen(true)}>
-      <FileUp className="mr-1.5 h-4 w-4" />
-      Plan-Datei
-    </Button>
-  )
-
   // The dialog exports the week the user is looking at: the week view follows
   // its offset navigation, the day view the week around the active date.
   const exportWeekPlans = view === "week" ? weekPlans : dayWeekPlans
@@ -907,6 +887,7 @@ export function MealPlanPlanner({
               isLocked={currentPlan.status === "approved"}
               onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
               onApplyTemplate={handleApplyTemplate}
+              onImportPlanFile={() => setPlanDataExchangeOpen(true)}
             />
           </div>
 
@@ -991,16 +972,6 @@ export function MealPlanPlanner({
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openApplyTemplateDialog}
-              >
-                <LayoutTemplate className="mr-1.5 h-4 w-4" />
-                Aus Vorlage
-              </Button>
-
-              {planDataExchangeMenu}
               {exportMenu}
             </div>
           </div>
@@ -1038,7 +1009,7 @@ export function MealPlanPlanner({
             weekRangeLabel={weekRangeLabel}
             onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
             onNextWeek={() => setWeekOffset((prev) => prev + 1)}
-            headerActions={<>{planDataExchangeMenu}{exportMenu}</>}
+            headerActions={exportMenu}
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
@@ -1138,7 +1109,6 @@ export function MealPlanPlanner({
       <PlanDataExchangeDialog
         open={planDataExchangeOpen}
         onOpenChange={setPlanDataExchangeOpen}
-        plan={currentPlan}
         onApply={(slots, importedPlan) => {
           applyTemplateToDate(currentDate, slots, {
             title: importedPlan.title ?? currentPlan.title,
@@ -1190,18 +1160,6 @@ export function MealPlanPlanner({
           onSelectFood={(foodId) => void handleSelectExchangeFood(foodId)}
         />
       )}
-
-      <PlanApplyTemplateDialog
-        open={applyTemplateDialogOpen}
-        onOpenChange={setApplyTemplateDialogOpen}
-        templates={mealPlanTemplates}
-        templatesLoading={templatesLoading}
-        dietLines={dietLines}
-        dietLine={dietLine}
-        dietLineId={dietLineId}
-        patientIndications={patientIndications}
-        onApply={handleApplyTemplate}
-      />
 
       <PlanAllergenWarningDialog
         open={pendingAllergenIntent !== null}

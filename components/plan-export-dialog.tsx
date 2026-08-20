@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { Download, FileText, Loader2, Users, Utensils } from "lucide-react"
+import { Download, FileJson, FileText, Loader2, Users, Utensils } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,7 @@ import {
   buildTeachingKitchenExportRequest,
   type MealPlanDaysVariant,
 } from "@/lib/exports/report-builder"
+import { createMealPlanExchange } from "@/lib/meal-plan-exchange"
 import type {
   DailyMealPlan,
   Food,
@@ -32,9 +33,9 @@ import type {
   Recipe,
   ResolvedReferenceConfig,
 } from "@/lib/types"
-import { cn, downloadResponseFile } from "@/lib/utils"
+import { cn, downloadBlob, downloadResponseFile } from "@/lib/utils"
 
-type ExportVariant = MealPlanDaysVariant | "lehrkueche"
+type ExportVariant = MealPlanDaysVariant | "lehrkueche" | "json"
 
 interface VariantOption {
   value: ExportVariant
@@ -61,6 +62,12 @@ const VARIANT_OPTIONS: VariantOption[] = [
     label: "Lehrküchenplan",
     description: "7-Tage-Aushang für Küche & Station (ganze Woche)",
     icon: Utensils,
+  },
+  {
+    value: "json",
+    label: "Inari-Plan-Datei",
+    description: "Bearbeitbare JSON-Datei für einen einzelnen Tag",
+    icon: FileJson,
   },
 ]
 
@@ -115,80 +122,139 @@ export function PlanExportDialog({
   useEffect(() => {
     if (!open) return
     const exportable = new Set(
-      sortedPlans.filter(planHasEntries).map((plan) => plan.date),
+      sortedPlans
+        .filter((plan) => variant === "json" || planHasEntries(plan))
+        .map((plan) => plan.date),
     )
-    setSelectedDates(new Set(defaultSelectedDates.filter((date) => exportable.has(date))))
+    const defaults = defaultSelectedDates.filter((date) => exportable.has(date))
+    setSelectedDates(new Set(variant === "json" ? defaults.slice(0, 1) : defaults))
     setIncludeRecipes(true)
     setIncludePersonalization(Boolean(patient))
     setNote("")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const toggleDate = useCallback((date: string) => {
-    setSelectedDates((prev) => {
-      const next = new Set(prev)
-      if (next.has(date)) next.delete(date)
-      else next.add(date)
-      return next
-    })
-  }, [])
+  const handleVariantChange = useCallback(
+    (value: string) => {
+      const nextVariant = value as ExportVariant
+      setVariant(nextVariant)
+      if (nextVariant !== "json") return
+      setSelectedDates((prev) => {
+        const defaultDate = defaultSelectedDates.find((date) =>
+          sortedPlans.some((plan) => plan.date === date),
+        )
+        const selectedDate = sortedPlans.find(
+          (plan) => prev.has(plan.date),
+        )?.date
+        const fallbackDate = sortedPlans[0]?.date
+        const date = defaultDate ?? selectedDate ?? fallbackDate
+        return new Set(date ? [date] : [])
+      })
+    },
+    [defaultSelectedDates, sortedPlans],
+  )
+
+  const toggleDate = useCallback(
+    (date: string) => {
+      setSelectedDates((prev) => {
+        if (variant === "json") return new Set([date])
+        const next = new Set(prev)
+        if (next.has(date)) next.delete(date)
+        else next.add(date)
+        return next
+      })
+    },
+    [variant],
+  )
 
   const selectedPlans = useMemo(
-    () => sortedPlans.filter((plan) => selectedDates.has(plan.date) && planHasEntries(plan)),
+    () => sortedPlans.filter((plan) => selectedDates.has(plan.date)),
     [selectedDates, sortedPlans],
   )
+  const selectedPdfPlans = useMemo(
+    () => selectedPlans.filter(planHasEntries),
+    [selectedPlans],
+  )
   const weekHasEntries = sortedPlans.some(planHasEntries)
-  const canExport = variant === "lehrkueche" ? weekHasEntries : selectedPlans.length > 0
+  const canExport =
+    variant === "lehrkueche"
+      ? weekHasEntries
+      : variant === "json"
+        ? selectedPlans.length === 1
+        : selectedPdfPlans.length > 0
 
   const handleExport = useCallback(async () => {
     if (isExporting || !canExport) return
 
-    const patientName = patient ? `${patient.firstName} ${patient.lastName}` : undefined
-    const baseContext = {
-      patientId: patient?.id,
-      patientName,
-      patientIndication: patientIndications.length ? patientIndications.join(", ") : undefined,
-      planId,
-      dietLineName,
-    }
-
-    const reportRequest = (() => {
-      if (variant === "lehrkueche") {
-        const firstPlan = sortedPlans[0]
-        const lastPlan = sortedPlans[sortedPlans.length - 1]
-        const rangeLabel =
-          firstPlan && lastPlan
-            ? `${format(parseISO(firstPlan.date), "d. MMM", { locale: de })} – ${format(
-                parseISO(lastPlan.date),
-                "d. MMM yyyy",
-                { locale: de },
-              )}`
-            : ""
-        return buildTeachingKitchenExportRequest(sortedPlans, recipes, foods, refConfig, {
-          ...baseContext,
-          rangeLabel,
-        })
-      }
-      return buildMealPlanDaysExportRequest(selectedPlans, recipes, foods, refConfig, {
-        ...baseContext,
-        variant,
-        notes: note.trim() || undefined,
-        includeRecipes: variant === "patient" && includeRecipes,
-        personalization:
-          variant === "patient" && includePersonalization && patient
-            ? {
-                calorieGoalKcal: patient.dailyCalorieGoal,
-                macroPreset: patient.macroPreset,
-                preferences: patient.nutritionPreferences,
-                allergens: patientAllergens,
-                goals: patient.patientGoals,
-              }
-            : undefined,
-      })
-    })()
-
     setIsExporting(true)
     try {
+      if (variant === "json") {
+        const selectedPlan = selectedPlans[0]
+        if (!selectedPlan) return
+        const exchange = createMealPlanExchange(selectedPlan)
+        const response = await fetch("/api/meal-plan-exchange", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ operation: "export", payload: exchange }),
+        })
+        const responseBody = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null
+        if (!response.ok) {
+          throw new Error(responseBody?.error ?? "Export konnte nicht geprüft werden.")
+        }
+        downloadBlob(
+          `inari-plan-${selectedPlan.date}.json`,
+          new Blob([JSON.stringify(exchange, null, 2)], { type: "application/json" }),
+        )
+        toast.success("Inari-Plan-Datei exportiert.")
+        onOpenChange(false)
+        return
+      }
+
+      const patientName = patient ? `${patient.firstName} ${patient.lastName}` : undefined
+      const baseContext = {
+        patientId: patient?.id,
+        patientName,
+        patientIndication: patientIndications.length ? patientIndications.join(", ") : undefined,
+        planId,
+        dietLineName,
+      }
+      const reportRequest = (() => {
+        if (variant === "lehrkueche") {
+          const firstPlan = sortedPlans[0]
+          const lastPlan = sortedPlans[sortedPlans.length - 1]
+          const rangeLabel =
+            firstPlan && lastPlan
+              ? `${format(parseISO(firstPlan.date), "d. MMM", { locale: de })} – ${format(
+                  parseISO(lastPlan.date),
+                  "d. MMM yyyy",
+                  { locale: de },
+                )}`
+              : ""
+          return buildTeachingKitchenExportRequest(sortedPlans, recipes, foods, refConfig, {
+            ...baseContext,
+            rangeLabel,
+          })
+        }
+        return buildMealPlanDaysExportRequest(selectedPdfPlans, recipes, foods, refConfig, {
+          ...baseContext,
+          variant,
+          notes: note.trim() || undefined,
+          includeRecipes: variant === "patient" && includeRecipes,
+          personalization:
+            variant === "patient" && includePersonalization && patient
+              ? {
+                  calorieGoalKcal: patient.dailyCalorieGoal,
+                  macroPreset: patient.macroPreset,
+                  preferences: patient.nutritionPreferences,
+                  allergens: patientAllergens,
+                  goals: patient.patientGoals,
+                }
+              : undefined,
+        })
+      })()
+
       const response = await fetch("/api/exports/report", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -225,6 +291,7 @@ export function PlanExportDialog({
     recipes,
     refConfig,
     selectedPlans,
+    selectedPdfPlans,
     sortedPlans,
     variant,
   ])
@@ -235,14 +302,14 @@ export function PlanExportDialog({
         <DialogHeader>
           <DialogTitle>Ernährungsplan exportieren</DialogTitle>
           <DialogDescription>
-            Dokument, Tage und Inhalte für den PDF-Export wählen.
+            Format, Tage und Inhalte für den Export wählen.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           <RadioGroup
             value={variant}
-            onValueChange={(value) => setVariant(value as ExportVariant)}
+            onValueChange={handleVariantChange}
             className="gap-2"
           >
             {VARIANT_OPTIONS.map((option) => (
@@ -281,7 +348,7 @@ export function PlanExportDialog({
                       type="button"
                       size="sm"
                       variant={selected ? "default" : "outline"}
-                      disabled={!hasEntries}
+                      disabled={variant !== "json" && !hasEntries}
                       onClick={() => toggleDate(plan.date)}
                       className="min-w-[64px]"
                     >
@@ -291,7 +358,9 @@ export function PlanExportDialog({
                 })}
               </div>
               <p className="text-muted-foreground text-xs">
-                Pro gewähltem Tag wird eine Seite exportiert. Leere Tage sind deaktiviert.
+                {variant === "json"
+                  ? "Die Inari-Datei enthält genau einen Tag; auch ein leerer Entwurf ist möglich."
+                  : "Pro gewähltem Tag wird eine Seite exportiert. Leere Tage sind deaktiviert."}
               </p>
             </div>
           ) : (
@@ -364,7 +433,7 @@ export function PlanExportDialog({
             ) : (
               <Download className="mr-1.5 h-4 w-4" />
             )}
-            PDF exportieren
+            {variant === "json" ? "JSON exportieren" : "PDF exportieren"}
           </Button>
         </DialogFooter>
       </DialogContent>
