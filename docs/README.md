@@ -28,13 +28,14 @@ When docs conflict with code, inspect the implementation and update the stale do
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
 | Public repository release | `docs/public-release.md` | Clean-snapshot release process, security settings, and history warning. |
 | Billing/subscription work | `.agent/docs/billing.md` | Billing is preview-only unless code proves otherwise. |
-| Claude phase commands | `.claude/commands/*` | Workflow prompts for Claude Code sessions. |
+| Claude project cycle | `.claude/skills/project-cycle/SKILL.md` | Optional manual workflow for brainstorming, planning, implementation, handoff, and reset. |
 
 ## Documentation Roles
 
 - `README.md` - setup, high-level capabilities, and key operational notes.
 - `AGENTS.md` - canonical AI-agent instructions for all coding tools.
 - `CLAUDE.md` - Claude wrapper that imports `AGENTS.md`.
+- `.claude/skills/project-cycle/SKILL.md` - Optional manual Claude workflow; project rules remain in `AGENTS.md`.
 - `GEMINI.md` - Gemini wrapper that imports `AGENTS.md`.
 - `AGENT.md` - compatibility pointer only.
 - `docs/user-priority-feedback.md` - current #1 product guideline from a PRODI user; primary prioritization lens.

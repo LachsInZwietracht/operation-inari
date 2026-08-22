@@ -55,5 +55,6 @@ tests/.auth/
 
 # Agent workflow scratch files
 .agent/phase/
+**/.claude/settings.local.json
 .claude/scheduled_tasks.lock
 public/zxing/

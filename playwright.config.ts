@@ -5,12 +5,10 @@ import { resolve } from "path";
 /**
  * Load Supabase env vars for the test run.
  *
- * Prefers `.env.test` when present so the E2E suite targets a dedicated
- * local/throwaway Supabase instead of whatever `.env.local` points at — which
- * is typically the live cloud project, where the fixtures (test users,
- * patients, appointments) would otherwise be written. Falls back to
- * `.env.local` only when no `.env.test` exists, preserving prior behavior.
- * Existing `process.env` values always win, so CI can override either file.
+ * Requires `.env.test` so the E2E suite targets a dedicated local/throwaway
+ * Supabase instead of whatever `.env.local` points at. The fixtures create and
+ * delete real users and clinical records, so an external project requires the
+ * explicit ALLOW_E2E_EXTERNAL_SUPABASE=true escape hatch.
  */
 function loadEnvFile(fileName: string): boolean {
   const envPath = resolve(__dirname, fileName);
@@ -28,11 +26,29 @@ function loadEnvFile(fileName: string): boolean {
   return true;
 }
 
+const allowExternalSupabase = process.env.ALLOW_E2E_EXTERNAL_SUPABASE === "true";
 const loadedEnvFile = loadEnvFile(".env.test")
   ? ".env.test"
-  : loadEnvFile(".env.local")
+  : allowExternalSupabase && loadEnvFile(".env.local")
     ? ".env.local"
     : null;
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseHostname = supabaseUrl ? new URL(supabaseUrl).hostname : null;
+const targetsLocalSupabase =
+  supabaseHostname === "127.0.0.1" || supabaseHostname === "localhost";
+
+if (!loadedEnvFile && !allowExternalSupabase) {
+  throw new Error(
+    "Playwright requires .env.test. Refusing to fall back to .env.local because the suite writes destructive fixtures.",
+  );
+}
+
+if (!targetsLocalSupabase && !allowExternalSupabase) {
+  throw new Error(
+    "Playwright requires a local Supabase URL. Set ALLOW_E2E_EXTERNAL_SUPABASE=true only for an explicitly approved throwaway project.",
+  );
+}
 
 const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(
   /^(https?:\/\/[^.]+).*/,
@@ -51,14 +67,13 @@ const STORAGE_STATE = "tests/.auth/user.json";
  */
 export default defineConfig({
   testDir: "./tests",
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* The suite shares one Supabase project and is intentionally serialized. */
+  fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */

@@ -60,10 +60,10 @@ Do not assume `npm run supabase:*` scripts exist; check `package.json` first.
 ## Test Environment
 
 The Playwright suite creates real users, patients, and links through the
-service-role client. `playwright.config.ts` loads `.env.test` in preference to
-`.env.local`, so those fixtures land in a local stack instead of the hosted
-project. Without `.env.test`, every test run writes to whatever `.env.local`
-points at — normally production.
+service-role client. `playwright.config.ts` requires `.env.test` to target a
+local stack and serializes the suite to one worker. It refuses `.env.local` and
+non-local URLs unless `ALLOW_E2E_EXTERNAL_SUPABASE=true` explicitly approves a
+throwaway external project.
 
 ```bash
 npx supabase start      # needs Docker Desktop running

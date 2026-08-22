@@ -1058,12 +1058,9 @@ When `.env.local` provides `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_
 
 These are created automatically by the auth setup via the Supabase Admin API and are safe to commit — do **not** reuse them for production or staging environments. The fixtures (test user, patients, appointments, reports) are written to **whichever Supabase the loaded env points at**, so always run the suite against a local/throwaway instance, never the live cloud project.
 
-**Env loading & target selection.** `playwright.config.ts` manually parses an env file (Playwright doesn't use Next.js env loading) and **prefers `.env.test` over `.env.local`**:
-- If `.env.test` exists, it is loaded *exclusively* — use it to point the suite at a local/throwaway Supabase (`http://127.0.0.1:54321` with the keys from `supabase status`) so fixtures never land in the cloud DB.
-- If `.env.test` is absent, it falls back to `.env.local` (the app's normal target, typically the cloud project).
-- Existing `process.env` values always win, so CI can override either file.
+**Env loading & target selection.** `playwright.config.ts` manually parses `.env.test` (Playwright doesn't use Next.js env loading) and requires it to point at local Supabase (`http://127.0.0.1:54321` or `localhost`). The suite stops before discovery when the file is missing or the URL is external. A deliberately approved throwaway cloud project can be supplied through process env or `.env.local` only with `ALLOW_E2E_EXTERNAL_SUPABASE=true`; never set that flag for production or routine local work. Existing `process.env` values win over values from a loaded file.
 
-The config logs which file and Supabase host it loaded at startup, e.g. `[playwright] Loaded env from .env.test → Supabase http://127…`, so you can confirm the target before a run. `.env.test` is gitignored (`.env*`).
+The config logs which file and Supabase host it loaded at startup, e.g. `[playwright] Loaded env from .env.test → Supabase http://127…`, so you can confirm the target before a run. It also fixes the worker count at one because the fixtures share this project. `.env.test` is gitignored (`.env*`).
 
 ### Versioning & Auditing
 - Store `data_source.version` and `imported_at` on every food

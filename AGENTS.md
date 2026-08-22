@@ -8,12 +8,12 @@ Primary buyer lens: German clinics and clinical nutrition departments.
 
 ## Current #1 Priority
 
-Our current top guideline is to build a product that satisfies the PRODI-user feedback in `docs/user-priority-feedback.md`. This is the single most important reference for prioritization right now. Before starting new feature work, confirm it advances one of those requirements or supports them. Re-evaluate this priority only with explicit user direction.
+Our current top guideline is to build a product that satisfies the PRODI-user feedback in `docs/user-priority-feedback.md`. This is the single most important reference for prioritizing new product work right now. Before starting a new feature, confirm it advances one of those requirements or supports them. Correctness, security, maintenance, and developer-experience work do not need an artificial checklist mapping. Re-evaluate the product priority only with explicit user direction.
 
 Core product areas:
 - Food and nutrient database workflows with BLS 4.0 data.
 - Recipes, daily meal plans, menu cycles, nutrient analysis, and reports.
-- Patient records, clinical workspace, counseling, protocols, lab values, screenings, and digital protocol intake.
+- Patient records, public intake, clinical workspace, counseling, lab values, and the consent-based client diary/client mode.
 - Institution workflows for menu planning, inpatient meal orders, allergen/diet-form checks, kitchen aggregation, and tray cards.
 - Practice operations, appointments, invoices, exports, RBAC, and admin surfaces.
 
@@ -131,7 +131,8 @@ For nutrient calculation, food data, search, reference values, or ETL:
 - Benchmark catalog queries the way the app issues them, including the `food_nutrients` embed. A bare `select` runs in ~1s where the real embedded query times out, so a probe without it will wrongly clear a change.
 
 Running Playwright:
-- Use `--workers=1`. The suite shares one Supabase project and flakes badly in parallel.
+- Keep the configured single worker. The suite shares one Supabase project and flakes badly in parallel; do not override it with a higher worker count.
+- `.env.test` must target local Supabase. `playwright.config.ts` refuses `.env.local` and non-local URLs unless `ALLOW_E2E_EXTERNAL_SUPABASE=true` explicitly approves a throwaway external project.
 - Re-run a single spec in isolation before concluding a full-run failure is real. Also re-run once warm: a cold dev server compiles routes on first hit, and `/institution/menueplaene` can take minutes that way.
 
 If a check is too expensive or blocked by environment, report it explicitly.
@@ -144,7 +145,7 @@ If a check is too expensive or blocked by environment, report it explicitly.
 - Competitors, clinic-first strategy, and market gaps: `docs/competitive-audit.md`.
 - Supabase workflow notes: `.agent/docs/supabase.md`.
 - Billing/subscription status: `.agent/docs/billing.md`.
-- Agent phase commands: `.claude/commands/*`.
+- Claude project workflow: `.claude/skills/project-cycle/SKILL.md`.
 
 ## Project Map
 

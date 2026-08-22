@@ -356,26 +356,34 @@ test.describe("Onboarding intake — practitioner surface", () => {
   });
 
   test("Board move menu explains what a stage still needs", async ({ page }) => {
-    await page.goto("/patienten/aufnahmen?view=board", {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
-    await page.waitForLoadState("networkidle");
+    test.setTimeout(60_000);
+    const link = await createIntakeLink();
 
-    const card = page.locator("article[data-intake-stage]").first();
-    await expect(card).toBeVisible({ timeout: 30_000 });
-    const cardName = (await card.innerText()).split("\n")[0];
+    try {
+      await page.goto("/patienten/aufnahmen?view=board", {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await page.waitForLoadState("networkidle");
 
-    // The menu carries the same moves as the drag, without its coordinates.
-    await card.hover();
-    await card.getByRole("button", { name: /verschieben/ }).click();
-    await page.getByRole("menuitem", { name: "Plan erstellen" }).click();
+      // Own the row this test uses instead of depending on records left by
+      // another spec or on their ordering.
+      const card = page.locator("article[data-intake-stage]", { hasText: link.label });
+      await expect(card).toBeVisible({ timeout: 30_000 });
 
-    // A stage is derived, so the dialog names the missing fact instead of
-    // moving the card. It must be about the card that was actually picked.
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await expect(dialog.getByRole("heading")).toContainText(cardName);
-    await expect(dialog.getByRole("heading")).toContainText("Plan erstellen");
+      // The menu carries the same moves as the drag, without its coordinates.
+      await card.hover();
+      await card.getByRole("button", { name: /verschieben/ }).click();
+      await page.getByRole("menuitem", { name: "Plan erstellen" }).click();
+
+      // A stage is derived, so the dialog names the missing fact instead of
+      // moving the card. It must be about the card that was actually picked.
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      await expect(dialog.getByRole("heading")).toContainText(link.label);
+      await expect(dialog.getByRole("heading")).toContainText("Plan erstellen");
+    } finally {
+      await deleteIntakeLink(link.id);
+    }
   });
 });
