@@ -96,9 +96,17 @@ test.beforeEach(async ({ context }) => {
 });
 
 test("a repeated session offers last time's exercises and prefills them", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/klient/training");
 
-  const today = page.locator("[data-slot=card]").filter({ hasText: TITLE }).first();
+  await expect(page.getByRole("heading", { name: "Aktivität", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dein Rhythmus" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trainingsfortschritt" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+
+  const recent = page.getByRole("region", { name: "Zuletzt" });
+  const today = recent.locator("[data-slot=collapsible]").filter({ hasText: TITLE }).first();
+  await today.getByRole("button", { name: `${TITLE} Details` }).click();
   await expect(today.getByText("Noch keine Sätze.")).toBeVisible();
 
   // Nothing is stored for this: the chip is read back out of the last session
@@ -132,10 +140,12 @@ test("a session with a duration shows what it cost", async ({ page }) => {
   await page.getByRole("button", { name: "Vorherige Woche" }).click();
 
   const past = page
-    .locator("[data-slot=card]")
+    .getByRole("region", { name: /Aktivitäten in KW/ })
+    .locator("[data-slot=collapsible]")
     .filter({ hasText: TITLE })
-    .filter({ hasText: "55 min" })
+    .filter({ hasText: "55 Min" })
     .first();
+  await past.getByRole("button", { name: `${TITLE} Details` }).click();
 
   // 80 kg, 55 min, moderate resistance work at 3.5 MET, net of resting
   // metabolism: (3.5 − 1) × 3.5 × 80 × 55 / 200 ≈ 193 kcal.

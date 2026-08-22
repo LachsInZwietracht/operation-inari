@@ -11,6 +11,7 @@ import {
   isStrengthSession,
   nextSetIndex,
   suggestExercisesForSession,
+  summarizeActivityRhythm,
   summarizeExerciseProgress,
   summarizeWeek,
   weekEnd,
@@ -225,6 +226,24 @@ test.describe("the week as the unit", () => {
     expect(summary.minutes).toBe(100);
     expect(summary.volumeKg).toBe(400);
     expect(summary.kcal).toBe(320);
+  });
+
+  test("the rhythm separates active days from multiple sessions", () => {
+    const rhythm = summarizeActivityRhythm(
+      [
+        { date: "2026-08-10", durationMinutes: 30 },
+        { date: "2026-08-10", durationMinutes: 45 },
+        { date: "2026-08-12", durationMinutes: 20 },
+        { date: "2026-08-03", durationMinutes: 60 },
+      ],
+      "2026-08-10",
+      2,
+    );
+
+    expect(rhythm).toEqual([
+      { weekStart: "2026-08-03", sessions: 1, activeDays: 1, minutes: 60 },
+      { weekStart: "2026-08-10", sessions: 3, activeDays: 2, minutes: 95 },
+    ]);
   });
 });
 

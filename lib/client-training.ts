@@ -329,6 +329,50 @@ export interface ClientWeekSummary {
   kcal?: number;
 }
 
+export interface ClientActivityWeek {
+  weekStart: string;
+  sessions: number;
+  activeDays: number;
+  minutes: number;
+}
+
+/**
+ * A compact movement rhythm for the activity hub.
+ *
+ * Sessions and active days deliberately stay separate: two workouts on one
+ * day are two sessions, but still one day on which someone made room for
+ * movement. The latter is the calmer, more useful habit signal.
+ */
+export function summarizeActivityRhythm(
+  sessions: Pick<ClientWorkoutSession, "date" | "durationMinutes">[],
+  endWeekStart: string,
+  weeks = 6,
+): ClientActivityWeek[] {
+  const daysByWeek = new Map<string, Set<string>>();
+  const summaries = new Map<string, ClientActivityWeek>();
+
+  for (let offset = weeks - 1; offset >= 0; offset--) {
+    const start = addWeeks(endWeekStart, -offset);
+    summaries.set(start, { weekStart: start, sessions: 0, activeDays: 0, minutes: 0 });
+    daysByWeek.set(start, new Set());
+  }
+
+  for (const session of sessions) {
+    const start = weekStart(session.date);
+    const summary = summaries.get(start);
+    if (!summary) continue;
+
+    summary.sessions += 1;
+    summary.minutes += session.durationMinutes ?? 0;
+    daysByWeek.get(start)?.add(session.date);
+  }
+
+  return [...summaries.values()].map((summary) => ({
+    ...summary,
+    activeDays: daysByWeek.get(summary.weekStart)?.size ?? 0,
+  }));
+}
+
 /**
  * What a week of activity amounted to.
  *

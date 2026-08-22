@@ -26,7 +26,9 @@ export default async function ClientTrainingPage() {
 
   let sessions: ClientWorkoutSession[] = []
   try {
-    sessions = await fetchClientWorkoutSessions(user.id, 20, supabase)
+    // The hub visualizes six weeks of rhythm. A three-week slice for someone
+    // who moves daily would make the older bars look empty rather than unknown.
+    sessions = await fetchClientWorkoutSessions(user.id, 80, supabase)
   } catch (error) {
     console.warn("Failed to load workout sessions:", error)
   }
