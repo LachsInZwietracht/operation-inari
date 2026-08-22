@@ -13,8 +13,8 @@ impact. Do not include real patient data, credentials, or access tokens.
 - Keep `SUPABASE_SERVICE_ROLE_KEY` server-only.
 - Never enable `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING` outside local testing.
 - Apply all Supabase migrations and verify RLS before deployment.
-- Keep patient report storage private and use authorized signed downloads.
-- Rate-limit `/api/protokoll/submit` at the hosting firewall or edge layer.
+- Keep exported patient data behind the existing authorization and access-audit checks.
+- Rate-limit `/api/onboarding/submit` at the hosting firewall or edge layer.
 - Enable dependency and secret scanning in GitHub.
 - Rotate any credential immediately if it is committed or logged.
 - Treat spreadsheet ETL input as trusted administrator-provided data. The

@@ -1,6 +1,6 @@
 # Clinic Demo Runbook
 
-Last updated: 2026-05-04
+Last updated: 2026-08-22
 
 Purpose:
 - Provide one repeatable clinic-first demo path for German hospital buyers.
@@ -10,15 +10,15 @@ Purpose:
 Source-of-truth rule:
 - Code, migrations, and tests win over this runbook.
 - Use `documentation.md` for route/component details and `docs/database-guide.md` for schema, ETL, search, export, and audit details.
-- Use `docs/clinic-it-integration-plan.md` for LDAP/AD and FHIR contracts.
+- Use `docs/clinic-it-integration-plan.md` for the remaining FHIR contract.
 
 ## Demo Goal
 
 Show Operation Prodi as a cloud-native German clinical nutrition workflow:
 
-1. A patient enters nutrition data remotely.
-2. The dietitian reviews and converts it into an internal protocol.
-3. The clinical workspace turns assessment data into counseling and meal-plan outputs.
+1. A patient completes the public intake and is linked to a clinical record.
+2. The linked client documents food, activity, and daily context in client mode.
+3. The dietitian reviews the shared information and turns it into counseling and meal-plan outputs.
 4. A plan export is generated and audit-visible through export metadata.
 5. The same patient can be assigned to an inpatient meal workflow.
 6. Kitchen orders, allergen conflicts, overrides, production status, and tray cards are traceable.
@@ -47,53 +47,45 @@ Important boundary:
 
 Use:
 - `/patienten`
+- `/patienten/aufnahmen`
 - `/patienten/[id]`
-- `/protokoll/[linkId]`
+- `/onboarding/[linkId]`
 
 Demo actions:
-- Open the patient overview and show the dense worklist before secondary demo/mail-merge tools.
-- Open a patient; the phase sits next to the name in the header.
-- Generate a digital protocol link from the patient workspace.
-- Open the public protocol URL in a separate browser context or mobile viewport.
-- Submit a simple food diary entry.
-- Return to the patient workspace and show the incoming submission state.
+- Create an intake invitation and open its public URL in a separate browser context or mobile viewport.
+- Submit the questionnaire, review it under `Aufnahmen`, and apply it to the patient record.
+- Open the patient overview and show the intake event, clinical facts, and next actions.
 
 Implementation references:
-- `components/patient-tabs.tsx`
-- `app/protokoll/[linkId]/patient-protocol-form.tsx`
-- `app/api/protokoll/submit/route.ts`
-- `hooks/use-digital-protocols.ts`
-- `hooks/use-digital-protocol-submissions.ts`
+- `app/(app)/patienten/aufnahmen/aufnahmen-client.tsx`
+- `components/patient-intake-review.tsx`
+- `app/onboarding/[linkId]/page.tsx`
+- `app/api/onboarding/submit/route.ts`
 
 Validation reference:
-- `tests/digital-protocol.spec.ts` covers public-route shell behavior, API validation, and the persisted happy path from public submission through link status update, submission audit row, authenticated conversion API, converted-state tracking, conversion audit row, and the practitioner Smart-Match review/protocol-form save flow.
-- Shared Supabase setup for this path lives in `tests/fixtures/clinic-demo.ts` alongside the report and institution demo fixtures.
+- `tests/patient-intake.spec.ts` covers the public intake and practitioner review/apply path.
+- Shared Supabase setup for the buyer story lives in `tests/fixtures/clinic-demo.ts`.
 
 ### 3. Assessment And Counseling
 
 Use:
-- `/patienten/[id]/protokolle/neu?digitalSubmission=<id>`
-- `/patienten/[id]/protokolle/[protokollId]`
+- `/patienten/[id]`
 - `/patienten/[id]/beratungen/neu`
 - `/patienten/[id]/beratungen/[beratungId]`
 
 Demo actions:
-- Convert the digital submission into an internal nutrition protocol.
-- Show smart matching confidence and preserved free-text notes for unresolved entries.
-- Open the protocol analysis and patient-bound reference profile context.
+- Show the patient-bound reference profile, energy needs, measurements, diagnoses, medication, lab values, and client-link status as appropriate for the demo case.
 - Create or open a counseling session with measures, material, and follow-up steps.
 
 Implementation references:
-- `lib/digital-protocol-conversion.ts`
-- `components/protocol-form.tsx`
-- `components/smart-match-review-dialog.tsx`
-- `components/protocol-analysis.tsx`
+- `components/patient-overview-tab.tsx`
+- `components/patient-tabs.tsx`
+- `components/patient-tabs/klienten-app-tab.tsx`
 - `components/counseling-session-form.tsx`
-- `hooks/use-protocols.ts`
 - `hooks/use-counseling.ts`
 
-Demo risk:
-- The full digital-submission conversion path should get a persisted Playwright fixture before this is used as the main sales demo.
+Optional client-mode extension:
+- With a second authenticated account, redeem the patient invitation at `/klient/einladung/[code]`, add a diary entry under `/klient`, then show the consent-gated read-only view in the patient's **Klienten-App** tab.
 
 ### 4. Patient Analytics (Statistiken)
 
@@ -168,11 +160,11 @@ Important boundary:
 Environment:
 - Supabase must be configured for persistence, auth, storage, and RLS-backed features.
 - Apply migrations through the current head in `supabase/migrations/`.
-- Run a food ETL first, such as `npm run etl:bls`, so demo recipes and protocol entries can reference real `foods` rows.
+- Run a food ETL first, such as `npm run etl:bls`, so demo recipes, plans, and client diary entries can reference real `foods` rows.
 - Seed the full buyer-story workspace with `DEMO_USER_EMAIL=<account-email> SUPABASE_SERVICE_ROLE_KEY=<service-role-key> npm run seed:clinic-demo`.
 - Add `DEMO_USER_PASSWORD=<password>` only when the demo auth user does not exist yet and the script should create a confirmed user.
 - Use `npm run seed:clinic-demo -- --dry-run` to verify credentials, user lookup, and food availability without writing rows.
-- The seed command creates or refreshes only `clinic-demo-*` records for the target user: patients, protocol intake, counseling, menu cycle, inpatient stays, meal orders, and audit/export rows.
+- The seed command creates or refreshes only `clinic-demo-*` records for the target user. Inspect the current seed script for the exact included patient, counseling, menu, inpatient, meal-order, and audit/export records.
 - Use `NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING=true` only for local testing, never as a production or sales-deployment claim.
 
 Recommended checks before a demo:
@@ -180,15 +172,14 @@ Recommended checks before a demo:
 - `npm run lint`
 - `npm run validate:nutrients`
 - `npm run test -- tests/institution.spec.ts`
-- `npm run test -- tests/digital-protocol.spec.ts`
+- `npm run test -- tests/patient-intake.spec.ts --workers=1`
 - Manually export one plan PDF from `/ernaehrungsplan` and verify the download works.
 
 ## Open Demo Hardening Work
 
 P0 demo hardening:
-- `npm run seed:clinic-demo` now seeds the full patient-to-kitchen buyer story for a selected Supabase Auth user.
-- Digital protocol coverage now includes the practitioner Smart-Match review sheet and saved internal protocol path.
-- Keep `tests/fixtures/clinic-demo.ts` aligned with the deployed seed story as report, institution, and digital-protocol coverage expands.
+- Keep `npm run seed:clinic-demo` and `tests/fixtures/clinic-demo.ts` aligned with the deployed patient-to-kitchen buyer story.
+- Add a stable two-account fixture before client-mode diary sharing becomes a mandatory sales-demo step.
 
 P1 clinic readiness:
 - Build FHIR Patient/Observation dry-run job/review surfaces.

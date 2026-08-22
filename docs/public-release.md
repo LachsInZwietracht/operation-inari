@@ -29,6 +29,7 @@ Before pushing:
 5. Keep the production Supabase project and deployment environment separate
    from contributor or preview environments.
 
-For production deployment, rate-limit `POST /api/protokoll/submit` at the
-hosting firewall or edge layer. The application enforces bounded payloads and
-single-use links, but network-level request throttling belongs at the edge.
+For production deployment, rate-limit the public intake endpoint
+`POST /api/onboarding/submit` at the hosting firewall or edge layer. The
+application enforces bounded payloads and single-use links, but network-level
+request throttling belongs at the edge.

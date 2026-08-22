@@ -16,17 +16,6 @@ export type ClinicDemoPatient = {
   fullName: string;
 };
 
-export type ClinicDemoDigitalProtocolLink = {
-  id: string;
-  patientId: string;
-  url: string;
-};
-
-export type ClinicDemoFood = {
-  id: string;
-  name: string;
-};
-
 export type ClinicDemoInstitutionRecipeMap = {
   breakfastId: string;
   breakfastName: string;
@@ -93,113 +82,8 @@ export async function createClinicDemoPatient(
   };
 }
 
-export async function createClinicDemoDigitalProtocolLink(
-  patient: ClinicDemoPatient,
-): Promise<ClinicDemoDigitalProtocolLink> {
-  const linkId = crypto.randomUUID();
-  const url = `https://operation-inari.vercel.app/protokoll/${linkId}`;
-
-  const { error } = await admin.from("patient_digital_protocol_links").insert({
-    id: linkId,
-    user_id: patient.userId,
-    patient_id: patient.id,
-    method: "Digitales 24h Recall",
-    status: "pending",
-    url,
-    expires_at: "2026-12-31",
-  });
-
-  if (error) throw new Error(error.message);
-
-  return {
-    id: linkId,
-    patientId: patient.id,
-    url,
-  };
-}
-
-export async function createClinicDemoProtocol(
-  patient: ClinicDemoPatient,
-  input: {
-    submissionId?: string;
-    title?: string;
-  } = {},
-) {
-  const protocolId = crypto.randomUUID();
-
-  const { error } = await admin.from("nutrition_protocols").insert({
-    id: protocolId,
-    user_id: patient.userId,
-    patient_id: patient.id,
-    title: input.title ?? "Digitales Protokoll aus Demo-Einreichung",
-    type: "ernaehrungsprotokoll",
-    start_date: "2026-04-19",
-    end_date: "2026-04-19",
-    notes: "Aus digitaler Patienteneinreichung uebernommen.",
-    metadata: {
-      source: "digital_protocol_submission",
-      sourceSubmissionId: input.submissionId,
-    },
-  });
-
-  if (error) throw new Error(error.message);
-
-  return protocolId;
-}
-
-export async function fetchClinicDemoFoodForSmartMatch(): Promise<ClinicDemoFood> {
-  const { data, error } = await admin
-    .from("foods")
-    .select("id,name")
-    .order("name", { ascending: true })
-    .limit(1)
-    .single();
-
-  if (error) throw new Error(error.message);
-  if (!data?.id || !data.name) throw new Error("No food available for Smart-Match fixture");
-
-  return { id: data.id, name: data.name };
-}
-
-export async function fetchClinicDemoProtocol(protocolId: string) {
-  const { data, error } = await admin
-    .from("nutrition_protocols")
-    .select(
-      "id,patient_id,title,type,start_date,end_date,notes,metadata,nutrition_protocol_entries(id,food_id,amount,meal_slot,entry_time)",
-    )
-    .eq("id", protocolId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data;
-}
-
 export async function deleteClinicDemoPatient(patientId: string) {
   await admin.from("patients").delete().eq("id", patientId);
-}
-
-export async function fetchDigitalProtocolSubmissionByLink(linkId: string) {
-  const { data, error } = await admin
-    .from("digital_protocol_submissions")
-    .select("*")
-    .eq("link_id", linkId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-export async function fetchDigitalProtocolLink(linkId: string) {
-  const { data, error } = await admin
-    .from("patient_digital_protocol_links")
-    .select("*")
-    .eq("id", linkId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data;
 }
 
 export async function fetchLatestAccessAuditLog(action: string, targetId?: string) {

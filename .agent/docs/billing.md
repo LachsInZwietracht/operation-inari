@@ -4,7 +4,7 @@ Billing is not production-ready yet.
 
 Current guidance for agents:
 - Do not assume Stripe, Polar, or another payment provider is active unless current code and `package.json` prove it.
-- The tariff/admin billing surface is a preview-only product/admin UI. Its static catalog lives in `lib/content/billing-preview.ts`, and it is not a checkout or subscription backend.
+- The tariff/admin billing surface is a preview-only product/admin UI. Its catalog and copy currently live directly in `app/(app)/admin/tarife/page.tsx`; it is not a checkout or subscription backend.
 - Before implementing billing, inspect `app/(app)/admin/tarife`, invoice code under `app/(app)/abrechnung`, related hooks/data modules, and `package.json`.
 - Choose a payment provider only after the user confirms the commercial model and provider preference.
 - Any real billing implementation must include server-only secrets, webhook signature verification, idempotency, audit logging, and tests for subscription state transitions.

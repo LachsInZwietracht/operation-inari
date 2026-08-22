@@ -1,18 +1,18 @@
 # Competitive Audit - April 2026
 
-This document captures raw audit findings for later product planning. It uses German clinics as the primary market lens and should be treated as strategy input, not as an implementation source of truth.
+This is a historical market snapshot researched in April 2026. Competitor descriptions and links were not re-verified during the August 2026 documentation cleanup. Use it as strategy input only; `documentation.md`, migrations, and current code describe the product today.
 
-## Current Product Position
+## Product Position Recorded in April 2026
 
 Operation Prodi is already broader than a direct PRODI clone. The current app combines German nutrition analysis, patient workflow, practice operations, reports, and early institutional meal operations in a modern SaaS architecture.
 
 Implemented or materially present strengths:
 - **Modern clinical SaaS foundation:** Next.js app shell, Supabase persistence, auth/RBAC, local fallback patterns, exports, and Playwright coverage.
 - **Nutrition database workflows:** Foods, custom foods, server-backed search, synonyms, comparison, reference values, exchange tables, BLS-based data flows, and Open Food Facts product staging/promotion.
-- **Recipe and meal planning workflows:** Recipe CRUD, Meal-Master-style import support, cached nutrient totals, meal planning, BE/Broteinheiten and Einzelanalyse surfaces, multi-plan Vergleich + descriptive statistics (matches DGExpert's Soll-Ist parity), Planvorlagen with browseable system and personal templates, Einkaufsliste-Aggregator across plans with synonym consolidation, additive (Zusatzstoffe / E-Nummern) declarations, print/report handoff, and production/shopping outputs for institution menus.
-- **Patient and clinical workspace:** Patients, anthropometrics, diagnoses, medications, screenings, lab values, activity, allergens, counseling sessions, counseling templates, and patient-bound report history.
-- **Digital protocol workflow:** Public patient diary links, practitioner review, NLP/fuzzy food matching, conversion into internal nutrition protocol drafts, and server-tracked converted state.
-- **Clinical reporting and exports:** PDF/CSV report generation, patient-bound immutable report versions, mail merge PDFs, export job history, and private report file storage.
+- **Recipe and meal planning workflows:** Recipe CRUD, Meal-Master-style import support, cached nutrient totals, meal planning, BE/Broteinheiten, multi-plan comparison, plan templates, shopping-list aggregation, additive declarations, and plan exports.
+- **Patient and clinical workspace:** Patients, anthropometrics, diagnoses, medications, screenings, lab values, activity, allergens, counseling sessions, and counseling templates.
+- **Client documentation:** The former digital protocol workflow has since been replaced by consent-based client mode with food diary, released plans, training, daily check-ins, and read-only counselor views.
+- **Clinical exports:** Plan PDF/CSV generation, mail merge PDFs, and export job history. The former patient-bound report archive was removed.
 - **Institution and hospital bridge:** Menu cycles, nutrient compliance, inpatient stay assignment, diet/allergen-safe meal selection, kitchen aggregation, and printable tray cards.
 - **Practice operations:** Appointments, invoices, dashboard KPIs, practice statistics, admin users, tariff surface, and role-based access foundations.
 
@@ -49,12 +49,12 @@ Enterprise healthcare and foodservice systems:
 The most important missing or incomplete capabilities for German clinic sales are:
 - **Scientific data moat:** SFK, broader official data coverage, full BLS expansion, OeNWT/Swiss/USDA/AFCD options, multilingual food names, and direct clinical manufacturer feeds.
 - **Database lifecycle management:** Global food replacement, database version migrations, nutrient-source diffing, release notes, and audit-friendly source/version traceability.
-- **Clinic IT readiness:** FHIR sync, SSO via SAML/OIDC, LDAP/Active Directory mapping, API keys, integration persistence, and production-grade device connectors.
-- **Audit and compliance:** Record access logs, export logs beyond generic jobs, report retention policies, diet-order override logs, role-change logs, and procurement-ready security documentation.
+- **Clinic IT readiness:** FHIR sync and production-grade connectors remain gaps. SAML/OIDC SSO, claim-to-role mapping, API keys, and their persisted/audited foundations have since been implemented.
+- **Audit and compliance:** Procurement-ready security documentation remains a gap. Record access, exports, role changes, and diet-order overrides now have audit coverage; verify exact coverage in current code.
 - **Clinical modules:** Diabetes counseling depth, renal/nutrition-support workflows, structured food-frequency/anamnesis forms, diagnosis-specific intervention templates, and stronger indication-based decision support.
 - **Documentation packs:** Arztbrief, Ernährungsbericht, Übergabe Küche, Verlaufsbericht, Qualitätsbericht, patient handouts, and clinic-specific document templates.
-- **Hospital kitchen depth:** Supplier pricing, inventory, purchase exports, LMIV label printing, production batch states, waste tracking, multi-site controls, and deeper allergy/diet-form production checks.
-- **Patient engagement:** Patient portal/PWA for diary entry, report delivery, meal-plan feedback, reminders, secure messaging, and follow-up tracking.
+- **Hospital kitchen depth:** Supplier pricing, inventory, purchase exports, LMIV label printing, waste tracking, and multi-site controls remain gaps. Production batch states and core allergy/diet-form checks have since been implemented.
+- **Patient engagement:** Client diary, released-plan feedback, training, check-ins, and counselor sharing have since been implemented. Report delivery, reminders, and secure messaging remain gaps.
 - **Commercial readiness:** Live subscription/checkout or clinic contract management, procurement packet, migration onboarding, sales demo flows, and data-import tooling from incumbent systems.
 
 ## Recommended Priority

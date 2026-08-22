@@ -261,15 +261,6 @@ export interface PatientAllergenEntry extends Timestamped {
   notes?: string;
 }
 
-export interface DigitalProtocolLink extends Timestamped {
-  id: ID;
-  patientId: ID;
-  method: string;
-  status: "pending" | "received" | "expired";
-  url: string;
-  expiresAt?: string;
-}
-
 export type FoodPreferenceRating = "gerne" | "geht" | "nie";
 
 export interface PatientFoodPreference extends Timestamped {

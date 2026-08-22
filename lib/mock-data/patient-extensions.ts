@@ -5,7 +5,6 @@ import type {
   TherapySetting,
   ScreeningResult,
   ProcamResult,
-  DigitalProtocolLink,
 } from "@/lib/types";
 
 const baseTs = (date: string) => ({
@@ -204,25 +203,5 @@ export const PROCAM_RESULTS: ProcamResult[] = [
     systolic: 138,
     smoker: false,
     ...baseTs("2026-01-22"),
-  },
-];
-
-export const DIGITAL_PROTOCOL_LINKS: DigitalProtocolLink[] = [
-  {
-    id: "dpl_patient1",
-    patientId: "patient_1",
-    method: "Digitales 24h Recall",
-    status: "pending",
-    url: "https://app.example.invalid/protokoll/patient_1",
-    expiresAt: "2026-03-20",
-    ...baseTs("2026-03-12"),
-  },
-  {
-    id: "dpl_patient2",
-    patientId: "patient_2",
-    method: "FFQ",
-    status: "received",
-    url: "https://app.example.invalid/protokoll/patient_2",
-    ...baseTs("2026-03-10"),
   },
 ];

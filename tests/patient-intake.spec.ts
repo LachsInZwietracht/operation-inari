@@ -11,8 +11,8 @@ import {
  *
  * The guard-screen and API-contract tests need no database rows, so they cover
  * the public surface even on a bare environment. The end-to-end test seeds an
- * invitation through the service role, the same way the digital protocol suite
- * does.
+ * invitation through the service role, matching the production ownership
+ * boundary without depending on another feature suite.
  */
 
 const UNKNOWN_UUID = "00000000-0000-0000-0000-000000000000";

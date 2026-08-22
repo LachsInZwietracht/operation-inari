@@ -21,7 +21,6 @@ export {
   THERAPY_SETTINGS,
   SCREENINGS,
   PROCAM_RESULTS,
-  DIGITAL_PROTOCOL_LINKS,
 } from "./patient-extensions";
 export { THERAPY_INTEGRATIONS } from "./therapy-integrations";
 export { GROWTH_PERCENTILES } from "./growth-percentiles";

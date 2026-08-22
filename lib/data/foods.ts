@@ -4,7 +4,6 @@ import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createLogger } from "@/lib/log";
-import { NUTRIENT_DEFINITIONS } from "@/lib/data/nutrient-definitions";
 import { fetchOrganizationDisabledSourceIds } from "@/lib/data/data-source-activations";
 import { getBlockedSourceIds } from "@/lib/data/entitlements";
 import { getFoodGroupDescendants } from "@/lib/data/food-groups";
@@ -1191,8 +1190,6 @@ const REPORT_NUTRIENT_IDS = Array.from(
   ]),
 );
 
-const PROTOCOL_NUTRIENT_IDS = NUTRIENT_DEFINITIONS.map((definition) => definition.id);
-
 /**
  * Lightweight variant of fetchAllFoods for list views.
  */
@@ -1206,10 +1203,6 @@ export const fetchFoodsForMealPlans = cache(async () => {
 
 export const fetchFoodsForReports = cache(async () => {
   return fetchFoodsChunked({ cacheKeyPrefix: "foods-reports", nutrientIds: REPORT_NUTRIENT_IDS });
-});
-
-export const fetchFoodsForProtocols = cache(async () => {
-  return fetchFoodsChunked({ cacheKeyPrefix: "foods-protocols", nutrientIds: PROTOCOL_NUTRIENT_IDS });
 });
 
 export const fetchFoodsForInstitution = cache(async () => {

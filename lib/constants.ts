@@ -1,8 +1,6 @@
 import type {
-  AssessmentMethod,
   MealSlotType,
   NutrientGroup,
-  ProtocolType,
 } from "@/lib/types";
 
 export const MEAL_SLOT_LABELS: Record<MealSlotType, string> = {
@@ -62,24 +60,6 @@ export const INDICATION_OPTIONS = [
 ] as const;
 
 export const COUNSELING_DURATION_OPTIONS = [15, 30, 45, 60, 90] as const;
-
-export const PROTOCOL_TYPE_LABELS: Record<ProtocolType, string> = {
-  ernaehrungsprotokoll: "Ernährungsprotokoll",
-  "24h_recall": "24-Stunden-Recall",
-  food_frequency: "Food Frequency Questionnaire",
-  household: "Haushaltsmengen-Protokoll",
-};
-
-export const ASSESSMENT_METHOD_LABELS: Record<AssessmentMethod, string> = {
-  "24h_recall": "24h Recall",
-  ffq: "Food Frequency Questionnaire",
-  diet_diary: "Mehr-Tages-Tagebuch",
-  dietary_history: "Ernährungsanamnese",
-  household: "Haushaltsmengen",
-  freiburg: "Freiburger Protokoll",
-  vegetarian: "Vegetarisches Template",
-  vegan: "Veganes Template",
-};
 
 export interface HouseholdMeasureDefinition {
   id: string;

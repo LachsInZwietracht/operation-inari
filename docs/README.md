@@ -23,11 +23,8 @@ When docs conflict with code, inspect the implementation and update the stale do
 | App routes, workflows, components, hooks | `documentation.md` | Use as a map, then verify code. |
 | Clinic demo path and hardening priorities | `docs/clinic-demo-runbook.md` | Repeatable buyer-demo path from intake to kitchen; includes open demo risks. |
 | Supabase schema, RLS, migrations, ETL, food data | `docs/database-guide.md` | Migrations remain the schema source of truth. |
-| Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Strategy input only. |
-| Clinic IT integrations: LDAP/AD, FHIR | `docs/clinic-it-integration-plan.md` | P1 integration contracts and implementation boundaries. |
-| Client mode: client accounts, tracking, counselor/client linking | `docs/client-mode-plan.md` | Proposal, not implemented. Second product surface; own priority line next to the clinic-first roadmap. |
-| Patient intake, client dashboard, calorie calculator, calendar, plan suggestions | `docs/patient-dashboard-plan.md` | Phased plan from intake truth through the patient overview and safe plan generation. |
-| Client check-in: the daily scores, sleep, alcohol, and the correlation surface | `docs/client-befinden-plan.md` | Shipped (M8 of client mode). Metric registry, per-metric sharing, and the no-recommendations positioning. |
+| Competitor positioning or clinic strategy | `docs/competitive-audit.md` | Historical April 2026 snapshot; strategy input only, not current implementation status. |
+| Remaining clinic IT integration work: FHIR | `docs/clinic-it-integration-plan.md` | Planned first inbound FHIR boundary and safety requirements. SSO is implemented and documented in `documentation.md`. |
 | Supabase local/deploy workflow | `.agent/docs/supabase.md` | Agent playbook; verify against package scripts. |
 | Public repository release | `docs/public-release.md` | Clean-snapshot release process, security settings, and history warning. |
 | Billing/subscription work | `.agent/docs/billing.md` | Billing is preview-only unless code proves otherwise. |
@@ -44,9 +41,8 @@ When docs conflict with code, inspect the implementation and update the stale do
 - `documentation.md` - feature implementation guide.
 - `docs/clinic-demo-runbook.md` - repeatable clinic-first demo path and demo-hardening checklist.
 - `docs/database-guide.md` - database, ETL, nutrition data, search, and performance guide.
-- `docs/competitive-audit.md` - April 2026 competitor and gap audit.
-- `docs/clinic-it-integration-plan.md` - LDAP/AD mapping and first FHIR sync boundary.
-- `docs/patient-dashboard-plan.md` - Phased plan for intake events, the patient overview, calorie calculator, weekly calendar, and safe plan suggestions.
+- `docs/competitive-audit.md` - Historical April 2026 competitor and gap audit.
+- `docs/clinic-it-integration-plan.md` - Remaining first inbound FHIR sync boundary.
 
 ## Maintenance Rules
 

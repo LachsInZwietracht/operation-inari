@@ -134,8 +134,8 @@ export function buildClientDayFactRows(inputs: ClientDayFactInput[]): ClientDayF
 //
 // Everything below is descriptive on purpose. It groups days and averages
 // them; it does not test, rank, score or search. The pair and the shift are
-// chosen by the person looking at their own data — see the positioning note in
-// docs/client-befinden-plan.md.
+// chosen by the person looking at their own data. This keeps the comparison
+// descriptive instead of turning it into an automated recommendation.
 // ============================================================================
 
 /** Below this many paired days the comparison is not shown at all. */

@@ -76,7 +76,6 @@ interface SeedContext {
   foods: DemoFood[];
   recipeIds: Map<string, string>;
   patientIds: Map<string, string>;
-  protocolId?: string;
   menuId?: string;
   planDate?: string;
 }
@@ -256,13 +255,6 @@ async function cleanupDemoWorkspace(ctx: SeedContext) {
     .eq("legacy_id", "clinic-demo-appointment-maria");
   assertNoError(appointmentDeleteError, "Failed to delete previous demo appointment");
 
-  const { error: protocolDeleteError } = await supabase
-    .from("nutrition_protocols")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("legacy_id", "clinic-demo-protocol-maria");
-  assertNoError(protocolDeleteError, "Failed to delete previous demo protocol");
-
   const { data: oldMenus, error: menuLookupError } = await supabase
     .from("institution_menus")
     .select("id")
@@ -340,7 +332,7 @@ async function upsertRecipes(ctx: SeedContext) {
     {
       legacyId: "clinic-demo-haferbrei",
       name: "Klinik-Demo Haferbrei mit Beeren",
-      description: "Fruehstueck fuer die digitale Protokoll- und Beratungsstrecke.",
+      description: "Fruehstueck fuer die Ernaehrungsplan- und Beratungsstrecke.",
       category: "Fruehstueck",
       allergens: ["gluten"],
       tags: ["clinic-demo", "milde Kost"],
@@ -547,103 +539,11 @@ async function seedPatients(ctx: SeedContext) {
   assertNoError(allergenError, "Failed to insert demo allergen");
 }
 
-async function seedDigitalProtocol(ctx: SeedContext) {
-  const mariaId = ctx.patientIds.get("clinic-demo-maria");
-  const food = ctx.foods[0];
-  if (!mariaId || !food) throw new Error("Digital protocol demo prerequisites missing.");
-
-  const { data: link, error: linkError } = await ctx.supabase
-    .from("patient_digital_protocol_links")
-    .insert({
-      patient_id: mariaId,
-      user_id: ctx.user.id,
-      method: "email",
-      status: "received",
-      url: `${APP_URL.replace(/\/$/, "")}/protokoll/clinic-demo-maria`,
-      expires_at: "2026-06-04",
-    })
-    .select("id")
-    .single();
-  assertNoError(linkError, "Failed to insert demo digital protocol link");
-
-  const { data: protocol, error: protocolError } = await ctx.supabase
-    .from("nutrition_protocols")
-    .insert({
-      legacy_id: "clinic-demo-protocol-maria",
-      user_id: ctx.user.id,
-      patient_id: mariaId,
-      title: "Klinik-Demo digitales 3-Tage-Protokoll",
-      type: "ernaehrungsprotokoll",
-      start_date: "2026-05-01",
-      end_date: "2026-05-03",
-      notes: "Aus digitaler Patienteneingabe konvertiert; Smart-Match Hinweise bleiben nachvollziehbar.",
-      metadata: {
-        demoWorkspace: DEMO_TAG,
-        source: "digital_protocol_submission",
-        unresolvedEntries: ["handvoll Beeren"],
-      },
-    })
-    .select("id")
-    .single();
-  assertNoError(protocolError, "Failed to insert demo nutrition protocol");
-  ctx.protocolId = assertRow(protocol, "Failed to insert demo nutrition protocol").id as string;
-
-  const { error: entryError } = await ctx.supabase.from("nutrition_protocol_entries").insert([
-    {
-      protocol_id: ctx.protocolId,
-      protocol_date: "2026-05-01",
-      food_id: food.id,
-      amount: 180,
-      meal_slot: "fruehstueck",
-      entry_time: "08:10",
-      notes: "Patientinnenangabe: Haferbrei, Match auf Datenbanklebensmittel.",
-      measurement_mode: "grams",
-      sort_order: 0,
-    },
-  ]);
-  assertNoError(entryError, "Failed to insert demo protocol entries");
-
-  const { data: submission, error: submissionError } = await ctx.supabase
-    .from("digital_protocol_submissions")
-    .insert({
-      link_id: assertRow(link, "Failed to insert demo digital protocol link").id,
-      patient_id: mariaId,
-      submitted_at: "2026-05-03T17:30:00+02:00",
-      days: [
-        {
-          date: "2026-05-01",
-          meals: [
-            { slot: "fruehstueck", time: "08:10", text: "Haferbrei mit Beeren", amount: "1 Schale" },
-            { slot: "mittagessen", time: "12:20", text: "Linseneintopf", amount: "1 Teller" },
-          ],
-        },
-      ],
-      notes: "Wenig Appetit am Abend, Getraenke unvollstaendig.",
-      status: "converted",
-      converted_protocol_id: ctx.protocolId,
-    })
-    .select("id")
-    .single();
-  assertNoError(submissionError, "Failed to insert demo digital protocol submission");
-
-  const submissionId = assertRow(submission, "Failed to insert demo digital protocol submission").id as string;
-  const linkId = assertRow(link, "Failed to insert demo digital protocol link").id as string;
-
-  await insertAudit(ctx, "digital_protocol_submission_received", "digital_protocol_submission", submissionId, {
-    patientId: mariaId,
-    linkId,
-  });
-  await insertAudit(ctx, "digital_protocol_submission_converted", "nutrition_protocol", ctx.protocolId, {
-    patientId: mariaId,
-    submissionId,
-  });
-}
-
 async function seedCounseling(ctx: SeedContext) {
   const mariaId = ctx.patientIds.get("clinic-demo-maria");
   const haferbreiId = ctx.recipeIds.get("clinic-demo-haferbrei");
   const linsenId = ctx.recipeIds.get("clinic-demo-linseneintopf");
-  if (!mariaId || !haferbreiId || !linsenId || !ctx.protocolId) {
+  if (!mariaId || !haferbreiId || !linsenId) {
     throw new Error("Counseling demo prerequisites missing.");
   }
 
@@ -656,11 +556,11 @@ async function seedCounseling(ctx: SeedContext) {
     session_type: "Erstberatung stationaer",
     indication: "Diabetes mellitus Typ 2, Gewichtsreduktion, OP-Vorbereitung",
     goals: "Stabile Kohlenhydratverteilung, eiweissreiches Mittagessen, sichere Stationskost.",
-    content: "Digitales Protokoll besprochen, Portionsgroessen korrigiert, Stationsmenue abgestimmt.",
+    content: "Ernaehrungsanamnese besprochen, Portionsgroessen korrigiert, Stationsmenue abgestimmt.",
     recommendations: "Fruehstueck mit Eiweisskomponente, Mittagessen Vollkost diabetesgeeignet, Verlaufskontrolle.",
     next_appointment: "2026-05-11",
     timeline: [
-      { date: TODAY, label: "Digitales Protokoll konvertiert" },
+      { date: TODAY, label: "Erstberatung dokumentiert" },
       { date: "2026-05-11", label: "Follow-up geplant" },
     ],
     materials: [{ title: "Patientenhandout Diabetes und Eiweiss", type: "handout" }],
@@ -934,7 +834,6 @@ async function main() {
   ctx.planDate = await resolveDemoPlanDate(ctx);
   await upsertRecipes(ctx);
   await seedPatients(ctx);
-  await seedDigitalProtocol(ctx);
   await seedCounseling(ctx);
   await seedInstitutionWorkflow(ctx);
 

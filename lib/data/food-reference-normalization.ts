@@ -1,4 +1,4 @@
-import type { DailyMealPlan, Food, NutritionProtocol, Recipe } from "@/lib/types";
+import type { DailyMealPlan, Food, Recipe } from "@/lib/types";
 
 function createFoodResolver(foods: Food[]) {
   const foodsById = new Set(foods.map((food) => food.id));
@@ -73,27 +73,4 @@ export function normalizeMealPlanFoodReferences(plan: DailyMealPlan, foods: Food
   });
 
   return changed ? { ...plan, slots } : plan;
-}
-
-export function normalizeProtocolFoodReferences(
-  protocol: NutritionProtocol,
-  foods: Food[],
-): NutritionProtocol {
-  const resolveFoodId = createFoodResolver(foods);
-  let changed = false;
-
-  const days = protocol.days.map((day) => {
-    const entries = day.entries.map((entry) => {
-      const foodId = resolveFoodId(entry.foodId);
-      if (foodId !== entry.foodId) {
-        changed = true;
-        return { ...entry, foodId };
-      }
-      return entry;
-    });
-
-    return changed ? { ...day, entries } : day;
-  });
-
-  return changed ? { ...protocol, days } : protocol;
 }

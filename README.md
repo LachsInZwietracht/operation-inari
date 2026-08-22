@@ -4,16 +4,15 @@ Operation Prodi is a modern, high-performance German nutrition counseling and th
 
 ## 🚀 Key Features
 
-- **Enterprise-Grade Performance:** Next.js 15 Server-Side Streaming with edge caching (Vercel Data Cache) for instant-feel navigation.
+- **Enterprise-Grade Performance:** Next.js 16 Server-Side Streaming with edge caching (Vercel Data Cache) for instant-feel navigation.
 - **Scientific Integrity:** Full BLS 4.0 (Bundeslebensmittelschlüssel) integration with calculations mathematically validated against official DGE/Hohenheim standards.
-- **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, protocols, meal plans, and the core patient clinical record with automatic cloud sync and local fallback.
-- **Smart Food Search:** Hybrid search engine combining local fuzzy matching with server-side trigram search across 7,000+ items.
-- **AI-Assisted Entry:** NLP-assisted food entry ("Smart-Eingabe") for rapid dietary assessment and protocol management.
+- **Full SaaS Persistence:** Secure Supabase backend for patients, recipes, meal plans, the core clinical record, and the client diary with automatic cloud sync and local fallback where documented.
+- **Smart Food Search:** Hybrid search engine combining local fuzzy matching with server-side trigram search across the ~101,000-item catalog; curated BLS/SFK foods are shown before branded Open Food Facts products.
 - **Professional Tools:** Pediatric percentile charts, PROCAM screening, plan PDF/CSV exports, and patient document mail-merge PDFs.
 
 ## 🛠 Tech Stack
 
-- **Framework:** Next.js 15 (App Router, Streaming, Server Actions)
+- **Framework:** Next.js 16 (App Router, Streaming, Server Actions)
 - **Styling:** Tailwind CSS 4, shadcn/ui
 - **Database:** Supabase (PostgreSQL with Trigram Search & RLS)
 - **State Management:** React Context + Type-safe CRUD Hooks
@@ -33,9 +32,9 @@ Current product surfaces include:
 - Patient workflow hub for intake, assessment, meal planning, counseling, statistics, and follow-up.
 - BLS-backed food browsing with source visibility, nutrient sort/filter, custom foods, Open Food Facts promotion, and SFK import support.
 - Recipes, meal plans, templates, shopping lists, nutrient analysis, and approval/version workflows.
-- Digital protocol intake with practitioner review and conversion into internal nutrition protocols.
+- Client mode with a consent-based food diary, released plans, training, daily check-ins, and read-only counselor views.
 - Institution menu planning, inpatient meal orders, kitchen production, compliance analytics, and tray cards.
-- Admin/RBAC, SSO foundations, API keys, export jobs, and billing-preview surfaces.
+- Admin/RBAC, implemented SSO login and role mapping, API keys, export jobs, and a preview-only tariff surface.
 
 ## 🛠 Development
 
@@ -52,7 +51,7 @@ Route protection is enabled by default whenever Supabase is configured. For temp
 Production and staging must leave that flag unset. Admin routes require an `owner` or `admin` membership, institution routes require `owner`, `admin`, or `institution_admin`, and patient data remains scoped by the existing per-user Supabase RLS policies.
 
 ### Data Import
-To populate the food database (7,140 items):
+To import the curated BLS 4.0 reference catalog (7,140 items):
 ```bash
 npm run etl:bls
 ```

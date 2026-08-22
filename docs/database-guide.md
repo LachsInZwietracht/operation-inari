@@ -16,7 +16,7 @@ Precedence:
 3. [Database Schema (Supabase/Postgres)](#3-database-schema-supabasepostgres)
 4. [Nutrient ID Mapping — Mock to BLS 4.0](#4-nutrient-id-mapping--mock-to-bls-40)
 5. [ETL Implementation Details per Source](#5-etl-implementation-details-per-source)
-6. [Migration Strategy — Mock Data to Real Data](#6-migration-strategy--mock-data-to-real-data)
+6. [Runtime Data Status and Cleanup Rules](#6-runtime-data-status-and-cleanup-rules)
 7. [Search Architecture](#7-search-architecture)
 8. [Key Constraints and Gotchas](#8-key-constraints-and-gotchas)
 9. [Sources](#9-sources)
@@ -101,7 +101,8 @@ These functions in `lib/nutrients.ts` are source-agnostic and will work with rea
 **Supabase (primary):**
 - Schema defined in `supabase/migrations/` (run migration files in order)
 - Seed data in `supabase/seed.sql` (nutrient definitions, data sources, DGE reference values)
-- BLS 4.0 imported: 7,140 foods + ~265k nutrient rows + English synonyms
+- The live catalog is roughly 101,000 foods: about 7,000 curated BLS/SFK reference foods plus about 94,000 branded Open Food Facts products. Curated foods lead browse and name-search ordering.
+- BLS 4.0 contributes 7,140 foods, ~265k nutrient rows, and English synonyms.
 - Food detail pages use `fetchFoodById()` for single-record queries
 
 **localStorage (fallback for some user data):**
@@ -125,18 +126,17 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 - `/austauschtabellen` follows this pattern for blank/category browsing, so the route no longer hydrates `Food[]` at page load; once the user types at least two characters, it queries `/api/foods/browser` for database-backed name and BLS/source-code search results
 - Prefer this when the UI sorts/ranks foods by nutrient values but does not need allergens, portions, source metadata, or full nutrient arrays
 
-**Tier 2b — List-optimised food catalog (~2-3 MB, preferred when components need `Food[]`):**
+**Tier 2b — List-optimised food data (legacy compatibility when components need `Food[]`):**
 - `fetchAllFoodsForList()` in `lib/data/foods.ts` fetches all food columns + selected display nutrients, no portions
 - Uses the `nutrientIds` filter on `fetchFoods()` which leverages PostgREST embedded resource filtering (`food_nutrients.nutrient_id=in.(...)`)
-- ~97% smaller than the full payload (~2-3 MB vs ~46 MB)
-- Used by list-style routes such as `/wissen` and protocol creation where full nutrient/portion data is not required but existing components still need `Food[]`
+- Smaller than the full nutrient payload, but still unsuitable for interactive whole-catalog loading at the current ~101,000-row scale
 
 **Tier 2c — Purpose-specific nutrient subsets:**
 - `fetchFoodsForComparison()` fetches the nutrients rendered by `/lebensmittel/vergleichen`: energy in kcal/kJ, core macros, sugar, fatty-acid summary, water, selected vitamins, and key minerals
-- `fetchFoodsForMealPlans()`, `fetchFoodsForReports()`, and `fetchFoodsForProtocols()` keep route-specific nutrient sets for their calculation surfaces
+- `fetchFoodsForMealPlans()` and `fetchFoodsForReports()` keep route-specific nutrient sets for their calculation surfaces
 - Prefer adding a named subset wrapper when a route needs a stable nutrient profile that is smaller than the full catalog
 
-**Tier 2d — Full food catalog with all nutrients (~46 MB, use sparingly):**
+**Tier 2d — Full food catalog with all nutrients (non-interactive/legacy only):**
 - `fetchAllFoods()` in `lib/data/foods.ts` fetches all columns + all `food_nutrients` + `food_portions` joins
 - Required only for pages that truly need every nutrient and portion definition
 - Consumed via `useFoods()` hook in client components
@@ -155,10 +155,9 @@ The app uses a tiered data delivery pattern to balance payload size vs. function
 **Pattern for new pages:**
 - If you only need food names/categories: use `useFoodSearch()` — no page-level fetch needed
 - If you need names/categories plus a few nutrient columns for ranking: use `useFoodSearch()` + `useNutrientValueMaps()`
-- If existing components need `Food[]` with table display nutrients: use `fetchAllFoodsForList()` + `FoodsProvider`
+- If an existing component still needs `Food[]`, first prefer a targeted ID query or server pagination; use `fetchAllFoodsForList()` only as a compatibility path after checking the actual row scope.
 - If you need a small fixed nutrient set, add or reuse a named subset wrapper such as `fetchFoodsForComparison()`
-- If you need all nutrients and portions: use `fetchAllFoods()` + `FoodsProvider`
-- If you need protocol analysis/day views: use `fetchFoodsForProtocols()` instead of `fetchAllFoods()`
+- If you need all nutrients and portions, fetch only the referenced food IDs; do not hydrate the whole production catalog into an interactive route.
 - `fetchFoods()` also accepts a `nutrientIds` string array to fetch an arbitrary subset of nutrients
 - `fetchFoods()` exposes `withCount` (default `true`) to disable expensive `COUNT(*)` queries when paginating manually
 
@@ -323,7 +322,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 - `/api/sso/resolve` is the public login-routing resolver. It accepts an email address, matches active SSO configs by domain through a service-role lookup, and returns only minimal routing metadata. `components/auth-form.tsx` uses that domain match to start Supabase Auth SSO.
 - `/auth/sso/callback` exchanges the Supabase Auth code, verifies the user through `getUser()`, extracts server-verified app metadata and identity data, and calls `completeVerifiedSsoLogin()`. Same-priority matches return ambiguity, no-match creates no membership, existing active owners are preserved, and matched roles create/update active `organization_memberships` rows with `sso_callback_*` audit events.
 - Direct LDAP bind/sync is intentionally out of scope for v1; LDAP/AD groups should arrive through verified OIDC/SAML claims.
-- Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, report and dataset exports, export history, digital protocol receipt/conversion, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
+- Sensitive access events use `lib/audit/access-audit.ts` to write best-effort `access_audit_logs` rows for patient workspace opens and mutations, report and dataset exports, export history, inpatient stays, meal orders, and diet-order overrides for allergen/diet-form conflicts. Audit failures are logged server-side/client-side and do not block the primary clinical workflow.
 - Existing patient and clinical tables remain scoped by `user_id` RLS. Team-wide patient sharing is intentionally not part of RBAC v1.
 - Plan visibility runs the opposite direction to the food log: a plan is written *for* the client, so `client_can_read_patient_plans(patient_id)` gates it on an active link alone, not on a consent flag, and exposes only the one current `active`/`approved` release per patient/date. A change draft coexists privately until `release_meal_plan_revision()` atomically archives the former release with `replaced_at` and exposes the successor. Direct counselor writes to released plan rows and entries are denied by RLS; `begin_meal_plan_revision()`, `release_meal_plan_revision()` and `archive_meal_plan_revision()` are authenticated owner-checked boundaries. Covered by `tests/client-plan-rls.spec.ts`.
 - Training reads use `client_link_grants_access(client_user_id, 'training')`, a flag distinct from `consent_nutrition`, so a counselor with food-log access alone sees no workouts. Covered by `tests/client-training-rls.spec.ts`.
@@ -778,21 +777,21 @@ npm run etl:verify:sfk   # verify row counts
 
 ---
 
-## 6. Migration Strategy — Mock Data to Real Data
+## 6. Runtime Data Status and Cleanup Rules
 
-### Phase 1: Schema Migration — COMPLETE
+### Completed foundation
 1. ~~Create Supabase migrations for core nutrition tables~~ — migrations live in `supabase/migrations/`
 2. ~~Seed `nutrient_definitions` with our existing 28 + new BLS nutrients~~ — 42 definitions in `seed.sql`
 3. ~~Seed `data_sources` with source metadata~~ — 10 sources seeded (note: `hersteller` uses `version: 'varies'` as placeholder)
 4. ~~Seed `reference_values` with official DGE values (age-stratified)~~ — 54 reference values (adults 25–51, gender-stratified)
 
-### Phase 2: BLS 4.0 Import — COMPLETE
+### Imported reference data
 1. ~~Run BLS ETL script~~ — 7,140 foods + ~265k nutrient rows + English synonyms imported
 2. ~~Verify import~~ — `npm run etl:verify:bls` confirms row counts match Excel source
 3. ~~Generate food_group and category mappings~~ — `deriveFoodGroupFromBlsCode()` resolves subgroup IDs + UI categories
 4. ~~SFK ETL pipeline implemented~~ — `npm run etl:sfk` / `npm run etl:verify:sfk` available; 46 additional nutrient definitions (aminosaeuren, fettsaeuren groups) added via migration `20260513000030_sfk_nutrient_definitions.sql`; data import requires paid SFK license
 
-### Phase 3: App Migration (Mock → Supabase) — COMPLETE
+### Runtime architecture
 
 All pages now fetch food data from Supabase instead of the `FOODS` mock constant. The migration followed this pattern:
 
@@ -801,10 +800,7 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 - They wrap their client component in `<FoodsProvider>` only when the client needs catalog data via `useFoods()`
 - The layout provides a lightweight search index via `<FoodSearchProvider>` (see Data Access Architecture in Section 1)
 
-**Current mock-data audit status (2026-04-26):**
-- `lib/mock-data/` still contains 31 TypeScript modules.
-- The runtime app still has 7 import sites from `@/lib/mock-data` outside tests/docs/seeds.
-- The food catalog migration itself is complete: there are still zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in app pages/components.
+The food catalog migration is complete: runtime pages no longer import the former `FOODS` mock catalog. Do not infer that every remaining `lib/mock-data` file is disposable: some modules are deliberate reference catalogs, ETL/demo inputs, or compatibility fallbacks.
 
 **What still uses mock data at runtime today:**
 | Area | Current status | Representative files |
@@ -823,35 +819,20 @@ All pages now fetch food data from Supabase instead of the `FOODS` mock constant
 | Database status | Live `data_sources` catalog with per-organization activate/deactivate | `app/(app)/datenbank/page.tsx`, `lib/data/data-sources.ts`, `lib/data/data-source-activations.ts` |
 | Admin / security | RBAC-backed team membership view with persisted roles, Supabase invitation actions, audited role/status/access events, report-retention controls, and organization SSO configuration | `app/(app)/admin/users/page.tsx`, `app/(app)/admin/users/actions.ts`, `lib/auth/access.ts`, `lib/auth/rbac.ts`, `lib/audit/access-audit.ts`, `lib/data/sso.ts` |
 | Kitchen production | Persisted production batch current state and event ledger for menu-derived kitchen execution | `app/(app)/institution/produktion/page.tsx`, `lib/data/production-batches.ts`, `lib/data/production-batches-client.ts` |
-| Pricing / billing | Preview-only UI backed by bundled product catalog and clinic readiness content; no live billing backend | `app/(app)/admin/tarife/page.tsx`, `lib/content/billing-preview.ts` |
+| Pricing / billing | Preview-only UI with page-local catalog/copy; no live billing backend | `app/(app)/admin/tarife/page.tsx` |
 
 **How to read the remaining mock data:**
 - **Bundled product/reference content:** Wissen cards.
 - **Static reference/catalog data:** bundled reference standards, plus compatibility re-export shims for catalogs now owned by `lib/reference-data`.
 - **Compatibility / migration fallback:** mock recipes, branded foods, legacy food ID mapping.
 
-**Mock-data cleanup checklist:**
-- [x] Move `/patienten` mail-merge templates/placeholders to non-mock bundled product defaults.
-- [x] Replace the mock `COUNSELING_SESSIONS` summary on `/patienten` with real counseling-session queries.
-- [x] Remove the mock card-reader intake demo workflow from the app.
-- [x] Move report-template seeds to non-mock bundled product defaults.
-- [x] Replace mock food-synonym seeds with seeded database rows or a curated bundled reference source.
-- [x] Keep `DIET_LINES` as bundled product defaults in `lib/reference-data/diet-lines.ts`, with user-defined diet-line presets persisted through `diet_line_presets`/`diet_line_targets`.
-- [x] Move institution `DIET_FORMS` and weekday labels into `lib/reference-data/institution.ts`.
-- [x] Move pediatric percentiles and lab parameter definitions into explicit `lib/reference-data` modules so they are no longer treated as “mock”.
-- [x] Reclassify `/wissen` knowledge cards as bundled product content and keep analytics live/runtime-backed.
-- [x] Replace `/datenbank` mock release notes with the live `data_sources` catalog plus per-organization source activation.
-- [x] Replace Admin preview with persisted RBAC membership data and real invitation actions; role-edit workflows remain deferred.
-- [x] Replace `Tarife` page datasets with a real billing backend or mark the route as preview-only until implemented.
-- [x] Remove `lib/legacy-food-map.ts` after legacy `food_*` references have been fully migrated.
-
-**What was migrated:**
+**Current rules:**
 - Zero remaining imports of `FOODS` from `@/lib/mock-data/foods` in any page or component
 - `useCustomFoods(baseFoods)` loads local custom-food migration candidates first, then replaces them with canonical Supabase rows after authenticated sync
 - `useInstitutionMenu(initialMenus, recipes)` reads foods from context, derives categories from `food.categoryId`. Supports full CRUD (create/delete/status) with Supabase persistence and localStorage fallback. Server fetchers now return authenticated Supabase rows (plus shared rows where applicable) or `[]`, never canned institution defaults.
 - Food detail pages use `fetchFoodById()` for single-record Supabase queries
 - Supabase-backed user hooks no longer seed runtime state from `lib/mock-data`; they initialize from localStorage migration candidates only, then merge real remote rows after sync.
-- This rule now covers patients, practice appointments/invoices, protocols, counseling sessions/templates, screenings, digital protocol links, inpatient stays, meal orders, diagnoses, activities, anthropometrics, lab values, medications, and patient allergens.
+- This rule covers the active patient, practice, counseling, institution, client-mode, and clinical-record hooks. Verify the owning hook before removing a compatibility fallback.
 
 **Bootstrap rule for future hooks:**
 - If a hook persists to Supabase, do not append mock constants during initialization.
@@ -870,7 +851,6 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 **Where normalization currently happens:**
 - Recipes
 - Meal plans
-- Nutrition protocols
 
 **Resolver strategy:**
 - `lib/data/food-reference-normalization.ts` resolves legacy food references at load time. It checks the loaded food catalog by ID, then by `legacyId`, then by BLS-code regex pattern (`/^[A-Za-z]\d{3,}/`). The former `lib/legacy-food-map.ts` has been deleted — BLS-code detection replaces the static mapping.
@@ -879,7 +859,7 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - Any remaining legacy-heavy modules should adopt the same boundary-normalization approach.
 - New persisted records must write canonical Supabase food IDs only.
 
-### Phase 4: Search Migration — PARTIALLY COMPLETE
+### Search status
 
 - ✅ Cmd+K command palette calls `search_foods()` via Supabase RPC (passing `auth.uid()` when available), with `shouldFilter={false}` so cmdk doesn't re-filter results. ILIKE substring fallback ensures short/partial queries return results even below the 0.3 trigram threshold. Local fuzzy search shows instantly while the RPC loads; remote results replace them when available.
 - ✅ `/lebensmittel` now uses a paginated server-backed browser API at `/api/foods/browser` instead of hydrating the full catalog into the client.
@@ -888,7 +868,7 @@ Older mock and localStorage-backed records still contain legacy food IDs such as
 - ✅ If both search RPCs fail because migrations are missing or the deployed function return type is out of sync, the browser falls back to a direct paginated Supabase `ILIKE` name query so typed food search still returns database rows.
 - ✅ Cologne phonetics ported to Postgres via migration `20260516000033`. The `cologne_phonetics()` function generates `phonetic_code` columns on `foods` and `food_synonyms`, and both search RPCs include a phonetic match branch (weighted at 0.6x). The client-side fallback in `lib/search/fuzzy-search.ts` remains available for the Cmd+K palette and for environments where the migration has not been applied.
 
-### Phase 5: localStorage → Supabase (Remaining User Data) — PARTIALLY COMPLETE
+### localStorage and Supabase status
 
 Supabase-backed clinical/workspace hooks now store only local migration candidates in localStorage and no longer bootstrap mock rows into runtime state. The same rule now applies to `useCustomFoods`, `useRecipes`, and `useMealPlan`: authenticated sessions fetch remote user-owned rows first, merge only still-unmigrated local records, and replace temp IDs with canonical Supabase IDs immediately after successful writes. `localStorage` remains an offline buffer for unmigrated records only, not a full mirror of persisted authored data.
 
@@ -901,9 +881,9 @@ Rules going forward:
 5. Brand-key migrations should use the same transition pattern: emit/read the new `inari_*` identifier first, keep accepting legacy `prodi_*` identifiers for at least one release, then remove the fallback once clients have moved.
 6. `useFoodSynonyms()` now follows a split model: read seeded system aliases from Supabase `food_synonyms`, then layer local user aliases from `localStorage` until synonym write policies and browser persistence are added.
 
-### Phase 6: Payload Optimization — PARTIALLY COMPLETE
+### Payload optimization
 
-`fetchAllFoods()` loads all 7,140 foods with all 37 nutrients + portions (~46 MB). This caused Playwright test timeouts and sluggish page loads.
+The live catalog is roughly 101,000 rows. Full-catalog queries with nutrient embeds are therefore unsafe for interactive routes; pages should use pagination, targeted IDs, or the narrowest nutrient subset. Historical payload measurements for the former 7,140-row BLS-only catalog no longer describe production scale.
 
 **Done:**
 - Added `nutrientIds` filter to `fetchFoods()` — uses PostgREST embedded resource filtering to fetch only selected nutrients
@@ -1005,7 +985,7 @@ When adding a new data source, add its ID here and insert a matching row in `dat
 
 ### PostgREST `max_rows` Limit (Critical)
 
-`supabase/config.toml` defines `max_rows` which caps rows PostgREST returns for **any** query, silently truncating results. Currently set to `10000` (sufficient for 7,140 BLS foods).
+`supabase/config.toml` defines `max_rows` which caps rows PostgREST returns for **any** query, silently truncating results. It is currently `10000`, far below the ~101,000-row catalog, so whole-table reads must paginate.
 
 **Symptoms of a too-low `max_rows`:** searches for valid foods return zero results; the food list appears complete but is missing entries; no error is surfaced. Long-term fix: server-side pagination.
 
@@ -1023,13 +1003,12 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 
 ### Performance Considerations
 
-**Current architecture (7,140 BLS foods):**
-- Layout provides lazy access to the ~100 KB food search index; consumers load it through `/api/foods/search-index`
+**Current architecture (~101,000 foods):**
+- Layout provides lazy access to the food search index; consumers load it through `/api/foods/search-index`
 - `/austauschtabellen` uses the search index plus nutrient value maps for selected table columns instead of hydrating `Food[]`; typed search is delegated to `/api/foods/browser` so RPC/name matching and BLS/source-code matching stay consistent with the main food browser
-- Remaining list pages that need `Food[]` use `fetchAllFoodsForList()` — 13 nutrients only, ~2-3 MB (down from ~46 MB with all 37 nutrients + portions)
+- Remaining legacy paths that need `Food[]` use narrow nutrient subsets, but interactive routes should prefer pagination or targeted IDs.
 - Comparison uses `fetchFoodsForComparison()` — displayed comparison nutrients only, no portions
-- Pages requiring every nutrient and portion use `fetchAllFoods()` — all 37 nutrients + portions (~46 MB, use sparingly)
-- Protocol detail pages use `fetchFoodsForProtocols()` — protocol analysis/day-view nutrient subset, smaller than `fetchAllFoods()`
+- Pages requiring every nutrient and portion should fetch the referenced IDs rather than the whole catalog.
 - Food detail pages use `fetchFoodById()` for single-record queries (efficient)
 - React `cache()` deduplicates fetches within a single server request
 - The `nutrientIds` filter on `fetchFoods()` uses PostgREST embedded resource filtering — it does NOT use `!inner`, so foods missing a particular nutrient are still returned (with an empty nutrients array for that nutrient)
@@ -1042,13 +1021,13 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 
 **Chunked caching (`fetchFoodsChunked`):**
 - Next.js `unstable_cache` has a **2 MB per-entry limit** — entries exceeding this are silently dropped
-- With ~7,140 foods, even the lightest variant (13 nutrients) serializes to ~21 MB — far above the limit
+- Even a light nutrient subset over the current catalog is far above the cache-entry limit.
 - `fetchFoodsChunked()` in `lib/data/foods.ts` solves this by splitting fetches into pages that each stay under 2 MB:
   1. Dynamically computes a safe chunk size based on nutrient count (`~1.5 MB target / estimated bytes per food`)
   2. Fetches each chunk via `fetchFoodsViaRpc()` with `limit`/`offset`
   3. Caches each chunk independently via `unstable_cache` with its own key (e.g., `foods-list-chunk-0`, `foods-list-chunk-1`)
   4. Reassembles all chunks into a single `Food[]`
-- All 7 cached wrappers (`fetchAllFoods`, `fetchAllFoodsForList`, `fetchFoodsForMealPlans`, `fetchFoodsForComparison`, `fetchFoodsForReports`, `fetchFoodsForProtocols`, `fetchFoodsForInstitution`) use `fetchFoodsChunked`
+- The remaining bulk wrappers use `fetchFoodsChunked`; this protects cache-entry size but does not make whole-catalog hydration appropriate for interactive routes.
 - Dynamic chunk sizes by variant:
 
 | Wrapper | Nutrients | ~Chunk size | ~Chunks |
@@ -1057,17 +1036,12 @@ If adding new food group mappings, verify against actual BLS data (e.g., Honig h
 | `fetchFoodsForMealPlans` | 16 | 1,666 | 5 |
 | `fetchFoodsForComparison` | 27 | 1,395 | 5 |
 | `fetchFoodsForReports` | 16 | 1,666 | 5 |
-| `fetchFoodsForProtocols` | 28 | 1,304 | 6 |
 | `fetchFoodsForInstitution` | 265 | 197 | 37 |
 | `fetchAllFoods` | 265 | 197 | 37 |
 
 - `fetchFoodSearchIndex` is **not** chunked — it fetches only 5 columns with no nutrients, well under 2 MB
 
-**When to revisit (triggers for remaining Phase 6 work):**
-- Total food count exceeds ~15k (e.g., after OFF integration) — search index grows past ~300 KB
-- List payload exceeds ~5 MB — add server-side pagination
-- Specific pages feel slow — consider fetching only referenced foods (e.g., only ingredients in a recipe) instead of the full catalog
-- Consider materialized views for "top nutrients per food" if needed
+**Ongoing rule:** benchmark the query shape the app actually issues, including the `food_nutrients` embed. Every `ORDER BY` over `foods` needs a matching btree index, and interactive catalog surfaces stay paginated or ID-scoped.
 
 ### Playwright Testing with Supabase Auth
 
