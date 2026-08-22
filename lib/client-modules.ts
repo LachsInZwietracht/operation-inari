@@ -30,13 +30,13 @@ export interface ClientModule {
 
 export const CLIENT_MODULES: ClientModule[] = [
   {
-    // One-way, guarded exception to "modules never import each other": the
+    // One-way, guarded exceptions to "modules never import each other": the
     // diary draws the day's planned meals in and counts the ones ticked off,
-    // because plan and diary describe the same day and splitting them made a
-    // perfectly adherent client look like they had eaten nothing. Every read
-    // sits behind `isClientModuleEnabled("plan")`, so switching the plan off
-    // removes the planned rows instead of breaking the diary. Nothing flows
-    // back the other way.
+    // and it shows that day's activity sessions. Plan, food and movement all
+    // describe the same day; splitting their recording across tabs made the
+    // diary incomplete. Every read sits behind its module switch, so disabling
+    // plan or training removes that section instead of breaking the diary.
+    // Nothing flows back the other way.
     id: "tagebuch",
     label: "Tagebuch",
     route: "/klient",

@@ -94,6 +94,28 @@ export async function fetchClientWorkoutSessions(
   return ((data ?? []) as unknown as SessionRow[]).map(mapSessionRow);
 }
 
+/** The diary needs the complete selected day, not a slice of the weekly feed. */
+export async function fetchClientWorkoutSessionsForDate(
+  clientUserId: string,
+  date: string,
+  supabase?: SupabaseClient,
+): Promise<ClientWorkoutSession[]> {
+  const client = resolveClient(supabase);
+  const { data, error } = await withTimeout(
+    client
+      .from("client_workout_sessions")
+      .select(SESSION_COLUMNS)
+      .eq("client_user_id", clientUserId)
+      .eq("session_date", date)
+      .order("created_at", { ascending: true }),
+    8000,
+    "Supabase diary activities request timed out",
+  );
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as SessionRow[]).map(mapSessionRow);
+}
+
 export interface ClientWorkoutSessionInput {
   date: string;
   title: string;

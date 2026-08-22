@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
+import { todayIsoDate } from "@/lib/client-mode";
+
 /**
  * The logging path through the training module.
  *
@@ -25,6 +27,8 @@ test.describe.configure({ mode: "serial" });
 let userId: string;
 let pastSessionId: string;
 let todaySessionId: string;
+const DIARY_ACTIVITY_TITLE = "Spaziergang Tagebuch UI";
+const DIARY_ACTIVITY_DATE = isoDaysAgo(2);
 
 function isoDaysAgo(days: number): string {
   const date = new Date();
@@ -70,7 +74,7 @@ test.beforeAll(async () => {
   );
   if (setError) throw new Error(setError.message);
 
-  todaySessionId = await createSession(isoDaysAgo(0), null);
+  todaySessionId = await createSession(todayIsoDate(), null);
 });
 
 test.afterAll(async () => {
@@ -78,6 +82,11 @@ test.afterAll(async () => {
     .from("client_workout_sessions")
     .delete()
     .in("id", [pastSessionId, todaySessionId]);
+  await admin
+    .from("client_workout_sessions")
+    .delete()
+    .eq("client_user_id", userId)
+    .eq("title", DIARY_ACTIVITY_TITLE);
 });
 
 test.beforeEach(async ({ context }) => {
@@ -132,6 +141,58 @@ test("a session with a duration shows what it cost", async ({ page }) => {
   // metabolism: (3.5 − 1) × 3.5 × 80 × 55 / 200 ≈ 193 kcal.
   await expect(past.getByText(/≈ 193 kcal/)).toBeVisible();
   await expect(past.getByText("Krafttraining")).toBeVisible();
+});
+
+test("the diary separates its four sections and records activity on the selected day", async ({ page }) => {
+  await page.goto("/klient");
+
+  const sections = page.locator('main section[aria-labelledby^="tagebuch-"]');
+  await expect(sections.locator("h2")).toHaveText([
+    "Wohlbefinden",
+    "Ernährung",
+    "Aktivität",
+    "Sonstiges",
+  ]);
+
+  const activity = page.getByRole("region", { name: "Aktivität" });
+  await expect(activity.getByText(TITLE)).toBeVisible();
+
+  // Backfilling from the diary must keep the day the person was looking at.
+  await page.goto(`/klient?datum=${DIARY_ACTIVITY_DATE}`);
+  const pastActivity = page.getByRole("region", { name: "Aktivität" });
+  await pastActivity.getByRole("button", { name: "Eintragen" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Neue Einheit" })).toBeVisible();
+  await expect(dialog.getByLabel("Datum")).toHaveValue(DIARY_ACTIVITY_DATE);
+  await dialog.getByLabel("Was hast du gemacht?").fill(DIARY_ACTIVITY_TITLE);
+  await dialog.getByLabel("Dauer (Minuten)").fill("30");
+
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes("/rest/v1/client_workout_sessions") &&
+        response.request().method() === "POST",
+    ),
+    dialog.getByRole("button", { name: "Anlegen" }).click(),
+  ]);
+
+  await expect(pastActivity.getByText(DIARY_ACTIVITY_TITLE)).toBeVisible();
+  await expect(pastActivity.getByText("Gehen / Spaziergang")).toBeVisible();
+  await expect(pastActivity.getByText("30 min")).toBeVisible();
+
+  const { data, error } = await admin
+    .from("client_workout_sessions")
+    .select("session_date,activity_kind,duration_minutes")
+    .eq("client_user_id", userId)
+    .eq("title", DIARY_ACTIVITY_TITLE)
+    .single();
+  expect(error).toBeNull();
+  expect(data).toMatchObject({
+    session_date: DIARY_ACTIVITY_DATE,
+    activity_kind: "gehen",
+    duration_minutes: 30,
+  });
 });
 
 test("an exercise opens its own history", async ({ page }) => {

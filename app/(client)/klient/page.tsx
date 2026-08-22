@@ -5,9 +5,10 @@ import { isClientModuleEnabled } from "@/lib/client-modules"
 import { isIsoDate, todayIsoDate } from "@/lib/client-mode"
 import { fetchClientFoodLogDay } from "@/lib/data/client-food-log-client"
 import { fetchClientPlanDay } from "@/lib/data/client-plan-client"
+import { fetchClientWorkoutSessionsForDate } from "@/lib/data/client-training-client"
 import { createClient } from "@/lib/supabase/server"
 import { getVerifiedUser } from "@/lib/supabase/verified-user"
-import type { ClientFoodLogDay, ClientPlanDay } from "@/lib/types"
+import type { ClientFoodLogDay, ClientPlanDay, ClientWorkoutSession } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 
@@ -23,7 +24,15 @@ export default async function ClientDiaryPage({ searchParams }: ClientDiaryPageP
     !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (authOptional || process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true") {
-    return <ClientFoodLogView date={date} clientUserId={null} initialDay={null} plan={null} />
+    return (
+      <ClientFoodLogView
+        date={date}
+        clientUserId={null}
+        initialDay={null}
+        plan={null}
+        initialActivitySessions={[]}
+      />
+    )
   }
 
   const supabase = await createClient()
@@ -49,6 +58,17 @@ export default async function ClientDiaryPage({ searchParams }: ClientDiaryPageP
     }
   }
 
+  // Logging lives in the diary, while the activity module remains the weekly
+  // overview over the same rows. Guard the one-way read just like the plan.
+  let initialActivitySessions: ClientWorkoutSession[] = []
+  if (isClientModuleEnabled("training")) {
+    try {
+      initialActivitySessions = await fetchClientWorkoutSessionsForDate(user.id, date, supabase)
+    } catch (error) {
+      console.warn("Failed to load client activities for the diary:", error)
+    }
+  }
+
   // Keyed by date so switching days remounts with fresh server data.
   return (
     <ClientFoodLogView
@@ -57,6 +77,7 @@ export default async function ClientDiaryPage({ searchParams }: ClientDiaryPageP
       clientUserId={user.id}
       initialDay={initialDay}
       plan={plan}
+      initialActivitySessions={initialActivitySessions}
     />
   )
 }

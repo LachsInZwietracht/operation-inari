@@ -1,22 +1,28 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { addDays, format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
 import {
+  Activity,
   BookmarkPlus,
   ChevronLeft,
   ChevronRight,
+  HeartPulse,
   Loader2,
+  NotebookPen,
   Plus,
   Trash2,
+  Utensils,
+  type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { ClientAddEntryDialog } from "@/components/client/client-add-entry-dialog"
 import { ClientCheckinCard } from "@/components/client/client-checkin-card"
 import { ClientDayContext } from "@/components/client/client-day-context"
+import { ClientDiaryActivity } from "@/components/client/client-diary-activity"
 import { ClientDaySummary } from "@/components/client/client-day-summary"
 import {
   ClientEntryDetail,
@@ -86,6 +92,7 @@ import type {
   ClientPlanDay,
   ClientPlanEntry,
   ClientPlanEntryFacts,
+  ClientWorkoutSession,
   Food,
   MealSlotType,
   NutrientValue,
@@ -108,12 +115,15 @@ export function ClientFoodLogView({
   clientUserId,
   initialDay,
   plan,
+  initialActivitySessions,
 }: {
   date: string
   clientUserId: string | null
   initialDay: ClientFoodLogDay | null
   /** The plan for this date, when the plan module is on and one was shared. */
   plan: ClientPlanDay | null
+  /** Activities already logged on this date, from the shared activity store. */
+  initialActivitySessions: ClientWorkoutSession[]
 }) {
   // The page keys this component by date, so a day switch remounts it and the
   // initial day never needs syncing back into state.
@@ -594,99 +604,138 @@ export function ClientFoodLogView({
 
       {/* Above the totals, not below them: someone who reads their kcal balance
           first ends up rating the balance instead of the day. */}
-      {isClientCapabilityEnabled("befinden") && <ClientCheckinCard date={date} />}
+      {isClientCapabilityEnabled("befinden") && (
+        <DiarySection
+          id="wohlbefinden"
+          title="Wohlbefinden"
+          description="Schlaf, Energie, Stimmung und Verdauung"
+          icon={HeartPulse}
+        >
+          <ClientCheckinCard date={date} />
+        </DiarySection>
+      )}
 
-      <ClientDayTotals
-        totals={totals}
-        target={target}
-        micronutrients={micronutrients}
-        microDataShare={microDataShare}
-      />
+      <DiarySection
+        id="ernaehrung"
+        title="Ernährung"
+        description="Tagesbilanz und Mahlzeiten"
+        icon={Utensils}
+      >
+        <ClientDayTotals
+          totals={totals}
+          target={target}
+          micronutrients={micronutrients}
+          microDataShare={microDataShare}
+        />
 
-      {SLOT_ORDER.map((slot) => {
-        const entries = entriesBySlot.get(slot) ?? []
-        const planned = plannedBySlot.get(slot) ?? []
+        {SLOT_ORDER.map((slot) => {
+          const entries = entriesBySlot.get(slot) ?? []
+          const planned = plannedBySlot.get(slot) ?? []
 
-        return (
-          <Card key={slot}>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{MEAL_SLOT_LABELS[slot]}</CardTitle>
-              <div className="flex items-center">
-                {entries.some((entry) => entry.sourceType !== "recipe") && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Als Mahlzeit speichern"
-                    onClick={() => void saveSlotAsMeal(slot, entries)}
-                  >
-                    <BookmarkPlus className="h-4 w-4" />
+          return (
+            <Card key={slot}>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{MEAL_SLOT_LABELS[slot]}</CardTitle>
+                <div className="flex items-center">
+                  {entries.some((entry) => entry.sourceType !== "recipe") && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Als Mahlzeit speichern"
+                      onClick={() => void saveSlotAsMeal(slot, entries)}
+                    >
+                      <BookmarkPlus className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setAddSlot({ slot })}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Hinzufügen
                   </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={() => setAddSlot({ slot })}>
-                  <Plus className="mr-1 h-4 w-4" />
-                  Hinzufügen
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <ClientSlotList
-              rows={buildSlotRows({
-                planEntries: planned,
-                planFacts,
-                completions,
-                entries,
-                foods,
-                recipeFacts: recipePerPortion,
-                recipeNames,
-              })}
-              pendingId={pendingEntryId}
-              onEat={(row) => {
-                if (row.kind !== "planned") return
-                const entry = planned.find((item) => item.id === row.planEntryId)
-                if (entry) void answerPlanEntry(entry, false)
-              }}
-              onSkip={(row) => {
-                if (row.kind !== "planned") return
-                const entry = planned.find((item) => item.id === row.planEntryId)
-                if (entry) void answerPlanEntry(entry, true)
-              }}
-              onChangeAmount={(row) => {
-                if (row.kind !== "planned") return
-                const entry = planned.find((item) => item.id === row.planEntryId)
-                if (entry) setEditingPlanEntry(entry)
-              }}
-              onReplace={(row) => {
-                if (row.kind !== "planned") return
-                setAddSlot({ slot, replaces: { id: row.planEntryId, label: row.label } })
-              }}
-              onOpenEntry={(row) => {
-                if (row.kind === "logged") setEditingEntry(row.entry)
-              }}
-              onDeleteEntry={(row) => {
-                if (row.kind === "logged") void handleDelete(row.entry.id)
-              }}
-            />
-            </CardContent>
-          </Card>
-        )
-      })}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ClientSlotList
+                  rows={buildSlotRows({
+                    planEntries: planned,
+                    planFacts,
+                    completions,
+                    entries,
+                    foods,
+                    recipeFacts: recipePerPortion,
+                    recipeNames,
+                  })}
+                  pendingId={pendingEntryId}
+                  onEat={(row) => {
+                    if (row.kind !== "planned") return
+                    const entry = planned.find((item) => item.id === row.planEntryId)
+                    if (entry) void answerPlanEntry(entry, false)
+                  }}
+                  onSkip={(row) => {
+                    if (row.kind !== "planned") return
+                    const entry = planned.find((item) => item.id === row.planEntryId)
+                    if (entry) void answerPlanEntry(entry, true)
+                  }}
+                  onChangeAmount={(row) => {
+                    if (row.kind !== "planned") return
+                    const entry = planned.find((item) => item.id === row.planEntryId)
+                    if (entry) setEditingPlanEntry(entry)
+                  }}
+                  onReplace={(row) => {
+                    if (row.kind !== "planned") return
+                    setAddSlot({ slot, replaces: { id: row.planEntryId, label: row.label } })
+                  }}
+                  onOpenEntry={(row) => {
+                    if (row.kind === "logged") setEditingEntry(row.entry)
+                  }}
+                  onDeleteEntry={(row) => {
+                    if (row.kind === "logged") void handleDelete(row.entry.id)
+                  }}
+                />
+              </CardContent>
+            </Card>
+          )
+        })}
+      </DiarySection>
 
-      {/* After the meals, not before them: the note is written when the day is
-          over, and water is a running tally rather than a headline. */}
-      <ClientDayContext
-        date={date}
-        waterMl={day?.waterMl}
-        notes={day?.notes}
-        weightKg={latestWeight?.weight}
-        weightMeasuredOn={latestWeight?.date}
-        onWaterChange={(waterMl) => void patchDay({ waterMl })}
-        onNotesChange={(notes) => void patchDay({ notes })}
-        onWeightRecorded={(entry) =>
-          setLatestWeight({ date: entry.date, weight: entry.weight })
-        }
-      />
+      {isClientModuleEnabled("training") && (
+        <DiarySection
+          id="aktivitaet"
+          title="Aktivität"
+          description="Training, Spaziergänge und Bewegung"
+          icon={Activity}
+        >
+          <ClientDiaryActivity
+            date={date}
+            clientUserId={clientUserId}
+            initialSessions={initialActivitySessions}
+            suggestedWeightKg={latestWeight?.weight}
+          />
+        </DiarySection>
+      )}
 
-      <ClientDaySummary highlights={highlights} />
+      <DiarySection
+        id="sonstiges"
+        title="Sonstiges"
+        description="Trinken, Gewicht und Notizen"
+        icon={NotebookPen}
+      >
+        {/* After the meals, not before them: the note is written when the day is
+            over, and water is a running tally rather than a headline. */}
+        <ClientDayContext
+          date={date}
+          waterMl={day?.waterMl}
+          notes={day?.notes}
+          weightKg={latestWeight?.weight}
+          weightMeasuredOn={latestWeight?.date}
+          onWaterChange={(waterMl) => void patchDay({ waterMl })}
+          onNotesChange={(notes) => void patchDay({ notes })}
+          onWeightRecorded={(entry) =>
+            setLatestWeight({ date: entry.date, weight: entry.weight })
+          }
+        />
+
+        <ClientDaySummary highlights={highlights} />
+      </DiarySection>
 
       {isRefreshing && (
         <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -755,6 +804,39 @@ export function ClientFoodLogView({
         />
       )}
     </div>
+  )
+}
+
+function DiarySection({
+  id,
+  title,
+  description,
+  icon: Icon,
+  children,
+}: {
+  id: string
+  title: string
+  description: string
+  icon: LucideIcon
+  children: ReactNode
+}) {
+  const headingId = `tagebuch-${id}`
+
+  return (
+    <section aria-labelledby={headingId} className="space-y-3 border-t border-border/70 pt-6">
+      <div className="flex items-center gap-3 px-1">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Icon className="h-4.5 w-4.5" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h2 id={headingId} className="text-base font-semibold tracking-tight">
+            {title}
+          </h2>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
   )
 }
 

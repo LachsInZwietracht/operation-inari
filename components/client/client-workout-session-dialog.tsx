@@ -52,6 +52,7 @@ function toInput(value?: number): string {
  */
 export function ClientWorkoutSessionDialog({
   session,
+  defaultDate,
   knownTitles,
   suggestedWeightKg,
   onClose,
@@ -59,6 +60,8 @@ export function ClientWorkoutSessionDialog({
 }: {
   /** Absent when creating. */
   session?: ClientWorkoutSession
+  /** The diary supplies its currently open day; the activity hub defaults to today. */
+  defaultDate?: string
   knownTitles: string[]
   /** Last known body weight — from an earlier session or the counselor's record. */
   suggestedWeightKg?: number
@@ -68,7 +71,7 @@ export function ClientWorkoutSessionDialog({
   const isEdit = Boolean(session)
 
   const [title, setTitle] = useState(session?.title ?? "")
-  const [date, setDate] = useState(session?.date ?? todayIsoDate())
+  const [date, setDate] = useState(session?.date ?? defaultDate ?? todayIsoDate())
   const [activityKind, setActivityKind] = useState(session?.activityKind ?? "kraft")
   const [intensity, setIntensity] = useState(session?.intensity ?? "moderat")
   const [duration, setDuration] = useState(toInput(session?.durationMinutes))
@@ -144,7 +147,9 @@ export function ClientWorkoutSessionDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Einheit bearbeiten" : "Neue Einheit"}</DialogTitle>
           <DialogDescription>
-            Dauer und Intensität kannst du auch später nachtragen.
+            {needsDuration
+              ? "Dauer und Intensität beschreiben deine Aktivität."
+              : "Dauer und Intensität kannst du auch später nachtragen."}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,7 +160,7 @@ export function ClientWorkoutSessionDialog({
               id="session-title"
               autoFocus={!isEdit}
               list="session-title-options"
-              placeholder="z. B. Oberkörper, Laufen"
+              placeholder="z. B. Spaziergang, Oberkörper, Laufen"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
