@@ -453,7 +453,7 @@ test.describe("Patient Management", () => {
         timeout: 30_000,
       });
       await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
-      await expect(page.getByRole("button", { name: "Planstatus" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Zurück", exact: true })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
         "data-state",
         "active",
@@ -461,6 +461,11 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("tab", { name: "Strategie" })).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Tag", exact: true })).toHaveCount(0);
       await expect(page.getByText("Wochenbilanz", { exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Woche fortschreiben" })).toBeVisible();
+      await page.getByRole("button", { name: "Woche fortschreiben" }).click();
+      await expect(page.getByRole("dialog", { name: "Woche fortschreiben" })).toBeVisible();
+      await expect(page.getByText("Nur leere Tage füllen")).toBeVisible();
+      await page.getByRole("button", { name: "Abbrechen" }).click();
       await expect(page.getByRole("button", { name: "Plan prüfen & freigeben" })).toBeVisible();
       await page.getByRole("button", { name: "Plan prüfen & freigeben" }).click();
       await expect(page.getByRole("dialog", { name: "Plan prüfen & freigeben" })).toBeVisible();
@@ -479,7 +484,7 @@ test.describe("Patient Management", () => {
         "data-state",
         "active",
       );
-      await expect(page.getByRole("tab", { name: "Planvorlagen" })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("tab", { name: "Planstände" })).toBeVisible({ timeout: 30_000 });
       await page.getByRole("tab", { name: "Profil" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
     } finally {

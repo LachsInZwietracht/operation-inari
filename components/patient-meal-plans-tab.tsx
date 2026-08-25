@@ -133,10 +133,10 @@ function countPlanEntries(plan: DailyMealPlan) {
 
 function getPlanTitle(plan: DailyMealPlan) {
   const title = plan.title?.trim()
-  if (!title) return `Planvorlage vom ${formatDate(plan.date)}`
-  if (title === "Ernährungsplan") return "Planvorlage"
+  if (!title) return `Planstand vom ${formatDate(plan.date)}`
+  if (title === "Ernährungsplan") return "Planstand"
   if (title.startsWith("Ernährungsplan ")) {
-    return `Planvorlage ${title.slice("Ernährungsplan ".length)}`
+    return `Planstand ${title.slice("Ernährungsplan ".length)}`
   }
   return title
 }
@@ -323,9 +323,9 @@ export function PatientMealPlansTab({
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
           <div>
-            <CardTitle>Planvorlagen</CardTitle>
+            <CardTitle>Planstände</CardTitle>
             <CardDescription>
-              Patientengebundene Vorlagen für einzelne Tage als klinische Übersicht und Einstieg in den Planer.
+              Datierte Entwürfe, Freigaben und Revisionen dieses Patienten als klinische Übersicht und Einstieg in den Planer.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -338,13 +338,13 @@ export function PatientMealPlansTab({
             {onCreatePlan ? (
               <Button size="sm" onClick={onCreatePlan}>
                 <Plus className="mr-2 h-4 w-4" />
-                Vorlage anlegen
+                Tagesplan anlegen
               </Button>
             ) : (
               <Button asChild size="sm">
                 <Link href={mealPlanHref(patient.id)}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Vorlage anlegen
+                  Tagesplan anlegen
                 </Link>
               </Button>
             )}
@@ -509,22 +509,22 @@ export function PatientMealPlansTab({
               <Flame className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <p className="font-medium">Noch keine Planvorlage angelegt</p>
+              <p className="font-medium">Noch kein Tagesplan angelegt</p>
               <p className="mt-1 max-w-lg text-sm text-muted-foreground">
-                Lege die erste patientengebundene Vorlage für einen einzelnen Tag an. Sie bleibt im Planer
+                Lege den ersten datierten Tagesplan an. Er bleibt im Planer
                 bearbeitbar und erscheint danach hier in der Übersicht.
               </p>
             </div>
             {onCreatePlan ? (
               <Button onClick={onCreatePlan}>
                 <Plus className="mr-2 h-4 w-4" />
-                Planvorlage anlegen
+                Tagesplan anlegen
               </Button>
             ) : (
               <Button asChild>
                 <Link href={mealPlanHref(patient.id)}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Planvorlage anlegen
+                  Tagesplan anlegen
                 </Link>
               </Button>
             )}
@@ -537,7 +537,7 @@ export function PatientMealPlansTab({
           <DialogHeader>
             <DialogTitle>Für anderen Patienten kopieren</DialogTitle>
             <DialogDescription>
-              Die ursprüngliche Planvorlage bleibt unverändert. Die Kopie wird beim Zielpatienten als Entwurf
+              Der ursprüngliche Planstand bleibt unverändert. Die Kopie wird beim Zielpatienten als Entwurf
               angelegt.
             </DialogDescription>
           </DialogHeader>
@@ -601,7 +601,7 @@ export function PatientMealPlansTab({
               disabled={!selectedCopyTarget || !copyTargetDate || isCopying}
             >
               {isCopying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Vorlage kopieren
+              Planstand kopieren
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -642,10 +642,10 @@ export function PatientMealPlansTab({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Planvorlage endgültig löschen?</AlertDialogTitle>
+            <AlertDialogTitle>Planstand endgültig löschen?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteDialogPlan ? `${getPlanTitle(deleteDialogPlan)} wird dauerhaft entfernt. ` : ""}
-              Einträge und Versionen dieser Vorlage werden ebenfalls gelöscht. Übergebene Planstände bleiben
+              Einträge und Versionen dieses Planstands werden ebenfalls gelöscht. Übergebene Planstände bleiben
               als Historie erhalten und können nicht gelöscht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>

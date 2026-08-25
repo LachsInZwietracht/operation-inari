@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { addDays, subDays, format, parseISO } from "date-fns"
+import { addDays, addWeeks, subDays, format, parseISO, startOfWeek } from "date-fns"
 import type { DailyMealPlan, Food, MealSlotType, MealEntry, MealSlot } from "@/lib/types"
 import { normalizeMealPlanFoodReferences } from "@/lib/data/food-reference-normalization"
 import { fetchMealPlansClient, persistMealPlan } from "@/lib/data/meal-plans-client"
@@ -30,6 +30,16 @@ type MealPlanMetadataPatch = Partial<
     | "approvedBy"
   >
 >
+
+export type WeekCopyCollisionStrategy = "fill-empty" | "replace-drafts"
+
+export interface WeekCopyResult {
+  copied: number
+  skippedOccupied: number
+  skippedLocked: number
+  skippedSource: number
+  failed: number
+}
 
 function createEmptyPlan(date: string, defaults: MealPlanMetadataPatch = {}): DailyMealPlan {
   return {
@@ -64,8 +74,11 @@ function clonePlanForDate(plan: DailyMealPlan, date: string): DailyMealPlan {
   return {
     ...plan,
     id: `plan_${date}`,
+    legacyId: undefined,
     date,
-    status: plan.status === "approved" ? "draft" : plan.status,
+    // A copied plan is always a fresh, independent draft. In particular it
+    // must never inherit a released stand's lifecycle metadata.
+    status: "draft",
     approvedAt: undefined,
     approvedBy: undefined,
     revisionNumber: undefined,
@@ -76,6 +89,17 @@ function clonePlanForDate(plan: DailyMealPlan, date: string): DailyMealPlan {
       entries: slot.entries.map(cloneEntry),
     })),
   }
+}
+
+function hasEntries(plan: DailyMealPlan): boolean {
+  return plan.slots.some((slot) => slot.entries.length > 0)
+}
+
+function isPlanProtected(plan: DailyMealPlan | undefined): boolean {
+  // "active" rows represent the current released patient-facing stand just
+  // like approved rows. Archived rows are history too and must not be reused
+  // as an editable target.
+  return plan?.status === "approved" || plan?.status === "active" || plan?.status === "archived"
 }
 
 function workspacePriority(plan: DailyMealPlan) {
@@ -492,7 +516,7 @@ export function useMealPlan(
 
   const copyPlanToDate = useCallback(
     (sourceDate: string, targetDate: string) => {
-      if (isPlanLocked(targetDate)) return
+      if (isPlanProtected(plansRef.current[getPlanKey(targetDate, contextPatientId)])) return
       const sourcePlan = getPlanForDate(sourceDate)
       const copiedPlan = clonePlanForDate(sourcePlan, targetDate)
       const copiedKey = getPlanKey(copiedPlan.date, copiedPlan.patientId)
@@ -505,7 +529,117 @@ export function useMealPlan(
 
       void syncPlanToSupabase(copiedPlan)
     },
-    [getPlanForDate, isPlanLocked, syncPlanToSupabase],
+    [contextPatientId, getPlanForDate, syncPlanToSupabase],
+  )
+
+  /**
+   * Copies the seven dated daily plans of one Monday--Sunday week into one or
+   * more future weeks. The operation is deliberately awaitable: callers can
+   * show one honest result after all autosave requests joined their existing
+   * per-plan sync chains.
+   */
+  const copyWeekToDates = useCallback(
+    async (
+      sourceWeekStart: string,
+      targetWeekStart: string,
+      repetitions: number,
+      strategy: WeekCopyCollisionStrategy,
+    ): Promise<WeekCopyResult> => {
+      const sourceMonday = startOfWeek(parseISO(sourceWeekStart), { weekStartsOn: 1 })
+      const targetMonday = startOfWeek(parseISO(targetWeekStart), { weekStartsOn: 1 })
+      const sourceDates = Array.from({ length: 7 }, (_, index) =>
+        format(addDays(sourceMonday, index), "yyyy-MM-dd"),
+      )
+      const sourceDateSet = new Set(sourceDates)
+      const result: WeekCopyResult = {
+        copied: 0,
+        skippedOccupied: 0,
+        skippedLocked: 0,
+        skippedSource: 0,
+        failed: 0,
+      }
+
+      // Fortschreiben is a forward-planning action. Keeping the target ahead
+      // of the source avoids accidental backfilling of history and ensures the
+      // source week itself can never be overwritten by a repeated range.
+      if (targetMonday <= sourceMonday) return result
+
+      // The workspace stores one preferred row per patient/date, whereas the
+      // release lifecycle can retain a released row beside a later draft.
+      // Refresh the target dates before copying so an unloaded release can
+      // never be shadowed by that draft in this bulk action.
+      const remotePlans = isAuthenticated && contextPatientId
+        ? await fetchMealPlansClient({ patientId: contextPatientId })
+        : []
+      const remotePlansByDate = new Map<string, DailyMealPlan[]>()
+      for (const plan of remotePlans) {
+        const existing = remotePlansByDate.get(plan.date) ?? []
+        existing.push(plan)
+        remotePlansByDate.set(plan.date, existing)
+      }
+
+      const repeatCount = Number.isFinite(repetitions)
+        ? Math.min(Math.max(Math.trunc(repetitions), 1), 12)
+        : 1
+      const sourcePlans = sourceDates.map((date) => {
+        const stored = plansRef.current[getPlanKey(date, contextPatientId)]
+        const remote = remotePlansByDate.get(date) ?? []
+        return stored
+          ?? remote.find((plan) => plan.status === "draft")
+          ?? remote.find((plan) => plan.status === "active" || plan.status === "approved")
+          ?? remote[0]
+          ?? createEmptyPlan(date, defaultMetadata)
+      })
+      const copies: DailyMealPlan[] = []
+
+      for (let weekOffset = 0; weekOffset < repeatCount; weekOffset += 1) {
+        const targetMondayForRepeat = addWeeks(targetMonday, weekOffset)
+        for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+          const targetDate = format(addDays(targetMondayForRepeat, dayOffset), "yyyy-MM-dd")
+          if (sourceDateSet.has(targetDate)) {
+            result.skippedSource += 1
+            continue
+          }
+
+          const existing = plansRef.current[getPlanKey(targetDate, contextPatientId)]
+          const remote = remotePlansByDate.get(targetDate) ?? []
+          if (isPlanProtected(existing) || remote.some(isPlanProtected)) {
+            result.skippedLocked += 1
+            continue
+          }
+          if (strategy === "fill-empty" && (Boolean(existing && hasEntries(existing)) || remote.some(hasEntries))) {
+            result.skippedOccupied += 1
+            continue
+          }
+
+          const source = sourcePlans[dayOffset]
+          const copied = clonePlanForDate(
+            { ...source, patientId: source.patientId ?? contextPatientId },
+            targetDate,
+          )
+          copies.push(copied)
+        }
+      }
+
+      if (copies.length === 0) return result
+
+      for (const plan of copies) {
+        dirtyDatesRef.current.add(getPlanKey(plan.date, plan.patientId))
+      }
+      setPlans((previous) => {
+        const next = { ...previous }
+        for (const plan of copies) {
+          next[getPlanKey(plan.date, plan.patientId)] = plan
+        }
+        return next
+      })
+
+      const persisted = await Promise.all(copies.map((plan) => syncPlanToSupabase(plan)))
+      result.copied = copies.length
+      result.failed = persisted.filter((plan) => plan === null).length
+      return result
+    },
+    [contextPatientId, defaultMetadata, isAuthenticated, syncPlanToSupabase],
   )
 
   const clearPlanForDate = useCallback(
@@ -629,6 +763,7 @@ export function useMealPlan(
     replaceEntry,
     moveEntry,
     copyPlanToDate,
+    copyWeekToDates,
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,

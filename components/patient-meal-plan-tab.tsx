@@ -55,7 +55,7 @@ function mergePlanSources(
  * A meal plan only ever exists for one patient, so the plan belongs in the
  * record rather than on a route of its own where the patient has to be picked
  * again. The record owns strategy in Planstatus; its builder opens the week,
- * treats a day as contextual detail, and keeps the patient's plan-template list.
+ * treats a day as contextual detail, and keeps the patient's plan-state list.
  *
  * Nothing here is loaded by the patient route: the tab mounts lazily, and its
  * recipes and food index are fetched on that mount. Putting them in the route's
@@ -151,7 +151,7 @@ export function PatientMealPlanTab({
           onClick={() => setWorkspace("status")}
         >
           <ArrowLeft className="mr-1.5 size-4" />
-          Planstatus
+          Zurück
         </Button>
       </div>
 
@@ -167,7 +167,7 @@ export function PatientMealPlanTab({
           initialPlans={statusPlans}
           extraTab={{
             value: "plans",
-            label: "Planvorlagen",
+            label: "Planstände",
             render: ({ openDay, openPlan, workspacePlans }) => (
               <PatientMealPlansTab
                 patient={patient}

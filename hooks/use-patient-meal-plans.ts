@@ -120,11 +120,11 @@ export function usePatientMealPlans(
       try {
         const persisted = await archiveMealPlanRevisionClient(plan.id)
         setPlans((prev) => sortPlans(prev.map((item) => (item.id === plan.id ? persisted : item))))
-        toast.success("Planvorlage archiviert.")
+        toast.success("Planstand archiviert.")
       } catch (error) {
         console.error("Failed to archive meal plan:", error)
         setPlans((prev) => sortPlans(prev.map((item) => (item.id === plan.id ? plan : item))))
-        toast.error("Planvorlage konnte nicht archiviert werden.")
+        toast.error("Planstand konnte nicht archiviert werden.")
       }
     },
     [],
@@ -139,7 +139,7 @@ export function usePatientMealPlans(
         legacyId: undefined,
         date,
         patientId,
-        title: `${plan.title ?? "Planvorlage"} (Kopie)`,
+        title: `${plan.title ?? "Planstand"} (Kopie)`,
         status: "draft",
         approvedAt: undefined,
         approvedBy: undefined,
@@ -158,12 +158,12 @@ export function usePatientMealPlans(
         setPlans((prev) =>
           sortPlans(prev.map((item) => (item.id === duplicatedPlan.id ? persisted : item))),
         )
-        toast.success("Planvorlage dupliziert.")
+        toast.success("Planstand dupliziert.")
         return persisted
       } catch (error) {
         console.error("Failed to duplicate meal plan:", error)
         setPlans((prev) => prev.filter((item) => item.id !== duplicatedPlan.id))
-        toast.error("Planvorlage konnte nicht dupliziert werden.")
+        toast.error("Planstand konnte nicht dupliziert werden.")
         return null
       }
     },
@@ -192,7 +192,7 @@ export function usePatientMealPlans(
         )
 
         if (targetHasPlanOnDate) {
-          toast.error("Der Zielpatient hat an diesem Datum bereits eine Planvorlage.")
+          toast.error("Der Zielpatient hat an diesem Datum bereits einen Planstand.")
           return null
         }
       } catch (error) {
@@ -207,7 +207,7 @@ export function usePatientMealPlans(
         legacyId: undefined,
         date: targetDate,
         patientId: targetPatient.id,
-        title: `${plan.title ?? "Planvorlage"} (Kopie)`,
+        title: `${plan.title ?? "Planstand"} (Kopie)`,
         status: "draft",
         notes: options.includeNotes ? plan.notes : undefined,
         dietLineId: options.includeDietLine ? plan.dietLineId : undefined,
@@ -227,11 +227,11 @@ export function usePatientMealPlans(
         if (isPatientPlan({ ...persisted, patientId: targetPatient.id }, patientId, patientLegacyId)) {
           setPlans((prev) => sortPlans([persisted, ...prev]))
         }
-        toast.success(`Planvorlage wurde für ${targetPatient.firstName} ${targetPatient.lastName} kopiert.`)
+        toast.success(`Planstand wurde für ${targetPatient.firstName} ${targetPatient.lastName} kopiert.`)
         return persisted
       } catch (error) {
         console.error("Failed to copy meal plan to patient:", error)
-        toast.error("Planvorlage konnte nicht kopiert werden.")
+        toast.error("Planstand konnte nicht kopiert werden.")
         return null
       }
     },
@@ -253,18 +253,18 @@ export function usePatientMealPlans(
       setPlans((prev) => prev.filter((item) => item.id !== plan.id))
 
       if (!isAuthenticated) {
-        toast.success("Planvorlage gelöscht.")
+        toast.success("Planstand gelöscht.")
         return true
       }
 
       try {
         await deleteMealPlanClient(plan.id)
-        toast.success("Planvorlage gelöscht.")
+        toast.success("Planstand gelöscht.")
         return true
       } catch (error) {
         console.error("Failed to delete meal plan:", error)
         setPlans((prev) => sortPlans([plan, ...prev]))
-        toast.error("Planvorlage konnte nicht gelöscht werden.")
+        toast.error("Planstand konnte nicht gelöscht werden.")
         return false
       }
     },

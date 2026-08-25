@@ -55,6 +55,12 @@ function uniquePlannerDate(offset = 0) {
   return `${year}-${month}-${day}`;
 }
 
+function addIsoDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
 /**
  * The planner only renders meal slots once a patient is selected, so every
  * test opens the page with an explicit patientId and a fresh plan date.
@@ -325,7 +331,7 @@ test.describe("Ernährungsplan", () => {
 
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
       await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
-      await page.getByRole("tab", { name: "Planvorlagen" }).click();
+      await page.getByRole("tab", { name: "Planstände" }).click();
 
       const draftCard = page.locator("[data-slot='card']").filter({ hasText: title }).first();
       await draftCard.getByRole("button", { name: "Tag freigeben" }).click();
@@ -336,12 +342,73 @@ test.describe("Ernährungsplan", () => {
       await draftCard.getByRole("button", { name: "Änderung beginnen" }).click();
       await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
 
-      await page.getByRole("tab", { name: "Planvorlagen" }).click();
+      await page.getByRole("tab", { name: "Planstände" }).click();
       await expect(page.getByText("Änderungsentwurf", { exact: true })).toBeVisible();
       await expect(page.getByText("Freigegeben", { exact: true })).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
       if (foodId) await admin.from("foods").delete().eq("id", foodId);
+    }
+  });
+
+  test("fortschreibt the visible patient week as independent future drafts", async ({ page }) => {
+    const patient = await createPatientFixture("Plan", "Fortschreiben");
+    const userId = await getTestUserId();
+    const sourceDate = uniquePlannerDate(2875);
+    const title = `Wochenfortschreibung ${Math.random().toString(36).slice(2, 8)}`;
+
+    try {
+      const { error: planError } = await admin.from("daily_meal_plans").insert({
+        user_id: userId,
+        patient_id: patient.id,
+        date: sourceDate,
+        title,
+        status: "draft",
+      });
+      if (planError) throw new Error(planError.message);
+
+      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
+      await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
+      await page.getByRole("tab", { name: "Planstände" }).click();
+      await page.locator("[data-slot='card']").filter({ hasText: title }).first().getByRole("button", { name: "Öffnen" }).click();
+
+      await page.getByRole("button", { name: "Woche fortschreiben" }).click();
+      const dialog = page.getByRole("dialog", { name: "Woche fortschreiben" });
+      const targetWeekStart = await dialog.getByLabel("Zielwoche").inputValue();
+      await dialog.getByRole("button", { name: "Woche fortschreiben" }).click();
+      await expect(page.getByText("7 Tagesentwürfe fortgeschrieben.")).toBeVisible({ timeout: 20_000 });
+
+      await expect.poll(async () => {
+        const { data, error } = await admin
+          .from("daily_meal_plans")
+          .select("date")
+          .eq("patient_id", patient.id)
+          .gte("date", targetWeekStart)
+          .lte("date", addIsoDays(targetWeekStart, 6));
+        if (error) throw new Error(error.message);
+        return data ?? [];
+      }, { timeout: 20_000 }).toHaveLength(7);
+
+      const { data: copiedPlans, error: copiedPlansError } = await admin
+        .from("daily_meal_plans")
+        .select("status,approved_at,approved_by,revision_number,supersedes_plan_id,replaced_at")
+        .eq("patient_id", patient.id)
+        .gte("date", targetWeekStart)
+        .lte("date", addIsoDays(targetWeekStart, 6));
+      if (copiedPlansError) throw new Error(copiedPlansError.message);
+      expect(copiedPlans).toHaveLength(7);
+      for (const copiedPlan of copiedPlans ?? []) {
+        expect(copiedPlan).toMatchObject({
+          status: "draft",
+          approved_at: null,
+          approved_by: null,
+          revision_number: 1,
+          supersedes_plan_id: null,
+          replaced_at: null,
+        });
+      }
+    } finally {
+      await deletePatientFixture(patient.id);
     }
   });
 

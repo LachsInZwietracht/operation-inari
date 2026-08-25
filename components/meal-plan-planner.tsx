@@ -85,6 +85,7 @@ import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { PlanWeekReleaseDialog, type WeekReleaseReview } from "@/components/plan-week-release-dialog"
+import { PlanWeekCopyDialog } from "@/components/plan-week-copy-dialog"
 import {
   PlanStrategyView,
   type PatientEnergyContext,
@@ -212,6 +213,7 @@ export function MealPlanPlanner({
     replaceEntry,
     moveEntry,
     copyPlanToDate,
+    copyWeekToDates,
     clearPlanForDate,
     updatePlanMetadata,
     applyTemplateToDate,
@@ -280,6 +282,8 @@ export function MealPlanPlanner({
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekReleaseReviewOpen, setWeekReleaseReviewOpen] = useState(false)
   const [isReleasingWeek, setIsReleasingWeek] = useState(false)
+  const [weekCopyOpen, setWeekCopyOpen] = useState(false)
+  const [isCopyingWeek, setIsCopyingWeek] = useState(false)
   const [clientLinkState, setClientLinkState] = useState<"linked" | "not-linked" | "unknown">("unknown")
 
   useEffect(() => {
@@ -737,6 +741,46 @@ export function MealPlanPlanner({
     }
   }, [clientLinkState, computedWeekStartIso, flushPlansForDates, patientId, setWorkspacePlan, weekPlans, weekReleaseReview.blockers.length])
 
+  const handleCopyWeek = useCallback(
+    async (targetWeekStart: string, repetitions: number, strategy: "fill-empty" | "replace-drafts") => {
+      setIsCopyingWeek(true)
+      try {
+        const result = await copyWeekToDates(computedWeekStartIso, targetWeekStart, repetitions, strategy)
+        setWeekCopyOpen(false)
+
+        if (result.copied === 0) {
+          toast.message("Keine Tage fortgeschrieben.", {
+            description: result.skippedLocked > 0
+              ? `${result.skippedLocked} freigegebene oder gesperrte Tage wurden geschützt.`
+              : "Die Zielwoche enthält bereits Planung.",
+          })
+          return
+        }
+
+        if (result.failed === result.copied) {
+          toast.error("Die fortgeschriebenen Entwürfe konnten nicht gespeichert werden.", {
+            description: "Bitte Verbindung prüfen und den Vorgang erneut ausführen.",
+          })
+          return
+        }
+
+        const skipped = result.skippedOccupied + result.skippedLocked + result.skippedSource
+        toast.success(`${result.copied} ${result.copied === 1 ? "Tagesentwurf" : "Tagesentwürfe"} fortgeschrieben.`, {
+          description: [
+            skipped > 0 ? `${skipped} Tage übersprungen` : null,
+            result.failed > 0 ? `${result.failed} Kopien konnten nicht gespeichert werden` : null,
+          ].filter(Boolean).join(" · ") || "Die neue Planung ist noch nicht freigegeben.",
+        })
+      } catch (error) {
+        console.error("Failed to copy meal plan week:", error)
+        toast.error("Woche konnte nicht fortgeschrieben werden.")
+      } finally {
+        setIsCopyingWeek(false)
+      }
+    },
+    [computedWeekStartIso, copyWeekToDates],
+  )
+
   // Strategy values (calorie target, macro split) live on the patient record,
   // so editing them here writes to the same fields the Kalorienrechner and the
   // patient overview read.
@@ -902,6 +946,10 @@ export function MealPlanPlanner({
   )
   const weekHeaderActions = embedded ? (
     <>
+      <Button size="sm" variant="outline" onClick={() => setWeekCopyOpen(true)} disabled={isCopyingWeek}>
+        <Copy className="mr-1.5 h-4 w-4" />
+        Woche fortschreiben
+      </Button>
       {weekIsReleased ? (
         <>
           <Badge className="border-emerald-300 bg-emerald-50 text-emerald-800" variant="outline">
@@ -1335,6 +1383,17 @@ export function MealPlanPlanner({
         dietLineName={dietLine?.name}
         planId={currentPlan.id}
       />
+
+      {embedded && patientId && weekCopyOpen ? (
+        <PlanWeekCopyDialog
+          open={weekCopyOpen}
+          onOpenChange={setWeekCopyOpen}
+          sourceWeekStart={computedWeekStartIso}
+          sourceWeekLabel={weekRangeLabel}
+          isCopying={isCopyingWeek}
+          onCopy={(targetWeekStart, repetitions, strategy) => void handleCopyWeek(targetWeekStart, repetitions, strategy)}
+        />
+      ) : null}
 
       {embedded && patientId ? (
         <PlanWeekReleaseDialog
