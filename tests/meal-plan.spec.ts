@@ -156,16 +156,20 @@ test.describe("Ernährungsplan", () => {
       await openPlannerWithFreshPlan(page, patient.id, planDate);
       await page.getByRole("tab", { name: "Woche" }).click();
 
-      const dayHeaders = page.getByRole("button", { name: /in Tagesansicht öffnen$/ });
+      const dayHeaders = page.getByRole("button", { name: /mit Doppelklick in Tagesansicht öffnen$/ });
       await expect(dayHeaders).toHaveCount(7);
       const targetDay = dayHeaders.nth(1);
       const targetLabel = (await targetDay.getAttribute("aria-label"))?.replace(
-        " in Tagesansicht öffnen",
+        " mit Doppelklick in Tagesansicht öffnen",
         "",
       );
       if (!targetLabel) throw new Error("Weekday header is missing its accessible date label");
 
+      // A single click must not unexpectedly leave the week. The deliberate
+      // double click opens the contextual day workspace.
       await targetDay.click();
+      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
+      await targetDay.dblclick();
 
       await expect(page.getByRole("tab", { name: "Tag" })).toHaveAttribute("data-state", "active");
       await expect(page.getByRole("button", { name: targetLabel, exact: true })).toBeVisible();
@@ -320,7 +324,7 @@ test.describe("Ernährungsplan", () => {
       if (entryError) throw new Error(entryError.message);
 
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
-      await page.getByRole("tab", { name: "Plan bearbeiten" }).click();
+      await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
       await page.getByRole("tab", { name: "Planvorlagen" }).click();
 
       const draftCard = page.locator("[data-slot='card']").filter({ hasText: title }).first();

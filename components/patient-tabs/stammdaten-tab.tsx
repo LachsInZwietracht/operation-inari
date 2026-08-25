@@ -1,7 +1,10 @@
 "use client"
 
+import Link from "next/link"
 import type { ReactNode } from "react"
+import { Pencil } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatDate, formatNumber } from "@/lib/format"
 import type {
@@ -110,7 +113,18 @@ export function StammdatenTab({
 
   return (
     <>
-      {profileSubNav}
+      {/* The profile is a read-only reference sheet, and the form behind
+          /bearbeiten is the only way to change any of it — so the way in
+          belongs here, next to the data it writes. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {profileSubNav}
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/patienten/${patient.id}/bearbeiten`}>
+            <Pencil className="mr-1.5 size-4" />
+            Bearbeiten
+          </Link>
+        </Button>
+      </div>
 
       <Card>
         <CardHeader className="pb-3">

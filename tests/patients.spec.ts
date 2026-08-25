@@ -447,14 +447,13 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
       await page.getByRole("tab", { name: "Ernährungsplan" }).click();
-      await expect(page.getByRole("tab", { name: "Planstatus" })).toHaveAttribute(
-        "data-state",
-        "active",
-      );
+      // The tab lands on the plan status; its own call to action is the only
+      // way into the builder now that the toggle above them is gone.
       await expect(page.getByText(/Der nächste Planungstag ist noch offen|Der aktuelle Plan reicht bis/)).toBeVisible({
         timeout: 30_000,
       });
-      await page.getByRole("tab", { name: "Plan bearbeiten" }).click();
+      await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
+      await expect(page.getByRole("button", { name: "Planstatus" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
         "data-state",
         "active",
@@ -471,8 +470,8 @@ test.describe("Patient Management", () => {
       await page.getByText("Wochenbilanz", { exact: true }).click();
       await expect(page.getByText("Als Nächstes", { exact: true })).toBeVisible();
 
-      const firstDay = page.getByRole("button", { name: /in Tagesansicht öffnen$/ }).first();
-      await firstDay.click();
+      const firstDay = page.getByRole("button", { name: /mit Doppelklick in Tagesansicht öffnen$/ }).first();
+      await firstDay.dblclick();
       await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toBeVisible();
       await expect(page.getByText("Nährstoff-Lückenfüller", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Zur Wochenansicht" }).click();

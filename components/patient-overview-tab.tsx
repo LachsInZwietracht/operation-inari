@@ -725,6 +725,57 @@ export function PatientOverviewTab({
         </div>
       </Card>
 
+      {/* Patient-level actions, directly under the patient-level facts. Quiet
+          on purpose: master data is written once at intake and deleting a
+          record happens almost never, so neither competes with the plan work
+          below — but both stay in reach without a scroll. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/patienten/${patient.id}/bearbeiten`}>
+            <Pencil className="mr-1.5 size-4" />
+            Stammdaten bearbeiten
+          </Link>
+        </Button>
+        {onDeletePatient ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="mr-1.5 size-4" />
+                Patient löschen
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Patient löschen?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {patient.firstName} {patient.lastName} wird aus der Patientenliste
+                  entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={isDeleting}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    setIsDeleting(true)
+                    void onDeletePatient().finally(() => setIsDeleting(false))
+                  }}
+                >
+                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Löschen
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
+      </div>
+
       {/* The first screen: the curve, and the two panels that explain it. */}
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -961,67 +1012,6 @@ export function PatientOverviewTab({
           sessions={sessions}
         />
       </section>
-
-      {/* Record admin, deliberately last and deliberately quiet. Stammdaten are
-          written once at intake and deleting a patient happens almost never —
-          neither is what this screen is read for, so they no longer sit as
-          three coloured blocks above every tab of the record. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-4">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Akte
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Stammdaten wie Name, Geburtsdatum und Kontaktweg.
-          </p>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/patienten/${patient.id}/bearbeiten`}>
-              <Pencil className="mr-1.5 size-4" />
-              Stammdaten bearbeiten
-            </Link>
-          </Button>
-          {onDeletePatient ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="mr-1.5 size-4" />
-                  Patient löschen
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Patient löschen?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {patient.firstName} {patient.lastName} wird aus der Patientenliste
-                    entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    disabled={isDeleting}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsDeleting(true)
-                      void onDeletePatient().finally(() => setIsDeleting(false))
-                    }}
-                  >
-                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Löschen
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          ) : null}
-        </div>
-      </div>
     </div>
   )
 }
