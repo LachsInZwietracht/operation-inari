@@ -3,7 +3,7 @@
 import { useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { Copy, FolderOpen, Lock, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
+import { Check, Copy, FolderOpen, Lock, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import {
   type MealPlanDragPayload,
 } from "@/components/meal-plan-library"
 import { formatNumber } from "@/lib/format"
+import { todayIsoDate } from "@/lib/client-mode"
 import { getEnergyTargetStatus } from "@/lib/meal-plan-calc"
 import { cn } from "@/lib/utils"
 import type {
@@ -25,6 +26,35 @@ import type {
 } from "@/lib/types"
 
 type DragPayload = MealPlanDragPayload
+
+type DayPlanningState = "open" | "planned" | "released"
+
+function isReleasedPlan(plan: DailyMealPlan) {
+  return plan.status === "approved" || plan.status === "active"
+}
+
+function getDayPlanningState(plan: DailyMealPlan): DayPlanningState {
+  if (isReleasedPlan(plan)) return "released"
+  return plan.slots.some((slot) => slot.entries.length > 0) ? "planned" : "open"
+}
+
+const DAY_STATE_META: Record<
+  DayPlanningState,
+  { label: string; className: string }
+> = {
+  open: {
+    label: "Offen",
+    className: "border-border bg-background/70 text-muted-foreground",
+  },
+  planned: {
+    label: "Geplant",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  released: {
+    label: "Freigegeben",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+}
 
 const SLOT_ROW_LABELS: Record<MealSlotType, string> = {
   fruehstueck: "Frühstück",
@@ -80,11 +110,12 @@ export function MealPlanWeekBoard({
   onRemoveEntry,
 }: MealPlanWeekBoardProps) {
   const [dropTarget, setDropTarget] = useState<{ date: string; slot: MealSlotType } | null>(null)
+  const today = todayIsoDate()
 
   const handleCellDrop = (event: DragEvent, plan: DailyMealPlan, slotType: MealSlotType) => {
     event.preventDefault()
     setDropTarget(null)
-    if (plan.status === "approved") return
+    if (isReleasedPlan(plan)) return
     const payload = readMealPlanDragPayload(event)
     if (!payload) return
     onDrop(plan.date, slotType, payload)
@@ -98,7 +129,11 @@ export function MealPlanWeekBoard({
             <div />
             {days.map(({ plan, kcal, energyEvaluable }) => {
               const isActive = plan.date === activeDate
-              const isPlanned = plan.slots.some((slot) => slot.entries.length > 0)
+              const isPast = plan.date < today
+              const isToday = plan.date === today
+              const planningState = getDayPlanningState(plan)
+              const stateMeta = DAY_STATE_META[planningState]
+              const isPlanned = planningState !== "open"
               const energyStatus = isPlanned && energyEvaluable
                 ? getEnergyTargetStatus(kcal, energyTarget)
                 : "unplanned"
@@ -108,26 +143,54 @@ export function MealPlanWeekBoard({
               return (
                 <div
                   key={plan.date}
+                  data-day-date={plan.date}
+                  data-day-planning-state={planningState}
+                  data-day-temporal-state={isPast ? "past" : isToday ? "today" : "upcoming"}
                   className={cn(
                     "group/day relative rounded-lg border transition-colors",
-                    isActive ? "border-primary/50 bg-primary/10" : "bg-card hover:bg-accent",
+                    isPast && "border-border/70 bg-muted/70",
+                    !isPast && "bg-card hover:bg-accent",
+                    isActive && "border-primary/50 bg-primary/10 ring-primary/10 ring-1",
                   )}
                 >
                   <button
                     type="button"
-                    aria-label={`${format(parseISO(plan.date), "EEEE, d. MMMM yyyy", { locale: de })} in Tagesansicht öffnen`}
-                    onClick={() => onOpenDay(plan.date)}
-                    className="flex w-full flex-col items-center gap-1.5 p-2 text-center"
+                    aria-label={`${format(parseISO(plan.date), "EEEE, d. MMMM yyyy", { locale: de })} mit Doppelklick in Tagesansicht öffnen`}
+                    title="Mit Doppelklick in die Tagesansicht"
+                    onClick={(event) => {
+                      // Native keyboard and assistive-tech activation dispatch
+                      // a click without pointer click-count information.
+                      if (event.detail === 0) onOpenDay(plan.date)
+                    }}
+                    onDoubleClick={() => onOpenDay(plan.date)}
+                    className={cn(
+                      "flex w-full select-none flex-col items-center gap-1.5 p-2 text-center transition-opacity",
+                      isPast && !isActive && "opacity-70 hover:opacity-100",
+                    )}
                   >
                     <span
                       className={cn(
                         "flex items-center gap-1 text-xs font-semibold capitalize",
-                        isActive ? "text-primary" : "text-foreground",
+                        isActive ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground",
                       )}
                     >
                       {format(parseISO(plan.date), "EEE dd.", { locale: de })}
-                      {plan.status === "approved" && <Lock className="h-3 w-3" />}
+                      {planningState === "released" && <Lock className="h-3 w-3" />}
                     </span>
+                    <div className="flex min-h-4 items-center justify-center gap-1">
+                      {isPast ? (
+                        <span className="text-muted-foreground text-[9px] font-medium">Vergangen</span>
+                      ) : isToday ? (
+                        <span className="text-primary text-[9px] font-medium">Heute</span>
+                      ) : null}
+                      <Badge
+                        variant="outline"
+                        className={cn("h-4 rounded-full px-1.5 text-[9px] font-medium", stateMeta.className)}
+                      >
+                        {planningState === "released" ? <Check className="mr-0.5 h-2.5 w-2.5" /> : null}
+                        {stateMeta.label}
+                      </Badge>
+                    </div>
                     <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
                       <div
                         className={cn(
@@ -171,7 +234,7 @@ export function MealPlanWeekBoard({
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onSelect={() => onOpenDay(plan.date)}>
                         <FolderOpen className="mr-2 h-3.5 w-3.5" />
-                        Tag öffnen
+                        Tagesansicht öffnen
                       </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => onCopyCurrentToDay(plan.date)}>
                         <Copy className="mr-2 h-3.5 w-3.5" />
@@ -205,7 +268,8 @@ export function MealPlanWeekBoard({
               {days.map(({ plan }) => {
                 const slot = plan.slots.find((item) => item.type === slotType)
                 const entries = slot?.entries ?? []
-                const isLocked = plan.status === "approved"
+                const isLocked = isReleasedPlan(plan)
+                const isPast = plan.date < today
                 const isDropTarget =
                   dropTarget?.date === plan.date && dropTarget.slot === slotType
                 return (
@@ -222,10 +286,14 @@ export function MealPlanWeekBoard({
                       )
                     }
                     onDrop={(event) => handleCellDrop(event, plan, slotType)}
+                    data-day-date={plan.date}
+                    data-day-temporal-state={isPast ? "past" : plan.date === today ? "today" : "upcoming"}
                     className={cn(
                       "flex min-h-[104px] flex-col gap-1 rounded-lg border p-1.5 transition-colors",
                       isDropTarget
                         ? "border-primary bg-primary/10 border-dashed"
+                        : isPast
+                          ? "border-border/60 bg-muted/55"
                         : entries.length > 0
                           ? "bg-card"
                           : "bg-muted/30",
@@ -235,7 +303,10 @@ export function MealPlanWeekBoard({
                     {entries.map((entry) => (
                       <div
                         key={entry.id}
-                        className="group bg-accent/60 border-l-primary relative rounded-md border-l-2 px-2 py-1"
+                        className={cn(
+                          "group bg-accent/60 border-l-primary relative rounded-md border-l-2 px-2 py-1",
+                          isPast && "border-l-muted-foreground/40 bg-background/70 text-muted-foreground",
+                        )}
                       >
                         <div className="pr-4 text-[11px] leading-tight font-medium">
                           {getEntryLabel(entry).split("(")[0]?.trim()}
