@@ -316,3 +316,154 @@ test.describe("client plan RLS", () => {
     expect(releasedDeleteError).not.toBeNull();
   });
 });
+
+test.describe("atomic weekly meal plan release", () => {
+  let counselor: TestUser;
+  let outsider: TestUser;
+  let patientId: string;
+  let outsiderPatientId: string;
+  let foodId: string;
+  const weekPlanIds: string[] = [];
+  let formerReleaseId: string;
+  let outsiderPlanId: string;
+  const weekStart = "2026-09-07";
+
+  test.beforeAll(async () => {
+    counselor = await createUser("week-counselor");
+    outsider = await createUser("week-outsider");
+
+    const { data: food, error: foodError } = await admin
+      .from("foods")
+      .insert({
+        name: "Week release test food",
+        data_source_id: "bls",
+        source_food_id: `week-release-${Math.random().toString(36).slice(2, 10)}`,
+      })
+      .select("id")
+      .single();
+    if (foodError) throw new Error(foodError.message);
+    foodId = food.id;
+
+    const { data: patient, error: patientError } = await admin
+      .from("patients")
+      .insert({ user_id: counselor.id, first_name: "Week", last_name: "Release", date_of_birth: "1985-01-01", gender: "w" })
+      .select("id")
+      .single();
+    if (patientError) throw new Error(patientError.message);
+    patientId = patient.id;
+
+    const { data: outsiderPatient, error: outsiderPatientError } = await admin
+      .from("patients")
+      .insert({ user_id: outsider.id, first_name: "Other", last_name: "Week", date_of_birth: "1985-01-01", gender: "w" })
+      .select("id")
+      .single();
+    if (outsiderPatientError) throw new Error(outsiderPatientError.message);
+    outsiderPatientId = outsiderPatient.id;
+
+    const { data: outsiderPlan, error: outsiderPlanError } = await admin
+      .from("daily_meal_plans")
+      .insert({ user_id: outsider.id, patient_id: outsiderPatientId, date: weekStart, status: "draft", title: "Other user's plan" })
+      .select("id")
+      .single();
+    if (outsiderPlanError) throw new Error(outsiderPlanError.message);
+    outsiderPlanId = outsiderPlan.id;
+
+    const { data: formerRelease, error: formerReleaseError } = await admin
+      .from("daily_meal_plans")
+      .insert({ user_id: counselor.id, patient_id: patientId, date: weekStart, status: "approved", title: "Former Monday" })
+      .select("id")
+      .single();
+    if (formerReleaseError) throw new Error(formerReleaseError.message);
+    formerReleaseId = formerRelease.id;
+
+    for (let index = 0; index < 7; index += 1) {
+      const date = new Date(`${weekStart}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + index);
+      const { data: plan, error: planError } = await admin
+        .from("daily_meal_plans")
+        .insert({
+          user_id: counselor.id,
+          patient_id: patientId,
+          date: date.toISOString().slice(0, 10),
+          status: "draft",
+          title: `Week day ${index + 1}`,
+        })
+        .select("id")
+        .single();
+      if (planError) throw new Error(planError.message);
+      weekPlanIds.push(plan.id);
+      const { error: entryError } = await admin.from("meal_entries").insert({
+        meal_plan_id: plan.id,
+        slot_type: "fruehstueck",
+        entry_type: "food",
+        reference_id: foodId,
+        amount: 80,
+      });
+      if (entryError) throw new Error(entryError.message);
+    }
+  });
+
+  test.afterAll(async () => {
+    await admin.from("daily_meal_plans").delete().in("id", [...weekPlanIds, formerReleaseId, outsiderPlanId]);
+    await admin.from("patients").delete().in("id", [patientId, outsiderPatientId]);
+    await admin.from("foods").delete().eq("id", foodId);
+    for (const user of [counselor, outsider]) {
+      if (user?.id) await admin.auth.admin.deleteUser(user.id);
+    }
+  });
+
+  test("rejects missing or cross-user days without partially releasing any draft", async () => {
+    const counselorClient = await signedInClient(counselor);
+    const missing = await counselorClient.rpc("release_meal_plan_week_revision", {
+      target_patient_id: patientId,
+      target_week_start: weekStart,
+      target_plan_ids: weekPlanIds.slice(0, 6),
+    });
+    expect(missing.error).not.toBeNull();
+
+    const crossUser = await counselorClient.rpc("release_meal_plan_week_revision", {
+      target_patient_id: patientId,
+      target_week_start: weekStart,
+      target_plan_ids: [...weekPlanIds.slice(0, 6), outsiderPlanId],
+    });
+    expect(crossUser.error).not.toBeNull();
+
+    const { data: drafts, error: draftsError } = await admin
+      .from("daily_meal_plans")
+      .select("id,status")
+      .in("id", weekPlanIds);
+    expect(draftsError).toBeNull();
+    expect(drafts).toHaveLength(7);
+    expect(drafts?.every((plan) => plan.status === "draft")).toBe(true);
+  });
+
+  test("releases exactly the whole week, snapshots every day and replaces the former release", async () => {
+    const counselorClient = await signedInClient(counselor);
+    const { data: released, error } = await counselorClient.rpc("release_meal_plan_week_revision", {
+      target_patient_id: patientId,
+      target_week_start: weekStart,
+      target_plan_ids: weekPlanIds,
+    });
+    expect(error).toBeNull();
+    expect(released).toHaveLength(7);
+
+    const { data: plans, error: plansError } = await admin
+      .from("daily_meal_plans")
+      .select("id,status,approved_at,approved_by,replaced_at")
+      .in("id", [...weekPlanIds, formerReleaseId]);
+    expect(plansError).toBeNull();
+    const releasedPlans = plans?.filter((plan) => weekPlanIds.includes(plan.id)) ?? [];
+    expect(releasedPlans).toHaveLength(7);
+    expect(releasedPlans.every((plan) => plan.status === "approved" && plan.approved_by === counselor.id)).toBe(true);
+    expect(new Set(releasedPlans.map((plan) => plan.approved_at))).toHaveLength(1);
+    expect(plans?.find((plan) => plan.id === formerReleaseId)).toMatchObject({ status: "archived" });
+
+    const { data: snapshots, error: snapshotsError } = await admin
+      .from("meal_plan_versions")
+      .select("meal_plan_id,reason,snapshot")
+      .in("meal_plan_id", weekPlanIds);
+    expect(snapshotsError).toBeNull();
+    expect(snapshots).toHaveLength(7);
+    expect(snapshots?.every((snapshot) => snapshot.reason === "approved" && snapshot.snapshot.status === "approved")).toBe(true);
+  });
+});

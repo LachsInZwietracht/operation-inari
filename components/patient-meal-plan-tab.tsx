@@ -4,10 +4,21 @@ import { useEffect, useState } from "react"
 
 import { FoodsProvider } from "@/components/foods-provider"
 import { MealPlanPlanner } from "@/components/meal-plan-planner"
+import { PatientPlanStatus } from "@/components/patient-plan-status"
 import type { PatientEnergyContext } from "@/components/plan-strategy-view"
 import { PatientMealPlansTab } from "@/components/patient-meal-plans-tab"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { todayIsoDate } from "@/lib/client-mode"
+import { fetchMealPlansClient } from "@/lib/data/meal-plans-client"
 import { fetchRecipesClient } from "@/lib/data/recipes-client"
-import type { DailyMealPlan, Food, Patient, Recipe } from "@/lib/types"
+import type {
+  AnthropometricEntry,
+  DailyMealPlan,
+  Food,
+  Patient,
+  PatientAllergenEntry,
+  Recipe,
+} from "@/lib/types"
 
 interface PatientMealPlanTabProps {
   patient: Patient
@@ -16,12 +27,16 @@ interface PatientMealPlanTabProps {
   foods: Food[]
   /** Recipes referenced by this patient's plans, used until the full set lands. */
   recipes: Recipe[]
+  anthropometrics: AnthropometricEntry[]
+  patientAllergens: PatientAllergenEntry[]
   /**
    * Energy figures the record already computed. Passed down rather than
    * recomputed so the plan strategy and the overview cannot quote the patient
    * two different maintenance requirements.
    */
   energyContext?: PatientEnergyContext
+  onSavePatient: (updates: Partial<Patient>) => Promise<void>
+  onOpenClientApp: () => void
 }
 
 function mergePlanSources(
@@ -38,8 +53,8 @@ function mergePlanSources(
  *
  * A meal plan only ever exists for one patient, so the plan belongs in the
  * record rather than on a route of its own where the patient has to be picked
- * again. The planner keeps its Strategie/Tag/Woche views and gains the
- * patient's plan-template list as a fourth.
+ * again. The record owns strategy in Planstatus; its builder opens the week,
+ * treats a day as contextual detail, and keeps the patient's plan-template list.
  *
  * Nothing here is loaded by the patient route: the tab mounts lazily, and its
  * recipes and food index are fetched on that mount. Putting them in the route's
@@ -51,11 +66,18 @@ export function PatientMealPlanTab({
   plans,
   foods,
   recipes,
+  anthropometrics,
+  patientAllergens,
   energyContext,
+  onSavePatient,
+  onOpenClientApp,
 }: PatientMealPlanTabProps) {
   // The library needs the whole catalogue, not just what this patient's plans
   // already reference — the referenced ones are only a head start.
   const [allRecipes, setAllRecipes] = useState<Recipe[]>(recipes)
+  const [workspace, setWorkspace] = useState<"status" | "planner">("status")
+  const [plannerDate, setPlannerDate] = useState(todayIsoDate)
+  const [statusPlans, setStatusPlans] = useState<DailyMealPlan[]>(plans)
 
   useEffect(() => {
     let cancelled = false
@@ -72,29 +94,87 @@ export function PatientMealPlanTab({
     }
   }, [])
 
+  // The builder owns its autosaving workspace, while releases and revisions
+  // also happen in its plan list. Refresh the light cockpit projection when
+  // returning to it so the coverage rail never depends on the route's older
+  // server payload. A short defer lets the last blur/autosave finish first.
+  useEffect(() => {
+    if (workspace !== "status") return
+    let cancelled = false
+    const timeout = window.setTimeout(() => {
+      fetchMealPlansClient({ patientId: patient.id })
+        .then((nextPlans) => {
+          if (!cancelled) setStatusPlans(nextPlans)
+        })
+        .catch((error) => {
+          console.error("Failed to refresh patient plan status:", error)
+        })
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [patient.id, workspace])
+
+  const openPlanner = (date: string) => {
+    setPlannerDate(date)
+    setWorkspace("planner")
+  }
+
   return (
-    <FoodsProvider foods={foods}>
-      <MealPlanPlanner
-        embedded
-        patientId={patient.id}
-        energyContext={energyContext}
-        recipes={allRecipes}
-        initialPlans={plans}
-        extraTab={{
-          value: "plans",
-          label: "Planvorlagen",
-          render: ({ openDay, openPlan, workspacePlans }) => (
-            <PatientMealPlansTab
-              patient={patient}
-              initialPlans={mergePlanSources(plans, workspacePlans)}
-              foods={foods}
-              recipes={allRecipes}
-              onOpenPlan={openPlan}
-              onCreatePlan={() => openDay(new Date().toISOString().slice(0, 10))}
-            />
-          ),
-        }}
-      />
-    </FoodsProvider>
+    <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as typeof workspace)}>
+      <div className="mb-4 flex justify-center">
+        <TabsList className="grid h-11 w-full max-w-xl grid-cols-2 rounded-full bg-muted/70 p-1">
+          <TabsTrigger value="status" className="rounded-full">
+            Planstatus
+          </TabsTrigger>
+          <TabsTrigger value="planner" className="rounded-full">
+            Plan bearbeiten
+          </TabsTrigger>
+        </TabsList>
+      </div>
+
+      <TabsContent value="status" className="mt-0">
+        <PatientPlanStatus
+          patient={patient}
+          plans={statusPlans}
+          anthropometrics={anthropometrics}
+          energyContext={energyContext}
+          patientAllergens={patientAllergens}
+          onSavePatient={onSavePatient}
+          onOpenPlanner={openPlanner}
+          onOpenClientApp={onOpenClientApp}
+        />
+      </TabsContent>
+
+      <TabsContent value="planner" className="mt-0">
+        <FoodsProvider foods={foods}>
+          <MealPlanPlanner
+            key={plannerDate}
+            embedded
+            initialView="week"
+            initialDate={plannerDate}
+            patientId={patient.id}
+            energyContext={energyContext}
+            recipes={allRecipes}
+            initialPlans={statusPlans}
+            extraTab={{
+              value: "plans",
+              label: "Planvorlagen",
+              render: ({ openDay, openPlan, workspacePlans }) => (
+                <PatientMealPlansTab
+                  patient={patient}
+                  initialPlans={mergePlanSources(statusPlans, workspacePlans)}
+                  foods={foods}
+                  recipes={allRecipes}
+                  onOpenPlan={openPlan}
+                  onCreatePlan={() => openDay(todayIsoDate())}
+                />
+              ),
+            }}
+          />
+        </FoodsProvider>
+      </TabsContent>
+    </Tabs>
   )
 }

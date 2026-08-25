@@ -1,17 +1,13 @@
 "use client"
 
 import { useMemo, useState, type DragEvent } from "react"
-import { format, parseISO } from "date-fns"
-import { de } from "date-fns/locale"
 import {
   AlertTriangle,
-  Copy,
   Plus,
   Replace,
   X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   Tooltip,
@@ -57,11 +53,6 @@ const SLOT_ACCENTS: Record<MealSlotType, { border: string }> = {
 
 interface PlanDayWorkspaceProps {
   plan: DailyMealPlan
-  /** The 7 plans of the week containing the active day, Monday-first. */
-  weekPlans: DailyMealPlan[]
-  activeDate: string
-  onSelectDay: (date: string) => void
-  onDuplicateDay: () => void
   foods: Food[]
   foodMap: Map<string, Food>
   recipeMap: Map<string, Recipe>
@@ -91,10 +82,6 @@ function getEntryName(
 /** Day tab: dense data workspace — nutrient table per meal plus live Tagesziele. */
 export function PlanDayWorkspace({
   plan,
-  weekPlans,
-  activeDate,
-  onSelectDay,
-  onDuplicateDay,
   foods,
   foodMap,
   recipeMap,
@@ -135,19 +122,6 @@ export function PlanDayWorkspace({
     return map
   }, [plan, entryNutrients])
 
-  const weekDayKcal = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const dayPlan of weekPlans) {
-      const totals = sumNutrients(
-        dayPlan.slots.flatMap((slot) =>
-          slot.entries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap)),
-        ),
-      )
-      map.set(dayPlan.date, getNutrientValue(totals, "energie"))
-    }
-    return map
-  }, [weekPlans, foodMap, foods, recipeMap])
-
   const handleSlotDrop = (event: DragEvent, slotType: MealSlotType) => {
     event.preventDefault()
     setDropSlot(null)
@@ -166,48 +140,6 @@ export function PlanDayWorkspace({
 
   return (
     <div className="min-w-0 space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {weekPlans.map((dayPlan) => {
-              const isActive = dayPlan.date === activeDate
-              const kcal = weekDayKcal.get(dayPlan.date) ?? 0
-              return (
-                <button
-                  key={dayPlan.date}
-                  type="button"
-                  onClick={() => onSelectDay(dayPlan.date)}
-                  className={cn(
-                    "flex min-w-[52px] flex-col items-center rounded-md border px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors",
-                    isActive
-                      ? "border-primary/50 bg-primary/10 text-primary"
-                      : "bg-card hover:bg-accent",
-                  )}
-                >
-                  {format(parseISO(dayPlan.date), "EEEEEE", { locale: de })}
-                  <span
-                    className={cn(
-                      "mt-0.5 font-mono text-[10px] font-normal",
-                      kcal > 0 ? "text-muted-foreground" : "text-muted-foreground/50",
-                    )}
-                  >
-                    {kcal > 0 ? formatNumber(Math.round(kcal)) : "–"}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            disabled={isLocked}
-            onClick={onDuplicateDay}
-          >
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            Tag duplizieren
-          </Button>
-        </div>
-
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[640px] text-sm">
             <thead>

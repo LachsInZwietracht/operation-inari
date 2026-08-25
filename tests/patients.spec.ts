@@ -442,10 +442,44 @@ test.describe("Patient Management", () => {
       await expect(page.getByText("Letzter Kontakt")).toBeVisible();
       await expect(page.getByText("Aktueller Plan")).toBeVisible();
       await expect(page.getByText("Gewichtsverlauf")).toBeVisible();
-      await page.getByRole("button", { name: "Löschen" }).click();
+      // Record admin lives at the foot of the overview now, not in the header.
+      await page.getByRole("button", { name: "Patient löschen" }).click();
       await expect(page.getByRole("alertdialog", { name: "Patient löschen?" })).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
       await page.getByRole("tab", { name: "Ernährungsplan" }).click();
+      await expect(page.getByRole("tab", { name: "Planstatus" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+      await expect(page.getByText(/Der nächste Planungstag ist noch offen|Der aktuelle Plan reicht bis/)).toBeVisible({
+        timeout: 30_000,
+      });
+      await page.getByRole("tab", { name: "Plan bearbeiten" }).click();
+      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+      await expect(page.getByRole("tab", { name: "Strategie" })).toHaveCount(0);
+      await expect(page.getByRole("tab", { name: "Tag", exact: true })).toHaveCount(0);
+      await expect(page.getByText("Wochenbilanz", { exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Plan prüfen & freigeben" })).toBeVisible();
+      await page.getByRole("button", { name: "Plan prüfen & freigeben" }).click();
+      await expect(page.getByRole("dialog", { name: "Plan prüfen & freigeben" })).toBeVisible();
+      await expect(page.getByText("Vor der Freigabe beheben")).toBeVisible();
+      await page.getByRole("button", { name: "Abbrechen" }).click();
+      await expect(page.getByText("Nährstoff-Lückenfüller", { exact: true })).toHaveCount(0);
+      await page.getByText("Wochenbilanz", { exact: true }).click();
+      await expect(page.getByText("Als Nächstes", { exact: true })).toBeVisible();
+
+      const firstDay = page.getByRole("button", { name: /in Tagesansicht öffnen$/ }).first();
+      await firstDay.click();
+      await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toBeVisible();
+      await expect(page.getByText("Nährstoff-Lückenfüller", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
+      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
       await expect(page.getByRole("tab", { name: "Planvorlagen" })).toBeVisible({ timeout: 30_000 });
       await page.getByRole("tab", { name: "Profil" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();

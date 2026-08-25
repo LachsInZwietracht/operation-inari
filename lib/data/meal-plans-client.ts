@@ -45,6 +45,7 @@ interface MealEntryRow {
 interface FetchMealPlansOptions {
   supabase?: SupabaseClient;
   limit?: number;
+  patientId?: string;
 }
 
 interface PersistMealPlanOptions {
@@ -141,6 +142,9 @@ export async function fetchMealPlansClient(
 
   if (typeof options.limit === "number") {
     query = query.limit(options.limit);
+  }
+  if (options.patientId) {
+    query = query.eq("patient_id", options.patientId);
   }
 
   const { data, error } = await withTimeout(
@@ -355,4 +359,45 @@ export function archiveMealPlanRevisionClient(
   options: PersistMealPlanOptions = {},
 ) {
   return runPlanLifecycleFunction("archive_meal_plan_revision", planId, options);
+}
+
+/**
+ * Releases one complete Monday-Sunday patient week in one database transaction.
+ * Callers must pass persisted UUIDs only; the RPC rejects missing, empty or
+ * non-draft days rather than creating a partial plan on their behalf.
+ */
+export async function releaseMealPlanWeekRevisionClient(
+  patientId: string,
+  weekStart: string,
+  planIds: string[],
+  options: PersistMealPlanOptions = {},
+): Promise<DailyMealPlan[]> {
+  const client = resolveBrowserClient(options.supabase);
+  const userId = await getAuthenticatedUserId(client);
+  if (!userId) throw new Error("AUTH_REQUIRED");
+
+  const { data: releasedRows, error } = await client.rpc(
+    "release_meal_plan_week_revision",
+    {
+      target_patient_id: patientId,
+      target_week_start: weekStart,
+      target_plan_ids: planIds,
+    },
+  );
+  if (error) throw new Error(error.message);
+
+  const releasedIds = (releasedRows ?? []).map((row: { plan_id: string }) => String(row.plan_id));
+  if (releasedIds.length !== 7) {
+    throw new Error("WEEK_RELEASE_RETURN_INCOMPLETE");
+  }
+
+  const { data, error: reloadError } = await withTimeout(
+    baseMealPlanQuery(client).in("id", releasedIds),
+    5000,
+    "Supabase weekly meal plan release lookup timed out",
+  );
+  if (reloadError) throw new Error(reloadError.message);
+  if ((data ?? []).length !== 7) throw new Error("WEEK_RELEASE_RELOAD_INCOMPLETE");
+
+  return (data as MealPlanRow[]).map(mapMealPlanRow);
 }

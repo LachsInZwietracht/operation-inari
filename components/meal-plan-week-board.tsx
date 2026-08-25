@@ -16,6 +16,7 @@ import {
   type MealPlanDragPayload,
 } from "@/components/meal-plan-library"
 import { formatNumber } from "@/lib/format"
+import { getEnergyTargetStatus } from "@/lib/meal-plan-calc"
 import { cn } from "@/lib/utils"
 import type {
   DailyMealPlan,
@@ -51,7 +52,7 @@ export interface WeekBoardTarget {
 }
 
 interface MealPlanWeekBoardProps {
-  days: { plan: DailyMealPlan; kcal: number }[]
+  days: { plan: DailyMealPlan; kcal: number; energyEvaluable: boolean }[]
   activeDate: string
   /** Drives the per-day kcal progress bars in the board header. */
   energyTarget?: number
@@ -95,8 +96,12 @@ export function MealPlanWeekBoard({
         <div className="min-w-[788px] space-y-2">
           <div className="grid grid-cols-[72px_repeat(7,1fr)] gap-2">
             <div />
-            {days.map(({ plan, kcal }) => {
+            {days.map(({ plan, kcal, energyEvaluable }) => {
               const isActive = plan.date === activeDate
+              const isPlanned = plan.slots.some((slot) => slot.entries.length > 0)
+              const energyStatus = isPlanned && energyEvaluable
+                ? getEnergyTargetStatus(kcal, energyTarget)
+                : "unplanned"
               const pct = energyTarget
                 ? Math.min(100, Math.round((kcal / energyTarget) * 100))
                 : 0
@@ -124,11 +129,34 @@ export function MealPlanWeekBoard({
                       {plan.status === "approved" && <Lock className="h-3 w-3" />}
                     </span>
                     <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
-                      <div className="bg-primary h-full rounded-full" style={{ width: `${pct}%` }} />
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          energyStatus === "in-range"
+                            ? "bg-emerald-500"
+                            : energyStatus === "low" || energyStatus === "high"
+                              ? "bg-amber-500"
+                              : energyStatus === "no-target"
+                                ? "bg-primary/70"
+                                : "bg-muted-foreground/25",
+                        )}
+                        style={{ width: `${isPlanned ? pct : 0}%` }}
+                      />
                     </div>
                     <span className="text-muted-foreground font-mono text-[10px]">
-                      {kcal > 0 ? formatNumber(Math.round(kcal)) : "—"}
+                      {!isPlanned
+                        ? "Nicht geplant"
+                        : !energyEvaluable
+                          ? "kcal nicht beurteilbar"
+                        : energyTarget
+                          ? `${formatNumber(Math.round(kcal))} / ${formatNumber(Math.round(energyTarget))} kcal`
+                          : `${formatNumber(Math.round(kcal))} kcal`}
                     </span>
+                    {isPlanned && energyEvaluable && energyTarget ? (
+                      <span className="text-muted-foreground text-[9px]">
+                        {pct} % · ±5 % Zielkorridor
+                      </span>
+                    ) : null}
                   </button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

@@ -320,16 +320,17 @@ test.describe("Ernährungsplan", () => {
       if (entryError) throw new Error(entryError.message);
 
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
+      await page.getByRole("tab", { name: "Plan bearbeiten" }).click();
       await page.getByRole("tab", { name: "Planvorlagen" }).click();
 
       const draftCard = page.locator("[data-slot='card']").filter({ hasText: title }).first();
-      await draftCard.getByRole("button", { name: "Freigeben" }).click();
+      await draftCard.getByRole("button", { name: "Tag freigeben" }).click();
       const releaseDialog = page.getByRole("alertdialog");
       await releaseDialog.getByRole("button", { name: "Verbindlich freigeben" }).click();
 
       await expect(draftCard.getByText("Freigegeben", { exact: true })).toBeVisible();
       await draftCard.getByRole("button", { name: "Änderung beginnen" }).click();
-      await expect(page.getByRole("tab", { name: "Tag" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
 
       await page.getByRole("tab", { name: "Planvorlagen" }).click();
       await expect(page.getByText("Änderungsentwurf", { exact: true })).toBeVisible();

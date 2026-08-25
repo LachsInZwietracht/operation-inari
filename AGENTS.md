@@ -163,3 +163,8 @@ If a check is too expensive or blocked by environment, report it explicitly.
 - `scripts/etl/` - import and validation scripts.
 - `tests/` - Playwright tests.
 - `docs/` - product, database, strategy, and documentation index.
+
+## Migrated Claude memory
+
+- Use the Notion page “Inari Overview” only as planning input. Park explicitly requested ideas in its “Ideensammler”; code and repository documentation remain the technical source of truth. Missing Notion access must not block development.
+- The complete Playwright suite had documented stale failures on an unchanged baseline as of 2026-07-06. Prefer focused tests for changed behavior, capture the real Playwright exit status (do not pipe it through `tail`), and verify a broad failure against the current baseline before treating it as a regression.

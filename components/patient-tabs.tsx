@@ -76,7 +76,8 @@ const KlientenAppTab = dynamic(
 interface PatientTabsProps {
   patient: Patient
   initialData?: PatientWorkspaceData | null
-  newMeasurementRequest?: number
+  /** Removes the record and leaves the page; offered in the overview. */
+  onDeletePatient?: () => Promise<void>
   /**
    * Reports the derived phase upwards so the page header can show it next to
    * the patient's name. The workspace hooks live here, and the server payload
@@ -89,7 +90,7 @@ interface PatientTabsProps {
 export function PatientTabs({
   patient,
   initialData,
-  newMeasurementRequest,
+  onDeletePatient,
   onStageChange,
 }: PatientTabsProps) {
   const { getPatient, updatePatient, savePatient } = usePatients({ initialPatients: [patient] })
@@ -496,10 +497,6 @@ export function PatientTabs({
   // Recording a measurement is a small, self-contained task: it opens over
   // whatever you were reading instead of moving you to another tab.
   const [measurementOpen, setMeasurementOpen] = useState(false)
-  useEffect(() => {
-    if (newMeasurementRequest == null) return
-    setMeasurementOpen(true)
-  }, [newMeasurementRequest])
 
   const currentStage = derivePatientIntakeStage({
     patient: currentPatient,
@@ -565,6 +562,7 @@ export function PatientTabs({
           onSaveBasalOverride={handleSaveBasalOverride}
           onAddMeasurement={() => setMeasurementOpen(true)}
           onSaveCalorieGoal={handleSaveCalorieGoal}
+          onDeletePatient={onDeletePatient}
         />
       </TabsContent>
 
@@ -574,12 +572,18 @@ export function PatientTabs({
           plans={initialData?.mealPlans ?? []}
           foods={initialData?.mealPlanFoods ?? []}
           recipes={initialData?.recipes ?? []}
+          anthropometrics={anthroEntries}
+          patientAllergens={patientAllergens}
           energyContext={{
             weightKg: latestAnthro?.weight,
             basalMetabolicRate: latestAnthro ? basalMetabolicRate : undefined,
             totalEnergyExpenditure: latestAnthro ? totalEnergyExpenditure : undefined,
             pal,
           }}
+          onSavePatient={async (updates) => {
+            await savePatient(currentPatient.id, updates)
+          }}
+          onOpenClientApp={() => setActiveTab("klienten-app")}
         />
       </TabsContent>
 

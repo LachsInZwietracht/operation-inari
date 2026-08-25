@@ -576,6 +576,37 @@ export function useMealPlan(
     [foods],
   )
 
+  /**
+   * Waits for the autosave chains of the requested plans and returns their
+   * canonical Supabase rows. This is used by the weekly release review: local
+   * temporary ids must never be handed to a lifecycle RPC.
+   */
+  const flushPlansForDates = useCallback(
+    async (dates: string[]): Promise<DailyMealPlan[]> => {
+      const requestedDates = [...new Set(dates)]
+      const persisted = await Promise.all(
+        requestedDates.map(async (date) => {
+          const plan = plansRef.current[getPlanKey(date, contextPatientId)]
+          if (!plan || !plan.slots.some((slot) => slot.entries.length > 0)) return null
+
+          const chainKey = getPlanKey(plan.date, plan.patientId)
+          const pending = syncChainsRef.current.get(chainKey)
+          if (pending) {
+            const result = await pending
+            if (result && typeof result === "object" && "id" in result) {
+              return result as DailyMealPlan
+            }
+          }
+
+          const latest = plansRef.current[getPlanKey(date, contextPatientId)] ?? plan
+          return syncPlanToSupabase(latest)
+        }),
+      )
+      return persisted.filter((plan): plan is DailyMealPlan => Boolean(plan))
+    },
+    [contextPatientId, syncPlanToSupabase],
+  )
+
   const goToNextDay = useCallback(() => {
     setCurrentDate((prev) => format(addDays(parseISO(prev), 1), "yyyy-MM-dd"))
   }, [])
@@ -603,6 +634,7 @@ export function useMealPlan(
     applyTemplateToDate,
     isPlanLocked,
     setWorkspacePlan,
+    flushPlansForDates,
     setDate,
     goToNextDay,
     goToPreviousDay,

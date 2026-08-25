@@ -10,9 +10,12 @@ import {
   ChevronRight,
   FileText,
   Info,
+  Loader2,
+  Pencil,
   Send,
   Stethoscope,
   Target,
+  Trash2,
   UtensilsCrossed,
 } from "lucide-react"
 
@@ -23,6 +26,17 @@ import {
   PatientWeightChart,
   type HorizonValue,
 } from "@/components/patient-weight-chart"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -97,6 +111,8 @@ interface PatientOverviewTabProps {
   onSaveBasalOverride: (kcal: number | undefined) => Promise<void>
   onAddMeasurement: () => void
   onSaveCalorieGoal: (kcal: number) => Promise<void>
+  /** Removes the record and leaves the page. Omitted where that is not allowed. */
+  onDeletePatient?: () => Promise<void>
 }
 
 /**
@@ -345,8 +361,10 @@ export function PatientOverviewTab({
   onSaveBasalOverride,
   onAddMeasurement,
   onSaveCalorieGoal,
+  onDeletePatient,
 }: PatientOverviewTabProps) {
   const [todayDate] = useState(() => new Date())
+  const [isDeleting, setIsDeleting] = useState(false)
   const [horizon, setHorizon] = useState<HorizonValue>("6")
   const sortedMeasurements = useMemo(
     () => [...anthropometrics].sort((a, b) => a.date.localeCompare(b.date)),
@@ -943,6 +961,67 @@ export function PatientOverviewTab({
           sessions={sessions}
         />
       </section>
+
+      {/* Record admin, deliberately last and deliberately quiet. Stammdaten are
+          written once at intake and deleting a patient happens almost never —
+          neither is what this screen is read for, so they no longer sit as
+          three coloured blocks above every tab of the record. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Akte
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Stammdaten wie Name, Geburtsdatum und Kontaktweg.
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/patienten/${patient.id}/bearbeiten`}>
+              <Pencil className="mr-1.5 size-4" />
+              Stammdaten bearbeiten
+            </Link>
+          </Button>
+          {onDeletePatient ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="mr-1.5 size-4" />
+                  Patient löschen
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Patient löschen?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {patient.firstName} {patient.lastName} wird aus der Patientenliste
+                    entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={isDeleting}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsDeleting(true)
+                      void onDeletePatient().finally(() => setIsDeleting(false))
+                    }}
+                  >
+                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Löschen
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }

@@ -34,6 +34,7 @@ const SEGMENT_LABELS: Record<string, { label: string; linkable?: boolean }> = {
   uebersicht: { label: "Übersicht" },
   bibliothek: { label: "Bibliothek" },
   vergleich: { label: "Vergleich" },
+  "design-studio": { label: "Design-Studio" },
   einkaufsliste: { label: "Einkaufsliste" },
   ernaehrungsplan: { label: "Ernährungsplan" },
   lebensmittel: { label: "Lebensmittel" },

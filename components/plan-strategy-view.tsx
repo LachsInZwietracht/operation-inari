@@ -119,6 +119,77 @@ interface PlanStrategyViewProps {
   onSavePatient: (updates: Partial<Patient>) => Promise<void>
 }
 
+interface PlanStatusGuidanceProps {
+  patient: Patient
+  patientAllergens: PatientAllergenEntry[]
+  energyContext?: PatientEnergyContext
+  onSavePatient: (updates: Partial<Patient>) => Promise<void>
+}
+
+/**
+ * Patient-wide rules that must be decided before a concrete week is built.
+ *
+ * The patient cockpit owns these values now: they apply to every future plan,
+ * while a Kostform remains plan-specific and therefore stays in the builder.
+ */
+export function PlanStatusGuidance({
+  patient,
+  patientAllergens,
+  energyContext,
+  onSavePatient,
+}: PlanStatusGuidanceProps) {
+  const calorieGoal = patient.dailyCalorieGoal
+  const macros = calorieGoal ? macroGramsFromKcal(calorieGoal, patient.macroPreset) : {}
+  const preset = findMacroPreset(patient.macroPreset)
+  const allergies = patientAllergens.filter((entry) => entry.type !== "preference")
+  const exclusions = patient.nutritionPreferences ?? []
+  const goalDirection = intendedDirection(patient.goalWeight, energyContext?.weightKg)
+
+  return (
+    <section className="space-y-4">
+      <div className="px-1">
+        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
+          Leitplanken
+        </p>
+        <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">
+          Was für jede Planwoche gelten soll
+        </h2>
+        <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
+          Zielwerte, Ausschlüsse und einfache Prinzipien werden einmal am Patienten
+          festgelegt. Die Wochenplanung setzt sie anschließend konkret um.
+        </p>
+      </div>
+
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <TargetsCard
+          patient={patient}
+          preset={preset}
+          macros={macros}
+          energyContext={energyContext}
+          goalDirection={goalDirection}
+          onSavePatient={onSavePatient}
+        />
+        <FrameCard
+          patient={patient}
+          allergies={allergies}
+          exclusions={exclusions}
+        />
+        <div className="lg:col-span-2">
+          <PlanPrinciplesCard
+            calorieGoal={calorieGoal}
+            macroPreset={patient.macroPreset}
+            dietStyle={patient.dietStyle}
+            exclusions={exclusions}
+            weightKg={energyContext?.weightKg}
+            overrides={patient.planPrinciples}
+            onSaveOverrides={(next) => onSavePatient({ planPrinciples: next })}
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
 /**
  * The strategy half of a meal plan: what the plan is supposed to achieve and
  * the numbers it will be measured against.

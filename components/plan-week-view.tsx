@@ -4,10 +4,12 @@ import { type ReactNode, useCallback, useMemo } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { MealPlanWeekBoard } from "@/components/meal-plan-week-board"
+import { PlanWeekBalance } from "@/components/plan-week-balance"
 import { Button } from "@/components/ui/button"
 import {
   calculateEntryNutrients,
   getEntryLabel,
+  isMealEntryNutrientEvaluable,
 } from "@/lib/meal-plan-calc"
 import { getNutrientValue, sumNutrients } from "@/lib/nutrients"
 import type {
@@ -16,7 +18,10 @@ import type {
   MealEntry,
   MealSlotType,
   Recipe,
+  DietLinePreset,
+  ResolvedReferenceConfig,
 } from "@/lib/types"
+import type { DietLineComplianceItem } from "@/lib/meal-plan-calc"
 
 interface PlanWeekViewProps {
   weekPlans: DailyMealPlan[]
@@ -30,6 +35,9 @@ interface PlanWeekViewProps {
   recipeMap: Map<string, Recipe>
   activeDate: string
   energyTarget?: number
+  dietLine?: DietLinePreset
+  refConfig: ResolvedReferenceConfig
+  nutrientTargets: DietLineComplianceItem[]
   onOpenDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
@@ -55,6 +63,9 @@ export function PlanWeekView({
   recipeMap,
   activeDate,
   energyTarget,
+  dietLine,
+  refConfig,
+  nutrientTargets,
   onOpenDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
@@ -103,6 +114,13 @@ export function PlanWeekView({
         days={weekSummaries.map(({ plan, totals }) => ({
           plan,
           kcal: getNutrientValue(totals, "energie"),
+          energyEvaluable:
+            plan.slots.some((slot) => slot.entries.length > 0) &&
+            plan.slots.every((slot) =>
+              slot.entries.every((entry) =>
+                isMealEntryNutrientEvaluable(entry, "energie", foodMap, recipeMap),
+              ),
+            ),
         }))}
         activeDate={activeDate}
         energyTarget={energyTarget}
@@ -114,6 +132,17 @@ export function PlanWeekView({
         onDrop={onDrop}
         onAddEntry={onAddEntry}
         onRemoveEntry={onRemoveEntry}
+      />
+
+      <PlanWeekBalance
+        weekPlans={weekPlans}
+        foods={foods}
+        foodMap={foodMap}
+        recipeMap={recipeMap}
+        dietLine={dietLine}
+        energyTarget={energyTarget}
+        refConfig={refConfig}
+        nutrientTargets={nutrientTargets}
       />
     </div>
   )

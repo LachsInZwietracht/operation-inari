@@ -15,6 +15,25 @@ import type {
 
 export type ComplianceStatus = "ok" | "low" | "high"
 
+/**
+ * Energy targets are planning corridors, not a false exact daily cut-off.
+ * The same corridor drives the week board and its weekly average.
+ */
+export const ENERGY_TARGET_TOLERANCE = 0.05
+
+export type EnergyTargetStatus = "in-range" | "low" | "high" | "no-target"
+
+export function getEnergyTargetStatus(
+  value: number,
+  target?: number,
+  tolerance = ENERGY_TARGET_TOLERANCE,
+): EnergyTargetStatus {
+  if (!(target && target > 0)) return "no-target"
+  if (value < target * (1 - tolerance)) return "low"
+  if (value > target * (1 + tolerance)) return "high"
+  return "in-range"
+}
+
 export interface DietLineComplianceItem {
   nutrientId: string
   label: string
@@ -43,6 +62,35 @@ export function calculateEntryNutrients(
   const totalNutrients = calculateRecipeNutrients(recipe, foods)
   const perServing = calculatePerServing(totalNutrients, recipe.servings)
   return scaleNutrients(perServing, 1, entry.amount)
+}
+
+/**
+ * True only when the loaded source data can support a statement about this
+ * nutrient. Missing catalogue fields are different from a measured zero.
+ */
+export function isMealEntryNutrientEvaluable(
+  entry: MealEntry,
+  nutrientId: string,
+  foodMap: Map<string, Food>,
+  recipeMap: Map<string, Recipe>,
+): boolean {
+  if (entry.type === "food") {
+    return (
+      foodMap
+        .get(entry.referenceId)
+        ?.nutrients.some((value) => value.nutrientId === nutrientId) ?? false
+    )
+  }
+
+  const recipe = recipeMap.get(entry.referenceId)
+  return Boolean(
+    recipe?.ingredients.length &&
+      recipe.ingredients.every((ingredient) =>
+        foodMap
+          .get(ingredient.foodId)
+          ?.nutrients.some((value) => value.nutrientId === nutrientId),
+      ),
+  )
 }
 
 /** Human-readable label for a plan entry, e.g. "Haferflocken (60 g)". */

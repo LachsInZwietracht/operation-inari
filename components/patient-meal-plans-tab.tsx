@@ -428,7 +428,7 @@ export function PatientMealPlansTab({
                           onClick={() => setReleaseDialogPlan(plan)}
                         >
                           <Send className="mr-2 h-4 w-4" />
-                          Freigeben
+                          Tag freigeben
                         </Button>
                       )}
                       {isReleased && (
@@ -613,9 +613,9 @@ export function PatientMealPlansTab({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Plan jetzt freigeben?</AlertDialogTitle>
+            <AlertDialogTitle>Einzelnen Tag freigeben?</AlertDialogTitle>
             <AlertDialogDescription>
-              Dieser Stand wird fachlich abgeschlossen, unveränderlich und für den verknüpften Klienten
+              Dieser einzelne Tagesplan wird fachlich abgeschlossen, unveränderlich und für den verknüpften Klienten
               sichtbar. Spätere Anpassungen beginnen als neuer Entwurf; bis zu dessen Freigabe bleibt dieser
               Stand gültig.
             </AlertDialogDescription>

@@ -12,21 +12,18 @@ import {
 } from "date-fns"
 import { de } from "date-fns/locale"
 import {
-  ChevronLeft,
-  ChevronRight,
-  CalendarIcon,
+  Copy,
   AlertTriangle,
+  ArrowLeft,
   ArrowUpRight,
   Download,
   Library,
-  Sparkles,
+  Send,
   UserPlus,
   UserRound,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
@@ -55,6 +52,13 @@ import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { formatNumber } from "@/lib/format"
+import {
+  calculateEntryNutrients,
+  complianceBadge,
+  getEnergyTargetStatus,
+  isMealEntryNutrientEvaluable,
+} from "@/lib/meal-plan-calc"
+import { getNutrientValue, sumNutrients } from "@/lib/nutrients"
 import type {
   MealSlotType,
   MealEntry,
@@ -80,6 +84,7 @@ import { PlanExchangeTool } from "@/components/plan-exchange-tool"
 import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
+import { PlanWeekReleaseDialog, type WeekReleaseReview } from "@/components/plan-week-release-dialog"
 import {
   PlanStrategyView,
   type PatientEnergyContext,
@@ -94,11 +99,15 @@ const PlanWeekView = dynamic(
   { ssr: false, loading: viewFallback },
 )
 import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
+import { fetchClientLinkForPatient } from "@/lib/data/client-links"
+import { releaseMealPlanWeekRevisionClient } from "@/lib/data/meal-plans-client"
+import { isUuid } from "@/lib/data/local-records"
+import { createClient as createSupabaseClient } from "@/lib/supabase/client"
+import { summarizePlanAllergenConflicts } from "@/lib/allergen-warnings"
 import { usePatients } from "@/hooks/use-patients"
 import { useDietLinePresets } from "@/hooks/use-diet-line-presets"
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates"
 import { PlanExportDialog } from "@/components/plan-export-dialog"
-import { PlanSuggestionDialog } from "@/components/plan-suggestion-dialog"
 import { PlanDataExchangeDialog } from "@/components/plan-data-exchange-dialog"
 import { cn } from "@/lib/utils"
 
@@ -109,15 +118,6 @@ type PatientWithLegacyIndication = Patient & {
   indication?: string
   indications?: string[]
 }
-
-/**
- * Whether the plan suggestion is offered in the interface.
- *
- * The suggestion drafts a whole day from the patient's targets. It is a tool
- * for us while the generator earns its keep, not something to put in front of a
- * counselor who would then have to check every line of it.
- */
-const SHOW_PLAN_SUGGESTION = process.env.NODE_ENV === "development"
 
 function getPatientIndications(patient?: Patient): string[] {
   if (!patient) return []
@@ -132,6 +132,8 @@ interface MealPlanPlannerProps {
   initialTemplates?: MealPlanTemplate[]
   patientId?: string
   initialDate?: string
+  /** Initial inner workspace when a surrounding flow already made the choice. */
+  initialView?: "strategy" | "day" | "week"
   /**
    * Template id passed via `?template=…` (used by Planvorlagen to
    * deep-link "anwenden"). When present, the planner consumes it once on
@@ -147,9 +149,9 @@ interface MealPlanPlannerProps {
    */
   embedded?: boolean
   /**
-   * One more view alongside Strategie/Tag/Woche — the patient's plan list.
-   * Rendered with a handle back into the planner so opening a plan switches
-   * to its day here instead of navigating out of the record.
+   * One more view alongside the planning views — the patient's plan list.
+   * Rendered with a handle back into the planner so opening a plan selects its
+   * date here instead of navigating out of the record.
    */
   extraTab?: {
     value: string
@@ -174,6 +176,7 @@ export function MealPlanPlanner({
   initialTemplates,
   patientId,
   initialDate,
+  initialView,
   initialApplyTemplateId,
   embedded = false,
   extraTab,
@@ -213,9 +216,8 @@ export function MealPlanPlanner({
     updatePlanMetadata,
     applyTemplateToDate,
     setWorkspacePlan,
+    flushPlansForDates,
     setDate,
-    goToNextDay,
-    goToPreviousDay,
     allPlans,
   } = useMealPlan(initialPlans, serverFoods, defaultPlanMetadata, initialDate)
   const {
@@ -263,19 +265,22 @@ export function MealPlanPlanner({
   const [activeSlot, setActiveSlot] = useState<MealSlotType>("fruehstueck")
   // When adding from the week board a target day is set; null means the active day.
   const [activeAddDate, setActiveAddDate] = useState<string | null>(null)
-  const [calendarOpen, setCalendarOpen] = useState(false)
-  // Embedded in the record the plan is opened to decide something, and that
-  // decision is the strategy. Standalone, the planner is a day editor.
-  const [view, setView] = useState(embedded ? "strategy" : "day")
+  // The patient record opens on the week as its actual planning surface.
+  // Standalone callers can still choose strategy or day explicitly.
+  const [view, setView] = useState<string>(
+    initialView ?? (embedded ? "strategy" : "day"),
+  )
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
   const [dietLineDialogOpen, setDietLineDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [planDataExchangeOpen, setPlanDataExchangeOpen] = useState(false)
-  const [suggestionDialogOpen, setSuggestionDialogOpen] = useState(false)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
+  const [weekReleaseReviewOpen, setWeekReleaseReviewOpen] = useState(false)
+  const [isReleasingWeek, setIsReleasingWeek] = useState(false)
+  const [clientLinkState, setClientLinkState] = useState<"linked" | "not-linked" | "unknown">("unknown")
 
   useEffect(() => {
     setHydratedFoods((prev) => {
@@ -426,13 +431,6 @@ export function MealPlanPlanner({
     )
   }
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      setDate(format(date, "yyyy-MM-dd"))
-      setCalendarOpen(false)
-    }
-  }
-
   const handleDropPayload = async (slotType: MealSlotType, payload: { type: MealEntry["type"]; referenceId: string }) => {
     if (payload.type === "recipe") {
       const recipe = recipeMap.get(payload.referenceId)
@@ -564,6 +562,19 @@ export function MealPlanPlanner({
   // independent of the week view's offset navigation.
   const baseWeekStartIso = format(baseWeekStart, "yyyy-MM-dd")
   const dayWeekPlans = useMemo(() => getPlansInRange(baseWeekStartIso, 7), [baseWeekStartIso, getPlansInRange])
+  // kcal per day of that week, for the weekday chips in the day header.
+  const weekDayKcal = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const dayPlan of dayWeekPlans) {
+      const totals = sumNutrients(
+        dayPlan.slots.flatMap((slot) =>
+          slot.entries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap)),
+        ),
+      )
+      map.set(dayPlan.date, getNutrientValue(totals, "energie"))
+    }
+    return map
+  }, [dayWeekPlans, foodMap, foods, recipeMap])
   const weekRangeLabel = `${format(computedWeekStart, "d. MMM", { locale: de })} – ${format(
     addDays(computedWeekStart, 6),
     "d. MMM yyyy",
@@ -577,6 +588,26 @@ export function MealPlanPlanner({
     [visiblePatient, getAllergensForPatient],
   )
 
+  // Only the active link state is needed for the handoff copy. This stays in
+  // the counselor's existing RLS scope and does not load any client diary data.
+  useEffect(() => {
+    if (!patientId) {
+      setClientLinkState("not-linked")
+      return
+    }
+    let cancelled = false
+    fetchClientLinkForPatient(createSupabaseClient(), patientId)
+      .then((link) => {
+        if (!cancelled) setClientLinkState(link?.status === "active" ? "linked" : "not-linked")
+      })
+      .catch(() => {
+        if (!cancelled) setClientLinkState("unknown")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [patientId])
+
   // The day's totals, keyed by nutrient id, so the strategy view can mark each
   // principle as reached or still open on the day currently in the Tag view.
   const dayTotals = useMemo(() => {
@@ -589,6 +620,122 @@ export function MealPlanPlanner({
 
   /** The strategy's energy target, shown in the tactical views as a reminder. */
   const strategyKcalTarget = visiblePatient?.dailyCalorieGoal
+
+  const weekReleaseReview = useMemo<WeekReleaseReview>(() => {
+    const blockers: string[] = []
+    const warnings: string[] = []
+    const persistedDraftDays = weekPlans.filter(
+      (plan) =>
+        isUuid(plan.id) &&
+        plan.status === "draft" &&
+        plan.slots.some((slot) => slot.entries.length > 0),
+    )
+    const preparedDays = weekPlans.filter((plan) => plan.slots.some((slot) => slot.entries.length > 0))
+    const targetEnergy = energyTargetValue ?? strategyKcalTarget
+
+    if (preparedDays.length !== 7) {
+      blockers.push(`${7 - preparedDays.length} von 7 Tagen sind noch nicht belegt.`)
+    }
+    if (persistedDraftDays.length !== 7) {
+      const unpersisted = preparedDays.filter((plan) => !isUuid(plan.id)).length
+      const nonDraft = preparedDays.filter((plan) => isUuid(plan.id) && plan.status !== "draft").length
+      if (unpersisted > 0) blockers.push(`${unpersisted} befüllte Tage werden noch gespeichert.`)
+      if (nonDraft > 0) blockers.push(`${nonDraft} befüllte Tage sind nicht mehr als Entwurf bearbeitbar.`)
+      if (unpersisted === 0 && nonDraft === 0 && preparedDays.length === 7) {
+        blockers.push("Nicht alle sieben Tagesentwürfe konnten als gespeicherte Pläne geprüft werden.")
+      }
+    }
+
+    const severeDays = weekPlans.filter((plan) =>
+      summarizePlanAllergenConflicts(plan, visiblePatientAllergens, foodMap, recipeMap).highestSeverity === "severe",
+    )
+    if (severeDays.length > 0) {
+      blockers.push(`Schwere Allergenkonflikte an ${severeDays.map((plan) => format(parseISO(plan.date), "EEE d.", { locale: de })).join(", ")}.`)
+    }
+
+    const allEntries = weekPlans.flatMap((plan) => plan.slots.flatMap((slot) => slot.entries))
+    if (allEntries.length > 0) {
+      if (targetEnergy) {
+        const evaluableEnergy = allEntries.every((entry) =>
+          isMealEntryNutrientEvaluable(entry, "energie", foodMap, recipeMap),
+        )
+        if (!evaluableEnergy) {
+          warnings.push("Die Wochenenergie ist wegen fehlender Quelldaten nicht vollständig beurteilbar.")
+        } else {
+          const totalEnergy = getNutrientValue(
+            sumNutrients(allEntries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap))),
+            "energie",
+          )
+          const status = getEnergyTargetStatus(totalEnergy / 7, targetEnergy)
+          if (status === "low" || status === "high") {
+            warnings.push(`Die durchschnittliche Energie liegt ${status === "low" ? "unter" : "über"} dem Zielkorridor.`)
+          }
+        }
+      }
+
+      const unavailableTargets = micronutrientCompliance.filter((target) =>
+        !allEntries.every((entry) =>
+          isMealEntryNutrientEvaluable(entry, target.nutrientId, foodMap, recipeMap),
+        ),
+      )
+      if (unavailableTargets.length > 0) {
+        warnings.push(`Für ${unavailableTargets.slice(0, 3).map((target) => target.label).join(", ")} fehlen bei einzelnen Einträgen Quelldaten.`)
+      }
+
+      const nutrientGaps = micronutrientCompliance.filter((target) => {
+        if (!allEntries.every((entry) => isMealEntryNutrientEvaluable(entry, target.nutrientId, foodMap, recipeMap))) return false
+        const average = getNutrientValue(
+          sumNutrients(allEntries.map((entry) => calculateEntryNutrients(entry, foodMap, foods, recipeMap))),
+          target.nutrientId,
+        ) / 7
+        return complianceBadge(average, target.min, target.max) !== "ok"
+      })
+      if (nutrientGaps.length > 0) {
+        warnings.push(`Die Wochenbilanz markiert ${nutrientGaps.slice(0, 3).map((target) => target.label).join(", ")} zur fachlichen Prüfung.`)
+      }
+    }
+
+    return {
+      blockers,
+      warnings,
+      plannedDays: preparedDays.length,
+      clientVisibility: clientLinkState,
+    }
+  }, [clientLinkState, energyTargetValue, foodMap, foods, micronutrientCompliance, recipeMap, strategyKcalTarget, visiblePatientAllergens, weekPlans])
+
+  const weekIsReleased = weekPlans.length === 7 && weekPlans.every(
+    (plan) => plan.status === "approved" || plan.status === "active",
+  )
+
+  const handleReleaseWeek = useCallback(async () => {
+    if (!patientId || weekReleaseReview.blockers.length > 0) return
+    setIsReleasingWeek(true)
+    try {
+      const persisted = await flushPlansForDates(weekPlans.map((plan) => plan.date))
+      if (persisted.length !== 7 || persisted.some((plan) => !isUuid(plan.id) || plan.status !== "draft")) {
+        throw new Error("WEEK_PLANS_NOT_PERSISTED")
+      }
+      const released = await releaseMealPlanWeekRevisionClient(
+        patientId,
+        computedWeekStartIso,
+        persisted.map((plan) => plan.id),
+      )
+      for (const plan of released) setWorkspacePlan(plan)
+      setWeekReleaseReviewOpen(false)
+      toast.success("Wochenplan verbindlich freigegeben.", {
+        description: clientLinkState === "linked" ? "Im Klienten-Account sichtbar." : "Kein aktiver Klienten-Account verknüpft.",
+      })
+    } catch (error) {
+      console.error("Failed to release meal plan week:", error)
+      toast.error("Wochenplan konnte nicht freigegeben werden.", {
+        description: error instanceof Error && error.message === "WEEK_PLANS_NOT_PERSISTED"
+          ? "Bitte warten Sie, bis alle sieben Tagesentwürfe gespeichert sind."
+          : "Die Woche wurde nicht teilweise freigegeben.",
+      })
+    } finally {
+      setIsReleasingWeek(false)
+    }
+  }, [clientLinkState, computedWeekStartIso, flushPlansForDates, patientId, setWorkspacePlan, weekPlans, weekReleaseReview.blockers.length])
 
   // Strategy values (calorie target, macro split) live on the patient record,
   // so editing them here writes to the same fields the Kalorienrechner and the
@@ -753,6 +900,28 @@ export function MealPlanPlanner({
       Export
     </Button>
   )
+  const weekHeaderActions = embedded ? (
+    <>
+      {weekIsReleased ? (
+        <>
+          <Badge className="border-emerald-300 bg-emerald-50 text-emerald-800" variant="outline">
+            Plan freigegeben
+          </Badge>
+          {extraTab ? (
+            <Button size="sm" variant="outline" onClick={() => setView(extraTab.value)}>
+              Änderung beginnen
+            </Button>
+          ) : null}
+        </>
+      ) : (
+        <Button size="sm" onClick={() => setWeekReleaseReviewOpen(true)}>
+          <Send className="mr-1.5 h-4 w-4" />
+          Plan prüfen &amp; freigeben
+        </Button>
+      )}
+      {exportMenu}
+    </>
+  ) : exportMenu
   // The dialog exports the week the user is looking at: the week view follows
   // its offset navigation, the day view the week around the active date.
   const exportWeekPlans = view === "week" ? weekPlans : dayWeekPlans
@@ -799,21 +968,13 @@ export function MealPlanPlanner({
           </SelectContent>
         </Select>
         {visiblePatient && (
-          <>
-            {SHOW_PLAN_SUGGESTION ? (
-              <Button variant="outline" onClick={() => setSuggestionDialogOpen(true)}>
-                <Sparkles className="mr-1.5 h-4 w-4" />
-                Planvorschlag
-              </Button>
-            ) : null}
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/patienten/${visiblePatient.id}`)}
-            >
-              <ArrowUpRight className="mr-1.5 h-4 w-4" />
-              Zum Patienten
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/patienten/${visiblePatient.id}`)}
+          >
+            <ArrowUpRight className="mr-1.5 h-4 w-4" />
+            Zum Patienten
+          </Button>
         )}
       </PageHeader>
       )}
@@ -836,19 +997,13 @@ export function MealPlanPlanner({
             tab strip it replaces. */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
-            <TabsTrigger value="strategy">Strategie</TabsTrigger>
-            <TabsTrigger value="day">Tag</TabsTrigger>
+            {!embedded ? <TabsTrigger value="strategy">Strategie</TabsTrigger> : null}
+            {!embedded ? <TabsTrigger value="day">Tag</TabsTrigger> : null}
             <TabsTrigger value="week">Woche</TabsTrigger>
             {extraTab ? (
               <TabsTrigger value={extraTab.value}>{extraTab.label}</TabsTrigger>
             ) : null}
           </TabsList>
-          {SHOW_PLAN_SUGGESTION && embedded && visiblePatient ? (
-            <Button variant="outline" size="sm" onClick={() => setSuggestionDialogOpen(true)}>
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Planvorschlag
-            </Button>
-          ) : null}
         </div>
 
         {extraTab ? (
@@ -856,12 +1011,14 @@ export function MealPlanPlanner({
             {extraTab.render({
               openDay: (date) => {
                 setDate(date)
-                setView("day")
+                setWeekOffset(0)
+                setView(embedded ? "week" : "day")
               },
               openPlan: (plan) => {
                 setWorkspacePlan(plan)
                 setDate(plan.date)
-                setView("day")
+                setWeekOffset(0)
+                setView(embedded ? "week" : "day")
               },
               workspacePlans: Object.values(allPlans),
             })}
@@ -934,17 +1091,18 @@ export function MealPlanPlanner({
                 </div>
               </SheetContent>
             </Sheet>
-            <PlanBalanceRail
-              layout="mobile"
-              compliance={dietLineMacros}
-              micronutrients={micronutrientCompliance}
-              dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
-              dietLines={dietLines}
-              dietLineId={dietLineId}
-              onDietLineChange={handleDietLineChange}
-              dietLineDisabled={currentPlan.status === "approved"}
-              onManageDietLine={() => setDietLineDialogOpen(true)}
-            />
+            {view === "day" ? (
+              <PlanBalanceRail
+                layout="mobile"
+                compliance={dietLineMacros}
+                dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
+                dietLines={dietLines}
+                dietLineId={dietLineId}
+                onDietLineChange={handleDietLineChange}
+                dietLineDisabled={currentPlan.status === "approved"}
+                onManageDietLine={() => setDietLineDialogOpen(true)}
+              />
+            ) : null}
           </div>
 
           {/* Col 1: the shared library on the left. At xl it fills the planner
@@ -971,61 +1129,60 @@ export function MealPlanPlanner({
 
         <TabsContent value="day" className="space-y-4">
           <div className="flex flex-wrap items-center gap-2 border-b py-2">
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" onClick={goToPreviousDay}>
-                <ChevronLeft className="h-4 w-4" />
-                <span className="sr-only">Vorheriger Tag</span>
+            {embedded ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mr-1"
+                onClick={() => {
+                  setWeekOffset(0)
+                  setView("week")
+                }}
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" />
+                Zur Wochenansicht
               </Button>
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden min-w-[180px] justify-start gap-2 capitalize sm:inline-flex"
+            ) : null}
+            {/* The week's days are the day picker: one click per day, with each
+                day's kcal on the chip so the week reads at a glance. */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {dayWeekPlans.map((dayPlan) => {
+                const isActive = dayPlan.date === currentDate
+                const kcal = weekDayKcal.get(dayPlan.date) ?? 0
+                return (
+                  <button
+                    key={dayPlan.date}
+                    type="button"
+                    onClick={() => setDate(dayPlan.date)}
+                    className={cn(
+                      "flex min-w-[52px] flex-col items-center rounded-md border px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors",
+                      isActive
+                        ? "border-primary/50 bg-primary/10 text-primary"
+                        : "bg-card hover:bg-accent",
+                    )}
                   >
-                    <CalendarIcon className="h-4 w-4" />
-                    {formattedDate}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={parsedDate}
-                    onSelect={handleDateSelect}
-                    locale={de}
-                  />
-                </PopoverContent>
-              </Popover>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon" className="sm:hidden">
-                    <CalendarIcon className="h-4 w-4" />
-                    <span className="sr-only">Datum wählen</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={parsedDate}
-                    onSelect={handleDateSelect}
-                    locale={de}
-                  />
-                </PopoverContent>
-              </Popover>
-              <Button variant="outline" size="icon" onClick={goToNextDay}>
-                <ChevronRight className="h-4 w-4" />
-                <span className="sr-only">Nächster Tag</span>
-              </Button>
+                    {format(parseISO(dayPlan.date), "EEEEEE", { locale: de })}
+                    <span
+                      className={cn(
+                        "mt-0.5 font-mono text-[10px] font-normal",
+                        kcal > 0 ? "text-muted-foreground" : "text-muted-foreground/50",
+                      )}
+                    >
+                      {kcal > 0 ? formatNumber(Math.round(kcal)) : "–"}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
+            <span className="text-muted-foreground text-xs capitalize">{formattedDate}</span>
 
-            {strategyKcalTarget ? (
+            {strategyKcalTarget && !embedded ? (
               <button
                 type="button"
                 onClick={() => setView("strategy")}
                 className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
               >
-                Strategie: {formatNumber(strategyKcalTarget)} kcal · heute{" "}
-                {formatNumber(Math.round(dayTotals.energie ?? 0))} kcal
+                Strategie: Ziel {formatNumber(strategyKcalTarget)} kcal · Tag {formatNumber(Math.round(dayTotals.energie ?? 0))} kcal
               </button>
             ) : null}
 
@@ -1047,23 +1204,24 @@ export function MealPlanPlanner({
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPlan.status === "approved"}
+                onClick={() => copyPlanToNextDay(currentDate)}
+              >
+                <Copy className="mr-1.5 h-4 w-4" />
+                Tag duplizieren
+              </Button>
               {exportMenu}
             </div>
           </div>
-          <div className="text-muted-foreground -mt-2 text-xs capitalize sm:hidden">
-            {formattedDate}
-          </div>
-
           {planAllergenSummary.totalConflicts > 0 && (
             <PlanAllergenBanner summary={planAllergenSummary} />
           )}
 
           <PlanDayWorkspace
             plan={currentPlan}
-            weekPlans={dayWeekPlans}
-            activeDate={currentDate}
-            onSelectDay={setDate}
-            onDuplicateDay={() => copyPlanToNextDay(currentDate)}
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
@@ -1084,14 +1242,18 @@ export function MealPlanPlanner({
             weekRangeLabel={weekRangeLabel}
             onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
             onNextWeek={() => setWeekOffset((prev) => prev + 1)}
-            headerActions={exportMenu}
+            headerActions={weekHeaderActions}
             foods={foods}
             foodMap={foodMap}
             recipeMap={recipeMap}
             activeDate={currentDate}
             energyTarget={energyTargetValue ?? strategyKcalTarget}
+            dietLine={dietLine}
+            refConfig={refConfig}
+            nutrientTargets={micronutrientCompliance}
             onOpenDay={(date) => {
               setDate(date)
+              setWeekOffset(0)
               setView("day")
             }}
             onCopyCurrentToDay={copyCurrentPlanToDate}
@@ -1104,9 +1266,10 @@ export function MealPlanPlanner({
         </TabsContent>
           </div>
 
-          {/* Shared tools section below the plan — identical in day and week
-              views. A quiet divider separates it from the planner above. */}
-          <div className="space-y-4 xl:col-span-2">
+          {/* Optimizers and the gap filler deliberately operate on the active
+              day. The week gets its own aggregate balance above, so no tool
+              silently analyses the wrong scope. */}
+          {view === "day" ? <div className="space-y-4 xl:col-span-2">
             <div className="flex items-center gap-3">
               <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                 Tools
@@ -1134,16 +1297,16 @@ export function MealPlanPlanner({
               <PlanAdditiveSummary plan={currentPlan} foodMap={foodMap} recipeMap={recipeMap} />
             </div>
           </div>
+          : null}
 
-          {/* Sticky bottom dock: a slim Tagesziele glance pinned to the screen
-              edge. The toggle expands it upward into the full micronutrient view. */}
+          {/* The daily dock stays a compact macro comparison. Week-level
+              micronutrients live in the non-sticky Wochenbilanz instead. */}
           {/* Pull the dock flush to the scroll bottom: cancel the trailing space
               below it (page padding + tab wrapper gap) so it no longer lifts off
               the bottom edge when scrolled all the way down. */}
-          <div className="sticky bottom-0 z-40 -mb-12 hidden md:block xl:col-span-2">
+          {view === "day" ? <div className="sticky bottom-0 z-40 -mb-12 hidden md:block xl:col-span-2">
             <PlanBalanceRail
               compliance={dietLineMacros}
-              micronutrients={micronutrientCompliance}
               dietLineName={dietLinesLoading ? "Zielprofile laden …" : dietLine?.name}
               dietLines={dietLines}
               dietLineId={dietLineId}
@@ -1152,6 +1315,7 @@ export function MealPlanPlanner({
               onManageDietLine={() => setDietLineDialogOpen(true)}
             />
           </div>
+          : null}
         </div>
       </Tabs>
         </>
@@ -1172,15 +1336,17 @@ export function MealPlanPlanner({
         planId={currentPlan.id}
       />
 
-      <PlanSuggestionDialog
-        open={suggestionDialogOpen}
-        onOpenChange={setSuggestionDialogOpen}
-        patientId={visiblePatient?.id}
-        onApply={(slots, notes) => {
-          applyTemplateToDate(currentDate, slots, { notes: notes.join(" ") })
-          toast.success("Planvorschlag als Entwurf eingesetzt.")
-        }}
-      />
+      {embedded && patientId ? (
+        <PlanWeekReleaseDialog
+          open={weekReleaseReviewOpen}
+          onOpenChange={setWeekReleaseReviewOpen}
+          patientName={visiblePatient ? `${visiblePatient.firstName} ${visiblePatient.lastName}` : "Patient"}
+          weekRangeLabel={weekRangeLabel}
+          review={weekReleaseReview}
+          isReleasing={isReleasingWeek}
+          onRelease={() => void handleReleaseWeek()}
+        />
+      ) : null}
 
       <PlanDataExchangeDialog
         open={planDataExchangeOpen}
