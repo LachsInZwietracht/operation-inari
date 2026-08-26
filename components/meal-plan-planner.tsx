@@ -8,6 +8,7 @@ import {
   parseISO,
   addDays,
   addWeeks,
+  differenceInCalendarDays,
   startOfWeek,
 } from "date-fns"
 import { de } from "date-fns/locale"
@@ -18,6 +19,7 @@ import {
   ArrowUpRight,
   Download,
   Library,
+  Save,
   Send,
   UserPlus,
   UserRound,
@@ -86,6 +88,8 @@ import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialo
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { PlanWeekReleaseDialog, type WeekReleaseReview } from "@/components/plan-week-release-dialog"
 import { PlanWeekCopyDialog } from "@/components/plan-week-copy-dialog"
+import { PlanWeekTemplateDialog } from "@/components/plan-week-template-dialog"
+import { PlanMultiDayTemplateApplyDialog } from "@/components/plan-multi-day-template-apply-dialog"
 import {
   PlanStrategyView,
   type PatientEnergyContext,
@@ -101,7 +105,7 @@ const PlanWeekView = dynamic(
 )
 import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
 import { fetchClientLinkForPatient } from "@/lib/data/client-links"
-import { releaseMealPlanWeekRevisionClient } from "@/lib/data/meal-plans-client"
+import { fetchMealPlansClient, releaseMealPlanWeekRevisionClient } from "@/lib/data/meal-plans-client"
 import { isUuid } from "@/lib/data/local-records"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 import { summarizePlanAllergenConflicts } from "@/lib/allergen-warnings"
@@ -134,7 +138,9 @@ interface MealPlanPlannerProps {
   patientId?: string
   initialDate?: string
   /** Initial inner workspace when a surrounding flow already made the choice. */
-  initialView?: "strategy" | "day" | "week"
+  initialView?: "strategy" | "day" | "week" | "plans"
+  /** Mirrors embedded workspace transitions into the surrounding route. */
+  onViewChange?: (view: string, date: string) => void
   /**
    * Template id passed via `?template=…` (used by Planvorlagen to
    * deep-link "anwenden"). When present, the planner consumes it once on
@@ -178,6 +184,7 @@ export function MealPlanPlanner({
   patientId,
   initialDate,
   initialView,
+  onViewChange,
   initialApplyTemplateId,
   embedded = false,
   extraTab,
@@ -228,7 +235,7 @@ export function MealPlanPlanner({
     savePreset: saveDietLinePreset,
     deletePreset: deleteDietLinePreset,
   } = useDietLinePresets()
-  const { templates: mealPlanTemplates } = useMealPlanTemplates({ initialTemplates })
+  const { templates: mealPlanTemplates, saveTemplate } = useMealPlanTemplates({ initialTemplates })
 
   // Planvorlagen deep-link handler. Applies a template once when the
   // planner mounts with `?template=…`, then rewrites the URL to drop the param
@@ -243,6 +250,13 @@ export function MealPlanPlanner({
     )
     if (!template) return
     appliedTemplateRef.current = initialApplyTemplateId
+    if (template.dayBlocks && template.dayBlocks.length > 1) {
+      toast.message("Mehrtägige Vorlage braucht eine Planprüfung.", {
+        description: "Öffnen Sie den Block im Patientenplaner, damit alle Zieltage gemeinsam geprüft werden.",
+      })
+      router.replace(`/ernaehrungsplan/bibliothek/${template.id}${patientId ? `?patientId=${patientId}` : ""}`)
+      return
+    }
     applyTemplateToDate(currentDate, template.slots, {
       title: template.name,
       dietLineId: template.dietLineId ?? undefined,
@@ -269,9 +283,12 @@ export function MealPlanPlanner({
   const [activeAddDate, setActiveAddDate] = useState<string | null>(null)
   // The patient record opens on the week as its actual planning surface.
   // Standalone callers can still choose strategy or day explicitly.
-  const [view, setView] = useState<string>(
+  const [internalView, setInternalView] = useState<string>(
     initialView ?? (embedded ? "strategy" : "day"),
   )
+  // Embedded callers control the visible depth from the URL. Standalone use
+  // keeps the original local tab state.
+  const view = onViewChange && initialView ? initialView : internalView
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [exchangeSlot, setExchangeSlot] = useState<MealSlotType | null>(null)
   const [exchangeEntryId, setExchangeEntryId] = useState<string | null>(null)
@@ -284,7 +301,31 @@ export function MealPlanPlanner({
   const [isReleasingWeek, setIsReleasingWeek] = useState(false)
   const [weekCopyOpen, setWeekCopyOpen] = useState(false)
   const [isCopyingWeek, setIsCopyingWeek] = useState(false)
+  const [selectedWeekDates, setSelectedWeekDates] = useState<string[]>([])
+  const [weekTemplateDialogOpen, setWeekTemplateDialogOpen] = useState(false)
+  const [isSavingWeekTemplate, setIsSavingWeekTemplate] = useState(false)
+  const [pendingMultiDayTemplate, setPendingMultiDayTemplate] = useState<{
+    template: MealPlanTemplate
+    targetDates: string[]
+    occupiedDates: string[]
+  } | null>(null)
+  const [isApplyingMultiDayTemplate, setIsApplyingMultiDayTemplate] = useState(false)
   const [clientLinkState, setClientLinkState] = useState<"linked" | "not-linked" | "unknown">("unknown")
+
+  const changeView = useCallback((nextView: string, date = currentDate) => {
+    setInternalView(nextView)
+    onViewChange?.(nextView, date)
+  }, [currentDate, onViewChange])
+
+  const selectDate = useCallback((date: string, extendSelection = false) => {
+    setDate(date)
+    setSelectedWeekDates((previous) => {
+      if (!extendSelection) return [date]
+      return previous.includes(date)
+        ? previous.filter((selectedDate) => selectedDate !== date)
+        : [...previous, date].sort()
+    })
+  }, [setDate])
 
   useEffect(() => {
     setHydratedFoods((prev) => {
@@ -711,6 +752,57 @@ export function MealPlanPlanner({
     (plan) => plan.status === "approved" || plan.status === "active",
   )
 
+  // Selection deliberately lives only in the currently visible week. It is a
+  // separate concern from `currentDate`: the latter keeps the library and
+  // contextual day view pointed at one concrete day.
+  const selectedWeekPlans = useMemo(
+    () => weekPlans.filter((plan) => selectedWeekDates.includes(plan.date)).sort((a, b) => a.date.localeCompare(b.date)),
+    [selectedWeekDates, weekPlans],
+  )
+  const selectedWeekHasEmptyDay = selectedWeekPlans.some(
+    (plan) => !plan.slots.some((slot) => slot.entries.length > 0),
+  )
+
+  const handleSaveWeekTemplate = useCallback(async (name: string) => {
+    if (selectedWeekPlans.length === 0) return
+    if (selectedWeekPlans.some((plan) => !plan.slots.some((slot) => slot.entries.length > 0))) {
+      toast.error("Leere Tage können nicht als Vorlage gespeichert werden.", {
+        description: "Wähle nur Tage mit mindestens einem geplanten Eintrag aus.",
+      })
+      return
+    }
+    setIsSavingWeekTemplate(true)
+    try {
+      const firstDate = selectedWeekPlans[0].date
+      const isMultiDay = selectedWeekPlans.length > 1
+      await saveTemplate({
+        name,
+        description: isMultiDay
+          ? `Persönlicher Vorlagenblock aus ${selectedWeekPlans.length} Planungstagen.`
+          : "Persönliche Tagesvorlage aus dem Planer.",
+        // Keep `slots` populated for all existing day-template consumers.
+        slots: selectedWeekPlans[0].slots,
+        dayBlocks: isMultiDay
+          ? selectedWeekPlans.map((plan) => ({
+              offsetDays: differenceInCalendarDays(parseISO(plan.date), parseISO(firstDate)),
+              slots: plan.slots,
+            }))
+          : undefined,
+        dietLineId: selectedWeekPlans[0].dietLineId,
+        targetProfileId: selectedWeekPlans[0].targetProfileId,
+      })
+      setWeekTemplateDialogOpen(false)
+      toast.success(isMultiDay ? "Mehrtägige Vorlage gespeichert." : "Tagesvorlage gespeichert.", {
+        description: "Sie steht ab sofort in der Bibliothek unter Vorlagen bereit.",
+      })
+    } catch (error) {
+      console.error("Failed to save selected meal plan days as template:", error)
+      toast.error("Vorlage konnte nicht gespeichert werden.")
+    } finally {
+      setIsSavingWeekTemplate(false)
+    }
+  }, [saveTemplate, selectedWeekPlans])
+
   const handleReleaseWeek = useCallback(async () => {
     if (!patientId || weekReleaseReview.blockers.length > 0) return
     setIsReleasingWeek(true)
@@ -911,29 +1003,103 @@ export function MealPlanPlanner({
     [],
   )
 
+  const applyTemplateBlocks = useCallback(
+    (template: MealPlanTemplate) => {
+      const blocks = template.dayBlocks?.length
+        ? template.dayBlocks
+        : [{ offsetDays: 0, slots: template.slots }]
+      for (const block of blocks) {
+        const targetDate = format(addDays(parseISO(currentDate), block.offsetDays), "yyyy-MM-dd")
+        applyTemplateToDate(targetDate, block.slots, {
+          dietLineId: template.dietLineId ?? currentPlan.dietLineId,
+          targetProfileId: template.targetProfileId ?? currentPlan.targetProfileId,
+          title: currentPlan.title ?? (patient ? `${template.name} – ${patient.firstName} ${patient.lastName}` : template.name),
+          notes: currentPlan.notes ?? template.notes ?? undefined,
+        })
+      }
+      setPendingMultiDayTemplate(null)
+      toast.success(
+        blocks.length > 1
+          ? `Vorlagenblock "${template.name}" ab dem aktiven Tag angewendet.`
+          : `Vorlage "${template.name}" auf den Tagesplan angewendet.`,
+      )
+    },
+    [applyTemplateToDate, currentDate, currentPlan.dietLineId, currentPlan.notes, currentPlan.targetProfileId, currentPlan.title, patient],
+  )
+
+  const confirmMultiDayTemplateApply = useCallback(async () => {
+    if (!pendingMultiDayTemplate || !patientId) return
+    setIsApplyingMultiDayTemplate(true)
+    try {
+      // The in-memory week can be stale while another counselor is working.
+      // Only an immediate database read decides whether this whole block may
+      // replace drafts; any read failure is intentionally a safe no-op.
+      const persistedPlans = await fetchMealPlansClient({ patientId })
+      const protectedDates = pendingMultiDayTemplate.targetDates.filter((date) => {
+        const rows = persistedPlans.filter((plan) => plan.date === date)
+        // A released row may intentionally coexist with its editable change
+        // draft. In that case the workspace targets the draft and leaves the
+        // currently client-visible release untouched.
+        if (rows.some((plan) => plan.status === "draft")) return false
+        return rows.some(
+          (plan) => plan.status === "approved" || plan.status === "active" || plan.status === "archived",
+        )
+      })
+      if (protectedDates.length > 0) {
+        setPendingMultiDayTemplate(null)
+        toast.error("Vorlagenblock nicht angewendet.", {
+          description: `Geschützte Tage: ${protectedDates.map((date) => format(parseISO(date), "d. MMM", { locale: de })).join(", ")}. Es wurde nichts verändert.`,
+        })
+        return
+      }
+      // A persisted draft is deliberately replaceable: the prior dialog made
+      // that replacement explicit. There are no protected targets, so all
+      // local mutations begin together; their established autosaves still run
+      // per daily plan and can report individual persistence failures later.
+      applyTemplateBlocks(pendingMultiDayTemplate.template)
+    } catch (error) {
+      console.error("Failed to verify meal plan block targets:", error)
+      setPendingMultiDayTemplate(null)
+      toast.error("Vorlagenblock nicht angewendet.", {
+        description: "Die aktuellen Planstände konnten nicht geprüft werden. Es wurde nichts verändert.",
+      })
+    } finally {
+      setIsApplyingMultiDayTemplate(false)
+    }
+  }, [applyTemplateBlocks, patientId, pendingMultiDayTemplate])
+
   const handleApplyTemplate = useCallback(
     (template: MealPlanTemplate) => {
-      applyTemplateToDate(currentDate, template.slots, {
-        dietLineId: template.dietLineId ?? currentPlan.dietLineId,
-        targetProfileId: template.targetProfileId ?? currentPlan.targetProfileId,
-        title:
-          currentPlan.title ??
-          (patient
-            ? `${template.name} – ${patient.firstName} ${patient.lastName}`
-            : template.name),
-        notes: currentPlan.notes ?? template.notes ?? undefined,
+      const blocks = template.dayBlocks?.length
+        ? template.dayBlocks
+        : [{ offsetDays: 0, slots: template.slots }]
+      if (blocks.length === 1) {
+        applyTemplateBlocks(template)
+        return
+      }
+
+      const targetDates = blocks.map((block) => format(addDays(parseISO(currentDate), block.offsetDays), "yyyy-MM-dd"))
+      const visibleTargets = getPlansInRange(currentDate, Math.max(...blocks.map((block) => block.offsetDays)) + 1)
+        .filter((plan) => targetDates.includes(plan.date))
+      const lockedDates = visibleTargets
+        .filter((plan) => plan.status === "approved" || plan.status === "active" || plan.status === "archived")
+        .map((plan) => plan.date)
+      if (lockedDates.length > 0) {
+        toast.error("Vorlagenblock nicht angewendet.", {
+          description: `Geschützte Tage: ${lockedDates.map((date) => format(parseISO(date), "d. MMM", { locale: de })).join(", ")}. Es wurde nichts verändert.`,
+        })
+        return
+      }
+
+      setPendingMultiDayTemplate({
+        template,
+        targetDates,
+        occupiedDates: visibleTargets
+          .filter((plan) => plan.slots.some((slot) => slot.entries.length > 0))
+          .map((plan) => plan.date),
       })
-      toast.success(`Vorlage "${template.name}" auf den Tagesplan angewendet.`)
     },
-    [
-      applyTemplateToDate,
-      currentDate,
-      currentPlan.dietLineId,
-      currentPlan.notes,
-      currentPlan.targetProfileId,
-      currentPlan.title,
-      patient,
-    ],
+    [applyTemplateBlocks, currentDate, getPlansInRange],
   )
 
   // Shared export trigger — rendered in the day header and reused in the week
@@ -946,6 +1112,18 @@ export function MealPlanPlanner({
   )
   const weekHeaderActions = embedded ? (
     <>
+      {selectedWeekPlans.length > 0 ? (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setWeekTemplateDialogOpen(true)}
+          disabled={selectedWeekHasEmptyDay}
+          title={selectedWeekHasEmptyDay ? "Jeder ausgewählte Tag braucht mindestens einen Eintrag." : undefined}
+        >
+          <Save className="mr-1.5 h-4 w-4" />
+          Als Vorlage speichern
+        </Button>
+      ) : null}
       <Button size="sm" variant="outline" onClick={() => setWeekCopyOpen(true)} disabled={isCopyingWeek}>
         <Copy className="mr-1.5 h-4 w-4" />
         Woche fortschreiben
@@ -956,7 +1134,7 @@ export function MealPlanPlanner({
             Plan freigegeben
           </Badge>
           {extraTab ? (
-            <Button size="sm" variant="outline" onClick={() => setView(extraTab.value)}>
+            <Button size="sm" variant="outline" onClick={() => changeView(extraTab.value)}>
               Änderung beginnen
             </Button>
           ) : null}
@@ -1039,7 +1217,7 @@ export function MealPlanPlanner({
 
       {(embedded || hasSelectedPatient) && (
         <>
-      <Tabs value={view} onValueChange={setView}>
+      <Tabs value={view} onValueChange={(nextView) => changeView(nextView)}>
         {/* Embedded, the sub-navigation shares its row with the one action the
             page header used to carry, so the planner opens no taller than the
             tab strip it replaces. */}
@@ -1060,13 +1238,13 @@ export function MealPlanPlanner({
               openDay: (date) => {
                 setDate(date)
                 setWeekOffset(0)
-                setView(embedded ? "week" : "day")
+                changeView("day", date)
               },
               openPlan: (plan) => {
                 setWorkspacePlan(plan)
                 setDate(plan.date)
                 setWeekOffset(0)
-                setView(embedded ? "week" : "day")
+                changeView("day", plan.date)
               },
               workspacePlans: Object.values(allPlans),
             })}
@@ -1084,7 +1262,7 @@ export function MealPlanPlanner({
             dietLine={dietLine}
             dayTotals={dayTotals}
             dayLabel={formattedDate}
-            onOpenDay={() => setView("day")}
+            onOpenDay={() => changeView("day")}
             onSavePatient={handleSaveStrategy}
           />
         </TabsContent>
@@ -1184,7 +1362,7 @@ export function MealPlanPlanner({
                 className="mr-1"
                 onClick={() => {
                   setWeekOffset(0)
-                  setView("week")
+                  changeView("week")
                 }}
               >
                 <ArrowLeft className="mr-1.5 h-4 w-4" />
@@ -1201,7 +1379,7 @@ export function MealPlanPlanner({
                   <button
                     key={dayPlan.date}
                     type="button"
-                    onClick={() => setDate(dayPlan.date)}
+                    onClick={() => selectDate(dayPlan.date)}
                     className={cn(
                       "flex min-w-[52px] flex-col items-center rounded-md border px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors",
                       isActive
@@ -1227,7 +1405,7 @@ export function MealPlanPlanner({
             {strategyKcalTarget && !embedded ? (
               <button
                 type="button"
-                onClick={() => setView("strategy")}
+                onClick={() => changeView("strategy")}
                 className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
               >
                 Strategie: Ziel {formatNumber(strategyKcalTarget)} kcal · Tag {formatNumber(Math.round(dayTotals.energie ?? 0))} kcal
@@ -1288,8 +1466,14 @@ export function MealPlanPlanner({
           <PlanWeekView
             weekPlans={weekPlans}
             weekRangeLabel={weekRangeLabel}
-            onPrevWeek={() => setWeekOffset((prev) => prev - 1)}
-            onNextWeek={() => setWeekOffset((prev) => prev + 1)}
+            onPrevWeek={() => {
+              setWeekOffset((prev) => prev - 1)
+              setSelectedWeekDates([])
+            }}
+            onNextWeek={() => {
+              setWeekOffset((prev) => prev + 1)
+              setSelectedWeekDates([])
+            }}
             headerActions={weekHeaderActions}
             foods={foods}
             foodMap={foodMap}
@@ -1299,10 +1483,12 @@ export function MealPlanPlanner({
             dietLine={dietLine}
             refConfig={refConfig}
             nutrientTargets={micronutrientCompliance}
+            onSelectDay={selectDate}
+            selectedDates={selectedWeekDates}
             onOpenDay={(date) => {
               setDate(date)
               setWeekOffset(0)
-              setView("day")
+              changeView("day", date)
             }}
             onCopyCurrentToDay={copyCurrentPlanToDate}
             onCopyToNextDay={copyPlanToNextDay}
@@ -1392,6 +1578,30 @@ export function MealPlanPlanner({
           sourceWeekLabel={weekRangeLabel}
           isCopying={isCopyingWeek}
           onCopy={(targetWeekStart, repetitions, strategy) => void handleCopyWeek(targetWeekStart, repetitions, strategy)}
+        />
+      ) : null}
+
+      {embedded && weekTemplateDialogOpen ? (
+        <PlanWeekTemplateDialog
+          open={weekTemplateDialogOpen}
+          onOpenChange={setWeekTemplateDialogOpen}
+          dates={selectedWeekPlans.map((plan) => plan.date)}
+          isSaving={isSavingWeekTemplate}
+          onSave={(name) => void handleSaveWeekTemplate(name)}
+        />
+      ) : null}
+
+      {pendingMultiDayTemplate ? (
+        <PlanMultiDayTemplateApplyDialog
+          open={Boolean(pendingMultiDayTemplate)}
+          onOpenChange={(open) => {
+            if (!open) setPendingMultiDayTemplate(null)
+          }}
+          templateName={pendingMultiDayTemplate.template.name}
+          dates={pendingMultiDayTemplate.targetDates}
+          occupiedDates={pendingMultiDayTemplate.occupiedDates}
+          isApplying={isApplyingMultiDayTemplate}
+          onConfirm={confirmMultiDayTemplateApply}
         />
       ) : null}
 

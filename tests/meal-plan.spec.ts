@@ -61,6 +61,12 @@ function addIsoDays(date: string, days: number) {
   return value.toISOString().slice(0, 10);
 }
 
+function mondayOfIsoWeek(date: string) {
+  const value = new Date(`${date}T00:00:00Z`);
+  const offset = (value.getUTCDay() + 6) % 7;
+  return addIsoDays(date, -offset);
+}
+
 /**
  * The planner only renders meal slots once a patient is selected, so every
  * test opens the page with an explicit patientId and a fresh plan date.
@@ -181,6 +187,67 @@ test.describe("Ernährungsplan", () => {
       await expect(page.getByRole("button", { name: targetLabel, exact: true })).toBeVisible();
     } finally {
       await deletePatientFixture(patient.id);
+    }
+  });
+
+  test("saves two selected draft days as a persistent multi-day template", async ({ page }) => {
+    const firstDate = mondayOfIsoWeek(uniquePlannerDate(275));
+    const secondDate = addIsoDays(firstDate, 2);
+    const patient = await createPatientFixture("Plan", "Blueprint");
+    let foodId: string | null = null;
+    let templateId: string | null = null;
+
+    try {
+      const userId = await getTestUserId();
+      const { data: food, error: foodError } = await admin
+        .from("foods")
+        .insert({ name: "Blueprint Testlebensmittel", data_source_id: "bls", source_food_id: `blueprint-${Math.random().toString(36).slice(2, 10)}` })
+        .select("id")
+        .single();
+      if (foodError) throw new Error(foodError.message);
+      foodId = food.id;
+
+      for (const date of [firstDate, secondDate]) {
+        const { data: plan, error: planError } = await admin
+          .from("daily_meal_plans")
+          .insert({ user_id: userId, patient_id: patient.id, date, status: "draft" })
+          .select("id")
+          .single();
+        if (planError) throw new Error(planError.message);
+        const { error: entryError } = await admin.from("meal_entries").insert({
+          meal_plan_id: plan.id, slot_type: "fruehstueck", entry_type: "food", reference_id: foodId, amount: 100, sort_order: 0,
+        });
+        if (entryError) throw new Error(entryError.message);
+      }
+
+      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan&planView=week&planDate=${firstDate}`);
+      // Use stable data attributes rather than weekday language in test data.
+      const firstButton = page.locator(`[data-day-date="${firstDate}"]`).getByRole("button", { name: /mit Doppelklick/ });
+      const secondButton = page.locator(`[data-day-date="${secondDate}"]`).getByRole("button", { name: /mit Doppelklick/ });
+      await firstButton.click();
+      await secondButton.click({ modifiers: ["Shift"] });
+      await page.getByRole("button", { name: "Als Vorlage speichern" }).click();
+      const dialog = page.getByRole("dialog", { name: "Als Vorlage speichern" });
+      await dialog.getByLabel("Name der Vorlage").fill("Playwright Mehrtagesblock");
+      await dialog.getByRole("button", { name: "Vorlage speichern" }).click();
+
+      await expect.poll(async () => {
+        const { data, error } = await admin.from("meal_plan_templates")
+          .select("id,day_blocks")
+          .eq("user_id", userId)
+          .eq("name", "Playwright Mehrtagesblock")
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        templateId = data?.id ?? null;
+        return data?.day_blocks ?? null;
+      }, { timeout: 20_000 }).toEqual(expect.arrayContaining([
+        expect.objectContaining({ offsetDays: 0 }),
+        expect.objectContaining({ offsetDays: 2 }),
+      ]));
+    } finally {
+      if (templateId) await admin.from("meal_plan_templates").delete().eq("id", templateId);
+      await deletePatientFixture(patient.id);
+      if (foodId) await admin.from("foods").delete().eq("id", foodId);
     }
   });
 
@@ -330,19 +397,20 @@ test.describe("Ernährungsplan", () => {
       if (entryError) throw new Error(entryError.message);
 
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
-      await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
-      await page.getByRole("tab", { name: "Planstände" }).click();
+      await page.getByRole("button", { name: "Zu heute springen" }).click();
+      await page.getByRole("tab", { name: "Versionen & Freigaben" }).click();
 
-      const draftCard = page.locator("[data-slot='card']").filter({ hasText: title }).first();
-      await draftCard.getByRole("button", { name: "Tag freigeben" }).click();
+      const draftRow = page.locator("article[data-plan-date]").filter({ hasText: title }).first();
+      await draftRow.getByRole("button", { name: "Tag freigeben" }).click();
       const releaseDialog = page.getByRole("alertdialog");
       await releaseDialog.getByRole("button", { name: "Verbindlich freigeben" }).click();
 
-      await expect(draftCard.getByText("Freigegeben", { exact: true })).toBeVisible();
-      await draftCard.getByRole("button", { name: "Änderung beginnen" }).click();
-      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
+      await expect(draftRow.getByText("Freigegeben", { exact: true })).toBeVisible();
+      await draftRow.getByRole("button", { name: "Änderung beginnen" }).click();
+      await expect(page).toHaveURL(new RegExp(`planView=day.*planDate=${planDate}`));
+      await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toBeVisible();
 
-      await page.getByRole("tab", { name: "Planstände" }).click();
+      await page.getByRole("tab", { name: "Versionen & Freigaben" }).click();
       await expect(page.getByText("Änderungsentwurf", { exact: true })).toBeVisible();
       await expect(page.getByText("Freigegeben", { exact: true })).toBeVisible();
     } finally {
@@ -368,9 +436,12 @@ test.describe("Ernährungsplan", () => {
       if (planError) throw new Error(planError.message);
 
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
-      await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
-      await page.getByRole("tab", { name: "Planstände" }).click();
-      await page.locator("[data-slot='card']").filter({ hasText: title }).first().getByRole("button", { name: "Öffnen" }).click();
+      await page.getByRole("button", { name: "Zu heute springen" }).click();
+      await page.getByRole("tab", { name: "Versionen & Freigaben" }).click();
+      await page.locator("article[data-plan-date]").filter({ hasText: title }).first().getByRole("button", { name: "Öffnen" }).click();
+
+      await expect(page).toHaveURL(new RegExp(`planView=day.*planDate=${sourceDate}`));
+      await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
 
       await page.getByRole("button", { name: "Woche fortschreiben" }).click();
       const dialog = page.getByRole("dialog", { name: "Woche fortschreiben" });

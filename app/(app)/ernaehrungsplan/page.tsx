@@ -54,7 +54,11 @@ function extractActiveFoodIds(
   const applyTemplate = applyTemplateId
     ? templates.find((template) => template.id === applyTemplateId)
     : undefined;
-  if (applyTemplate) collectSlots(applyTemplate.slots);
+  if (applyTemplate) {
+    for (const day of applyTemplate.dayBlocks?.length ? applyTemplate.dayBlocks : [{ offsetDays: 0, slots: applyTemplate.slots }]) {
+      collectSlots(day.slots);
+    }
+  }
 
   for (const recipe of recipes) {
     if (recipeIds.has(recipe.id) || (recipe.legacyId && recipeIds.has(recipe.legacyId))) {

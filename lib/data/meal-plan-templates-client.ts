@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   MealEntry,
   MealPlanTemplate,
+  MealPlanTemplateDayBlock,
   MealSlot,
   MealSlotType,
 } from "@/lib/types";
@@ -18,7 +19,7 @@ const SLOT_ORDER: MealSlotType[] = [
 ];
 
 const TEMPLATE_COLUMNS =
-  "id,legacy_id,user_id,name,description,indication,diet_line_id,target_profile_id,slots,notes,source_type,created_at,updated_at";
+  "id,legacy_id,user_id,name,description,indication,diet_line_id,target_profile_id,slots,day_blocks,notes,source_type,created_at,updated_at";
 
 interface RawSlotEntry {
   id?: string;
@@ -42,10 +43,17 @@ interface MealPlanTemplateRow {
   diet_line_id?: string | null;
   target_profile_id?: string | null;
   slots: RawSlot[] | null;
+  day_blocks?: RawDayBlock[] | null;
   notes?: string | null;
   source_type?: MealPlanTemplate["sourceType"] | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+interface RawDayBlock {
+  offsetDays?: number;
+  offset_days?: number;
+  slots?: RawSlot[] | null;
 }
 
 interface FetchMealPlanTemplatesOptions {
@@ -63,7 +71,21 @@ interface SaveMealPlanTemplateInput {
   dietLineId?: string;
   targetProfileId?: string;
   slots: MealSlot[];
+  dayBlocks?: MealPlanTemplateDayBlock[];
   notes?: string;
+}
+
+function normalizeDayBlocks(blocks: RawDayBlock[] | null | undefined): MealPlanTemplateDayBlock[] | undefined {
+  if (!blocks?.length) return undefined;
+  const normalized = blocks
+    .map((block) => {
+      const offsetDays = Number(block.offsetDays ?? block.offset_days)
+      if (!Number.isInteger(offsetDays) || offsetDays < 0) return null
+      return { offsetDays, slots: normalizeSlots(block.slots ?? []) }
+    })
+    .filter((block): block is MealPlanTemplateDayBlock => block !== null)
+    .sort((a, b) => a.offsetDays - b.offsetDays)
+  return normalized.length ? normalized : undefined
 }
 
 function resolveBrowserClient(supabase?: SupabaseClient) {
@@ -106,11 +128,20 @@ function mapTemplateRow(row: MealPlanTemplateRow): MealPlanTemplate {
     dietLineId: row.diet_line_id ?? undefined,
     targetProfileId: row.target_profile_id ?? undefined,
     slots: normalizeSlots(row.slots),
+    dayBlocks: normalizeDayBlocks(row.day_blocks),
     notes: row.notes ?? undefined,
     sourceType: row.source_type ?? (row.user_id ? "personal" : "system"),
     createdAt: row.created_at ?? undefined,
     updatedAt: row.updated_at ?? undefined,
   };
+}
+
+function serializeDayBlocks(blocks: MealPlanTemplateDayBlock[] | undefined) {
+  if (!blocks?.length) return null
+  return blocks.map((block) => ({
+    offsetDays: block.offsetDays,
+    slots: serializeSlots(block.slots),
+  }))
 }
 
 function serializeSlots(slots: MealSlot[]): RawSlot[] {
@@ -183,6 +214,7 @@ export async function saveMealPlanTemplate(
     diet_line_id: input.dietLineId ?? null,
     target_profile_id: input.targetProfileId ?? null,
     slots: serializeSlots(input.slots),
+    day_blocks: serializeDayBlocks(input.dayBlocks),
     notes: input.notes ?? null,
     source_type: "personal" as const,
   };

@@ -1,13 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import {
-  addDays,
-  differenceInYears,
-  format,
-  formatDistanceToNowStrict,
-  parseISO,
-} from "date-fns"
+import { addDays, format, formatDistanceToNowStrict, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
 import {
   ArrowRight,
@@ -20,22 +14,10 @@ import {
   Moon,
   RefreshCw,
   Scale,
-  Target,
+  TrendingDown,
+  TrendingUp,
   Utensils,
 } from "lucide-react"
-import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceArea,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
-
 import {
   PlanStatusGuidance,
   type PatientEnergyContext,
@@ -44,7 +26,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useCounselorClientPulse } from "@/hooks/use-counselor-client-pulse"
+import {
+  useCounselorClientPulse,
+  type CounselorClientPulse,
+} from "@/hooks/use-counselor-client-pulse"
 import { calculateClientLogNutrients } from "@/lib/client-food-log"
 import {
   formatMetricValue,
@@ -56,23 +41,17 @@ import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { formatDate, formatNumber } from "@/lib/format"
 import { parsePatientGoals } from "@/lib/intake/patient-goals"
 import { getNutrientValue } from "@/lib/nutrients"
-import {
-  PATIENT_ENERGY_FORMULA,
-  type EnergySex,
-} from "@/lib/nutrition/energy-calculation"
-import { projectWeight } from "@/lib/nutrition/weight-projection"
 import type {
   AnthropometricEntry,
   ClientFoodLogEntry,
   DailyMealPlan,
   Patient,
   PatientAllergenEntry,
+  PracticeAppointment,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const DAY_MS = 24 * 60 * 60 * 1000
 const COVERAGE_DAYS = 14
-const PROJECTION_WEEKS = 8
 
 type CoverageState = "released" | "draft" | "empty"
 
@@ -86,6 +65,7 @@ interface PatientPlanStatusProps {
   patient: Patient
   plans: DailyMealPlan[]
   anthropometrics: AnthropometricEntry[]
+  appointments: PracticeAppointment[]
   energyContext?: PatientEnergyContext
   patientAllergens: PatientAllergenEntry[]
   onSavePatient: (updates: Partial<Patient>) => Promise<void>
@@ -129,6 +109,101 @@ function shortDay(date: string) {
 
 function shortDate(date: string) {
   return format(parseISO(date), "d. MMM", { locale: de })
+}
+
+type SignalDirection = "up" | "down" | "stable" | "unknown"
+
+interface SignalTrend {
+  direction: SignalDirection
+  value: string
+  detail: string
+  delta?: number
+  samples: number
+}
+
+function average(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function summarizeMoodTrend(series: { date: string; value: number }[]): SignalTrend {
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date))
+  const latest = sorted.at(-1)
+  if (!latest) {
+    return {
+      direction: "unknown",
+      value: "Keine Daten",
+      detail: "Noch keine Stimmung geteilt",
+      samples: 0,
+    }
+  }
+  if (sorted.length === 1) {
+    return {
+      direction: "unknown",
+      value: `${formatNumber(latest.value, 1)} von 5`,
+      detail: `Ein Wert vom ${shortDate(latest.date)}`,
+      samples: 1,
+    }
+  }
+
+  const recentCount = Math.min(3, Math.ceil(sorted.length / 2))
+  const recent = sorted.slice(-recentCount)
+  const previous = sorted.slice(0, -recentCount).slice(-3)
+  const recentAverage = average(recent.map((entry) => entry.value))
+  const previousAverage = average(previous.map((entry) => entry.value))
+  const delta = recentAverage - previousAverage
+  const direction = delta > 0.35 ? "up" : delta < -0.35 ? "down" : "stable"
+
+  return {
+    direction,
+    value:
+      direction === "up"
+        ? "Tendenz steigt"
+        : direction === "down"
+          ? "Tendenz sinkt"
+          : "Weitgehend stabil",
+    detail: `Ø ${formatNumber(recentAverage, 1)} von 5 · ${sorted.length} Angaben`,
+    delta,
+    samples: sorted.length,
+  }
+}
+
+function summarizeWeightTrend(entries: AnthropometricEntry[]): SignalTrend {
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date))
+  const latest = sorted.at(-1)
+  if (!latest) {
+    return {
+      direction: "unknown",
+      value: "Keine Messung",
+      detail: "Noch kein Gewicht erfasst",
+      samples: 0,
+    }
+  }
+  const previous = sorted.at(-2)
+  if (!previous) {
+    return {
+      direction: "unknown",
+      value: `${formatNumber(latest.weight, 1)} kg`,
+      detail: `Ein Messwert vom ${shortDate(latest.date)}`,
+      samples: 1,
+    }
+  }
+
+  const delta = latest.weight - previous.weight
+  const direction = delta > 0.1 ? "up" : delta < -0.1 ? "down" : "stable"
+  const signedDelta = `${delta > 0 ? "+" : delta < 0 ? "−" : ""}${formatNumber(Math.abs(delta), 1)} kg`
+
+  return {
+    direction,
+    value:
+      direction === "up"
+        ? "Gewicht steigt"
+        : direction === "down"
+          ? "Gewicht sinkt"
+          : "Gewicht stabil",
+    detail: `${signedDelta} seit ${shortDate(previous.date)} · zuletzt ${formatNumber(latest.weight, 1)} kg`,
+    delta,
+    samples: sorted.length,
+  }
 }
 
 function clientEntryLabel(
@@ -253,114 +328,13 @@ function CoverageRail({
   )
 }
 
-type TrajectoryRow = {
-  ts: number
-  label: string
-  measured?: number
-  projected?: number
-}
-
-function TrajectoryTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean
-  payload?: Array<{
-    dataKey?: string | number
-    value?: number
-    payload?: TrajectoryRow
-  }>
-}) {
-  if (!active || !payload?.length) return null
-  const row = payload[0]?.payload
-  const measured = payload.find((item) => item.dataKey === "measured")?.value
-  const projected = payload.find((item) => item.dataKey === "projected")?.value
-  const value = measured ?? projected
-  if (!row || value === undefined) return null
-
-  return (
-    <div className="rounded-xl border bg-background/95 px-3 py-2 shadow-lg backdrop-blur">
-      <p className="text-xs font-medium">{row.label}</p>
-      <p className="mt-0.5 text-sm tabular-nums">
-        {formatNumber(value, 1)} kg
-        <span className="text-muted-foreground ml-1 text-xs">
-          {measured !== undefined ? "gemessen" : "Schätzung"}
-        </span>
-      </p>
-    </div>
-  )
-}
-
-function PlanTrajectory({
-  patient,
-  anthropometrics,
-  energyContext,
+function PlanCoverage({
   coverage,
   onOpenPlanner,
-}: Pick<
-  PatientPlanStatusProps,
-  "patient" | "anthropometrics" | "energyContext" | "onOpenPlanner"
-> & { coverage: CoverageDay[] }) {
-  const sortedMeasurements = useMemo(
-    () => [...anthropometrics].sort((a, b) => a.date.localeCompare(b.date)).slice(-12),
-    [anthropometrics],
-  )
-  const latest = sortedMeasurements.at(-1)
-  const today = todayIsoDate()
-  const todayTs = parseISO(today).getTime()
+}: Pick<PatientPlanStatusProps, "onOpenPlanner"> & { coverage: CoverageDay[] }) {
   const firstGap = coverage.find((day) => day.state === "empty")
-  const coveredDays = firstGap
-    ? coverage.slice(0, coverage.indexOf(firstGap))
-    : coverage
+  const coveredDays = firstGap ? coverage.slice(0, coverage.indexOf(firstGap)) : coverage
   const plannedThrough = coveredDays.at(-1)?.date
-  const cycleEndTs = plannedThrough ? parseISO(plannedThrough).getTime() : null
-
-  const sex: EnergySex =
-    patient.gender === "m" ? "male" : patient.gender === "w" ? "female" : "diverse"
-  const projection =
-    latest && patient.dailyCalorieGoal && energyContext?.pal
-      ? projectWeight({
-          targetKcal: patient.dailyCalorieGoal,
-          weightKg: latest.weight,
-          heightCm: latest.height,
-          ageYears: differenceInYears(new Date(), parseISO(patient.dateOfBirth)),
-          sex,
-          formula: PATIENT_ENERGY_FORMULA,
-          pal: energyContext.pal,
-          basalOverrideKcal: patient.basalMetabolicRateOverride,
-          goalWeightKg: patient.goalWeight,
-          weeks: PROJECTION_WEEKS,
-        })
-      : null
-
-  const rows: TrajectoryRow[] = sortedMeasurements.map((entry, index) => ({
-    ts: parseISO(entry.date).getTime(),
-    label: formatDate(entry.date),
-    measured: entry.weight,
-    projected:
-      index === sortedMeasurements.length - 1 ? projection?.points[0]?.weightKg : undefined,
-  }))
-
-  if (latest && projection) {
-    const anchor = parseISO(latest.date).getTime()
-    for (const point of projection.points) {
-      if (point.week === 0) continue
-      rows.push({
-        ts: anchor + point.week * 7 * DAY_MS,
-        label: formatDate(new Date(anchor + point.week * 7 * DAY_MS).toISOString()),
-        projected: point.weightKg,
-      })
-    }
-  }
-
-  const chartValues = rows.flatMap((row) =>
-    [row.measured, row.projected].filter((value): value is number => value !== undefined),
-  )
-  if (patient.goalWeight) chartValues.push(patient.goalWeight)
-  const low = chartValues.length > 0 ? Math.min(...chartValues) : 60
-  const high = chartValues.length > 0 ? Math.max(...chartValues) : 90
-  const padding = Math.max(1.5, (high - low) * 0.12)
-  const yDomain: [number, number] = [Math.floor(low - padding), Math.ceil(high + padding)]
 
   return (
     <Card className="overflow-hidden rounded-[28px] border-black/[0.06] shadow-[0_18px_50px_-34px_rgba(0,0,0,0.35)] dark:border-white/10">
@@ -368,14 +342,13 @@ function PlanTrajectory({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
-              Verlauf und Planung
+              Planungshorizont
             </p>
             <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">
-              Vergangenheit, heute und die nächsten Schritte
+              Wie weit der aktuelle Plan trägt
             </h2>
             <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-              Messwerte sind durchgezogen. Die gestrichelte Kurve ist eine Modellschätzung bei
-              unverändertem Kalorienziel – keine automatische Therapieentscheidung.
+              Die nächsten 14 Tage zeigen, was freigegeben, vorbereitet oder noch zu planen ist.
             </p>
           </div>
           <Badge variant="outline" className="rounded-full bg-background/70 px-3 py-1">
@@ -386,120 +359,7 @@ function PlanTrajectory({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6 p-5 sm:p-6">
-        {rows.length > 0 ? (
-          <div className="h-[270px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rows} margin={{ top: 14, right: 12, left: -8, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="plan-status-weight" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="var(--color-border)" strokeOpacity={0.55} />
-                <XAxis
-                  dataKey="ts"
-                  type="number"
-                  scale="time"
-                  domain={["dataMin", "dataMax"]}
-                  tickFormatter={(value: number) =>
-                    format(new Date(value), "d. MMM", { locale: de })
-                  }
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={36}
-                  fontSize={11}
-                  stroke="var(--color-muted-foreground)"
-                />
-                <YAxis
-                  domain={yDomain}
-                  tickLine={false}
-                  axisLine={false}
-                  width={46}
-                  fontSize={11}
-                  stroke="var(--color-muted-foreground)"
-                  tickFormatter={(value: number) => `${formatNumber(value)} kg`}
-                />
-                <Tooltip content={<TrajectoryTooltip />} />
-                {cycleEndTs && cycleEndTs >= todayTs ? (
-                  <ReferenceArea
-                    x1={todayTs}
-                    x2={cycleEndTs}
-                    fill="var(--color-chart-2)"
-                    fillOpacity={0.07}
-                    strokeOpacity={0}
-                  />
-                ) : null}
-                <ReferenceLine
-                  x={todayTs}
-                  stroke="var(--color-foreground)"
-                  strokeOpacity={0.3}
-                  strokeDasharray="3 3"
-                  label={{
-                    value: "Heute",
-                    position: "insideTopRight",
-                    fontSize: 10,
-                    fill: "var(--color-muted-foreground)",
-                  }}
-                />
-                {patient.goalWeight ? (
-                  <ReferenceLine
-                    y={patient.goalWeight}
-                    stroke="var(--color-muted-foreground)"
-                    strokeOpacity={0.55}
-                    strokeDasharray="4 4"
-                    label={{
-                      value: `Ziel ${formatNumber(patient.goalWeight, 1)} kg`,
-                      position: "insideTopLeft",
-                      fontSize: 10,
-                      fill: "var(--color-muted-foreground)",
-                    }}
-                  />
-                ) : null}
-                <Area
-                  type="monotone"
-                  dataKey="measured"
-                  stroke="none"
-                  fill="url(#plan-status-weight)"
-                  connectNulls
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="measured"
-                  stroke="var(--color-chart-1)"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, strokeWidth: 0 }}
-                  activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-background)" }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="projected"
-                  stroke="var(--color-chart-1)"
-                  strokeWidth={2}
-                  strokeDasharray="6 6"
-                  strokeOpacity={0.55}
-                  dot={false}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="flex h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/20 text-center">
-            <Scale className="text-muted-foreground size-6" />
-            <p className="mt-3 text-sm font-medium">Noch keine Gewichtskurve</p>
-            <p className="text-muted-foreground mt-1 max-w-sm text-xs">
-              Sobald ein Gewicht erfasst wurde, verbindet Inari den Ist-Verlauf mit der
-              gekennzeichneten Prognose.
-            </p>
-          </div>
-        )}
-
+      <CardContent className="p-5 sm:p-6">
         <CoverageRail days={coverage} onOpenPlanner={onOpenPlanner} />
       </CardContent>
     </Card>
@@ -508,9 +368,13 @@ function PlanTrajectory({
 
 function ClientPulse({
   patient,
+  pulse,
+  weightTrend,
   onOpenClientApp,
-}: Pick<PatientPlanStatusProps, "patient" | "onOpenClientApp">) {
-  const pulse = useCounselorClientPulse(patient.id)
+}: Pick<PatientPlanStatusProps, "patient" | "onOpenClientApp"> & {
+  pulse: CounselorClientPulse
+  weightTrend: SignalTrend
+}) {
   const latestDay = [...pulse.days].sort((a, b) => b.date.localeCompare(a.date))[0]
   const recipeNutrients = useMemo(
     () =>
@@ -552,6 +416,58 @@ function ClientPulse({
   const problemSlot = [...pulse.adherence.bySlot]
     .filter((slot) => slot.planned > 0 && slot.skipped > 0)
     .sort((a, b) => b.skipped / b.planned - a.skipped / a.planned)[0]
+  const moodTrend = summarizeMoodTrend(pulse.wellbeing.get("mood") ?? [])
+  const planningHint = (() => {
+    if (moodTrend.direction === "down" && moodTrend.samples >= 2) {
+      return {
+        title: "Belastung vor dem Fortschreiben klären",
+        detail:
+          "Die geteilte Stimmung ist zuletzt gesunken. Prüfen Sie kurz, ob Umfang und Alltagstauglichkeit des Plans noch passen.",
+        tone: "amber" as const,
+      }
+    }
+    if (
+      problemSlot &&
+      problemSlot.planned >= 2 &&
+      problemSlot.skipped / problemSlot.planned >= 0.4
+    ) {
+      return {
+        title: `${MEAL_SLOT_LABELS[problemSlot.slotType]} gezielt prüfen`,
+        detail: `${problemSlot.skipped} von ${problemSlot.planned} geplanten Einträgen wurden ausgelassen. Zeitpunkt, Aufwand oder eine einfachere Alternative besprechen.`,
+        tone: "amber" as const,
+      }
+    }
+    if (
+      adherencePercent !== null &&
+      adherenceTotals.planned >= 3 &&
+      adherencePercent < 60
+    ) {
+      return {
+        title: "Umsetzungshürden vor der nächsten Woche klären",
+        detail: `Aktuell wurden ${adherencePercent} % der geplanten Einträge bestätigt. Den Plan erst nach kurzer Rückmeldung unverändert fortschreiben.`,
+        tone: "amber" as const,
+      }
+    }
+    if (
+      moodTrend.samples === 0 &&
+      !latestDay &&
+      adherenceTotals.planned === 0 &&
+      weightTrend.samples < 2
+    ) {
+      return {
+        title: "Vor der nächsten Freigabe Rückmeldung einholen",
+        detail:
+          "Noch reichen die geteilten Signale nicht für eine belastbare Tendenz. Eine kurze Rückfrage ist aussagekräftiger als eine automatische Annahme.",
+        tone: "neutral" as const,
+      }
+    }
+    return {
+      title: "Aktuelle Signale beim nächsten Kontakt bestätigen",
+      detail:
+        "Es zeigt sich gerade kein eindeutiges Warnsignal. Prüfen Sie trotzdem kurz, ob Aufwand, Portionsgrößen und Tagesstruktur weiter passen.",
+      tone: "green" as const,
+    }
+  })()
 
   const refreshedLabel = pulse.refreshedAt
     ? `vor ${formatDistanceToNowStrict(pulse.refreshedAt, { locale: de })}`
@@ -646,6 +562,36 @@ function ClientPulse({
                 {pulse.error}
               </p>
             ) : null}
+            <div
+              className={cn(
+                "mb-3 flex items-start gap-3 rounded-2xl border p-4",
+                planningHint.tone === "amber" &&
+                  "border-amber-500/20 bg-amber-500/10",
+                planningHint.tone === "green" &&
+                  "border-emerald-500/20 bg-emerald-500/10",
+                planningHint.tone === "neutral" && "bg-background/60",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
+                  planningHint.tone === "amber" && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                  planningHint.tone === "green" && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+                  planningHint.tone === "neutral" && "bg-muted text-muted-foreground",
+                )}
+              >
+                <ArrowRight className="size-4" />
+              </span>
+              <div>
+                <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-[0.14em]">
+                  Hinweis für die nächste Planung
+                </p>
+                <p className="mt-1 text-sm font-medium">{planningHint.title}</p>
+                <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                  {planningHint.detail}
+                </p>
+              </div>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {selectedMetrics.map(({ metric, latest }) => (
                 <PulseTile
@@ -705,6 +651,7 @@ export function PatientPlanStatus({
   patient,
   plans,
   anthropometrics,
+  appointments,
   energyContext,
   patientAllergens,
   onSavePatient,
@@ -712,7 +659,25 @@ export function PatientPlanStatus({
   onOpenClientApp,
 }: PatientPlanStatusProps) {
   const [today] = useState(todayIsoDate)
+  const pulse = useCounselorClientPulse(patient.id)
   const coverage = useMemo(() => buildCoverage(plans, today), [plans, today])
+  const moodTrend = useMemo(
+    () => summarizeMoodTrend(pulse.wellbeing.get("mood") ?? []),
+    [pulse.wellbeing],
+  )
+  const weightTrend = useMemo(
+    () => summarizeWeightTrend(anthropometrics),
+    [anthropometrics],
+  )
+  const nextAppointment = useMemo(
+    () =>
+      [...appointments]
+        .filter((appointment) => appointment.date >= today)
+        .sort((a, b) =>
+          `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`),
+        )[0],
+    [appointments, today],
+  )
   const firstGap = coverage.find((day) => day.state === "empty")
   const plannedDays = firstGap ? coverage.slice(0, coverage.indexOf(firstGap)) : coverage
   const plannedThrough = plannedDays.at(-1)?.date
@@ -724,10 +689,18 @@ export function PatientPlanStatus({
   const goals = parsePatientGoals(patient.patientGoals)
   const goalText = goals.goal ?? patient.intakeReason?.trim()
   const phase = phaseFor(patient, energyContext?.totalEnergyExpenditure)
-  const calorieDelta =
-    patient.dailyCalorieGoal && energyContext?.totalEnergyExpenditure
-      ? patient.dailyCalorieGoal - energyContext.totalEnergyExpenditure
-      : null
+  const MoodTrendIcon =
+    moodTrend.direction === "up"
+      ? TrendingUp
+      : moodTrend.direction === "down"
+        ? TrendingDown
+        : HeartPulse
+  const WeightTrendIcon =
+    weightTrend.direction === "up"
+      ? TrendingUp
+      : weightTrend.direction === "down"
+        ? TrendingDown
+        : Scale
 
   return (
     <div className="space-y-4">
@@ -753,8 +726,13 @@ export function PatientPlanStatus({
                 ? `Danach braucht ${patient.firstName} einen geprüften nächsten Stand. Ist-Werte und Klienten-Feedback zeigen, ob das Konzept unverändert weiterlaufen kann.`
                 : `Ziele und aktuelle Rückmeldungen sind der Ausgangspunkt. Beginnen Sie mit dem ersten Tages- oder Wochenplan.`}
             </p>
-            {goals.timeframe || patient.goalWeight || patient.indications?.length ? (
+            {goalText || goals.timeframe || patient.goalWeight || patient.indications?.length ? (
               <div className="mt-4 flex max-w-3xl flex-wrap gap-2 text-xs">
+                {goalText ? (
+                  <span className="rounded-full border border-black/[0.06] bg-background/70 px-3 py-1.5 backdrop-blur dark:border-white/10">
+                    Ziel {goalText}
+                  </span>
+                ) : null}
                 {patient.goalWeight ? (
                   <span className="rounded-full border border-black/[0.06] bg-background/70 px-3 py-1.5 backdrop-blur dark:border-white/10">
                     Zielgewicht {formatNumber(patient.goalWeight, 1)} kg
@@ -790,7 +768,7 @@ export function PatientPlanStatus({
                 className="rounded-full bg-background/70 px-5 backdrop-blur"
                 onClick={() => onOpenPlanner(today)}
               >
-                Aktuellen Plan öffnen
+                Zu heute springen
               </Button>
             </div>
           </div>
@@ -798,51 +776,44 @@ export function PatientPlanStatus({
           <div className="grid gap-px overflow-hidden rounded-2xl border border-black/[0.06] bg-black/[0.06] sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3 dark:border-white/10 dark:bg-white/10">
             <div className="bg-background/85 p-4 backdrop-blur">
               <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                <Target className="size-3.5" /> Ziel
+                <MoodTrendIcon className="size-3.5" /> Stimmungstrend
               </p>
-              <p className="mt-2 line-clamp-2 text-sm font-medium">
-                {goalText || "Noch kein Beratungsziel hinterlegt"}
+              <p className="mt-2 text-sm font-medium">{moodTrend.value}</p>
+              <p className="text-muted-foreground mt-1 text-xs">{moodTrend.detail}</p>
+            </div>
+            <div className="bg-background/85 p-4 backdrop-blur">
+              <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                <WeightTrendIcon className="size-3.5" /> Gewichtstrend
+              </p>
+              <p className="mt-2 text-sm font-medium">{weightTrend.value}</p>
+              <p className="text-muted-foreground mt-1 text-xs tabular-nums">
+                {weightTrend.detail}
               </p>
             </div>
             <div className="bg-background/85 p-4 backdrop-blur">
               <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                <Scale className="size-3.5" /> Sollwert
+                <Clock3 className="size-3.5" /> Nächster Termin
               </p>
               <p className="mt-2 text-sm font-medium tabular-nums">
-                {patient.dailyCalorieGoal
-                  ? `${formatNumber(patient.dailyCalorieGoal)} kcal/Tag`
-                  : "Noch kein Kalorienziel"}
-              </p>
-              {calorieDelta !== null ? (
-                <p className="text-muted-foreground mt-1 text-xs tabular-nums">
-                  {calorieDelta > 0 ? "+" : calorieDelta < 0 ? "−" : ""}
-                  {formatNumber(Math.abs(calorieDelta))} kcal zum Erhalt
-                </p>
-              ) : null}
-            </div>
-            <div className="bg-background/85 p-4 backdrop-blur">
-              <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                <Clock3 className="size-3.5" /> Nächste Entscheidung
-              </p>
-              <p className="mt-2 text-sm font-medium">
-                {firstGap ? shortDate(firstGap.date) : "In mehr als 14 Tagen"}
+                {nextAppointment ? shortDate(nextAppointment.date) : "Nicht geplant"}
               </p>
               <p className="text-muted-foreground mt-1 text-xs">
-                {firstGap ? "Noch nicht abgedeckt" : "Planungsfenster vollständig"}
+                {nextAppointment
+                  ? `${nextAppointment.startTime.slice(0, 5)} Uhr · ${nextAppointment.title}`
+                  : "Noch kein zukünftiger Termin"}
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      <ClientPulse patient={patient} onOpenClientApp={onOpenClientApp} />
+      <PlanCoverage coverage={coverage} onOpenPlanner={onOpenPlanner} />
 
-      <PlanTrajectory
+      <ClientPulse
         patient={patient}
-        anthropometrics={anthropometrics}
-        energyContext={energyContext}
-        coverage={coverage}
-        onOpenPlanner={onOpenPlanner}
+        pulse={pulse}
+        weightTrend={weightTrend}
+        onOpenClientApp={onOpenClientApp}
       />
 
       <PlanStatusGuidance

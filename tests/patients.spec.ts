@@ -452,7 +452,8 @@ test.describe("Patient Management", () => {
       await expect(page.getByText(/Der nächste Planungstag ist noch offen|Der aktuelle Plan reicht bis/)).toBeVisible({
         timeout: 30_000,
       });
-      await page.getByRole("button", { name: "Aktuellen Plan öffnen" }).click();
+      await page.getByRole("button", { name: "Zu heute springen" }).click();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=week/);
       await expect(page.getByRole("button", { name: "Zurück", exact: true })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
         "data-state",
@@ -476,15 +477,29 @@ test.describe("Patient Management", () => {
       await expect(page.getByText("Als Nächstes", { exact: true })).toBeVisible();
 
       const firstDay = page.getByRole("button", { name: /mit Doppelklick in Tagesansicht öffnen$/ }).first();
+      await firstDay.click();
+      await expect(firstDay).toHaveAttribute("aria-pressed", "true");
+      const secondDay = page.getByRole("button", { name: /mit Doppelklick in Tagesansicht öffnen$/ }).nth(1);
+      await secondDay.click({ modifiers: ["Shift"] });
+      await expect(secondDay).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Als Vorlage speichern" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toHaveCount(0);
       await firstDay.dblclick();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=day/);
       await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toBeVisible();
       await expect(page.getByText("Nährstoff-Lückenfüller", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
+      await page.goBack();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=week/);
+      await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
         "data-state",
         "active",
       );
-      await expect(page.getByRole("tab", { name: "Planstände" })).toBeVisible({ timeout: 30_000 });
+      await page.goBack();
+      await expect(page).not.toHaveURL(/planView=/);
+      await expect(page.getByText(/Der nächste Planungstag ist noch offen|Der aktuelle Plan reicht bis/)).toBeVisible();
+      await page.getByRole("button", { name: "Zu heute springen" }).click();
+      await expect(page.getByRole("tab", { name: "Versionen & Freigaben" })).toBeVisible({ timeout: 30_000 });
       await page.getByRole("tab", { name: "Profil" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
     } finally {

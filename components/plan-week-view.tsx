@@ -34,10 +34,12 @@ interface PlanWeekViewProps {
   foodMap: Map<string, Food>
   recipeMap: Map<string, Recipe>
   activeDate: string
+  selectedDates: string[]
   energyTarget?: number
   dietLine?: DietLinePreset
   refConfig: ResolvedReferenceConfig
   nutrientTargets: DietLineComplianceItem[]
+  onSelectDay: (date: string, extendSelection?: boolean) => void
   onOpenDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
@@ -62,10 +64,12 @@ export function PlanWeekView({
   foodMap,
   recipeMap,
   activeDate,
+  selectedDates,
   energyTarget,
   dietLine,
   refConfig,
   nutrientTargets,
+  onSelectDay,
   onOpenDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
@@ -123,8 +127,10 @@ export function PlanWeekView({
             ),
         }))}
         activeDate={activeDate}
+        selectedDates={selectedDates}
         energyTarget={energyTarget}
         getEntryLabel={weekEntryLabel}
+        onSelectDay={onSelectDay}
         onOpenDay={onOpenDay}
         onCopyCurrentToDay={onCopyCurrentToDay}
         onCopyToNextDay={onCopyToNextDay}

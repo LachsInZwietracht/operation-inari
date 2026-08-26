@@ -514,6 +514,9 @@ export function BibliothekClient({
                           {dietLine.name}
                         </Badge>
                       )}
+                      {template.dayBlocks && template.dayBlocks.length > 1 && (
+                        <Badge variant="outline" className="text-xs">{template.dayBlocks.length} Tage</Badge>
+                      )}
                     </div>
                     <CardTitle className="text-base leading-snug">
                       {template.name}
@@ -535,7 +538,9 @@ export function BibliothekClient({
                         {stats?.entryCount ?? 0} Einträge
                       </span>
                     </div>
-                    {stats && stats.entryCount > 0 ? (
+                    {template.dayBlocks && template.dayBlocks.length > 1 ? (
+                      <p className="text-muted-foreground text-xs">Mehrtägiger Vorlagenblock — Tageswerte werden bewusst nicht zusammengefasst.</p>
+                    ) : stats && stats.entryCount > 0 ? (
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                         <MacroBlock label="Energie" value={`${formatKcal(stats.energie)} kcal`} accent />
                         <MacroBlock label="Eiweiß" value={`${formatGrams(stats.eiweiss)} g`} />

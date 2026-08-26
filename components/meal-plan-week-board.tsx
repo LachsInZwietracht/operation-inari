@@ -84,9 +84,11 @@ export interface WeekBoardTarget {
 interface MealPlanWeekBoardProps {
   days: { plan: DailyMealPlan; kcal: number; energyEvaluable: boolean }[]
   activeDate: string
+  selectedDates: string[]
   /** Drives the per-day kcal progress bars in the board header. */
   energyTarget?: number
   getEntryLabel: (entry: MealEntry) => string
+  onSelectDay: (date: string, extendSelection?: boolean) => void
   onOpenDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
@@ -99,8 +101,10 @@ interface MealPlanWeekBoardProps {
 export function MealPlanWeekBoard({
   days,
   activeDate,
+  selectedDates,
   energyTarget,
   getEntryLabel,
+  onSelectDay,
   onOpenDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
@@ -129,6 +133,7 @@ export function MealPlanWeekBoard({
             <div />
             {days.map(({ plan, kcal, energyEvaluable }) => {
               const isActive = plan.date === activeDate
+              const isSelected = selectedDates.includes(plan.date)
               const isPast = plan.date < today
               const isToday = plan.date === today
               const planningState = getDayPlanningState(plan)
@@ -151,16 +156,19 @@ export function MealPlanWeekBoard({
                     isPast && "border-border/70 bg-muted/70",
                     !isPast && "bg-card hover:bg-accent",
                     isActive && "border-primary/50 bg-primary/10 ring-primary/10 ring-1",
+                    isSelected && !isActive && "border-primary/40 bg-primary/5",
                   )}
                 >
                   <button
                     type="button"
                     aria-label={`${format(parseISO(plan.date), "EEEE, d. MMMM yyyy", { locale: de })} mit Doppelklick in Tagesansicht öffnen`}
-                    title="Mit Doppelklick in die Tagesansicht"
+                    aria-pressed={isSelected}
+                    title="Einmal auswählen, mit Shift weitere Tage auswählen; mit Doppelklick in die Tagesansicht"
                     onClick={(event) => {
-                      // Native keyboard and assistive-tech activation dispatch
-                      // a click without pointer click-count information.
-                      if (event.detail === 0) onOpenDay(plan.date)
+                      // A double click dispatches two click events first. Only
+                      // the first selects; the dedicated double-click handler
+                      // then opens the contextual day view.
+                      if (event.detail <= 1) onSelectDay(plan.date, event.shiftKey)
                     }}
                     onDoubleClick={() => onOpenDay(plan.date)}
                     className={cn(
@@ -171,7 +179,7 @@ export function MealPlanWeekBoard({
                     <span
                       className={cn(
                         "flex items-center gap-1 text-xs font-semibold capitalize",
-                        isActive ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground",
+                        isSelected || isActive ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground",
                       )}
                     >
                       {format(parseISO(plan.date), "EEE dd.", { locale: de })}

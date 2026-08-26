@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { ArrowLeft } from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { FoodsProvider } from "@/components/foods-provider"
 import { MealPlanPlanner } from "@/components/meal-plan-planner"
@@ -18,6 +19,7 @@ import type {
   Food,
   Patient,
   PatientAllergenEntry,
+  PracticeAppointment,
   Recipe,
 } from "@/lib/types"
 
@@ -29,6 +31,7 @@ interface PatientMealPlanTabProps {
   /** Recipes referenced by this patient's plans, used until the full set lands. */
   recipes: Recipe[]
   anthropometrics: AnthropometricEntry[]
+  appointments: PracticeAppointment[]
   patientAllergens: PatientAllergenEntry[]
   /**
    * Energy figures the record already computed. Passed down rather than
@@ -68,17 +71,30 @@ export function PatientMealPlanTab({
   foods,
   recipes,
   anthropometrics,
+  appointments,
   patientAllergens,
   energyContext,
   onSavePatient,
   onOpenClientApp,
 }: PatientMealPlanTabProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   // The library needs the whole catalogue, not just what this patient's plans
   // already reference — the referenced ones are only a head start.
   const [allRecipes, setAllRecipes] = useState<Recipe[]>(recipes)
-  const [workspace, setWorkspace] = useState<"status" | "planner">("status")
-  const [plannerDate, setPlannerDate] = useState(todayIsoDate)
   const [statusPlans, setStatusPlans] = useState<DailyMealPlan[]>(plans)
+  const requestedPlanView = searchParams.get("planView")
+  const plannerView = requestedPlanView === "day" || requestedPlanView === "plans"
+    ? requestedPlanView
+    : "week"
+  const workspace = requestedPlanView === "week" || requestedPlanView === "day" || requestedPlanView === "plans"
+    ? "planner"
+    : "status"
+  const requestedDate = searchParams.get("planDate")
+  const plannerDate = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+    ? requestedDate
+    : todayIsoDate()
 
   useEffect(() => {
     let cancelled = false
@@ -117,10 +133,24 @@ export function PatientMealPlanTab({
     }
   }, [patient.id, workspace])
 
-  const openPlanner = (date: string) => {
-    setPlannerDate(date)
-    setWorkspace("planner")
+  const navigatePlan = (
+    nextView: "status" | "week" | "day" | "plans",
+    date?: string,
+  ) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("tab", "ernaehrungsplan")
+    if (nextView === "status") {
+      params.delete("planView")
+      params.delete("planDate")
+    } else {
+      params.set("planView", nextView)
+      if (date) params.set("planDate", date)
+    }
+    const href = `${pathname}?${params.toString()}`
+    router.push(href, { scroll: false })
   }
+
+  const openPlanner = (date: string) => navigatePlan("week", date)
 
   // Status is where the tab lands and the builder is what it leads to, so the
   // two are one path, not two peers: the status screen's own call to action
@@ -132,6 +162,7 @@ export function PatientMealPlanTab({
         patient={patient}
         plans={statusPlans}
         anthropometrics={anthropometrics}
+        appointments={appointments}
         energyContext={energyContext}
         patientAllergens={patientAllergens}
         onSavePatient={onSavePatient}
@@ -148,7 +179,7 @@ export function PatientMealPlanTab({
           variant="ghost"
           size="sm"
           className="text-muted-foreground hover:text-foreground -ml-2"
-          onClick={() => setWorkspace("status")}
+          onClick={() => navigatePlan("status")}
         >
           <ArrowLeft className="mr-1.5 size-4" />
           Zurück
@@ -157,17 +188,22 @@ export function PatientMealPlanTab({
 
       <FoodsProvider foods={foods}>
         <MealPlanPlanner
-          key={plannerDate}
+          key={patient.id}
           embedded
-          initialView="week"
+          initialView={plannerView}
           initialDate={plannerDate}
           patientId={patient.id}
           energyContext={energyContext}
           recipes={allRecipes}
           initialPlans={statusPlans}
+          onViewChange={(nextView, date) => {
+            if (nextView === "week" || nextView === "day" || nextView === "plans") {
+              navigatePlan(nextView, date)
+            }
+          }}
           extraTab={{
             value: "plans",
-            label: "Planstände",
+            label: "Versionen & Freigaben",
             render: ({ openDay, openPlan, workspacePlans }) => (
               <PatientMealPlansTab
                 patient={patient}

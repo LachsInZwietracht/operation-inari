@@ -219,6 +219,13 @@ export function TemplateDetailClient({
   }, [dayTotals]);
 
   const handleApply = () => {
+    if (template.dayBlocks && template.dayBlocks.length > 1) {
+      const params = new URLSearchParams();
+      params.set("date", format(applyDate, "yyyy-MM-dd"));
+      if (patientId) params.set("patientId", patientId);
+      router.push(`/ernaehrungsplan?${params.toString()}`);
+      return;
+    }
     const dateString = format(applyDate, "yyyy-MM-dd");
     const params = new URLSearchParams();
     params.set("date", dateString);
@@ -244,6 +251,10 @@ export function TemplateDetailClient({
         targetProfileId: template.targetProfileId,
         notes: template.notes,
         slots: cloneSlots(template.slots),
+        dayBlocks: template.dayBlocks?.map((block) => ({
+          offsetDays: block.offsetDays,
+          slots: cloneSlots(block.slots),
+        })),
       });
       setDuplicateSuccessId(saved.id);
     } catch (error) {
@@ -275,7 +286,7 @@ export function TemplateDetailClient({
       <PageHeader
         title={template.name}
         description={template.description || templateScopeLabel}
-        helpText="Diese Detailansicht zeigt alle Slots der Vorlage mit Tagessummen und – falls ein Patient gewählt ist – den Vergleich gegen das aktive Referenzprofil. Über 'Anwenden' lädt die Vorlage einen Tagesplan im Planer; 'Als eigene Vorlage speichern' erzeugt eine bearbeitbare Kopie unter deinen persönlichen Vorlagen."
+        helpText={template.dayBlocks && template.dayBlocks.length > 1 ? "Dieser mehrtägige Vorlagenblock behält beim Anwenden seine relativen Abstände. Tagesanalysen werden hier bewusst nicht als Gesamtwert dargestellt; anwenden lässt er sich geprüft im Patientenplaner." : "Diese Detailansicht zeigt alle Slots der Vorlage mit Tagessummen und – falls ein Patient gewählt ist – den Vergleich gegen das aktive Referenzprofil. Über 'Anwenden' lädt die Vorlage einen Tagesplan im Planer; 'Als eigene Vorlage speichern' erzeugt eine bearbeitbare Kopie unter deinen persönlichen Vorlagen."}
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
@@ -314,7 +325,9 @@ export function TemplateDetailClient({
         )}
         <Badge variant="outline" className="gap-1">
           <Layers className="h-3 w-3" />
-          {filledSlots.length} Slot{filledSlots.length === 1 ? "" : "s"} · {entryCount} Einträge
+          {template.dayBlocks && template.dayBlocks.length > 1
+            ? `${template.dayBlocks.length} Tage · erster Tag: ${filledSlots.length} Slots · ${entryCount} Einträge`
+            : `${filledSlots.length} Slot${filledSlots.length === 1 ? "" : "s"} · ${entryCount} Einträge`}
         </Badge>
         <Badge variant="outline">{templateScopeLabel}</Badge>
       </div>
@@ -362,9 +375,9 @@ export function TemplateDetailClient({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Slot-Aufbau</CardTitle>
+          <CardTitle className="text-base">{template.dayBlocks && template.dayBlocks.length > 1 ? "Erster Tag: Slot-Aufbau" : "Slot-Aufbau"}</CardTitle>
           <CardDescription>
-            Einträge der Vorlage pro Mahlzeit mit Mengenangabe und Slot-Summe.
+            {template.dayBlocks && template.dayBlocks.length > 1 ? "Der Block beginnt mit diesem Tag; die weiteren Tage bleiben als Ablauf mit relativen Abständen gespeichert." : "Einträge der Vorlage pro Mahlzeit mit Mengenangabe und Slot-Summe."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -382,7 +395,7 @@ export function TemplateDetailClient({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Nährstoff-Übersicht (Tagessumme)</CardTitle>
+          <CardTitle className="text-base">Nährstoff-Übersicht ({template.dayBlocks && template.dayBlocks.length > 1 ? "erster Tag" : "Tagessumme"})</CardTitle>
           <CardDescription>
             {patient
               ? `Vergleich gegen das Referenzprofil von ${patient.firstName ?? ""} ${patient.lastName ?? ""}`.trim()
@@ -448,8 +461,9 @@ export function TemplateDetailClient({
           <DialogHeader>
             <DialogTitle>Vorlage anwenden</DialogTitle>
             <DialogDescription>
-              Die Vorlage wird auf den gewählten Tag im Planer übernommen. Ein
-              bestehender Tagesplan an diesem Datum wird durch die Vorlage ersetzt.
+              {template.dayBlocks && template.dayBlocks.length > 1
+                ? "Der Block wird im Planer geöffnet. Dort prüfst du alle Zieltage gemeinsam, bevor bestehende Entwürfe ersetzt werden."
+                : "Die Vorlage wird auf den gewählten Tag im Planer übernommen. Ein bestehender Tagesplan an diesem Datum wird durch die Vorlage ersetzt."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -484,7 +498,7 @@ export function TemplateDetailClient({
             </Button>
             <Button onClick={handleApply}>
               <CalendarDays className="mr-2 h-4 w-4" />
-              Im Plan öffnen
+              {template.dayBlocks && template.dayBlocks.length > 1 ? "Im Planer öffnen" : "Im Plan öffnen"}
             </Button>
           </DialogFooter>
         </DialogContent>

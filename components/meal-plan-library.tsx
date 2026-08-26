@@ -571,6 +571,7 @@ export function MealPlanLibrary({
                 (sum, slot) => sum + slot.entries.length,
                 0,
               )
+              const blockCount = template.dayBlocks?.length ?? 0
               return (
                 <div
                   key={template.id}
@@ -580,8 +581,7 @@ export function MealPlanLibrary({
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{template.name}</div>
                     <div className="text-muted-foreground truncate text-[11px]">
-                      {template.indication || template.description || "Tagesplan"} · {entryCount}{" "}
-                      Einträge
+                      {template.indication || template.description || "Tagesplan"} · {blockCount > 1 ? `${blockCount} Tage` : `${entryCount} Einträge`}
                     </div>
                   </div>
                   {onApplyTemplate && (
@@ -606,7 +606,7 @@ export function MealPlanLibrary({
         </div>
         <p className="text-muted-foreground text-[11px]">
           {tab === "templates"
-            ? "Vorlagen füllen den aktiven Tag komplett."
+            ? "Tagesvorlagen füllen den aktiven Tag; mehrtägige Blöcke starten dort und behalten ihre Abstände."
             : "Per Drag & Drop auf eine Mahlzeit ziehen oder über + hinzufügen."}
         </p>
       </CardContent>

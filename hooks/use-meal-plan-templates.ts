@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { MealPlanTemplate, MealSlot } from "@/lib/types"
+import type { MealPlanTemplate, MealPlanTemplateDayBlock, MealSlot } from "@/lib/types"
 import {
   fetchMealPlanTemplatesClient,
   saveMealPlanTemplate,
@@ -21,6 +21,7 @@ interface SaveTemplateInput {
   dietLineId?: string
   targetProfileId?: string
   slots: MealSlot[]
+  dayBlocks?: MealPlanTemplateDayBlock[]
   notes?: string
 }
 

@@ -155,8 +155,8 @@ export function PlanStatusGuidance({
           Was für jede Planwoche gelten soll
         </h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-          Zielwerte, Ausschlüsse und einfache Prinzipien werden einmal am Patienten
-          festgelegt. Die Wochenplanung setzt sie anschließend konkret um.
+          Zielwerte und Ausschlüsse werden einmal am Patienten festgelegt. Die
+          Wochenplanung setzt sie anschließend konkret um.
         </p>
       </div>
 
@@ -174,17 +174,6 @@ export function PlanStatusGuidance({
           allergies={allergies}
           exclusions={exclusions}
         />
-        <div className="lg:col-span-2">
-          <PlanPrinciplesCard
-            calorieGoal={calorieGoal}
-            macroPreset={patient.macroPreset}
-            dietStyle={patient.dietStyle}
-            exclusions={exclusions}
-            weightKg={energyContext?.weightKg}
-            overrides={patient.planPrinciples}
-            onSaveOverrides={(next) => onSavePatient({ planPrinciples: next })}
-          />
-        </div>
       </div>
     </section>
   )

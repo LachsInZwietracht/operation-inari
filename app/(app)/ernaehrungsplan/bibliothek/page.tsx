@@ -29,9 +29,11 @@ function extractFoodIds(
   const ids = new Set<string>();
 
   for (const template of templates) {
-    for (const slot of template.slots) {
-      for (const entry of slot.entries) {
-        if (entry.type === "food") ids.add(entry.referenceId);
+    for (const day of template.dayBlocks?.length ? template.dayBlocks : [{ offsetDays: 0, slots: template.slots }]) {
+      for (const slot of day.slots) {
+        for (const entry of slot.entries) {
+          if (entry.type === "food") ids.add(entry.referenceId);
+        }
       }
     }
   }

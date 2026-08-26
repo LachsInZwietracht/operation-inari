@@ -71,10 +71,21 @@ export interface MealPlanTemplate {
   dietLineId?: string;
   targetProfileId?: ID;
   slots: MealSlot[];
+  /**
+   * Optional multi-day blueprint. `offsetDays` is relative to the first
+   * selected day, so a template can preserve deliberate gaps (for example
+   * weekday-only plans) without carrying a patient date.
+   */
+  dayBlocks?: MealPlanTemplateDayBlock[];
   notes?: string;
   sourceType: "personal" | "system";
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface MealPlanTemplateDayBlock {
+  offsetDays: number;
+  slots: MealSlot[];
 }
 
 export interface DietLinePreset {

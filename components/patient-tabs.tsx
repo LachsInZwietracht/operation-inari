@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import dynamic from "next/dynamic"
-import { useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { addDays, differenceInCalendarDays, differenceInMonths, differenceInYears, parseISO } from "date-fns"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAnthropometric } from "@/hooks/use-anthropometric"
@@ -491,12 +491,28 @@ export function PatientTabs({
     (appointment) => appointment.patientId === patient.id || appointment.patientId === patient.legacyId,
   )
   const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
   const initialTabParam = searchParams.get("tab")
-  const initialTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "overview"
-  const [activeTab, setActiveTab] = useState(initialTab)
+  const activeTab = initialTabParam && KNOWN_TAB_VALUES.has(initialTabParam) ? initialTabParam : "overview"
   // Recording a measurement is a small, self-contained task: it opens over
   // whatever you were reading instead of moving you to another tab.
   const [measurementOpen, setMeasurementOpen] = useState(false)
+
+  // Patient tabs are real navigation levels. Keeping them in the URL makes
+  // browser Back return through the record instead of skipping straight over
+  // the nutrition workspace to the patient list.
+  const openPatientTab = useCallback((nextTab: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (nextTab === "overview") params.delete("tab")
+    else params.set("tab", nextTab)
+    if (nextTab !== "ernaehrungsplan") {
+      params.delete("planView")
+      params.delete("planDate")
+    }
+    const query = params.toString()
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }, [pathname, router, searchParams])
 
   const currentStage = derivePatientIntakeStage({
     patient: currentPatient,
@@ -527,7 +543,7 @@ export function PatientTabs({
   )
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={openPatientTab}>
       {/* The plan sits second: it is what the overview leads to, and the rest
           of the record is reference the plan is built from. Ablauf derived the
           same phase the overview already shows next to the name, and
@@ -573,6 +589,7 @@ export function PatientTabs({
           foods={initialData?.mealPlanFoods ?? []}
           recipes={initialData?.recipes ?? []}
           anthropometrics={anthroEntries}
+          appointments={patientAppointments}
           patientAllergens={patientAllergens}
           energyContext={{
             weightKg: latestAnthro?.weight,
@@ -583,7 +600,7 @@ export function PatientTabs({
           onSavePatient={async (updates) => {
             await savePatient(currentPatient.id, updates)
           }}
-          onOpenClientApp={() => setActiveTab("klienten-app")}
+          onOpenClientApp={() => openPatientTab("klienten-app")}
         />
       </TabsContent>
 
@@ -697,7 +714,7 @@ export function PatientTabs({
           onNutritionPreferenceNotesBlur={handleNutritionPreferenceNotesBlur}
           nutritionPreferenceAllergens={nutritionPreferenceAllergens}
           allergensPending={allergensPending}
-          onManageAllergens={() => setActiveTab("diagnosen")}
+          onManageAllergens={() => openPatientTab("diagnosen")}
         />
       </TabsContent>
 
