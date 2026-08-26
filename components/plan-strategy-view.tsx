@@ -148,10 +148,7 @@ export function PlanStatusGuidance({
   return (
     <section className="space-y-4">
       <div className="px-1">
-        <p className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
-          Leitplanken
-        </p>
-        <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">
+        <h2 className="text-xl font-semibold tracking-[-0.03em]">
           Was für jede Planwoche gelten soll
         </h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
