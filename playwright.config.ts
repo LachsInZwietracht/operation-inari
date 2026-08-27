@@ -21,7 +21,10 @@ function loadEnvFile(fileName: string): boolean {
     if (eqIndex === -1) continue;
     const key = trimmed.slice(0, eqIndex);
     const value = trimmed.slice(eqIndex + 1);
-    if (!process.env[key]) process.env[key] = value;
+    // The selected test file is the safety boundary. Inherited shell values
+    // may point at another Supabase project or carry an incompatible key, so
+    // they must not silently win over the explicitly loaded local test env.
+    process.env[key] = value;
   }
   return true;
 }

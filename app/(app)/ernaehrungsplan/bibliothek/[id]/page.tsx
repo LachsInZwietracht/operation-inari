@@ -71,7 +71,7 @@ export default async function BibliothekDetailPage({
     fetchMealPlanTemplates({
       supabase,
       userId: user?.id,
-      includeSystem: true,
+      patientId: query.patientId,
     }),
   ]);
 

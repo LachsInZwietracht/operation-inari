@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   format,
   parseISO,
@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Download,
+  History,
   Library,
   Save,
   Send,
@@ -54,10 +55,12 @@ import { FOOD_CATEGORIES } from "@/lib/data/food-categories"
 import { PlanAdditiveSummary } from "@/components/plan-additive-summary"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
 import { formatNumber } from "@/lib/format"
+import { todayIsoDate } from "@/lib/client-mode"
 import {
   calculateEntryNutrients,
   complianceBadge,
   getEnergyTargetStatus,
+  getEntryLabel,
   isMealEntryNutrientEvaluable,
 } from "@/lib/meal-plan-calc"
 import { getNutrientValue, sumNutrients } from "@/lib/nutrients"
@@ -88,8 +91,8 @@ import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialo
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { PlanWeekReleaseDialog, type WeekReleaseReview } from "@/components/plan-week-release-dialog"
 import { PlanWeekCopyDialog } from "@/components/plan-week-copy-dialog"
-import { PlanWeekTemplateDialog } from "@/components/plan-week-template-dialog"
-import { PlanMultiDayTemplateApplyDialog } from "@/components/plan-multi-day-template-apply-dialog"
+import { PlanWeekTemplateDialog, type WeekTemplateDraft } from "@/components/plan-week-template-dialog"
+import { PlanMultiDayTemplateApplyDialog, type TemplateApplyTarget } from "@/components/plan-multi-day-template-apply-dialog"
 import {
   PlanStrategyView,
   type PatientEnergyContext,
@@ -133,6 +136,12 @@ function getPatientIndications(patient?: Patient): string[] {
   const record = patient as PatientWithLegacyIndication
   if (record.indications?.length) return record.indications
   return record.indication ? [record.indication] : []
+}
+
+function getTemplateBlocks(template: MealPlanTemplate) {
+  return template.dayBlocks?.length
+    ? template.dayBlocks
+    : [{ offsetDays: 0, slots: template.slots }]
 }
 
 interface MealPlanPlannerProps {
@@ -196,6 +205,7 @@ export function MealPlanPlanner({
   energyContext,
 }: MealPlanPlannerProps) {
   const router = useRouter()
+  const [today] = useState(todayIsoDate)
   const serverFoods = useFoods()
   const { index: foodSearchIndex, loadIndex: loadFoodSearchIndex } = useFoodSearch()
   const { patients, getPatient, savePatient } = usePatients()
@@ -240,11 +250,16 @@ export function MealPlanPlanner({
     savePreset: saveDietLinePreset,
     deletePreset: deleteDietLinePreset,
   } = useDietLinePresets()
-  const { templates: mealPlanTemplates, saveTemplate } = useMealPlanTemplates({ initialTemplates })
+  const { templates: mealPlanTemplates, saveTemplate } = useMealPlanTemplates({ initialTemplates, patientId })
+  const [pendingMultiDayTemplate, setPendingMultiDayTemplate] = useState<{
+    template: MealPlanTemplate
+    startDate: string
+  } | null>(null)
+  const [isApplyingMultiDayTemplate, setIsApplyingMultiDayTemplate] = useState(false)
 
-  // Planvorlagen deep-link handler. Applies a template once when the
-  // planner mounts with `?template=…`, then rewrites the URL to drop the param
-  // so a refresh or share-link does not silently re-apply on top of edits.
+  // Planvorlagen deep-links deliberately open the same preview as the library.
+  // Removing the parameter makes a refresh harmless without bypassing the
+  // target-date and overwrite review.
   const appliedTemplateRef = useRef<string | null>(null)
   useEffect(() => {
     if (!initialApplyTemplateId) return
@@ -255,17 +270,12 @@ export function MealPlanPlanner({
     )
     if (!template) return
     appliedTemplateRef.current = initialApplyTemplateId
-    if (template.dayBlocks && template.dayBlocks.length > 1) {
-      toast.message("Mehrtägige Vorlage braucht eine Planprüfung.", {
-        description: "Öffnen Sie den Block im Patientenplaner, damit alle Zieltage gemeinsam geprüft werden.",
-      })
-      router.replace(`/ernaehrungsplan/bibliothek/${template.id}${patientId ? `?patientId=${patientId}` : ""}`)
+    if (template.patientId && template.patientId !== patientId) {
+      toast.error("Diese Vorlage gehört zu einem anderen Patienten.")
       return
     }
-    applyTemplateToDate(currentDate, template.slots, {
-      title: template.name,
-      dietLineId: template.dietLineId ?? undefined,
-      targetProfileId: template.targetProfileId ?? undefined,
+    startTransition(() => {
+      setPendingMultiDayTemplate({ template, startDate: currentDate })
     })
     if (embedded) return
     const params = new URLSearchParams()
@@ -276,7 +286,6 @@ export function MealPlanPlanner({
     embedded,
     initialApplyTemplateId,
     mealPlanTemplates,
-    applyTemplateToDate,
     currentDate,
     patientId,
     router,
@@ -310,12 +319,6 @@ export function MealPlanPlanner({
   const [selectedWeekDates, setSelectedWeekDates] = useState<string[]>([])
   const [weekTemplateDialogOpen, setWeekTemplateDialogOpen] = useState(false)
   const [isSavingWeekTemplate, setIsSavingWeekTemplate] = useState(false)
-  const [pendingMultiDayTemplate, setPendingMultiDayTemplate] = useState<{
-    template: MealPlanTemplate
-    targetDates: string[]
-    occupiedDates: string[]
-  } | null>(null)
-  const [isApplyingMultiDayTemplate, setIsApplyingMultiDayTemplate] = useState(false)
   const [clientLinkState, setClientLinkState] = useState<"linked" | "not-linked" | "unknown">("unknown")
 
   const changeView = useCallback((nextView: string, date = currentDate) => {
@@ -769,7 +772,7 @@ export function MealPlanPlanner({
     (plan) => !plan.slots.some((slot) => slot.entries.length > 0),
   )
 
-  const handleSaveWeekTemplate = useCallback(async (name: string) => {
+  const handleSaveWeekTemplate = useCallback(async ({ name, description, indication, dietLineId, scope }: WeekTemplateDraft) => {
     if (selectedWeekPlans.length === 0) return
     if (selectedWeekPlans.some((plan) => !plan.slots.some((slot) => slot.entries.length > 0))) {
       toast.error("Leere Tage können nicht als Vorlage gespeichert werden.", {
@@ -783,9 +786,10 @@ export function MealPlanPlanner({
       const isMultiDay = selectedWeekPlans.length > 1
       await saveTemplate({
         name,
-        description: isMultiDay
+        description: description || (isMultiDay
           ? `Persönlicher Vorlagenblock aus ${selectedWeekPlans.length} Planungstagen.`
-          : "Persönliche Tagesvorlage aus dem Planer.",
+          : "Persönliche Tagesvorlage aus dem Planer."),
+        indication: indication || undefined,
         // Keep `slots` populated for all existing day-template consumers.
         slots: selectedWeekPlans[0].slots,
         dayBlocks: isMultiDay
@@ -794,8 +798,9 @@ export function MealPlanPlanner({
               slots: plan.slots,
             }))
           : undefined,
-        dietLineId: selectedWeekPlans[0].dietLineId,
+        dietLineId,
         targetProfileId: selectedWeekPlans[0].targetProfileId,
+        patientId: scope === "patient" ? patientId : undefined,
       })
       setWeekTemplateDialogOpen(false)
       toast.success(isMultiDay ? "Mehrtägige Vorlage gespeichert." : "Tagesvorlage gespeichert.", {
@@ -807,7 +812,7 @@ export function MealPlanPlanner({
     } finally {
       setIsSavingWeekTemplate(false)
     }
-  }, [saveTemplate, selectedWeekPlans])
+  }, [patientId, saveTemplate, selectedWeekPlans])
 
   const handleReleaseWeek = useCallback(async () => {
     if (!patientId || weekReleaseReview.blockers.length > 0) return
@@ -1033,38 +1038,70 @@ export function MealPlanPlanner({
   )
 
   const applyTemplateBlocks = useCallback(
-    (template: MealPlanTemplate) => {
-      const blocks = template.dayBlocks?.length
-        ? template.dayBlocks
-        : [{ offsetDays: 0, slots: template.slots }]
+    (template: MealPlanTemplate, startDate: string) => {
+      const blocks = getTemplateBlocks(template)
+      const basePlan = getPlansInRange(startDate, 1)[0]
       for (const block of blocks) {
-        const targetDate = format(addDays(parseISO(currentDate), block.offsetDays), "yyyy-MM-dd")
+        const targetDate = format(addDays(parseISO(startDate), block.offsetDays), "yyyy-MM-dd")
         applyTemplateToDate(targetDate, block.slots, {
-          dietLineId: template.dietLineId ?? currentPlan.dietLineId,
-          targetProfileId: template.targetProfileId ?? currentPlan.targetProfileId,
-          title: currentPlan.title ?? (patient ? `${template.name} – ${patient.firstName} ${patient.lastName}` : template.name),
-          notes: currentPlan.notes ?? template.notes ?? undefined,
+          dietLineId: template.dietLineId ?? basePlan.dietLineId,
+          targetProfileId: template.targetProfileId ?? basePlan.targetProfileId,
+          title: basePlan.title ?? (patient ? `${template.name} – ${patient.firstName} ${patient.lastName}` : template.name),
+          notes: basePlan.notes ?? template.notes ?? undefined,
         })
       }
+      setDate(startDate)
+      setWeekOffset(0)
+      setSelectedWeekDates(blocks.map((block) =>
+        format(addDays(parseISO(startDate), block.offsetDays), "yyyy-MM-dd"),
+      ))
       setPendingMultiDayTemplate(null)
       toast.success(
         blocks.length > 1
-          ? `Vorlagenblock "${template.name}" ab dem aktiven Tag angewendet.`
+          ? `Vorlagenblock "${template.name}" ab ${format(parseISO(startDate), "d. MMM", { locale: de })} angewendet.`
           : `Vorlage "${template.name}" auf den Tagesplan angewendet.`,
       )
     },
-    [applyTemplateToDate, currentDate, currentPlan.dietLineId, currentPlan.notes, currentPlan.targetProfileId, currentPlan.title, patient],
+    [applyTemplateToDate, getPlansInRange, patient, setDate],
+  )
+
+  const getTemplateApplyTargets = useCallback(
+    (template: MealPlanTemplate, startDate: string): TemplateApplyTarget[] => {
+      const blocks = getTemplateBlocks(template)
+      const range = getPlansInRange(startDate, Math.max(...blocks.map((block) => block.offsetDays)) + 1)
+      return blocks.map((block) => {
+        const date = format(addDays(parseISO(startDate), block.offsetDays), "yyyy-MM-dd")
+        const plan = range.find((candidate) => candidate.date === date)
+        const protectedPlan = plan?.status === "approved" || plan?.status === "active" || plan?.status === "archived"
+        const hasDraft = !protectedPlan && Boolean(plan?.slots.some((slot) => slot.entries.length > 0))
+        return { date, state: protectedPlan ? "protected" : hasDraft ? "draft" : "free" }
+      })
+    },
+    [getPlansInRange],
   )
 
   const confirmMultiDayTemplateApply = useCallback(async () => {
-    if (!pendingMultiDayTemplate || !patientId) return
+    if (!pendingMultiDayTemplate) return
+    if (pendingMultiDayTemplate.template.patientId && pendingMultiDayTemplate.template.patientId !== patientId) {
+      setPendingMultiDayTemplate(null)
+      toast.error("Diese Vorlage gehört zu einem anderen Patienten.")
+      return
+    }
+    const targetDates = getTemplateApplyTargets(
+      pendingMultiDayTemplate.template,
+      pendingMultiDayTemplate.startDate,
+    ).map((target) => target.date)
+    if (!patientId) {
+      applyTemplateBlocks(pendingMultiDayTemplate.template, pendingMultiDayTemplate.startDate)
+      return
+    }
     setIsApplyingMultiDayTemplate(true)
     try {
       // The in-memory week can be stale while another counselor is working.
       // Only an immediate database read decides whether this whole block may
       // replace drafts; any read failure is intentionally a safe no-op.
       const persistedPlans = await fetchMealPlansClient({ patientId })
-      const protectedDates = pendingMultiDayTemplate.targetDates.filter((date) => {
+      const protectedDates = targetDates.filter((date) => {
         const rows = persistedPlans.filter((plan) => plan.date === date)
         // A released row may intentionally coexist with its editable change
         // draft. In that case the workspace targets the draft and leaves the
@@ -1085,7 +1122,7 @@ export function MealPlanPlanner({
       // that replacement explicit. There are no protected targets, so all
       // local mutations begin together; their established autosaves still run
       // per daily plan and can report individual persistence failures later.
-      applyTemplateBlocks(pendingMultiDayTemplate.template)
+      applyTemplateBlocks(pendingMultiDayTemplate.template, pendingMultiDayTemplate.startDate)
     } catch (error) {
       console.error("Failed to verify meal plan block targets:", error)
       setPendingMultiDayTemplate(null)
@@ -1095,40 +1132,20 @@ export function MealPlanPlanner({
     } finally {
       setIsApplyingMultiDayTemplate(false)
     }
-  }, [applyTemplateBlocks, patientId, pendingMultiDayTemplate])
+  }, [applyTemplateBlocks, getTemplateApplyTargets, patientId, pendingMultiDayTemplate])
 
   const handleApplyTemplate = useCallback(
     (template: MealPlanTemplate) => {
-      const blocks = template.dayBlocks?.length
-        ? template.dayBlocks
-        : [{ offsetDays: 0, slots: template.slots }]
-      if (blocks.length === 1) {
-        applyTemplateBlocks(template)
+      if (template.patientId && template.patientId !== patientId) {
+        toast.error("Diese Vorlage gehört zu einem anderen Patienten.")
         return
       }
-
-      const targetDates = blocks.map((block) => format(addDays(parseISO(currentDate), block.offsetDays), "yyyy-MM-dd"))
-      const visibleTargets = getPlansInRange(currentDate, Math.max(...blocks.map((block) => block.offsetDays)) + 1)
-        .filter((plan) => targetDates.includes(plan.date))
-      const lockedDates = visibleTargets
-        .filter((plan) => plan.status === "approved" || plan.status === "active" || plan.status === "archived")
-        .map((plan) => plan.date)
-      if (lockedDates.length > 0) {
-        toast.error("Vorlagenblock nicht angewendet.", {
-          description: `Geschützte Tage: ${lockedDates.map((date) => format(parseISO(date), "d. MMM", { locale: de })).join(", ")}. Es wurde nichts verändert.`,
-        })
-        return
-      }
-
       setPendingMultiDayTemplate({
         template,
-        targetDates,
-        occupiedDates: visibleTargets
-          .filter((plan) => plan.slots.some((slot) => slot.entries.length > 0))
-          .map((plan) => plan.date),
+        startDate: currentDate,
       })
     },
-    [applyTemplateBlocks, currentDate, getPlansInRange],
+    [currentDate, patientId],
   )
 
   // Shared export trigger — rendered in the day header and reused in the week
@@ -1142,16 +1159,21 @@ export function MealPlanPlanner({
   const weekHeaderActions = embedded ? (
     <>
       {selectedWeekPlans.length > 0 ? (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setWeekTemplateDialogOpen(true)}
-          disabled={selectedWeekHasEmptyDay}
-          title={selectedWeekHasEmptyDay ? "Jeder ausgewählte Tag braucht mindestens einen Eintrag." : undefined}
-        >
-          <Save className="mr-1.5 h-4 w-4" />
-          Als Vorlage speichern
-        </Button>
+        <>
+          <span className="text-muted-foreground hidden text-xs 2xl:inline">
+            {selectedWeekPlans.length} {selectedWeekPlans.length === 1 ? "Tag" : "Tage"} ausgewählt · weitere über ⋯ hinzufügen
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setWeekTemplateDialogOpen(true)}
+            disabled={selectedWeekHasEmptyDay}
+            title={selectedWeekHasEmptyDay ? "Jeder ausgewählte Tag braucht mindestens einen Eintrag." : undefined}
+          >
+            <Save className="mr-1.5 h-4 w-4" />
+            Als Vorlage speichern
+          </Button>
+        </>
       ) : null}
       <Button size="sm" variant="outline" onClick={() => setWeekCopyOpen(true)} disabled={isCopyingWeek}>
         <Copy className="mr-1.5 h-4 w-4" />
@@ -1337,6 +1359,7 @@ export function MealPlanPlanner({
                     fullFoods={foods}
                     recipes={recipes}
                     templates={mealPlanTemplates}
+                    patientId={patientId}
                     categoryLabels={foodCategoryLabels}
                     isLocked={currentPlan.status === "approved"}
                     onQuickAdd={(payload, slotType) => {
@@ -1380,6 +1403,7 @@ export function MealPlanPlanner({
               fullFoods={foods}
               recipes={recipes}
               templates={mealPlanTemplates}
+              patientId={patientId}
               categoryLabels={foodCategoryLabels}
               isLocked={currentPlan.status === "approved"}
               onQuickAdd={(payload, slotType) => void handleDropPayload(slotType, payload)}
@@ -1412,6 +1436,7 @@ export function MealPlanPlanner({
             <div className="flex flex-wrap items-center gap-1.5">
               {dayWeekPlans.map((dayPlan) => {
                 const isActive = dayPlan.date === currentDate
+                const isPast = dayPlan.date < today
                 const kcal = weekDayKcal.get(dayPlan.date) ?? 0
                 return (
                   <button
@@ -1420,9 +1445,13 @@ export function MealPlanPlanner({
                     onClick={() => selectDate(dayPlan.date)}
                     className={cn(
                       "flex min-w-[52px] flex-col items-center rounded-md border px-2.5 py-1.5 text-xs font-semibold capitalize transition-colors",
-                      isActive
-                        ? "border-primary/50 bg-primary/10 text-primary"
-                        : "bg-card hover:bg-accent",
+                      isPast
+                        ? isActive
+                          ? "border-foreground/15 bg-foreground/[0.09] text-foreground"
+                          : "border-foreground/[0.06] bg-foreground/[0.05] text-muted-foreground/60 hover:bg-foreground/[0.08] hover:text-muted-foreground"
+                        : isActive
+                          ? "border-primary/50 bg-primary/10 text-primary"
+                          : "bg-card hover:bg-accent",
                     )}
                   >
                     {format(parseISO(dayPlan.date), "EEEEEE", { locale: de })}
@@ -1439,6 +1468,15 @@ export function MealPlanPlanner({
               })}
             </div>
             <span className="text-muted-foreground text-xs capitalize">{formattedDate}</span>
+            {currentDate < today ? (
+              <Badge
+                variant="outline"
+                className="border-foreground/10 bg-foreground/[0.06] text-muted-foreground gap-1.5 rounded-full px-2 py-1 text-[10px]"
+              >
+                <History className="h-3 w-3" />
+                Vergangener Tag
+              </Badge>
+            ) : null}
 
             {strategyKcalTarget && !embedded ? (
               <button
@@ -1624,6 +1662,9 @@ export function MealPlanPlanner({
           open={weekTemplateDialogOpen}
           onOpenChange={setWeekTemplateDialogOpen}
           dates={selectedWeekPlans.map((plan) => plan.date)}
+          dietLines={dietLines}
+          initialDietLineId={selectedWeekPlans[0]?.dietLineId}
+          patient={patientId && patient ? { id: patientId, name: `${patient.firstName} ${patient.lastName}` } : undefined}
           isSaving={isSavingWeekTemplate}
           onSave={(name) => void handleSaveWeekTemplate(name)}
         />
@@ -1635,9 +1676,17 @@ export function MealPlanPlanner({
           onOpenChange={(open) => {
             if (!open) setPendingMultiDayTemplate(null)
           }}
-          templateName={pendingMultiDayTemplate.template.name}
-          dates={pendingMultiDayTemplate.targetDates}
-          occupiedDates={pendingMultiDayTemplate.occupiedDates}
+          template={pendingMultiDayTemplate.template}
+          startDate={pendingMultiDayTemplate.startDate}
+          onStartDateChange={(startDate) => {
+            if (!startDate) return
+            setPendingMultiDayTemplate((pending) => pending ? { ...pending, startDate } : null)
+          }}
+          targets={getTemplateApplyTargets(
+            pendingMultiDayTemplate.template,
+            pendingMultiDayTemplate.startDate,
+          )}
+          getEntryLabel={(entry) => getEntryLabel(entry, foodMap, recipeMap)}
           isApplying={isApplyingMultiDayTemplate}
           onConfirm={confirmMultiDayTemplateApply}
         />

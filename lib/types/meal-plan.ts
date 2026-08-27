@@ -65,6 +65,8 @@ export interface MealPlanTemplate {
   id: ID;
   legacyId?: ID;
   userId?: ID;
+  /** Set only for a personal template deliberately bound to one patient. */
+  patientId?: ID;
   name: string;
   description: string;
   indication?: string;

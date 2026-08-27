@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, type DragEvent } from "react"
-import { FileUp, LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
+import { ChevronDown, FileUp, LayoutTemplate, MoreVertical, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -67,6 +67,8 @@ export function readMealPlanDragPayload(event: DragEvent): MealPlanDragPayload |
 }
 
 type LibraryTab = "recipes" | "foods" | "templates"
+type TemplateScopeFilter = "patient" | "advisor"
+type TemplateDurationFilter = "all" | "day" | "two-to-three" | "four-to-six" | "seven-plus"
 
 /**
  * "default" keeps the incoming (relevance/source) order; the nutrient sorts
@@ -130,6 +132,8 @@ interface MealPlanLibraryProps {
   fullFoods: Food[]
   recipes: Recipe[]
   templates?: MealPlanTemplate[]
+  /** Patient context controls the two clear template scopes in the library. */
+  patientId?: string
   categoryLabels: Map<string, string>
   isLocked?: boolean
   /** Click-to-add fallback for drag & drop: adds the item to the chosen slot of the active day. */
@@ -184,6 +188,7 @@ export function MealPlanLibrary({
   fullFoods,
   recipes,
   templates = [],
+  patientId,
   categoryLabels,
   isLocked,
   onQuickAdd,
@@ -200,6 +205,8 @@ export function MealPlanLibrary({
   const [foodSource, setFoodSource] = useState<FoodSourceId | "all">("all")
   const [customOnly, setCustomOnly] = useState(false)
   const [limit, setLimit] = useState<number>(DEFAULT_LIMIT)
+  const [templateScope, setTemplateScope] = useState<TemplateScopeFilter>(patientId ? "patient" : "advisor")
+  const [templateDuration, setTemplateDuration] = useState<TemplateDurationFilter>("all")
 
   const normalizedQuery = query.trim().toLowerCase()
 
@@ -299,12 +306,32 @@ export function MealPlanLibrary({
       (template) =>
         !normalizedQuery ||
         template.name.toLowerCase().includes(normalizedQuery) ||
-        template.indication?.toLowerCase().includes(normalizedQuery),
+        template.indication?.toLowerCase().includes(normalizedQuery) ||
+        template.description?.toLowerCase().includes(normalizedQuery),
     )
-    if (sort === "name-asc") result.sort((a, b) => byName(a, b, 1))
-    else if (sort === "name-desc") result.sort((a, b) => byName(a, b, -1))
-    return limit > 0 ? result.slice(0, limit) : result
-  }, [templates, normalizedQuery, sort, limit])
+    const durationFiltered = result.filter((template) => {
+      const blocks = template.dayBlocks?.length
+        ? template.dayBlocks
+        : [{ offsetDays: 0, slots: template.slots }]
+      const spanDays = Math.max(...blocks.map((block) => block.offsetDays)) + 1
+      const matchesScope = patientId
+        ? templateScope === "patient"
+          ? template.patientId === patientId
+          : !template.patientId
+        : !template.patientId
+      const matchesDuration = templateDuration === "all" ||
+        (templateDuration === "day" && spanDays === 1) ||
+        (templateDuration === "two-to-three" && spanDays >= 2 && spanDays <= 3) ||
+        (templateDuration === "four-to-six" && spanDays >= 4 && spanDays <= 6) ||
+        (templateDuration === "seven-plus" && spanDays >= 7)
+      return (
+        template.sourceType === "personal" && matchesScope && matchesDuration
+      )
+    })
+    if (sort === "name-asc") durationFiltered.sort((a, b) => byName(a, b, 1))
+    else if (sort === "name-desc") durationFiltered.sort((a, b) => byName(a, b, -1))
+    return limit > 0 ? durationFiltered.slice(0, limit) : durationFiltered
+  }, [templates, normalizedQuery, sort, limit, patientId, templateDuration, templateScope])
 
   // Badge count on the kebab so an active filter set is visible while collapsed.
   const activeFilterCount =
@@ -494,6 +521,55 @@ export function MealPlanLibrary({
             </button>
           ))}
         </div>
+        {tab === "templates" ? (
+          <div className="space-y-2">
+            {patientId ? (
+              <div className="flex flex-wrap gap-1.5" aria-label="Vorlagenbereich">
+                {([
+                  ["patient", "Dieser Patient"],
+                  ["advisor", "Meine Vorlagen"],
+                ] as const).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={templateScope === value ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setTemplateScope(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            <details className="group rounded-md border px-2 py-1.5">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium">
+                Zeitraum{templateDuration === "all" ? "" : `: ${templateDuration === "day" ? "1 Tag" : templateDuration === "two-to-three" ? "2–3 Tage" : templateDuration === "four-to-six" ? "4–6 Tage" : "7+ Tage"}`}
+                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {([
+                  ["all", "Alle"],
+                  ["day", "1 Tag"],
+                  ["two-to-three", "2–3 Tage"],
+                  ["four-to-six", "4–6 Tage"],
+                  ["seven-plus", "7+ Tage"],
+                ] as const).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={templateDuration === value ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setTemplateDuration(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </details>
+          </div>
+        ) : null}
         {tab === "templates" && onImportPlanFile ? (
           <Button
             type="button"
@@ -567,35 +643,39 @@ export function MealPlanLibrary({
           )}
           {tab === "templates" &&
             filteredTemplates.map((template) => {
-              const entryCount = template.slots.reduce(
-                (sum, slot) => sum + slot.entries.length,
+              const blocks = template.dayBlocks?.length
+                ? template.dayBlocks
+                : [{ offsetDays: 0, slots: template.slots }]
+              const entryCount = blocks.reduce(
+                (total, block) => total + block.slots.reduce((sum, slot) => sum + slot.entries.length, 0),
                 0,
               )
-              const blockCount = template.dayBlocks?.length ?? 0
+              const spanDays = Math.max(...blocks.map((block) => block.offsetDays)) + 1
               return (
-                <div
+                <button
                   key={template.id}
-                  className="hover:bg-accent flex items-center gap-2 rounded-md border px-3 py-3"
+                  type="button"
+                  className="hover:bg-accent focus-visible:ring-ring flex w-full items-center gap-2 rounded-md border px-3 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                  disabled={isLocked || !onApplyTemplate}
+                  onClick={() => onApplyTemplate?.(template)}
                 >
                   <LayoutTemplate className="text-muted-foreground h-4 w-4 flex-none" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{template.name}</div>
-                    <div className="text-muted-foreground truncate text-[11px]">
-                      {template.indication || template.description || "Tagesplan"} · {blockCount > 1 ? `${blockCount} Tage` : `${entryCount} Einträge`}
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <div className="truncate text-sm font-medium">{template.name}</div>
+                      <span className="text-muted-foreground flex-none text-[10px]">{template.patientId ? "Dieser Patient" : "Meine Vorlage"}</span>
+                    </div>
+                    <div className="text-muted-foreground mt-0.5 truncate text-[11px]">
+                      {template.indication || template.description || "Ohne fachliche Kennzeichnung"}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
+                      <span className="rounded-full border px-1.5 py-0.5">{blocks.length === 1 ? "1 Tag" : `${blocks.length} Planungstage · Zeitraum ${spanDays} Tage`}</span>
+                      <span className="rounded-full border px-1.5 py-0.5">{entryCount} {entryCount === 1 ? "Eintrag" : "Einträge"}</span>
+                      {blocks.length > 1 ? <span className="rounded-full border px-1.5 py-0.5">Vorlagentage {blocks.map((block) => block.offsetDays + 1).join(" · ")}</span> : null}
                     </div>
                   </div>
-                  {onApplyTemplate && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 flex-none px-2 text-[11px]"
-                      disabled={isLocked}
-                      onClick={() => onApplyTemplate(template)}
-                    >
-                      Anwenden
-                    </Button>
-                  )}
-                </div>
+                  <span className="text-primary flex-none text-[11px] font-medium">Vorschau</span>
+                </button>
               )
             })}
           {tab === "templates" && filteredTemplates.length === 0 && (
@@ -606,7 +686,7 @@ export function MealPlanLibrary({
         </div>
         <p className="text-muted-foreground text-[11px]">
           {tab === "templates"
-            ? "Tagesvorlagen füllen den aktiven Tag; mehrtägige Blöcke starten dort und behalten ihre Abstände."
+            ? "Vorlage auswählen, Zieltermine prüfen und anschließend bewusst anwenden."
             : "Per Drag & Drop auf eine Mahlzeit ziehen oder über + hinzufügen."}
         </p>
       </CardContent>

@@ -123,10 +123,24 @@ export function TemplateDetailClient({
   const foods = useFoods();
   const { patients } = usePatients();
   const { getResolvedConfig } = useReferenceProfiles();
-  const { saveTemplate, templates: personalTemplates } = useMealPlanTemplates();
+  const { saveTemplate, templates: personalTemplates } = useMealPlanTemplates({ patientId });
 
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyDate, setApplyDate] = useState<Date>(() => new Date());
+  const templateBlocks = useMemo(
+    () =>
+      template.dayBlocks?.length
+        ? template.dayBlocks
+        : [{ offsetDays: 0, slots: template.slots }],
+    [template.dayBlocks, template.slots],
+  );
+  const [activeBlockOffset, setActiveBlockOffset] = useState(
+    () => templateBlocks[0]?.offsetDays ?? 0,
+  );
+  const activeBlock =
+    templateBlocks.find((block) => block.offsetDays === activeBlockOffset) ??
+    templateBlocks[0];
+  const isMultiDay = templateBlocks.length > 1;
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [duplicateName, setDuplicateName] = useState(
     `${template.name} (Kopie)`,
@@ -137,6 +151,7 @@ export function TemplateDetailClient({
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
+  const [duplicateScope, setDuplicateScope] = useState<"patient" | "advisor">(patientId ? "patient" : "advisor");
 
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes]);
@@ -165,7 +180,7 @@ export function TemplateDetailClient({
 
   const slotNutrients = useMemo(
     () =>
-      template.slots.map((slot) => ({
+      activeBlock.slots.map((slot) => ({
         slot,
         totals: sumNutrients(
           slot.entries.map((entry) =>
@@ -173,7 +188,7 @@ export function TemplateDetailClient({
           ),
         ),
       })),
-    [template.slots, foodMap, recipeMap, foods],
+    [activeBlock.slots, foodMap, recipeMap, foods],
   );
 
   const dayTotals = useMemo(
@@ -182,13 +197,23 @@ export function TemplateDetailClient({
   );
 
   const entryCount = useMemo(
-    () => template.slots.reduce((acc, slot) => acc + slot.entries.length, 0),
-    [template.slots],
+    () => activeBlock.slots.reduce((acc, slot) => acc + slot.entries.length, 0),
+    [activeBlock.slots],
+  );
+
+  const totalEntryCount = useMemo(
+    () =>
+      templateBlocks.reduce(
+        (total, block) =>
+          total + block.slots.reduce((sum, slot) => sum + slot.entries.length, 0),
+        0,
+      ),
+    [templateBlocks],
   );
 
   const filledSlots = useMemo(
-    () => template.slots.filter((slot) => slot.entries.length > 0),
-    [template.slots],
+    () => activeBlock.slots.filter((slot) => slot.entries.length > 0),
+    [activeBlock.slots],
   );
 
   const dietLine = template.dietLineId
@@ -219,13 +244,6 @@ export function TemplateDetailClient({
   }, [dayTotals]);
 
   const handleApply = () => {
-    if (template.dayBlocks && template.dayBlocks.length > 1) {
-      const params = new URLSearchParams();
-      params.set("date", format(applyDate, "yyyy-MM-dd"));
-      if (patientId) params.set("patientId", patientId);
-      router.push(`/ernaehrungsplan?${params.toString()}`);
-      return;
-    }
     const dateString = format(applyDate, "yyyy-MM-dd");
     const params = new URLSearchParams();
     params.set("date", dateString);
@@ -255,6 +273,7 @@ export function TemplateDetailClient({
           offsetDays: block.offsetDays,
           slots: cloneSlots(block.slots),
         })),
+        patientId: duplicateScope === "patient" ? patientId : undefined,
       });
       setDuplicateSuccessId(saved.id);
     } catch (error) {
@@ -278,15 +297,14 @@ export function TemplateDetailClient({
   const backHref = patientId
     ? `/ernaehrungsplan/bibliothek?patientId=${patientId}`
     : "/ernaehrungsplan/bibliothek";
-  const templateScopeLabel =
-    template.sourceType === "system" ? "System-Vorlage" : "Eigene Vorlage";
+  const templateScopeLabel = template.patientId ? "Vorlage dieses Patienten" : "Meine Vorlage";
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={template.name}
         description={template.description || templateScopeLabel}
-        helpText={template.dayBlocks && template.dayBlocks.length > 1 ? "Dieser mehrtägige Vorlagenblock behält beim Anwenden seine relativen Abstände. Tagesanalysen werden hier bewusst nicht als Gesamtwert dargestellt; anwenden lässt er sich geprüft im Patientenplaner." : "Diese Detailansicht zeigt alle Slots der Vorlage mit Tagessummen und – falls ein Patient gewählt ist – den Vergleich gegen das aktive Referenzprofil. Über 'Anwenden' lädt die Vorlage einen Tagesplan im Planer; 'Als eigene Vorlage speichern' erzeugt eine bearbeitbare Kopie unter deinen persönlichen Vorlagen."}
+        helpText={isMultiDay ? "Dieser mehrtägige Vorlagenblock behält beim Anwenden seine relativen Abstände. Wähle unten jeden Vorlagentag einzeln aus, um Inhalt und Tageswerte zu prüfen." : "Diese Detailansicht zeigt alle Slots der Vorlage mit Tagessummen und – falls ein Patient gewählt ist – den Vergleich gegen das aktive Referenzprofil. Über 'Anwenden' lädt die Vorlage einen Tagesplan im Planer; beim Speichern einer Kopie wählst du ihren Geltungsbereich bewusst."}
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
@@ -301,7 +319,7 @@ export function TemplateDetailClient({
             onClick={() => setDuplicateDialogOpen(true)}
           >
             <BookmarkPlus className="mr-2 h-4 w-4" />
-            Als eigene Vorlage speichern
+            Kopie speichern
           </Button>
           <Button size="sm" onClick={() => setApplyDialogOpen(true)}>
             <PlayCircle className="mr-2 h-4 w-4" />
@@ -325,12 +343,41 @@ export function TemplateDetailClient({
         )}
         <Badge variant="outline" className="gap-1">
           <Layers className="h-3 w-3" />
-          {template.dayBlocks && template.dayBlocks.length > 1
-            ? `${template.dayBlocks.length} Tage · erster Tag: ${filledSlots.length} Slots · ${entryCount} Einträge`
+          {isMultiDay
+            ? `${templateBlocks.length} Planungstage · Zeitraum ${Math.max(...templateBlocks.map((block) => block.offsetDays)) + 1} Tage · ${totalEntryCount} Einträge`
             : `${filledSlots.length} Slot${filledSlots.length === 1 ? "" : "s"} · ${entryCount} Einträge`}
         </Badge>
         <Badge variant="outline">{templateScopeLabel}</Badge>
       </div>
+
+      {isMultiDay && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Vorlagentage prüfen</CardTitle>
+            <CardDescription>
+              Jeder Tag wird separat ausgewertet; fehlende Positionen bleiben beim Anwenden als bewusste Lücken erhalten.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {templateBlocks.map((block) => {
+              const blockEntryCount = block.slots.reduce(
+                (sum, slot) => sum + slot.entries.length,
+                0,
+              );
+              return (
+                <Button
+                  key={block.offsetDays}
+                  type="button"
+                  variant={activeBlock.offsetDays === block.offsetDays ? "default" : "outline"}
+                  onClick={() => setActiveBlockOffset(block.offsetDays)}
+                >
+                  Tag {block.offsetDays + 1} · {blockEntryCount} {blockEntryCount === 1 ? "Eintrag" : "Einträge"}
+                </Button>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <DayMacroCard
@@ -375,9 +422,9 @@ export function TemplateDetailClient({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{template.dayBlocks && template.dayBlocks.length > 1 ? "Erster Tag: Slot-Aufbau" : "Slot-Aufbau"}</CardTitle>
+          <CardTitle className="text-base">{isMultiDay ? `Vorlagentag ${activeBlock.offsetDays + 1}: Slot-Aufbau` : "Slot-Aufbau"}</CardTitle>
           <CardDescription>
-            {template.dayBlocks && template.dayBlocks.length > 1 ? "Der Block beginnt mit diesem Tag; die weiteren Tage bleiben als Ablauf mit relativen Abständen gespeichert." : "Einträge der Vorlage pro Mahlzeit mit Mengenangabe und Slot-Summe."}
+            Einträge der Vorlage pro Mahlzeit mit Mengenangabe und Slot-Summe.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -395,7 +442,7 @@ export function TemplateDetailClient({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Nährstoff-Übersicht ({template.dayBlocks && template.dayBlocks.length > 1 ? "erster Tag" : "Tagessumme"})</CardTitle>
+          <CardTitle className="text-base">Nährstoff-Übersicht ({isMultiDay ? `Vorlagentag ${activeBlock.offsetDays + 1}` : "Tagessumme"})</CardTitle>
           <CardDescription>
             {patient
               ? `Vergleich gegen das Referenzprofil von ${patient.firstName ?? ""} ${patient.lastName ?? ""}`.trim()
@@ -513,10 +560,10 @@ export function TemplateDetailClient({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Als eigene Vorlage speichern</DialogTitle>
+            <DialogTitle>Kopie speichern</DialogTitle>
             <DialogDescription>
-              Erstellt eine bearbeitbare Kopie dieser Vorlage in deinen
-              persönlichen Vorlagen.
+              Erstellt eine bearbeitbare Kopie. Im Patientenkontext legst du
+              ihren Geltungsbereich fest.
             </DialogDescription>
           </DialogHeader>
           {duplicateSuccessId ? (
@@ -526,7 +573,7 @@ export function TemplateDetailClient({
                 <span>Vorlage erfolgreich gespeichert.</span>
               </div>
               <p className="text-muted-foreground">
-                Du findest die Kopie ab sofort hier unter „Eigene“ und im Planer unter „Vorlagen“.
+                Du findest die Kopie ab sofort hier und im Planer unter „Vorlagen“.
                 {personalTemplates.length > 0 &&
                   ` Insgesamt sind ${personalTemplates.length} eigene Vorlage${personalTemplates.length === 1 ? "" : "n"} hinterlegt.`}
               </p>
@@ -538,6 +585,13 @@ export function TemplateDetailClient({
             <>
               <Separator />
               <div className="space-y-3">
+                {patientId ? <div className="space-y-1">
+                  <Label>Geltungsbereich</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant={duplicateScope === "patient" ? "secondary" : "outline"} onClick={() => setDuplicateScope("patient")}>Nur für diesen Patienten</Button>
+                    <Button type="button" size="sm" variant={duplicateScope === "advisor" ? "secondary" : "outline"} onClick={() => setDuplicateScope("advisor")}>Für alle meine Patienten</Button>
+                  </div>
+                </div> : null}
                 <div className="space-y-1">
                   <Label htmlFor="duplicate-name">Name</Label>
                   <Input

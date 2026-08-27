@@ -9,6 +9,7 @@ import type {
 } from "@/lib/types";
 import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/data/utils";
+import { isUuid } from "@/lib/data/local-records";
 
 const SLOT_ORDER: MealSlotType[] = [
   "fruehstueck",
@@ -19,7 +20,7 @@ const SLOT_ORDER: MealSlotType[] = [
 ];
 
 const TEMPLATE_COLUMNS =
-  "id,legacy_id,user_id,name,description,indication,diet_line_id,target_profile_id,slots,day_blocks,notes,source_type,created_at,updated_at";
+  "id,legacy_id,user_id,patient_id,name,description,indication,diet_line_id,target_profile_id,slots,day_blocks,notes,source_type,created_at,updated_at";
 
 interface RawSlotEntry {
   id?: string;
@@ -37,6 +38,7 @@ interface MealPlanTemplateRow {
   id: string;
   legacy_id?: string | null;
   user_id?: string | null;
+  patient_id?: string | null;
   name: string;
   description?: string | null;
   indication?: string | null;
@@ -60,6 +62,7 @@ interface FetchMealPlanTemplatesOptions {
   supabase?: SupabaseClient;
   indication?: string | null;
   dietLineId?: string | null;
+  patientId?: string | null;
   limit?: number;
 }
 
@@ -73,6 +76,7 @@ interface SaveMealPlanTemplateInput {
   slots: MealSlot[];
   dayBlocks?: MealPlanTemplateDayBlock[];
   notes?: string;
+  patientId?: string;
 }
 
 function normalizeDayBlocks(blocks: RawDayBlock[] | null | undefined): MealPlanTemplateDayBlock[] | undefined {
@@ -122,6 +126,7 @@ function mapTemplateRow(row: MealPlanTemplateRow): MealPlanTemplate {
     id: row.id,
     legacyId: row.legacy_id ?? undefined,
     userId: row.user_id ?? undefined,
+    patientId: row.patient_id ?? undefined,
     name: row.name,
     description: row.description ?? "",
     indication: row.indication ?? undefined,
@@ -171,6 +176,7 @@ export async function fetchMealPlanTemplatesClient(
   let query = client
     .from("meal_plan_templates")
     .select(TEMPLATE_COLUMNS)
+    .eq("source_type", "personal")
     .order("name", { ascending: true });
 
   if (options.indication) {
@@ -179,6 +185,10 @@ export async function fetchMealPlanTemplatesClient(
   if (options.dietLineId) {
     query = query.eq("diet_line_id", options.dietLineId);
   }
+  const patientId = isUuid(options.patientId) ? options.patientId : null;
+  query = patientId
+    ? query.or(`patient_id.is.null,patient_id.eq.${patientId}`)
+    : query.is("patient_id", null);
   if (typeof options.limit === "number") {
     query = query.limit(options.limit);
   }
@@ -208,6 +218,7 @@ export async function saveMealPlanTemplate(
   const payload = {
     ...(input.id ? { id: input.id } : {}),
     user_id: userId,
+    patient_id: input.patientId ?? null,
     name: input.name,
     description: input.description ?? "",
     indication: input.indication ?? null,

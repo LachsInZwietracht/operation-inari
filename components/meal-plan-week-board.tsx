@@ -3,7 +3,7 @@
 import { useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { Check, Copy, FolderOpen, Lock, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
+import { CircleCheck, Copy, FolderOpen, ListPlus, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -48,11 +48,11 @@ const DAY_STATE_META: Record<
   },
   planned: {
     label: "Geplant",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
+    className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   },
   released: {
     label: "Freigegeben",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   },
 }
 
@@ -152,18 +152,23 @@ export function MealPlanWeekBoard({
                   data-day-planning-state={planningState}
                   data-day-temporal-state={isPast ? "past" : isToday ? "today" : "upcoming"}
                   className={cn(
-                    "group/day relative rounded-lg border transition-colors",
-                    isPast && "border-border/70 bg-muted/70",
-                    !isPast && "bg-card hover:bg-accent",
-                    isActive && "border-primary/50 bg-primary/10 ring-primary/10 ring-1",
-                    isSelected && !isActive && "border-primary/40 bg-primary/5",
+                    "group/day relative rounded-xl border transition-[border-color,background-color,opacity,filter] duration-200",
+                    isPast &&
+                      "border-foreground/[0.08] bg-foreground/[0.07] grayscale hover:bg-foreground/[0.09]",
+                    !isPast && planningState === "released" &&
+                      "border-emerald-500/15 bg-gradient-to-b from-emerald-500/[0.07] to-emerald-500/[0.025] hover:border-emerald-500/25",
+                    !isPast && planningState !== "released" && "bg-card hover:bg-accent",
+                    isActive && !isPast &&
+                      "border-primary/50 bg-primary/[0.07] ring-primary/10 ring-1",
+                    isSelected && !isActive && !isPast &&
+                      "border-primary/40 bg-primary/5",
                   )}
                 >
                   <button
                     type="button"
                     aria-label={`${format(parseISO(plan.date), "EEEE, d. MMMM yyyy", { locale: de })} mit Doppelklick in Tagesansicht öffnen`}
                     aria-pressed={isSelected}
-                    title="Einmal auswählen, mit Shift weitere Tage auswählen; mit Doppelklick in die Tagesansicht"
+                    title="Einmal auswählen; weitere Tage mit Shift oder über die Tagesaktionen hinzufügen; mit Doppelklick in die Tagesansicht"
                     onClick={(event) => {
                       // A double click dispatches two click events first. Only
                       // the first selects; the dedicated double-click handler
@@ -172,32 +177,45 @@ export function MealPlanWeekBoard({
                     }}
                     onDoubleClick={() => onOpenDay(plan.date)}
                     className={cn(
-                      "flex w-full select-none flex-col items-center gap-1.5 p-2 text-center transition-opacity",
-                      isPast && !isActive && "opacity-70 hover:opacity-100",
+                      "flex min-h-[116px] w-full select-none flex-col items-center gap-1.5 p-2 text-center",
+                      isPast &&
+                        "text-muted-foreground/55 transition-colors hover:text-muted-foreground/80",
                     )}
                   >
                     <span
                       className={cn(
                         "flex items-center gap-1 text-xs font-semibold capitalize",
-                        isSelected || isActive ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground",
+                        !isPast && (isSelected || isActive)
+                          ? "text-primary"
+                          : isPast
+                            ? "text-muted-foreground"
+                            : "text-foreground",
                       )}
                     >
                       {format(parseISO(plan.date), "EEE dd.", { locale: de })}
-                      {planningState === "released" && <Lock className="h-3 w-3" />}
                     </span>
-                    <div className="flex min-h-4 items-center justify-center gap-1">
-                      {isPast ? (
-                        <span className="text-muted-foreground text-[9px] font-medium">Vergangen</span>
-                      ) : isToday ? (
-                        <span className="text-primary text-[9px] font-medium">Heute</span>
-                      ) : null}
+                    <div className="grid h-5 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
+                      <span
+                        className={cn(
+                          "truncate text-left text-[8px] font-medium",
+                          isToday && "text-primary",
+                        )}
+                      >
+                        {isPast ? "Vergangen" : isToday ? "Heute" : ""}
+                      </span>
                       <Badge
                         variant="outline"
-                        className={cn("h-4 rounded-full px-1.5 text-[9px] font-medium", stateMeta.className)}
+                        className={cn(
+                          "h-5 rounded-full px-2 text-[9px] font-medium shadow-none",
+                          stateMeta.className,
+                        )}
                       >
-                        {planningState === "released" ? <Check className="mr-0.5 h-2.5 w-2.5" /> : null}
+                        {planningState === "released" ? (
+                          <CircleCheck className="mr-1 h-3 w-3" />
+                        ) : null}
                         {stateMeta.label}
                       </Badge>
+                      <span aria-hidden="true" />
                     </div>
                     <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
                       <div
@@ -214,7 +232,7 @@ export function MealPlanWeekBoard({
                         style={{ width: `${isPlanned ? pct : 0}%` }}
                       />
                     </div>
-                    <span className="text-muted-foreground font-mono text-[10px]">
+                    <span className="text-muted-foreground flex min-h-8 items-center justify-center font-mono text-[10px] leading-tight">
                       {!isPlanned
                         ? "Nicht geplant"
                         : !energyEvaluable
@@ -233,13 +251,17 @@ export function MealPlanWeekBoard({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="text-muted-foreground hover:text-foreground absolute top-1 right-1 hidden group-hover/day:block data-[state=open]:block"
+                        className="text-muted-foreground hover:text-foreground absolute top-1 right-1 block opacity-70 transition-opacity md:opacity-0 md:group-hover/day:opacity-100 data-[state=open]:opacity-100"
                         aria-label="Tagesaktionen"
                       >
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => onSelectDay(plan.date, true)}>
+                        {isSelected ? <X className="mr-2 h-3.5 w-3.5" /> : <ListPlus className="mr-2 h-3.5 w-3.5" />}
+                        {isSelected ? "Aus Vorlagenauswahl entfernen" : "Zur Vorlagenauswahl hinzufügen"}
+                      </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => onOpenDay(plan.date)}>
                         <FolderOpen className="mr-2 h-3.5 w-3.5" />
                         Tagesansicht öffnen
@@ -297,15 +319,16 @@ export function MealPlanWeekBoard({
                     data-day-date={plan.date}
                     data-day-temporal-state={isPast ? "past" : plan.date === today ? "today" : "upcoming"}
                     className={cn(
-                      "flex min-h-[104px] flex-col gap-1 rounded-lg border p-1.5 transition-colors",
+                      "flex min-h-[104px] flex-col gap-1 rounded-xl border p-1.5 transition-[border-color,background-color,opacity,filter] duration-200",
                       isDropTarget
                         ? "border-primary bg-primary/10 border-dashed"
                         : isPast
-                          ? "border-border/60 bg-muted/55"
+                          ? "border-foreground/[0.08] bg-foreground/[0.065] grayscale hover:bg-foreground/[0.085]"
+                        : isLocked
+                          ? "border-emerald-500/10 bg-emerald-500/[0.025]"
                         : entries.length > 0
                           ? "bg-card"
                           : "bg-muted/30",
-                      isLocked && "opacity-60",
                     )}
                   >
                     {entries.map((entry) => (
@@ -313,7 +336,10 @@ export function MealPlanWeekBoard({
                         key={entry.id}
                         className={cn(
                           "group bg-accent/60 border-l-primary relative rounded-md border-l-2 px-2 py-1",
-                          isPast && "border-l-muted-foreground/40 bg-background/70 text-muted-foreground",
+                          isPast &&
+                            "border-l-muted-foreground/25 bg-background/35 text-muted-foreground opacity-45 transition-opacity hover:opacity-70",
+                          !isPast && isLocked &&
+                            "border-l-emerald-500/35 bg-emerald-500/[0.05]",
                         )}
                       >
                         <div className="pr-4 text-[11px] leading-tight font-medium">
@@ -337,13 +363,24 @@ export function MealPlanWeekBoard({
                       </div>
                     ))}
                     {entries.length === 0 ? (
-                      <div className="flex flex-1 items-center justify-center">
+                      <div
+                        className={cn(
+                          "flex flex-1 items-center justify-center",
+                          isPast && "opacity-45 transition-opacity hover:opacity-70",
+                        )}
+                      >
                         {isDropTarget ? (
                           <Badge variant="outline" className="border-primary/50 text-primary text-[10px]">
                             Hier ablegen
                           </Badge>
                         ) : isLocked ? (
-                          <Plus className="text-muted-foreground/40 h-4 w-4" />
+                          <span
+                            className={cn(
+                              "h-px w-5 rounded-full",
+                              isPast ? "bg-muted-foreground/25" : "bg-emerald-500/20",
+                            )}
+                            aria-hidden="true"
+                          />
                         ) : (
                           <button
                             type="button"

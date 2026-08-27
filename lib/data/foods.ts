@@ -8,6 +8,7 @@ import { fetchOrganizationDisabledSourceIds } from "@/lib/data/data-source-activ
 import { getBlockedSourceIds } from "@/lib/data/entitlements";
 import { getFoodGroupDescendants } from "@/lib/data/food-groups";
 import { BRANDED_FOODS } from "@/lib/mock-data/branded-foods";
+import { FOODS } from "@/lib/mock-data/foods";
 import type {
   Food,
   FoodBrowserQuery,
@@ -612,6 +613,14 @@ export interface FetchFoodsViaRpcOptions {
 }
 
 export async function fetchFoodsViaRpc(options: FetchFoodsViaRpcOptions = {}): Promise<Food[]> {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
+  ) {
+    const requestedIds = options.foodIds ? new Set(options.foodIds) : null;
+    return FOODS.filter((food) => !requestedIds || requestedIds.has(food.id));
+  }
+
   try {
     const client = await createServiceClient();
     const { data, error } = await withTimeout(

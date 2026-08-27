@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth"
 
 interface UseMealPlanTemplatesOptions {
   initialTemplates?: MealPlanTemplate[]
+  patientId?: string
 }
 
 interface SaveTemplateInput {
@@ -23,10 +24,14 @@ interface SaveTemplateInput {
   slots: MealSlot[]
   dayBlocks?: MealPlanTemplateDayBlock[]
   notes?: string
+  patientId?: string
 }
 
 export function useMealPlanTemplates(options: UseMealPlanTemplatesOptions = {}) {
   const { isAuthenticated, loading: authLoading } = useAuth()
+  const isLocalTemplateTesting =
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
   const [templates, setTemplates] = useState<MealPlanTemplate[]>(options.initialTemplates ?? [])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -35,7 +40,7 @@ export function useMealPlanTemplates(options: UseMealPlanTemplatesOptions = {}) 
     setIsLoading(true)
     setError(null)
     try {
-      const next = await fetchMealPlanTemplatesClient()
+      const next = await fetchMealPlanTemplatesClient({ patientId: options.patientId })
       setTemplates(next)
     } catch (err) {
       console.error("Failed to load meal plan templates:", err)
@@ -43,17 +48,28 @@ export function useMealPlanTemplates(options: UseMealPlanTemplatesOptions = {}) 
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [options.patientId])
 
   useEffect(() => {
+    if (isLocalTemplateTesting) return
     if (authLoading) return
     if (!isAuthenticated) return
     void refresh()
-  }, [authLoading, isAuthenticated, refresh])
+  }, [authLoading, isAuthenticated, isLocalTemplateTesting, refresh])
 
   const saveTemplate = useCallback(
     async (input: SaveTemplateInput): Promise<MealPlanTemplate> => {
-      const saved = await saveMealPlanTemplate(input)
+      const saved = isLocalTemplateTesting
+        ? {
+            ...input,
+            id: input.id ?? `mock_saved_${globalThis.crypto.randomUUID()}`,
+            description: input.description ?? "",
+            sourceType: "personal" as const,
+            patientId: input.patientId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        : await saveMealPlanTemplate(input)
       setTemplates((prev) => {
         const existing = prev.findIndex((template) => template.id === saved.id)
         if (existing >= 0) {
@@ -65,13 +81,13 @@ export function useMealPlanTemplates(options: UseMealPlanTemplatesOptions = {}) 
       })
       return saved
     },
-    [],
+    [isLocalTemplateTesting],
   )
 
   const removeTemplate = useCallback(async (id: string) => {
-    await deleteMealPlanTemplate(id)
+    if (!isLocalTemplateTesting) await deleteMealPlanTemplate(id)
     setTemplates((prev) => prev.filter((template) => template.id !== id))
-  }, [])
+  }, [isLocalTemplateTesting])
 
   return {
     templates,

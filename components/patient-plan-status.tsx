@@ -224,15 +224,23 @@ function PulseTile({
   value,
   detail,
   tone = "neutral",
+  emphasis = false,
 }: {
   icon: typeof HeartPulse
   label: string
   value: string
   detail: string
   tone?: "green" | "blue" | "amber" | "neutral"
+  emphasis?: boolean
 }) {
   return (
-    <div className="rounded-2xl border border-black/[0.06] bg-white/80 p-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] dark:border-white/10 dark:bg-white/[0.04]">
+    <div
+      className={cn(
+        "rounded-2xl border border-black/[0.06] bg-white/80 p-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] dark:border-white/10 dark:bg-white/[0.04]",
+        emphasis &&
+          "border-amber-500/25 bg-amber-500/[0.06] dark:border-amber-400/20 dark:bg-amber-400/[0.06]",
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="text-muted-foreground text-xs font-medium">{label}</p>
         <span
@@ -366,11 +374,9 @@ function PlanCoverage({
 function ClientPulse({
   patient,
   pulse,
-  weightTrend,
   onOpenClientApp,
 }: Pick<PatientPlanStatusProps, "patient" | "onOpenClientApp"> & {
   pulse: CounselorClientPulse
-  weightTrend: SignalTrend
 }) {
   const latestDay = [...pulse.days].sort((a, b) => b.date.localeCompare(a.date))[0]
   const recipeNutrients = useMemo(
@@ -414,57 +420,15 @@ function ClientPulse({
     .filter((slot) => slot.planned > 0 && slot.skipped > 0)
     .sort((a, b) => b.skipped / b.planned - a.skipped / a.planned)[0]
   const moodTrend = summarizeMoodTrend(pulse.wellbeing.get("mood") ?? [])
-  const planningHint = (() => {
-    if (moodTrend.direction === "down" && moodTrend.samples >= 2) {
-      return {
-        title: "Belastung vor dem Fortschreiben klären",
-        detail:
-          "Die geteilte Stimmung ist zuletzt gesunken. Prüfen Sie kurz, ob Umfang und Alltagstauglichkeit des Plans noch passen.",
-        tone: "amber" as const,
-      }
-    }
-    if (
-      problemSlot &&
+  const adherenceNeedsAttention =
+    adherencePercent !== null &&
+    adherenceTotals.planned >= 3 &&
+    adherencePercent < 60
+  const problemSlotNeedsAttention = Boolean(
+    problemSlot &&
       problemSlot.planned >= 2 &&
-      problemSlot.skipped / problemSlot.planned >= 0.4
-    ) {
-      return {
-        title: `${MEAL_SLOT_LABELS[problemSlot.slotType]} gezielt prüfen`,
-        detail: `${problemSlot.skipped} von ${problemSlot.planned} geplanten Einträgen wurden ausgelassen. Zeitpunkt, Aufwand oder eine einfachere Alternative besprechen.`,
-        tone: "amber" as const,
-      }
-    }
-    if (
-      adherencePercent !== null &&
-      adherenceTotals.planned >= 3 &&
-      adherencePercent < 60
-    ) {
-      return {
-        title: "Umsetzungshürden vor der nächsten Woche klären",
-        detail: `Aktuell wurden ${adherencePercent} % der geplanten Einträge bestätigt. Den Plan erst nach kurzer Rückmeldung unverändert fortschreiben.`,
-        tone: "amber" as const,
-      }
-    }
-    if (
-      moodTrend.samples === 0 &&
-      !latestDay &&
-      adherenceTotals.planned === 0 &&
-      weightTrend.samples < 2
-    ) {
-      return {
-        title: "Vor der nächsten Freigabe Rückmeldung einholen",
-        detail:
-          "Noch reichen die geteilten Signale nicht für eine belastbare Tendenz. Eine kurze Rückfrage ist aussagekräftiger als eine automatische Annahme.",
-        tone: "neutral" as const,
-      }
-    }
-    return {
-      title: "Aktuelle Signale beim nächsten Kontakt bestätigen",
-      detail:
-        "Es zeigt sich gerade kein eindeutiges Warnsignal. Prüfen Sie trotzdem kurz, ob Aufwand, Portionsgrößen und Tagesstruktur weiter passen.",
-      tone: "green" as const,
-    }
-  })()
+      problemSlot.skipped / problemSlot.planned >= 0.4,
+  )
 
   const refreshedLabel = pulse.refreshedAt
     ? `vor ${formatDistanceToNowStrict(pulse.refreshedAt, { locale: de })}`
@@ -559,36 +523,6 @@ function ClientPulse({
                 {pulse.error}
               </p>
             ) : null}
-            <div
-              className={cn(
-                "mb-3 flex items-start gap-3 rounded-2xl border p-4",
-                planningHint.tone === "amber" &&
-                  "border-amber-500/20 bg-amber-500/10",
-                planningHint.tone === "green" &&
-                  "border-emerald-500/20 bg-emerald-500/10",
-                planningHint.tone === "neutral" && "bg-background/60",
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
-                  planningHint.tone === "amber" && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                  planningHint.tone === "green" && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-                  planningHint.tone === "neutral" && "bg-muted text-muted-foreground",
-                )}
-              >
-                <ArrowRight className="size-4" />
-              </span>
-              <div>
-                <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-[0.14em]">
-                  Hinweis für die nächste Planung
-                </p>
-                <p className="mt-1 text-sm font-medium">{planningHint.title}</p>
-                <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                  {planningHint.detail}
-                </p>
-              </div>
-            </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {selectedMetrics.map(({ metric, latest }) => (
                 <PulseTile
@@ -597,7 +531,14 @@ function ClientPulse({
                   label={metric.label}
                   value={formatMetricValue(metric, latest.value)}
                   detail={`Zuletzt ${shortDate(latest.date)} · vom Klienten selbst angegeben`}
-                  tone={metric.key === "sleep_minutes" ? "blue" : "green"}
+                  tone={
+                    metric.key === "mood" && moodTrend.direction === "down"
+                      ? "amber"
+                      : metric.key === "sleep_minutes"
+                        ? "blue"
+                        : "green"
+                  }
+                  emphasis={metric.key === "mood" && moodTrend.direction === "down"}
                 />
               ))}
 
@@ -623,7 +564,8 @@ function ClientPulse({
                       ? `${MEAL_SLOT_LABELS[problemSlot.slotType]}: ${problemSlot.skipped} von ${problemSlot.planned} Einträgen ausgelassen.`
                       : `${adherenceTotals.completed} von ${adherenceTotals.planned} geplanten Einträgen bestätigt.`
                   }
-                  tone="blue"
+                  tone={adherenceNeedsAttention || problemSlotNeedsAttention ? "amber" : "blue"}
+                  emphasis={adherenceNeedsAttention || problemSlotNeedsAttention}
                 />
               ) : null}
 
@@ -809,7 +751,6 @@ export function PatientPlanStatus({
       <ClientPulse
         patient={patient}
         pulse={pulse}
-        weightTrend={weightTrend}
         onOpenClientApp={onOpenClientApp}
       />
 

@@ -223,9 +223,9 @@ test.describe("Ernährungsplan", () => {
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan&planView=week&planDate=${firstDate}`);
       // Use stable data attributes rather than weekday language in test data.
       const firstButton = page.locator(`[data-day-date="${firstDate}"]`).getByRole("button", { name: /mit Doppelklick/ });
-      const secondButton = page.locator(`[data-day-date="${secondDate}"]`).getByRole("button", { name: /mit Doppelklick/ });
       await firstButton.click();
-      await secondButton.click({ modifiers: ["Shift"] });
+      await page.locator(`[data-day-date="${secondDate}"]`).getByRole("button", { name: "Tagesaktionen" }).click();
+      await page.getByRole("menuitem", { name: "Zur Vorlagenauswahl hinzufügen" }).click();
       await page.getByRole("button", { name: "Als Vorlage speichern" }).click();
       const dialog = page.getByRole("dialog", { name: "Als Vorlage speichern" });
       await dialog.getByLabel("Name der Vorlage").fill("Playwright Mehrtagesblock");
@@ -233,7 +233,7 @@ test.describe("Ernährungsplan", () => {
 
       await expect.poll(async () => {
         const { data, error } = await admin.from("meal_plan_templates")
-          .select("id,day_blocks")
+          .select("id,patient_id,day_blocks")
           .eq("user_id", userId)
           .eq("name", "Playwright Mehrtagesblock")
           .maybeSingle();
@@ -244,6 +244,36 @@ test.describe("Ernährungsplan", () => {
         expect.objectContaining({ offsetDays: 0 }),
         expect.objectContaining({ offsetDays: 2 }),
       ]));
+
+      if (!templateId) throw new Error("Saved template id was not resolved");
+      await expect.poll(async () => {
+        const { data, error } = await admin.from("meal_plan_templates")
+          .select("patient_id")
+          .eq("id", templateId!)
+          .single();
+        if (error) throw new Error(error.message);
+        return data.patient_id;
+      }).toBe(patient.id);
+
+      // Patient-bound templates must not be discoverable through an unscoped
+      // detail URL; the matching context below remains usable.
+      await page.goto(`/ernaehrungsplan/bibliothek/${templateId}`);
+      // App Router can stream a notFound() boundary after the response has
+      // started, so the browser may retain HTTP 200. The noindex marker and
+      // absent protected content are the stable route-level contract.
+      await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
+      await expect(page.getByRole("heading", { name: "Playwright Mehrtagesblock" })).toHaveCount(0);
+      await page.goto(`/ernaehrungsplan/bibliothek/${templateId}?patientId=${patient.id}`);
+      await expect(page.getByRole("button", { name: "Tag 3 · 1 Eintrag" })).toBeVisible();
+      await page.getByRole("button", { name: "Tag 3 · 1 Eintrag" }).click();
+      await expect(page.getByText("Vorlagentag 3: Slot-Aufbau", { exact: true })).toBeVisible();
+
+      await page.getByRole("button", { name: "Anwenden", exact: true }).click();
+      await page.getByRole("button", { name: "Im Planer öffnen" }).click();
+      const applyDialog = page.getByRole("dialog", { name: "Vorlage prüfen und platzieren" });
+      await expect(applyDialog).toBeVisible();
+      await expect(applyDialog.getByText("Tag 1 · 1 Eintrag", { exact: false })).toBeVisible();
+      await expect(applyDialog.getByText("Tag 3 · 1 Eintrag", { exact: false })).toBeVisible();
     } finally {
       if (templateId) await admin.from("meal_plan_templates").delete().eq("id", templateId);
       await deletePatientFixture(patient.id);

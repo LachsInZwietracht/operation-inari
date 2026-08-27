@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -11,9 +10,10 @@ import type {
 } from "@/lib/types";
 import {
   createClient as createServerSupabaseClient,
-  createServiceClient,
 } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/data/utils";
+import { isUuid } from "@/lib/data/local-records";
+import { LOCAL_TEST_MEAL_PLAN_TEMPLATES } from "@/lib/mock-data/meal-plan-template-test-fixtures";
 
 const SLOT_ORDER: MealSlotType[] = [
   "fruehstueck",
@@ -40,6 +40,7 @@ interface MealPlanTemplateRow {
   id: string;
   legacy_id?: string | null;
   user_id?: string | null;
+  patient_id?: string | null;
   name: string;
   description?: string | null;
   indication?: string | null;
@@ -62,10 +63,50 @@ interface RawDayBlock {
 export interface FetchMealPlanTemplatesOptions {
   supabase?: SupabaseClient;
   userId?: string | null;
-  includeSystem?: boolean;
+  /** Limits personal templates to the counselor-wide and this patient's scope. */
+  patientId?: string | null;
   indication?: string | null;
   dietLineId?: string | null;
   limit?: number;
+}
+
+function isLocalTemplateTesting(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
+  );
+}
+
+function localTestTemplates(
+  options: FetchMealPlanTemplatesOptions,
+): MealPlanTemplate[] {
+  if (!isLocalTemplateTesting()) {
+    return [];
+  }
+
+  let templates = LOCAL_TEST_MEAL_PLAN_TEMPLATES;
+  templates = templates.filter((template) => {
+    if (template.sourceType !== "personal") return false;
+    return options.patientId
+      ? !template.patientId || template.patientId === options.patientId
+      : !template.patientId;
+  });
+  if (options.indication) {
+    templates = templates.filter(
+      (template) => template.indication === options.indication,
+    );
+  }
+  if (options.dietLineId) {
+    templates = templates.filter(
+      (template) => template.dietLineId === options.dietLineId,
+    );
+  }
+  const sorted = templates
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "de"));
+  return typeof options.limit === "number"
+    ? sorted.slice(0, options.limit)
+    : sorted;
 }
 
 async function resolveClient(supabase?: SupabaseClient) {
@@ -122,6 +163,7 @@ function mapTemplateRow(row: MealPlanTemplateRow): MealPlanTemplate {
     id: row.id,
     legacyId: row.legacy_id ?? undefined,
     userId: row.user_id ?? undefined,
+    patientId: row.patient_id ?? undefined,
     name: row.name,
     description: row.description ?? "",
     indication: row.indication ?? undefined,
@@ -137,45 +179,11 @@ function mapTemplateRow(row: MealPlanTemplateRow): MealPlanTemplate {
 }
 
 const TEMPLATE_COLUMNS =
-  "id,legacy_id,user_id,name,description,indication,diet_line_id,target_profile_id,slots,day_blocks,notes,source_type,created_at,updated_at";
+  "id,legacy_id,user_id,patient_id,name,description,indication,diet_line_id,target_profile_id,slots,day_blocks,notes,source_type,created_at,updated_at";
 
 export const fetchMealPlanTemplates = cache(
   async (options: FetchMealPlanTemplatesOptions = {}): Promise<MealPlanTemplate[]> => {
-    const isSystemOnly =
-      !options.supabase &&
-      !options.userId &&
-      (options.includeSystem ?? true) &&
-      !options.indication &&
-      !options.dietLineId &&
-      !options.limit;
-
-    if (isSystemOnly) {
-      return unstable_cache(
-        async () => {
-          try {
-            const client = await createServiceClient();
-            const { data, error } = await withTimeout(
-              client
-                .from("meal_plan_templates")
-                .select(TEMPLATE_COLUMNS)
-                .is("user_id", null)
-                .order("name", { ascending: true }),
-              5000,
-              "Supabase meal plan template request timed out",
-            );
-            if (error) throw new Error(error.message);
-            return (data ?? []).map((row) =>
-              mapTemplateRow(row as MealPlanTemplateRow),
-            );
-          } catch (error) {
-            console.warn("Falling back to empty meal plan templates:", error);
-            return [];
-          }
-        },
-        ["meal-plan-templates-system"],
-        { revalidate: 300, tags: ["meal-plan-templates"] },
-      )();
-    }
+    if (isLocalTemplateTesting()) return localTestTemplates(options);
 
     try {
       const client = await resolveClient(options.supabase);
@@ -184,14 +192,12 @@ export const fetchMealPlanTemplates = cache(
         .select(TEMPLATE_COLUMNS)
         .order("name", { ascending: true });
 
-      const includeSystem = options.includeSystem ?? true;
-      if (options.userId) {
-        query = includeSystem
-          ? query.or(`user_id.eq.${options.userId},user_id.is.null`)
-          : query.eq("user_id", options.userId);
-      } else if (includeSystem) {
-        query = query.is("user_id", null);
-      }
+      if (!options.userId) return [];
+      query = query.eq("user_id", options.userId).eq("source_type", "personal");
+      const patientId = isUuid(options.patientId) ? options.patientId : null;
+      query = patientId
+        ? query.or(`patient_id.is.null,patient_id.eq.${patientId}`)
+        : query.is("patient_id", null);
 
       if (options.indication) {
         query = query.eq("indication", options.indication);
@@ -211,12 +217,19 @@ export const fetchMealPlanTemplates = cache(
       if (error) {
         throw new Error(error.message);
       }
-      return (data ?? []).map((row) =>
+      const templates = (data ?? []).map((row) =>
         mapTemplateRow(row as MealPlanTemplateRow),
       );
+      return templates.length > 0 ? templates : localTestTemplates(options);
     } catch (error) {
-      console.warn("Falling back to empty meal plan templates:", error);
-      return [];
+      const fallback = localTestTemplates(options);
+      console.warn(
+        fallback.length > 0
+          ? "Falling back to local test meal plan templates:"
+          : "Falling back to empty meal plan templates:",
+        error,
+      );
+      return fallback;
     }
   },
 );

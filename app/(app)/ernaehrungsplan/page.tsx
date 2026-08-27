@@ -86,7 +86,7 @@ export default async function ErnaehrungsplanPage({
     fetchMealPlanTemplates({
       supabase,
       userId: user?.id,
-      includeSystem: true,
+      patientId,
     }),
   ]);
 
