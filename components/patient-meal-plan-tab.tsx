@@ -203,14 +203,14 @@ export function PatientMealPlanTab({
           }}
           extraTab={{
             value: "plans",
-            label: "Versionen & Freigaben",
-            render: ({ openDay, openPlan, workspacePlans }) => (
+            label: "Freigaben",
+            render: ({ openDay, openWeek, workspacePlans }) => (
               <PatientMealPlansTab
                 patient={patient}
                 initialPlans={mergePlanSources(statusPlans, workspacePlans)}
                 foods={foods}
                 recipes={allRecipes}
-                onOpenPlan={openPlan}
+                onOpenPlan={openWeek}
                 onCreatePlan={() => openDay(todayIsoDate())}
               />
             ),

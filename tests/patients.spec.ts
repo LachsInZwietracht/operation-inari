@@ -499,7 +499,7 @@ test.describe("Patient Management", () => {
       await expect(page).not.toHaveURL(/planView=/);
       await expect(page.getByText(/Der nächste Planungstag ist noch offen|Der aktuelle Plan reicht bis/)).toBeVisible();
       await page.getByRole("button", { name: "Zu heute springen" }).click();
-      await expect(page.getByRole("tab", { name: "Versionen & Freigaben" })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("tab", { name: "Freigaben" })).toBeVisible({ timeout: 30_000 });
       await page.getByRole("tab", { name: "Profil" }).click();
       await expect(page.getByText(patient.insuranceProvider ?? "")).toBeVisible();
     } finally {

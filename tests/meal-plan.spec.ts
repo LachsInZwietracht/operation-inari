@@ -353,11 +353,12 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
-  test("releases a plan and starts later changes as a separate draft", async ({ page }) => {
-    const planDate = uniquePlannerDate(2750);
+  test("releases and prepares later changes as one complete week", async ({ page }) => {
+    const weekStart = mondayOfIsoWeek(uniquePlannerDate(2750));
     const patient = await createPatientFixture("Plan", "Release");
     const title = `Freigabe ${Math.random().toString(36).slice(2, 8)}`;
     let foodId: string | null = null;
+    const releasedPlanIds: string[] = [];
 
     try {
       const userId = await getTestUserId();
@@ -373,46 +374,64 @@ test.describe("Ernährungsplan", () => {
       if (foodError) throw new Error(foodError.message);
       foodId = food.id;
 
-      const { data: plan, error: planError } = await admin
+      for (let offset = 0; offset < 7; offset += 1) {
+        const { data: plan, error: planError } = await admin
+          .from("daily_meal_plans")
+          .insert({
+            user_id: userId,
+            patient_id: patient.id,
+            date: addIsoDays(weekStart, offset),
+            title,
+            status: "draft",
+          })
+          .select("id")
+          .single();
+        if (planError) throw new Error(planError.message);
+        releasedPlanIds.push(plan.id);
+
+        const { error: entryError } = await admin.from("meal_entries").insert({
+          meal_plan_id: plan.id,
+          slot_type: "fruehstueck",
+          entry_type: "food",
+          reference_id: food.id,
+          amount: 100,
+          sort_order: 0,
+        });
+        if (entryError) throw new Error(entryError.message);
+      }
+
+      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan&planView=week&planDate=${weekStart}`);
+      await page.getByRole("button", { name: "Plan prüfen & freigeben" }).click();
+      await page.getByRole("dialog", { name: "Plan prüfen & freigeben" })
+        .getByRole("button", { name: "Verbindlich freigeben" })
+        .click();
+      await expect(page.getByRole("button", { name: "Änderungen vorbereiten" })).toBeVisible();
+
+      await page.getByRole("button", { name: "Änderungen vorbereiten" }).click();
+      await expect(page.getByText("Arbeitsfassung für die Woche vorbereitet.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Plan prüfen & freigeben" })).toBeVisible();
+
+      await expect.poll(async () => {
+        const { data, error } = await admin
+          .from("daily_meal_plans")
+          .select("id,status,revision_number,supersedes_plan_id")
+          .eq("patient_id", patient.id)
+          .gte("date", weekStart)
+          .lte("date", addIsoDays(weekStart, 6));
+        if (error) throw new Error(error.message);
+        return data ?? [];
+      }).toHaveLength(14);
+
+      const { data: drafts, error: draftsError } = await admin
         .from("daily_meal_plans")
-        .insert({
-          user_id: userId,
-          patient_id: patient.id,
-          date: planDate,
-          title,
-          status: "draft",
-        })
-        .select("id")
-        .single();
-      if (planError) throw new Error(planError.message);
-
-      const { error: entryError } = await admin.from("meal_entries").insert({
-        meal_plan_id: plan.id,
-        slot_type: "fruehstueck",
-        entry_type: "food",
-        reference_id: food.id,
-        amount: 100,
-        sort_order: 0,
-      });
-      if (entryError) throw new Error(entryError.message);
-
-      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
-      await page.getByRole("button", { name: "Zu heute springen" }).click();
-      await page.getByRole("tab", { name: "Versionen & Freigaben" }).click();
-
-      const draftRow = page.locator("article[data-plan-date]").filter({ hasText: title }).first();
-      await draftRow.getByRole("button", { name: "Tag freigeben" }).click();
-      const releaseDialog = page.getByRole("alertdialog");
-      await releaseDialog.getByRole("button", { name: "Verbindlich freigeben" }).click();
-
-      await expect(draftRow.getByText("Freigegeben", { exact: true })).toBeVisible();
-      await draftRow.getByRole("button", { name: "Änderung beginnen" }).click();
-      await expect(page).toHaveURL(new RegExp(`planView=day.*planDate=${planDate}`));
-      await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toBeVisible();
-
-      await page.getByRole("tab", { name: "Versionen & Freigaben" }).click();
-      await expect(page.getByText("Änderungsentwurf", { exact: true })).toBeVisible();
-      await expect(page.getByText("Freigegeben", { exact: true })).toBeVisible();
+        .select("status,revision_number,supersedes_plan_id")
+        .eq("patient_id", patient.id)
+        .eq("status", "draft")
+        .gte("date", weekStart)
+        .lte("date", addIsoDays(weekStart, 6));
+      if (draftsError) throw new Error(draftsError.message);
+      expect(drafts).toHaveLength(7);
+      expect(drafts?.every((draft) => draft.revision_number === 2 && releasedPlanIds.includes(draft.supersedes_plan_id))).toBe(true);
     } finally {
       await deletePatientFixture(patient.id);
       if (foodId) await admin.from("foods").delete().eq("id", foodId);
@@ -435,13 +454,8 @@ test.describe("Ernährungsplan", () => {
       });
       if (planError) throw new Error(planError.message);
 
-      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan`);
-      await page.getByRole("button", { name: "Zu heute springen" }).click();
-      await page.getByRole("tab", { name: "Versionen & Freigaben" }).click();
-      await page.locator("article[data-plan-date]").filter({ hasText: title }).first().getByRole("button", { name: "Öffnen" }).click();
-
-      await expect(page).toHaveURL(new RegExp(`planView=day.*planDate=${sourceDate}`));
-      await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
+      await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan&planView=week&planDate=${sourceDate}`);
+      await expect(page).toHaveURL(new RegExp(`planView=week.*planDate=${sourceDate}`));
 
       await page.getByRole("button", { name: "Woche fortschreiben" }).click();
       const dialog = page.getByRole("dialog", { name: "Woche fortschreiben" });

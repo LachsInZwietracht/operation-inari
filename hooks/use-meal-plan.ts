@@ -117,7 +117,14 @@ function assignWorkspacePlan(
   const normalized = ensureAllSlots(normalizeMealPlanFoodReferences(plan, foods))
   const key = getPlanKey(normalized.date, normalized.patientId)
   const existing = record[key]
-  if (!existing || workspacePriority(normalized) > workspacePriority(existing)) {
+  // A lifecycle RPC keeps the same row id while changing draft → released.
+  // That authoritative replacement must win over the local draft copy; a
+  // different draft revision still deliberately wins over its old release.
+  if (
+    !existing ||
+    existing.id === normalized.id ||
+    workspacePriority(normalized) > workspacePriority(existing)
+  ) {
     record[key] = normalized
   }
 }

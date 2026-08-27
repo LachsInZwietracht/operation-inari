@@ -105,7 +105,11 @@ const PlanWeekView = dynamic(
 )
 import { fetchFoodById, fetchFoodsByIds } from "@/lib/data/foods-client"
 import { fetchClientLinkForPatient } from "@/lib/data/client-links"
-import { fetchMealPlansClient, releaseMealPlanWeekRevisionClient } from "@/lib/data/meal-plans-client"
+import {
+  beginMealPlanWeekRevisionClient,
+  fetchMealPlansClient,
+  releaseMealPlanWeekRevisionClient,
+} from "@/lib/data/meal-plans-client"
 import { isUuid } from "@/lib/data/local-records"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 import { summarizePlanAllergenConflicts } from "@/lib/allergen-warnings"
@@ -166,6 +170,7 @@ interface MealPlanPlannerProps {
     render: (api: {
       openDay: (date: string) => void
       openPlan: (plan: DailyMealPlan) => void
+      openWeek: (plan: DailyMealPlan) => void
       workspacePlans: DailyMealPlan[]
     }) => React.ReactNode
   }
@@ -299,6 +304,7 @@ export function MealPlanPlanner({
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekReleaseReviewOpen, setWeekReleaseReviewOpen] = useState(false)
   const [isReleasingWeek, setIsReleasingWeek] = useState(false)
+  const [isBeginningWeekRevision, setIsBeginningWeekRevision] = useState(false)
   const [weekCopyOpen, setWeekCopyOpen] = useState(false)
   const [isCopyingWeek, setIsCopyingWeek] = useState(false)
   const [selectedWeekDates, setSelectedWeekDates] = useState<string[]>([])
@@ -833,6 +839,29 @@ export function MealPlanPlanner({
     }
   }, [clientLinkState, computedWeekStartIso, flushPlansForDates, patientId, setWorkspacePlan, weekPlans, weekReleaseReview.blockers.length])
 
+  const handleBeginWeekRevision = useCallback(async () => {
+    if (!patientId || !weekIsReleased) return
+    setIsBeginningWeekRevision(true)
+    try {
+      const drafts = await beginMealPlanWeekRevisionClient(patientId, computedWeekStartIso)
+      if (drafts.length !== 7) throw new Error("WEEK_REVISION_RETURN_INCOMPLETE")
+      for (const draft of drafts) setWorkspacePlan(draft)
+      toast.success("Arbeitsfassung für die Woche vorbereitet.", {
+        description: "Die bisher freigegebene Woche bleibt für den Klienten sichtbar, bis diese Änderungen veröffentlicht werden.",
+      })
+    } catch (error) {
+      console.error("Failed to begin meal plan week revision:", error)
+      const code = error instanceof Error ? error.message : ""
+      toast.error("Arbeitsfassung konnte nicht vorbereitet werden.", {
+        description: code.includes("WEEK_REVISION_DRAFT_INCOMPLETE") || code.includes("WEEK_REVISION_DRAFT_CONFLICT")
+          ? "Für diese Woche liegt bereits eine unvollständige oder nicht zuordenbare Arbeitsfassung vor. Es wurde nichts verändert."
+          : "Die bisherige Freigabe bleibt unverändert.",
+      })
+    } finally {
+      setIsBeginningWeekRevision(false)
+    }
+  }, [computedWeekStartIso, patientId, setWorkspacePlan, weekIsReleased])
+
   const handleCopyWeek = useCallback(
     async (targetWeekStart: string, repetitions: number, strategy: "fill-empty" | "replace-drafts") => {
       setIsCopyingWeek(true)
@@ -1133,11 +1162,14 @@ export function MealPlanPlanner({
           <Badge className="border-emerald-300 bg-emerald-50 text-emerald-800" variant="outline">
             Plan freigegeben
           </Badge>
-          {extraTab ? (
-            <Button size="sm" variant="outline" onClick={() => changeView(extraTab.value)}>
-              Änderung beginnen
-            </Button>
-          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleBeginWeekRevision()}
+            disabled={isBeginningWeekRevision}
+          >
+            {isBeginningWeekRevision ? "Arbeitsfassung wird vorbereitet …" : "Änderungen vorbereiten"}
+          </Button>
         </>
       ) : (
         <Button size="sm" onClick={() => setWeekReleaseReviewOpen(true)}>
@@ -1245,6 +1277,12 @@ export function MealPlanPlanner({
                 setDate(plan.date)
                 setWeekOffset(0)
                 changeView("day", plan.date)
+              },
+              openWeek: (plan) => {
+                setWorkspacePlan(plan)
+                setDate(plan.date)
+                setWeekOffset(0)
+                changeView("week", plan.date)
               },
               workspacePlans: Object.values(allPlans),
             })}

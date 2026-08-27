@@ -362,6 +362,47 @@ export function archiveMealPlanRevisionClient(
 }
 
 /**
+ * Creates (or returns) the complete editable successor of one released
+ * Monday-Sunday patient week. The visible release is deliberately not changed
+ * until the existing weekly release RPC is called with these seven drafts.
+ */
+export async function beginMealPlanWeekRevisionClient(
+  patientId: string,
+  weekStart: string,
+  options: PersistMealPlanOptions = {},
+): Promise<DailyMealPlan[]> {
+  const client = resolveBrowserClient(options.supabase);
+  const userId = await getAuthenticatedUserId(client);
+  if (!userId) throw new Error("AUTH_REQUIRED");
+
+  const { data: draftRows, error } = await client.rpc(
+    "begin_meal_plan_week_revision",
+    {
+      target_patient_id: patientId,
+      target_week_start: weekStart,
+    },
+  );
+  if (error) throw new Error(error.message);
+
+  const draftIds = (draftRows ?? []).map((row: { plan_id: string }) => String(row.plan_id));
+  if (draftIds.length !== 7) throw new Error("WEEK_REVISION_RETURN_INCOMPLETE");
+
+  const { data, error: reloadError } = await withTimeout(
+    baseMealPlanQuery(client).in("id", draftIds),
+    5000,
+    "Supabase weekly meal plan revision lookup timed out",
+  );
+  if (reloadError) throw new Error(reloadError.message);
+  if ((data ?? []).length !== 7) throw new Error("WEEK_REVISION_RELOAD_INCOMPLETE");
+
+  const drafts = (data as MealPlanRow[]).map(mapMealPlanRow);
+  if (drafts.some((plan) => plan.status !== "draft")) {
+    throw new Error("WEEK_REVISION_RELOAD_NOT_DRAFT");
+  }
+  return drafts;
+}
+
+/**
  * Releases one complete Monday-Sunday patient week in one database transaction.
  * Callers must pass persisted UUIDs only; the RPC rejects missing, empty or
  * non-draft days rather than creating a partial plan on their behalf.
