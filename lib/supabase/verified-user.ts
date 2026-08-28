@@ -30,9 +30,11 @@ export const getVerifiedUser = cache(
     if (!supabaseUrl) return null
 
     const jwks = await loadJwks(supabaseUrl)
+    if (!jwks) return null
+
     const { data, error } = await supabase.auth.getClaims(
       undefined,
-      jwks ? { jwks } : undefined,
+      { jwks },
     )
 
     const claims = data?.claims

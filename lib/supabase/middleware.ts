@@ -46,7 +46,22 @@ function redirectTo(request: NextRequest, pathname: string) {
   return NextResponse.redirect(url)
 }
 
+function hasSupabaseAuthCookie(request: NextRequest) {
+  return request.cookies
+    .getAll()
+    .some(({ name }) => name === "supabase.auth.token" || (name.startsWith("sb-") && name.includes("-auth-token")))
+}
+
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl
+  const mode = parseAppMode(request.cookies.get(APP_MODE_COOKIE)?.value)
+
+  // Logged-out visitors have no session to refresh or verify. Avoiding an Auth
+  // request here also keeps public pages available during a Supabase Auth outage.
+  if (!hasSupabaseAuthCookie(request)) {
+    return isPublicPath(pathname) ? NextResponse.next({ request }) : redirectTo(request, "/login")
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -77,15 +92,16 @@ export async function updateSession(request: NextRequest) {
   // access token expires instead of being cut off on the next navigation.
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const jwks = await loadJwks(supabaseUrl)
+  if (!jwks) {
+    return isPublicPath(pathname) ? supabaseResponse : redirectTo(request, "/login")
+  }
+
   const { data: claimsData } = await supabase.auth.getClaims(
     undefined,
-    jwks ? { jwks } : undefined,
+    { jwks },
   )
   const claims = claimsData?.claims
   const userId = claims?.sub
-
-  const { pathname } = request.nextUrl
-  const mode = parseAppMode(request.cookies.get(APP_MODE_COOKIE)?.value)
 
   // Auth pages: redirect to the active surface if already authenticated
   if (userId && (pathname === "/login" || pathname === "/registrieren")) {
