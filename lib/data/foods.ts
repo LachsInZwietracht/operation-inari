@@ -615,7 +615,8 @@ export interface FetchFoodsViaRpcOptions {
 export async function fetchFoodsViaRpc(options: FetchFoodsViaRpcOptions = {}): Promise<Food[]> {
   if (
     process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
+    (process.env.NEXT_PUBLIC_USE_LOCAL_MEAL_PLAN_TEMPLATE_FIXTURES === "true" ||
+      process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true")
   ) {
     const requestedIds = options.foodIds ? new Set(options.foodIds) : null;
     return FOODS.filter((food) => !requestedIds || requestedIds.has(food.id));

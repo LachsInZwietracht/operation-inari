@@ -73,7 +73,8 @@ export interface FetchMealPlanTemplatesOptions {
 function isLocalTemplateTesting(): boolean {
   return (
     process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
+    (process.env.NEXT_PUBLIC_USE_LOCAL_MEAL_PLAN_TEMPLATE_FIXTURES === "true" ||
+      process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true")
   );
 }
 

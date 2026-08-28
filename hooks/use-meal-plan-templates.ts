@@ -31,7 +31,8 @@ export function useMealPlanTemplates(options: UseMealPlanTemplatesOptions = {}) 
   const { isAuthenticated, loading: authLoading } = useAuth()
   const isLocalTemplateTesting =
     process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true"
+    (process.env.NEXT_PUBLIC_USE_LOCAL_MEAL_PLAN_TEMPLATE_FIXTURES === "true" ||
+      process.env.NEXT_PUBLIC_DISABLE_AUTH_FOR_TESTING === "true")
   const [templates, setTemplates] = useState<MealPlanTemplate[]>(options.initialTemplates ?? [])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
