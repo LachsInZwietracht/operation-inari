@@ -166,7 +166,7 @@ test.describe("Ernährungsplan", () => {
 
     try {
       await openPlannerWithFreshPlan(page, patient.id, planDate);
-      await page.getByRole("tab", { name: "Woche" }).click();
+      await page.getByRole("tab", { name: "Planer" }).click();
 
       const dayHeaders = page.getByRole("button", { name: /mit Doppelklick in Tagesansicht öffnen$/ });
       await expect(dayHeaders).toHaveCount(7);
@@ -180,7 +180,7 @@ test.describe("Ernährungsplan", () => {
       // A single click must not unexpectedly leave the week. The deliberate
       // double click opens the contextual day workspace.
       await targetDay.click();
-      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByRole("tab", { name: "Planer" })).toHaveAttribute("data-state", "active");
       await targetDay.dblclick();
 
       await expect(page.getByRole("tab", { name: "Tag" })).toHaveAttribute("data-state", "active");
@@ -196,14 +196,14 @@ test.describe("Ernährungsplan", () => {
 
     try {
       await openPlannerWithFreshPlan(page, patient.id, planDate);
-      await page.getByRole("tab", { name: "Woche" }).click();
+      await page.getByRole("tab", { name: "Planer" }).click();
       await page.getByRole("button", { name: "Tagesaktionen" }).first().click();
       await page.getByRole("menuitem", { name: "Tag analysieren" }).click();
 
       await expect(page.getByText("Tagesanalyse", { exact: true })).toBeVisible();
       await expect(page.getByText("Tag noch nicht geplant")).toBeVisible();
       await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
-      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByRole("tab", { name: "Planer" })).toHaveAttribute("data-state", "active");
     } finally {
       await deletePatientFixture(patient.id);
     }
@@ -283,6 +283,26 @@ test.describe("Ernährungsplan", () => {
       await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
       await expect(page.getByRole("heading", { name: "Playwright Mehrtagesblock" })).toHaveCount(0);
       await page.goto(`/ernaehrungsplan/bibliothek/${templateId}?patientId=${patient.id}`);
+      await expect(page.getByText("2 Planungstage · Zeitraum 3 Tage · 2 Einträge", { exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Löschen" })).toBeVisible();
+      await page.getByRole("button", { name: "Bearbeiten" }).click();
+      const editDialog = page.getByRole("dialog", { name: "Vorlage bearbeiten" });
+      await editDialog.getByLabel("Beschreibung").fill("Metadaten aktualisiert");
+      await editDialog.getByRole("button", { name: "Änderungen speichern" }).click();
+      await expect.poll(async () => {
+        const { data, error } = await admin.from("meal_plan_templates")
+          .select("description,day_blocks")
+          .eq("id", templateId!)
+          .single();
+        if (error) throw new Error(error.message);
+        return {
+          description: data.description,
+          offsets: (data.day_blocks as Array<{ offsetDays: number }>).map((block) => block.offsetDays),
+        };
+      }, { timeout: 20_000 }).toEqual({
+        description: "Metadaten aktualisiert",
+        offsets: [0, 2],
+      });
       await expect(page.getByRole("button", { name: "Tag 3 · 1 Eintrag" })).toBeVisible();
       await page.getByRole("button", { name: "Tag 3 · 1 Eintrag" }).click();
       await expect(page.getByText("Vorlagentag 3: Slot-Aufbau", { exact: true })).toBeVisible();

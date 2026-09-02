@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   BookmarkPlus,
@@ -12,9 +13,11 @@ import {
   CheckCircle2,
   ChefHat,
   Copy,
+  Pencil,
   Layers,
   PlayCircle,
   Stethoscope,
+  Trash2,
   Utensils,
 } from "lucide-react";
 
@@ -49,6 +52,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { useFoods } from "@/components/foods-provider";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
@@ -66,6 +87,10 @@ import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates";
 import { useReferenceProfiles } from "@/hooks/use-reference-profiles";
 import { usePatients } from "@/hooks/use-patients";
 import { cn } from "@/lib/utils";
+import {
+  getMealPlanTemplateBlocks,
+  getMealPlanTemplateSpanDays,
+} from "@/lib/meal-plan-template-utils";
 import type {
   MealEntry,
   MealPlanTemplate,
@@ -79,6 +104,7 @@ interface TemplateDetailClientProps {
   recipes: Recipe[];
   nutrientIds: string[];
   patientId?: string;
+  returnDate?: string;
 }
 
 function nutrientDecimals(value: number, unit: string): number {
@@ -114,25 +140,25 @@ function describeEntry(
 }
 
 export function TemplateDetailClient({
-  template,
+  template: initialTemplate,
   recipes,
   nutrientIds,
   patientId,
+  returnDate,
 }: TemplateDetailClientProps) {
   const router = useRouter();
   const foods = useFoods();
   const { patients } = usePatients();
   const { getResolvedConfig } = useReferenceProfiles();
-  const { saveTemplate, templates: personalTemplates } = useMealPlanTemplates({ patientId });
+  const { saveTemplate, removeTemplate, templates: personalTemplates } =
+    useMealPlanTemplates({ initialTemplates: [initialTemplate], patientId });
+  const [template, setTemplate] = useState(initialTemplate);
 
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyDate, setApplyDate] = useState<Date>(() => new Date());
   const templateBlocks = useMemo(
-    () =>
-      template.dayBlocks?.length
-        ? template.dayBlocks
-        : [{ offsetDays: 0, slots: template.slots }],
-    [template.dayBlocks, template.slots],
+    () => getMealPlanTemplateBlocks(template),
+    [template],
   );
   const [activeBlockOffset, setActiveBlockOffset] = useState(
     () => templateBlocks[0]?.offsetDays ?? 0,
@@ -152,6 +178,16 @@ export function TemplateDetailClient({
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [duplicateSuccessId, setDuplicateSuccessId] = useState<string | null>(null);
   const [duplicateScope, setDuplicateScope] = useState<"patient" | "advisor">(patientId ? "patient" : "advisor");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editName, setEditName] = useState(template.name);
+  const [editDescription, setEditDescription] = useState(template.description ?? "");
+  const [editIndication, setEditIndication] = useState(template.indication ?? "");
+  const [editDietLineId, setEditDietLineId] = useState(template.dietLineId ?? "");
+  const [editScope, setEditScope] = useState<"patient" | "advisor">(
+    template.patientId ? "patient" : "advisor",
+  );
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes]);
@@ -246,9 +282,15 @@ export function TemplateDetailClient({
   const handleApply = () => {
     const dateString = format(applyDate, "yyyy-MM-dd");
     const params = new URLSearchParams();
-    params.set("date", dateString);
     params.set("template", template.id);
-    if (patientId) params.set("patientId", patientId);
+    if (patientId) {
+      params.set("tab", "ernaehrungsplan");
+      params.set("planView", "week");
+      params.set("planDate", dateString);
+      router.push(`/patienten/${patientId}?${params.toString()}`);
+      return;
+    }
+    params.set("date", dateString);
     router.push(`/ernaehrungsplan?${params.toString()}`);
   };
 
@@ -288,6 +330,59 @@ export function TemplateDetailClient({
     }
   };
 
+  const openEditDialog = () => {
+    setEditName(template.name);
+    setEditDescription(template.description ?? "");
+    setEditIndication(template.indication ?? "");
+    setEditDietLineId(template.dietLineId ?? "");
+    setEditScope(template.patientId ? "patient" : "advisor");
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveMetadata = async () => {
+    const name = editName.trim();
+    if (!name) return;
+    setIsSavingEdit(true);
+    try {
+      const saved = await saveTemplate({
+        id: template.id,
+        name,
+        description: editDescription.trim() || undefined,
+        indication: editIndication.trim() || undefined,
+        dietLineId: editDietLineId || undefined,
+        targetProfileId: template.targetProfileId,
+        notes: template.notes,
+        slots: cloneSlots(template.slots),
+        dayBlocks: template.dayBlocks?.map((block) => ({
+          offsetDays: block.offsetDays,
+          slots: cloneSlots(block.slots),
+        })),
+        patientId: editScope === "patient" ? patientId : undefined,
+      });
+      setTemplate(saved);
+      setEditDialogOpen(false);
+      toast.success("Vorlage aktualisiert.");
+    } catch (error) {
+      console.error("Failed to update meal plan template:", error);
+      toast.error("Vorlage konnte nicht aktualisiert werden.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await removeTemplate(template.id);
+      toast.success("Vorlage gelöscht.");
+      router.replace(backHref);
+    } catch (error) {
+      console.error("Failed to delete meal plan template:", error);
+      toast.error("Vorlage konnte nicht gelöscht werden.");
+      setIsDeleting(false);
+    }
+  };
+
   const closeDuplicateDialog = () => {
     setDuplicateDialogOpen(false);
     setDuplicateError(null);
@@ -295,9 +390,10 @@ export function TemplateDetailClient({
   };
 
   const backHref = patientId
-    ? `/ernaehrungsplan/bibliothek?patientId=${patientId}`
+    ? `/ernaehrungsplan/bibliothek?patientId=${patientId}${returnDate ? `&returnDate=${returnDate}` : ""}`
     : "/ernaehrungsplan/bibliothek";
   const templateScopeLabel = template.patientId ? "Vorlage dieses Patienten" : "Meine Vorlage";
+  const spanDays = getMealPlanTemplateSpanDays(template);
 
   return (
     <div className="space-y-6">
@@ -316,6 +412,14 @@ export function TemplateDetailClient({
           <Button
             variant="outline"
             size="sm"
+            onClick={openEditDialog}
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            Bearbeiten
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setDuplicateDialogOpen(true)}
           >
             <BookmarkPlus className="mr-2 h-4 w-4" />
@@ -325,6 +429,35 @@ export function TemplateDetailClient({
             <PlayCircle className="mr-2 h-4 w-4" />
             Anwenden
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Löschen
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Vorlage löschen?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  „{template.name}“ wird dauerhaft entfernt. Bereits erstellte Ernährungspläne bleiben unverändert.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isDeleting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleDelete();
+                  }}
+                >
+                  {isDeleting ? "Löscht…" : "Vorlage löschen"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </PageHeader>
 
@@ -343,8 +476,8 @@ export function TemplateDetailClient({
         )}
         <Badge variant="outline" className="gap-1">
           <Layers className="h-3 w-3" />
-          {isMultiDay
-            ? `${templateBlocks.length} Planungstage · Zeitraum ${Math.max(...templateBlocks.map((block) => block.offsetDays)) + 1} Tage · ${totalEntryCount} Einträge`
+          {spanDays > 1
+            ? `${templateBlocks.length} Planungstage · Zeitraum ${spanDays} Tage · ${totalEntryCount} Einträge`
             : `${filledSlots.length} Slot${filledSlots.length === 1 ? "" : "s"} · ${entryCount} Einträge`}
         </Badge>
         <Badge variant="outline">{templateScopeLabel}</Badge>
@@ -546,6 +679,85 @@ export function TemplateDetailClient({
             <Button onClick={handleApply}>
               <CalendarDays className="mr-2 h-4 w-4" />
               {template.dayBlocks && template.dayBlocks.length > 1 ? "Im Planer öffnen" : "Im Plan öffnen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vorlage bearbeiten</DialogTitle>
+            <DialogDescription>
+              Ändere die Einordnung der Vorlage. Planungstage, Abstände und Inhalte bleiben unverändert.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {patientId ? (
+              <div className="space-y-1.5">
+                <Label>Geltungsbereich</Label>
+                <Select
+                  value={editScope}
+                  onValueChange={(value) => setEditScope(value as "patient" | "advisor")}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="patient">Nur für diesen Patienten</SelectItem>
+                    <SelectItem value="advisor">Für alle meine Patienten</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-template-name">Name</Label>
+              <Input
+                id="edit-template-name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-template-description">Beschreibung</Label>
+              <Textarea
+                id="edit-template-description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-template-indication">Indikation</Label>
+              <Input
+                id="edit-template-indication"
+                value={editIndication}
+                onChange={(event) => setEditIndication(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Kostform</Label>
+              <Select
+                value={editDietLineId || "none"}
+                onValueChange={(value) => setEditDietLineId(value === "none" ? "" : value)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Keine Zuordnung</SelectItem>
+                  {DIET_LINES.map((line) => (
+                    <SelectItem key={line.id} value={line.id}>{line.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => void handleSaveMetadata()}
+              disabled={isSavingEdit || !editName.trim()}
+            >
+              {isSavingEdit ? "Speichert…" : "Änderungen speichern"}
             </Button>
           </DialogFooter>
         </DialogContent>

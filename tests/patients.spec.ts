@@ -455,9 +455,13 @@ test.describe("Patient Management", () => {
       await page.getByRole("button", { name: "Zu heute springen" }).click();
       await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=week/);
       await expect(page.getByRole("button", { name: "Zurück", exact: true })).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
+      await expect(page.getByRole("tab", { name: "Planer" })).toHaveAttribute(
         "data-state",
         "active",
+      );
+      await expect(page.getByRole("tab", { name: "Vorlagen" })).toHaveAttribute(
+        "href",
+        new RegExp(`/ernaehrungsplan/bibliothek\\?patientId=${patient.id}&returnDate=\\d{4}-\\d{2}-\\d{2}`),
       );
       await expect(page.getByRole("tab", { name: "Strategie" })).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Tag", exact: true })).toHaveCount(0);
@@ -498,7 +502,7 @@ test.describe("Patient Management", () => {
       await page.goBack();
       await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=week/);
       await expect(page.getByRole("button", { name: "Zur Wochenansicht" })).toHaveCount(0);
-      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute(
+      await expect(page.getByRole("tab", { name: "Planer" })).toHaveAttribute(
         "data-state",
         "active",
       );

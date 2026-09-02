@@ -58,9 +58,9 @@ function extractFoodIds(
 export default async function BibliothekPage({
   searchParams,
 }: {
-  searchParams: Promise<{ patientId?: string; indication?: string }>;
+  searchParams: Promise<{ patientId?: string; indication?: string; returnDate?: string }>;
 }) {
-  const { patientId, indication } = await searchParams;
+  const { patientId, indication, returnDate } = await searchParams;
   const supabase = await createServerSupabaseClient();
   const user = await getVerifiedUser(supabase);
 
@@ -92,6 +92,7 @@ export default async function BibliothekPage({
         recipes={recipes}
         patientId={patientId}
         initialIndication={indication}
+        returnDate={returnDate}
       />
     </FoodsProvider>
   );

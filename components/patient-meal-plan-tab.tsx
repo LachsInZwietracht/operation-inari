@@ -92,6 +92,7 @@ export function PatientMealPlanTab({
     ? "planner"
     : "status"
   const requestedDate = searchParams.get("planDate")
+  const requestedTemplate = searchParams.get("template") ?? undefined
   const plannerDate = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
     ? requestedDate
     : todayIsoDate()
@@ -196,6 +197,12 @@ export function PatientMealPlanTab({
           energyContext={energyContext}
           recipes={allRecipes}
           initialPlans={statusPlans}
+          initialApplyTemplateId={requestedTemplate}
+          onApplyTemplateConsumed={() => {
+            const params = new URLSearchParams(searchParams.toString())
+            params.delete("template")
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+          }}
           onViewChange={(nextView, date) => {
             if (nextView === "week" || nextView === "day" || nextView === "analysis" || nextView === "plans") {
               navigatePlan(nextView, date)

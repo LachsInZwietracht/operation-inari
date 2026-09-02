@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -162,6 +163,8 @@ interface MealPlanPlannerProps {
    * URL without the param so a refresh does not re-apply silently.
    */
   initialApplyTemplateId?: string
+  /** Lets an embedded route remove a consumed template deep-link safely. */
+  onApplyTemplateConsumed?: () => void
   /**
    * Renders inside a patient record rather than on its own route: the page
    * header, the patient picker and the "no patient chosen" state all belong to
@@ -201,6 +204,7 @@ export function MealPlanPlanner({
   initialView,
   onViewChange,
   initialApplyTemplateId,
+  onApplyTemplateConsumed,
   embedded = false,
   extraTab,
   energyContext,
@@ -281,7 +285,10 @@ export function MealPlanPlanner({
     startTransition(() => {
       setPendingMultiDayTemplate({ template, startDate: currentDate })
     })
-    if (embedded) return
+    if (embedded) {
+      onApplyTemplateConsumed?.()
+      return
+    }
     const params = new URLSearchParams()
     params.set("date", currentDate)
     if (patientId) params.set("patientId", patientId)
@@ -293,6 +300,7 @@ export function MealPlanPlanner({
     currentDate,
     patientId,
     router,
+    onApplyTemplateConsumed,
   ])
 
   const [commandOpen, setCommandOpen] = useState(false)
@@ -1375,10 +1383,21 @@ export function MealPlanPlanner({
           <TabsList>
             {!embedded ? <TabsTrigger value="strategy">Strategie</TabsTrigger> : null}
             {!embedded ? <TabsTrigger value="day">Tag</TabsTrigger> : null}
-            <TabsTrigger value="week">Woche</TabsTrigger>
+            <TabsTrigger value="week">Planer</TabsTrigger>
             {extraTab ? (
               <TabsTrigger value={extraTab.value}>{extraTab.label}</TabsTrigger>
             ) : null}
+            <TabsTrigger value="templates" asChild>
+              <Link
+                href={
+                  patientId ?? currentPlan.patientId
+                    ? `/ernaehrungsplan/bibliothek?patientId=${patientId ?? currentPlan.patientId}&returnDate=${currentDate}`
+                    : "/ernaehrungsplan/bibliothek"
+                }
+              >
+                Vorlagen
+              </Link>
+            </TabsTrigger>
           </TabsList>
         </div>
 

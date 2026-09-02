@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { differenceInCalendarDays, parseISO } from "date-fns";
 import {
   ArrowLeft,
   BookMarked,
+  CalendarRange,
   ChefHat,
   Filter,
   Layers,
@@ -53,6 +55,13 @@ import {
   sumNutrients,
 } from "@/lib/nutrients";
 import { cn } from "@/lib/utils";
+import {
+  getMealPlanTemplateBlocks,
+  getMealPlanTemplateSpanDays,
+  matchesMealPlanTemplateDuration,
+  MEAL_PLAN_TEMPLATE_DURATION_LABELS,
+  type MealPlanTemplateDuration,
+} from "@/lib/meal-plan-template-utils";
 import type { DailyMealPlan, MealPlanTemplate, Recipe } from "@/lib/types";
 
 interface BibliothekClientProps {
@@ -61,6 +70,7 @@ interface BibliothekClientProps {
   recipes: Recipe[];
   patientId?: string;
   initialIndication?: string;
+  returnDate?: string;
 }
 
 interface TemplateStats {
@@ -75,6 +85,7 @@ interface TemplateStats {
 
 type SortKey = "name" | "kcalAsc" | "kcalDesc";
 type TemplateScope = "patient" | "advisor";
+type CreationSpan = "1" | "3" | "7";
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
@@ -106,28 +117,73 @@ function defaultTemplateName(plan: DailyMealPlan | undefined): string {
   return plan.title?.trim() || `Vorlage vom ${formatDateLabel(plan.date)}`;
 }
 
+function planPriority(plan: DailyMealPlan): number {
+  const status = plan.status === "draft" ? 30 : plan.status === "active" ? 20 : 10;
+  return status + (plan.revisionNumber ?? 0) / 1000;
+}
+
+function collectTemplatePeriodPlans(
+  sourcePlan: DailyMealPlan,
+  plans: DailyMealPlan[],
+  spanDays: number,
+): Array<{ offsetDays: number; plan: DailyMealPlan }> {
+  const plansByOffset = new Map<number, DailyMealPlan>();
+  for (const candidate of plans) {
+    if (candidate.status === "archived") continue;
+    if (candidate.patientId !== sourcePlan.patientId) continue;
+    const offsetDays = differenceInCalendarDays(
+      parseISO(candidate.date),
+      parseISO(sourcePlan.date),
+    );
+    if (offsetDays < 0 || offsetDays >= spanDays) continue;
+    const existing = plansByOffset.get(offsetDays);
+    if (!existing || planPriority(candidate) > planPriority(existing)) {
+      plansByOffset.set(offsetDays, candidate);
+    }
+  }
+  plansByOffset.set(0, sourcePlan);
+  return Array.from(plansByOffset.entries())
+    .sort(([offsetA], [offsetB]) => offsetA - offsetB)
+    .map(([offsetDays, plan]) => ({ offsetDays, plan }));
+}
+
 export function BibliothekClient({
   templates,
   mealPlans,
   recipes,
   patientId,
   initialIndication,
+  returnDate,
 }: BibliothekClientProps) {
   const foods = useFoods();
   const { templates: managedTemplates, saveTemplate } = useMealPlanTemplates({
     initialTemplates: templates,
+    patientId,
   });
   const [search, setSearch] = useState("");
   const [indicationFilter, setIndicationFilter] = useState<string>(
     initialIndication ?? "alle",
   );
   const [dietLineFilter, setDietLineFilter] = useState<string>("alle");
+  const [durationFilter, setDurationFilter] =
+    useState<MealPlanTemplateDuration>("all");
   const [scopeFilter, setScopeFilter] = useState<TemplateScope>(patientId ? "patient" : "advisor");
   const [sort, setSort] = useState<SortKey>("name");
-  const plansWithEntries = useMemo(
-    () => mealPlans.filter((plan) => countPlanEntries(plan) > 0 && (!patientId || plan.patientId === patientId)),
-    [mealPlans, patientId],
-  );
+  const plansWithEntries = useMemo(() => {
+    const plansByPatientAndDate = new Map<string, DailyMealPlan>();
+    for (const plan of mealPlans) {
+      if (plan.status === "archived" || countPlanEntries(plan) === 0) continue;
+      if (patientId && plan.patientId !== patientId) continue;
+      const key = `${plan.patientId ?? "unassigned"}:${plan.date}`;
+      const existing = plansByPatientAndDate.get(key);
+      if (!existing || planPriority(plan) > planPriority(existing)) {
+        plansByPatientAndDate.set(key, plan);
+      }
+    }
+    return Array.from(plansByPatientAndDate.values()).sort((a, b) =>
+      b.date.localeCompare(a.date),
+    );
+  }, [mealPlans, patientId]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [sourcePlanId, setSourcePlanId] = useState<string>(
     plansWithEntries[0]?.id ?? "",
@@ -146,6 +202,23 @@ export function BibliothekClient({
   );
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
   const [creationScope, setCreationScope] = useState<TemplateScope>(patientId ? "patient" : "advisor");
+  const [creationSpan, setCreationSpan] = useState<CreationSpan>("1");
+  const selectedPeriodPlans = useMemo(
+    () =>
+      selectedSourcePlan
+        ? collectTemplatePeriodPlans(
+            selectedSourcePlan,
+            plansWithEntries,
+            Number(creationSpan),
+          )
+        : [],
+    [creationSpan, plansWithEntries, selectedSourcePlan],
+  );
+  const hasPeriodEnd =
+    creationSpan === "1" ||
+    selectedPeriodPlans.some(
+      ({ offsetDays }) => offsetDays === Number(creationSpan) - 1,
+    );
 
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods]);
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes]);
@@ -153,17 +226,19 @@ export function BibliothekClient({
   const statsByTemplate = useMemo(() => {
     const map = new Map<string, TemplateStats>();
     for (const template of managedTemplates) {
-      const perEntry = template.slots.flatMap((slot) =>
+      const blocks = getMealPlanTemplateBlocks(template);
+      const allSlots = blocks.flatMap((block) => block.slots);
+      const perEntry = allSlots.flatMap((slot) =>
         slot.entries.map((entry) =>
           calculateMealEntryNutrients(entry, foodMap, recipeMap, foods),
         ),
       );
       const totals = sumNutrients(perEntry);
-      const entryCount = template.slots.reduce(
+      const entryCount = allSlots.reduce(
         (acc, slot) => acc + slot.entries.length,
         0,
       );
-      const filledSlotCount = template.slots.filter(
+      const filledSlotCount = allSlots.filter(
         (slot) => slot.entries.length > 0,
       ).length;
       map.set(template.id, {
@@ -219,6 +294,14 @@ export function BibliothekClient({
       ) {
         return false;
       }
+      if (
+        !matchesMealPlanTemplateDuration(
+          getMealPlanTemplateSpanDays(template),
+          durationFilter,
+        )
+      ) {
+        return false;
+      }
       if (!trimmed) return true;
       const haystack = [
         template.name,
@@ -236,16 +319,20 @@ export function BibliothekClient({
       const energieB = statsByTemplate.get(b.id)?.energie ?? 0;
       return sort === "kcalAsc" ? energieA - energieB : energieB - energieA;
     });
-  }, [managedTemplates, patientId, search, scopeFilter, indicationFilter, dietLineFilter, sort, statsByTemplate]);
+  }, [managedTemplates, patientId, search, scopeFilter, indicationFilter, dietLineFilter, durationFilter, sort, statsByTemplate]);
 
   const detailHrefFor = (templateId: string): string => {
     const params = new URLSearchParams();
     if (patientId) params.set("patientId", patientId);
+    if (returnDate) params.set("returnDate", returnDate);
     const query = params.toString();
     return `/ernaehrungsplan/bibliothek/${templateId}${query ? `?${query}` : ""}`;
   };
 
   const totalAvailable = managedTemplates.length;
+  const plannerHref = patientId
+    ? `/patienten/${patientId}?tab=ernaehrungsplan&planView=week${returnDate ? `&planDate=${returnDate}` : ""}`
+    : "/ernaehrungsplan";
   const visibleCount = filteredTemplates.length;
   const patientCount = patientId
     ? managedTemplates.filter((template) => template.patientId === patientId).length
@@ -255,7 +342,8 @@ export function BibliothekClient({
     search.trim().length > 0 ||
     (patientId && scopeFilter !== "patient") ||
     indicationFilter !== "alle" ||
-    dietLineFilter !== "alle";
+    dietLineFilter !== "alle" ||
+    durationFilter !== "all";
 
   const openCreateDialog = () => {
     const fallbackPlan = selectedSourcePlan ?? plansWithEntries[0];
@@ -265,6 +353,7 @@ export function BibliothekClient({
     setTemplateIndication(initialIndication ?? "");
     setTemplateDietLineId(fallbackPlan?.dietLineId ?? "");
     setCreationScope(patientId ? "patient" : "advisor");
+    setCreationSpan("1");
     setCreateDialogOpen(true);
   };
 
@@ -288,9 +377,22 @@ export function BibliothekClient({
       toast.error("Bitte gib einen Namen für die Vorlage ein.");
       return;
     }
+    if (!hasPeriodEnd) {
+      toast.error(
+        `Für einen Zeitraum von ${creationSpan} Tagen muss auch der letzte Tag im Planer gefüllt sein.`,
+      );
+      return;
+    }
 
     setIsCreatingTemplate(true);
     try {
+      const spanDays = Number(creationSpan);
+      const dayBlocks = collectTemplatePeriodPlans(
+        sourcePlan,
+        plansWithEntries,
+        spanDays,
+      ).map(({ offsetDays, plan }) => ({ offsetDays, slots: plan.slots }));
+
       await saveTemplate({
         name: trimmedName,
         description: templateDescription.trim() || undefined,
@@ -298,12 +400,17 @@ export function BibliothekClient({
         dietLineId: templateDietLineId || undefined,
         targetProfileId: sourcePlan.targetProfileId,
         slots: sourcePlan.slots,
+        dayBlocks: spanDays > 1 ? dayBlocks : undefined,
         notes: sourcePlan.notes,
         patientId: creationScope === "patient" ? patientId : undefined,
       });
       setCreateDialogOpen(false);
       setScopeFilter(creationScope);
-      toast.success("Vorlage erstellt.");
+      toast.success(
+        spanDays > 1
+          ? `Vorlage für ${spanDays} Tage mit ${dayBlocks.length} Planungstagen erstellt.`
+          : "Tagesvorlage erstellt.",
+      );
     } catch (error) {
       console.error("Failed to create meal plan template:", error);
       toast.error("Vorlage konnte nicht erstellt werden.");
@@ -316,16 +423,16 @@ export function BibliothekClient({
     <div className="space-y-6">
       <PageHeader
         title="Planvorlagen"
-        description="Eigene und patientenspezifische Tagesplan-Vorlagen prüfen und auf ein Datum übernehmen."
-        helpText="Planvorlagen bleiben in deiner Beratungshoheit: Im Patientenkontext wählst du zwischen diesem Patienten und deinen wiederverwendbaren Vorlagen. Klicke auf eine Karte, um Slots, Tagessummen und Referenzvergleiche zu prüfen. Über 'Anwenden' wird die Vorlage auf einen Wunschtermin im Planer geladen."
+        description="Tages- und Mehrtagesvorlagen erstellen, ordnen und sicher anwenden."
+        helpText="Der datumsgebundene Planer bleibt die Baufläche. Hier verwaltest du daraus gespeicherte Zeiträume, prüfst ihren Inhalt und wählst beim Anwenden bewusst Startdatum und Zieltermine."
       >
         <Button variant="outline" size="sm" asChild>
-          <Link href="/ernaehrungsplan">
+          <Link href={plannerHref}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Zum Plan
+            Zum Planer
           </Link>
         </Button>
-        <Button size="sm" onClick={openCreateDialog} disabled={plansWithEntries.length === 0}>
+        <Button size="sm" onClick={openCreateDialog}>
           <BookMarked className="mr-2 h-4 w-4" />
           Vorlage erstellen
         </Button>
@@ -462,6 +569,28 @@ export function BibliothekClient({
               </div>
             </div>
           )}
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <CalendarRange className="text-muted-foreground h-4 w-4" />
+              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Zeitraum
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(Object.entries(MEAL_PLAN_TEMPLATE_DURATION_LABELS) as Array<
+                [MealPlanTemplateDuration, string]
+              >).map(([value, label]) => (
+                <FilterChip
+                  key={value}
+                  active={durationFilter === value}
+                  onClick={() => setDurationFilter(value)}
+                >
+                  {label}
+                </FilterChip>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -483,6 +612,7 @@ export function BibliothekClient({
                   setScopeFilter(patientId ? "patient" : "advisor");
                   setIndicationFilter("alle");
                   setDietLineFilter("alle");
+                  setDurationFilter("all");
                 }}
               >
                 Filter zurücksetzen
@@ -494,6 +624,8 @@ export function BibliothekClient({
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredTemplates.map((template) => {
             const stats = statsByTemplate.get(template.id);
+            const blocks = getMealPlanTemplateBlocks(template);
+            const spanDays = getMealPlanTemplateSpanDays(template);
             const dietLine = template.dietLineId
               ? DIET_LINES.find((line) => line.id === template.dietLineId)
               : undefined;
@@ -519,9 +651,11 @@ export function BibliothekClient({
                           {dietLine.name}
                         </Badge>
                       )}
-                      {template.dayBlocks && template.dayBlocks.length > 1 && (
-                        <Badge variant="outline" className="text-xs">{template.dayBlocks.length} Tage</Badge>
-                      )}
+                      <Badge variant="outline" className="text-xs">
+                        {spanDays === 1
+                          ? "1 Tag"
+                          : `${blocks.length} Planungstage · ${spanDays} Tage Zeitraum`}
+                      </Badge>
                     </div>
                     <CardTitle className="text-base leading-snug">
                       {template.name}
@@ -543,11 +677,9 @@ export function BibliothekClient({
                         {stats?.entryCount ?? 0} Einträge
                       </span>
                     </div>
-                    {template.dayBlocks && template.dayBlocks.length > 1 ? (
-                      <p className="text-muted-foreground text-xs">Mehrtägiger Vorlagenblock — Tageswerte werden bewusst nicht zusammengefasst.</p>
-                    ) : stats && stats.entryCount > 0 ? (
+                    {stats && stats.entryCount > 0 ? (
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                        <MacroBlock label="Energie" value={`${formatKcal(stats.energie)} kcal`} accent />
+                        <MacroBlock label={spanDays > 1 ? "Energie gesamt" : "Energie"} value={`${formatKcal(stats.energie)} kcal`} accent />
                         <MacroBlock label="Eiweiß" value={`${formatGrams(stats.eiweiss)} g`} />
                         <MacroBlock label="Fett" value={`${formatGrams(stats.fett)} g`} />
                         <MacroBlock label="KH" value={`${formatGrams(stats.kohlenhydrate)} g`} />
@@ -571,10 +703,24 @@ export function BibliothekClient({
           <DialogHeader>
             <DialogTitle>Vorlage erstellen</DialogTitle>
             <DialogDescription>
-              Wähle einen gespeicherten Ernährungsplan als Grundlage.
+              Übernimm einen vorbereiteten Tag oder Zeitraum aus dem Planer. Ungefüllte Tage bleiben als bewusste Lücken erhalten.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
+            {plansWithEntries.length === 0 ? (
+              <div className="rounded-md border border-dashed p-4 text-sm">
+                <p className="font-medium">Noch kein vorbereiteter Plan verfügbar</p>
+                <p className="text-muted-foreground mt-1">
+                  Fülle zuerst mindestens einen Tag im Planer. Danach kannst du ihn hier als Vorlage sichern.
+                </p>
+                <Button variant="outline" size="sm" className="mt-3" asChild>
+                  <Link href={plannerHref}>
+                    Zum Planer
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <>
             {patientId ? <div className="space-y-1.5">
               <Label>Geltungsbereich</Label>
               <Select value={creationScope} onValueChange={(value) => setCreationScope(value as TemplateScope)}>
@@ -586,7 +732,7 @@ export function BibliothekClient({
               </Select>
             </div> : null}
             <div className="space-y-1.5">
-              <Label>Ernährungsplan</Label>
+              <Label>Erster Planungstag</Label>
               <Select value={sourcePlanId} onValueChange={handleSourcePlanChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Plan auswählen" />
@@ -599,6 +745,32 @@ export function BibliothekClient({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Zeitraum</Label>
+              <Select
+                value={creationSpan}
+                onValueChange={(value) => setCreationSpan(value as CreationSpan)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Tag</SelectItem>
+                  <SelectItem value="3">3 Tage</SelectItem>
+                  <SelectItem value="7">1 Woche</SelectItem>
+                </SelectContent>
+              </Select>
+              {selectedSourcePlan ? (
+                <p className="text-muted-foreground text-xs">
+                  {selectedPeriodPlans.length} von {creationSpan} Tagen sind gefüllt.
+                  {!hasPeriodEnd
+                    ? " Plane noch den letzten Tag, damit die gewählte Länge eindeutig gespeichert wird."
+                    : selectedPeriodPlans.length < Number(creationSpan)
+                      ? " Freie Tage dazwischen bleiben als bewusste Lücken erhalten."
+                      : ""}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="template-name">Name</Label>
@@ -650,12 +822,21 @@ export function BibliothekClient({
                 </Select>
               </div>
             </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
               Abbrechen
             </Button>
-            <Button onClick={() => void createTemplateFromPlan()} disabled={isCreatingTemplate}>
+            <Button
+              onClick={() => void createTemplateFromPlan()}
+              disabled={
+                isCreatingTemplate ||
+                plansWithEntries.length === 0 ||
+                !hasPeriodEnd
+              }
+            >
               {isCreatingTemplate ? "Speichert..." : "Vorlage speichern"}
             </Button>
           </DialogFooter>
