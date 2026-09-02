@@ -3,7 +3,7 @@
 import { useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { CircleCheck, Copy, FolderOpen, ListPlus, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
+import { BarChart3, CircleCheck, Copy, FolderOpen, ListPlus, MoreHorizontal, Plus, Trash2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -90,6 +90,7 @@ interface MealPlanWeekBoardProps {
   getEntryLabel: (entry: MealEntry) => string
   onSelectDay: (date: string, extendSelection?: boolean) => void
   onOpenDay: (date: string) => void
+  onAnalyzeDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
   onClearDay: (date: string) => void
@@ -106,6 +107,7 @@ export function MealPlanWeekBoard({
   getEntryLabel,
   onSelectDay,
   onOpenDay,
+  onAnalyzeDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
   onClearDay,
@@ -265,6 +267,10 @@ export function MealPlanWeekBoard({
                       <DropdownMenuItem onSelect={() => onOpenDay(plan.date)}>
                         <FolderOpen className="mr-2 h-3.5 w-3.5" />
                         Tagesansicht öffnen
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => onAnalyzeDay(plan.date)}>
+                        <BarChart3 className="mr-2 h-3.5 w-3.5" />
+                        Tag analysieren
                       </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => onCopyCurrentToDay(plan.date)}>
                         <Copy className="mr-2 h-3.5 w-3.5" />

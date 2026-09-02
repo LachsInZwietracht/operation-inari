@@ -440,6 +440,7 @@ export function usePlanAnalysis({
     dietLineCompliance,
     dietLineMacros,
     micronutrientCompliance,
+    microReferenceValues,
     energyTargetValue,
     weekBoardTargets,
     optimizationSuggestions,

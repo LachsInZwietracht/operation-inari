@@ -41,6 +41,7 @@ interface PlanWeekViewProps {
   nutrientTargets: DietLineComplianceItem[]
   onSelectDay: (date: string, extendSelection?: boolean) => void
   onOpenDay: (date: string) => void
+  onAnalyzeDay: (date: string) => void
   onCopyCurrentToDay: (date: string) => void
   onCopyToNextDay: (date: string) => void
   onClearDay: (date: string) => void
@@ -71,6 +72,7 @@ export function PlanWeekView({
   nutrientTargets,
   onSelectDay,
   onOpenDay,
+  onAnalyzeDay,
   onCopyCurrentToDay,
   onCopyToNextDay,
   onClearDay,
@@ -132,6 +134,7 @@ export function PlanWeekView({
         getEntryLabel={weekEntryLabel}
         onSelectDay={onSelectDay}
         onOpenDay={onOpenDay}
+        onAnalyzeDay={onAnalyzeDay}
         onCopyCurrentToDay={onCopyCurrentToDay}
         onCopyToNextDay={onCopyToNextDay}
         onClearDay={onClearDay}

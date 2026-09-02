@@ -476,6 +476,13 @@ test.describe("Patient Management", () => {
       await page.getByText("Wochenbilanz", { exact: true }).click();
       await expect(page.getByText("Als Nächstes", { exact: true })).toBeVisible();
 
+      await page.getByRole("button", { name: "Tagesaktionen" }).first().click();
+      await page.getByRole("menuitem", { name: "Tag analysieren" }).click();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=analysis/);
+      await expect(page.getByText("Tagesanalyse", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=week/);
+
       const firstDay = page.getByRole("button", { name: /mit Doppelklick in Tagesansicht öffnen$/ }).first();
       await firstDay.click();
       await expect(firstDay).toHaveAttribute("aria-pressed", "true");
@@ -495,6 +502,11 @@ test.describe("Patient Management", () => {
         "data-state",
         "active",
       );
+      await page.goBack();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=analysis/);
+      await expect(page.getByText("Tagesanalyse", { exact: true })).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(/tab=ernaehrungsplan.*planView=week/);
       await page.goBack();
       await expect(page).not.toHaveURL(/planView=/);
       await expect(page.getByText(/Der nächste Planungstag ist noch offen|Der aktuelle Plan reicht bis/)).toBeVisible();

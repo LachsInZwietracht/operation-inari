@@ -85,10 +85,10 @@ export function PatientMealPlanTab({
   const [allRecipes, setAllRecipes] = useState<Recipe[]>(recipes)
   const [statusPlans, setStatusPlans] = useState<DailyMealPlan[]>(plans)
   const requestedPlanView = searchParams.get("planView")
-  const plannerView = requestedPlanView === "day" || requestedPlanView === "plans"
+  const plannerView = requestedPlanView === "day" || requestedPlanView === "plans" || requestedPlanView === "analysis"
     ? requestedPlanView
     : "week"
-  const workspace = requestedPlanView === "week" || requestedPlanView === "day" || requestedPlanView === "plans"
+  const workspace = requestedPlanView === "week" || requestedPlanView === "day" || requestedPlanView === "plans" || requestedPlanView === "analysis"
     ? "planner"
     : "status"
   const requestedDate = searchParams.get("planDate")
@@ -134,7 +134,7 @@ export function PatientMealPlanTab({
   }, [patient.id, workspace])
 
   const navigatePlan = (
-    nextView: "status" | "week" | "day" | "plans",
+    nextView: "status" | "week" | "day" | "analysis" | "plans",
     date?: string,
   ) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -197,7 +197,7 @@ export function PatientMealPlanTab({
           recipes={allRecipes}
           initialPlans={statusPlans}
           onViewChange={(nextView, date) => {
-            if (nextView === "week" || nextView === "day" || nextView === "plans") {
+            if (nextView === "week" || nextView === "day" || nextView === "analysis" || nextView === "plans") {
               navigatePlan(nextView, date)
             }
           }}

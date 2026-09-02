@@ -89,6 +89,7 @@ import { PlanExchangeTool } from "@/components/plan-exchange-tool"
 import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
+import { PlanDayAnalysis } from "@/components/plan-day-analysis"
 import { PlanWeekReleaseDialog, type WeekReleaseReview } from "@/components/plan-week-release-dialog"
 import { PlanWeekCopyDialog } from "@/components/plan-week-copy-dialog"
 import { PlanWeekTemplateDialog, type WeekTemplateDraft } from "@/components/plan-week-template-dialog"
@@ -151,7 +152,7 @@ interface MealPlanPlannerProps {
   patientId?: string
   initialDate?: string
   /** Initial inner workspace when a surrounding flow already made the choice. */
-  initialView?: "strategy" | "day" | "week" | "plans"
+  initialView?: "strategy" | "day" | "week" | "analysis" | "plans"
   /** Mirrors embedded workspace transitions into the surrounding route. */
   onViewChange?: (view: string, date: string) => void
   /**
@@ -218,6 +219,9 @@ export function MealPlanPlanner({
     [patient, patientId],
   )
   const [hydratedFoods, setHydratedFoods] = useState<Food[]>(serverFoods)
+  const [pendingHydrationIds, setPendingHydrationIds] = useState<string[]>([])
+  const [failedHydrationIds, setFailedHydrationIds] = useState<string[]>([])
+  const [completedAnalysisHydrationKeys, setCompletedAnalysisHydrationKeys] = useState<string[]>([])
   const { getForPatient: getAllergensForPatient } = usePatientAllergens()
   const patientAllergens = useMemo(
     () => (patientId ? getAllergensForPatient(patientId) : []),
@@ -381,6 +385,33 @@ export function MealPlanPlanner({
   const foodMap = useMemo(() => new Map(foods.map((food) => [food.id, food])), [foods])
   const recipeMap = useMemo(() => createRecipeLookup(recipes), [recipes])
 
+  // The analysis is intentionally tied to the in-memory plan: edits that are
+  // still in the autosave queue must be visible. It nevertheless waits for
+  // full food/ingredient records before issuing definitive nutrient statuses.
+  const analysisReferencedFoodIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const slot of currentPlan.slots) {
+      for (const entry of slot.entries) {
+        if (entry.type === "food") ids.add(entry.referenceId)
+        else recipeMap.get(entry.referenceId)?.ingredients.forEach((ingredient) => ids.add(ingredient.foodId))
+      }
+    }
+    return Array.from(ids)
+  }, [currentPlan.slots, recipeMap])
+  const analysisMissingFoodIds = useMemo(
+    () => analysisReferencedFoodIds.filter((id) => !hydratedFoods.some((food) => food.id === id || food.legacyId === id)),
+    [analysisReferencedFoodIds, hydratedFoods],
+  )
+  const analysisFoodRequestKey = [...analysisReferencedFoodIds].sort().join("|")
+  const analysisForceHydrationComplete = completedAnalysisHydrationKeys.includes(analysisFoodRequestKey)
+  const analysisHydration = analysisReferencedFoodIds.some((id) => failedHydrationIds.includes(id))
+    ? "error" as const
+    : analysisReferencedFoodIds.some((id) => pendingHydrationIds.includes(id))
+      ? "loading" as const
+      : (view === "analysis" && analysisReferencedFoodIds.length > 0 && !analysisForceHydrationComplete) || analysisMissingFoodIds.length > 0
+        ? "loading" as const
+        : "ready" as const
+
   // The server only ships foods for the active day's plan. Week/cycle views
   // and template application reference other plans, so batch-hydrate any
   // referenced foods (including recipe ingredients) that are still missing.
@@ -409,26 +440,90 @@ export function MealPlanPlanner({
 
     // Mark before the request so unknown IDs can't cause a refetch loop.
     missing.forEach((id) => requestedFoodIdsRef.current.add(id))
+    setPendingHydrationIds((previous) => Array.from(new Set([...previous, ...missing])))
+    setFailedHydrationIds((previous) => previous.filter((id) => !missing.includes(id)))
 
     let cancelled = false
     fetchFoodsByIds(missing)
       .then((fetched) => {
-        if (cancelled || fetched.length === 0) return
+        if (cancelled) return
+        const fetchedIds = new Set(fetched.map((food) => food.id))
+        const unresolved = missing.filter((id) => !fetchedIds.has(id))
+        setFailedHydrationIds((previous) => Array.from(new Set([...previous, ...unresolved])))
         setHydratedFoods((prev) => {
           const known = new Set(prev.map((food) => food.id))
           const additions = fetched.filter((food) => !known.has(food.id))
           return additions.length > 0 ? [...prev, ...additions] : prev
         })
+        setPendingHydrationIds((previous) => previous.filter((id) => !missing.includes(id)))
       })
       .catch((error) => {
         console.error("Failed to hydrate referenced meal plan foods:", error)
         // Allow a retry on the next change.
         missing.forEach((id) => requestedFoodIdsRef.current.delete(id))
+        setPendingHydrationIds((previous) => previous.filter((id) => !missing.includes(id)))
+        setFailedHydrationIds((previous) => Array.from(new Set([...previous, ...missing])))
       })
     return () => {
       cancelled = true
+      missing.forEach((id) => requestedFoodIdsRef.current.delete(id))
+      setPendingHydrationIds((previous) => previous.filter((id) => !missing.includes(id)))
     }
   }, [allPlans, recipeMap, hydratedFoods])
+
+  // Initial planner payloads intentionally contain only the compact nutrient
+  // list needed for the week. Opening the detailed analysis force-refreshes
+  // every direct food and recipe ingredient with the complete nutrient set;
+  // fetched rows replace the compact copies instead of being discarded.
+  const analysedFoodRequestKeysRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (view !== "analysis" || analysisReferencedFoodIds.length === 0) return
+    const key = analysisFoodRequestKey
+    if (analysedFoodRequestKeysRef.current.has(key)) return
+    analysedFoodRequestKeysRef.current.add(key)
+    let cancelled = false
+    let completed = false
+    setPendingHydrationIds((previous) => Array.from(new Set([...previous, ...analysisReferencedFoodIds])))
+    setFailedHydrationIds((previous) => previous.filter((id) => !analysisReferencedFoodIds.includes(id)))
+    fetchFoodsByIds(analysisReferencedFoodIds)
+      .then((fetched) => {
+        if (cancelled) return
+        const resolved = new Set<string>()
+        for (const food of fetched) {
+          resolved.add(food.id)
+          if (food.legacyId) resolved.add(food.legacyId)
+        }
+        const unavailable = analysisReferencedFoodIds.filter((id) => !resolved.has(id))
+        setFailedHydrationIds((previous) => Array.from(new Set([...previous, ...unavailable])))
+        setHydratedFoods((previous) => {
+          const next = new Map(previous.map((food) => [food.id, food]))
+          // Replacement is deliberate: the server's 16-field preview cannot
+          // answer the detailed vitamin, fatty-acid, or amino-acid rows.
+          for (const food of fetched) next.set(food.id, food)
+          return Array.from(next.values())
+        })
+        setCompletedAnalysisHydrationKeys((previous) => previous.includes(key) ? previous : [...previous, key])
+        completed = true
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error("Failed to fully hydrate foods for day analysis:", error)
+        setFailedHydrationIds((previous) => Array.from(new Set([...previous, ...analysisReferencedFoodIds])))
+        analysedFoodRequestKeysRef.current.delete(key)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPendingHydrationIds((previous) => previous.filter((id) => !analysisReferencedFoodIds.includes(id)))
+        }
+      })
+    return () => {
+      cancelled = true
+      if (!completed) {
+        analysedFoodRequestKeysRef.current.delete(key)
+        setPendingHydrationIds((previous) => previous.filter((id) => !analysisReferencedFoodIds.includes(id)))
+      }
+    }
+  }, [analysisFoodRequestKey, analysisReferencedFoodIds, view])
 
   const {
     pendingIntent: pendingAllergenIntent,
@@ -591,6 +686,7 @@ export function MealPlanPlanner({
     dietLineMacros,
     dietLineCompliance,
     micronutrientCompliance,
+    microReferenceValues,
     energyTargetValue,
     optimizationSuggestions,
     planFillState,
@@ -1327,6 +1423,25 @@ export function MealPlanPlanner({
           />
         </TabsContent>
 
+        <TabsContent value="analysis" className="mt-2">
+          <PlanDayAnalysis
+            plan={currentPlan}
+            foods={foods}
+            foodMap={foodMap}
+            recipeMap={recipeMap}
+            dietLine={dietLine}
+            refConfig={refConfig}
+            referenceValues={microReferenceValues}
+            patientEnergyTarget={strategyKcalTarget}
+            hydration={analysisHydration}
+            onBack={() => {
+              setWeekOffset(0)
+              changeView("week", currentDate)
+            }}
+            onEdit={() => changeView("day", currentDate)}
+          />
+        </TabsContent>
+
         {/* The library is the shared build source for the day and week views:
             the same items can be dragged (or click-added) into either view.
             Hidden rather than unmounted on the strategy tab so its search and
@@ -1334,7 +1449,7 @@ export function MealPlanPlanner({
         <div
           className={cn(
             "mt-2 grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)]",
-            (view === "strategy" || view === extraTab?.value) && "hidden",
+            (view === "strategy" || view === "analysis" || view === extraTab?.value) && "hidden",
           )}
         >
           <div className="flex items-center gap-2 md:hidden">
@@ -1565,6 +1680,11 @@ export function MealPlanPlanner({
               setDate(date)
               setWeekOffset(0)
               changeView("day", date)
+            }}
+            onAnalyzeDay={(date) => {
+              setDate(date)
+              setWeekOffset(0)
+              changeView("analysis", date)
             }}
             onCopyCurrentToDay={copyCurrentPlanToDate}
             onCopyToNextDay={copyPlanToNextDay}

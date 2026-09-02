@@ -190,6 +190,25 @@ test.describe("Ernährungsplan", () => {
     }
   });
 
+  test("opens the selected day analysis from the week action menu", async ({ page }) => {
+    const planDate = uniquePlannerDate(260);
+    const patient = await createPatientFixture("Plan", "DayAnalysis");
+
+    try {
+      await openPlannerWithFreshPlan(page, patient.id, planDate);
+      await page.getByRole("tab", { name: "Woche" }).click();
+      await page.getByRole("button", { name: "Tagesaktionen" }).first().click();
+      await page.getByRole("menuitem", { name: "Tag analysieren" }).click();
+
+      await expect(page.getByText("Tagesanalyse", { exact: true })).toBeVisible();
+      await expect(page.getByText("Tag noch nicht geplant")).toBeVisible();
+      await page.getByRole("button", { name: "Zur Wochenansicht" }).click();
+      await expect(page.getByRole("tab", { name: "Woche" })).toHaveAttribute("data-state", "active");
+    } finally {
+      await deletePatientFixture(patient.id);
+    }
+  });
+
   test("saves two selected draft days as a persistent multi-day template", async ({ page }) => {
     const firstDate = mondayOfIsoWeek(uniquePlannerDate(275));
     const secondDate = addIsoDays(firstDate, 2);
