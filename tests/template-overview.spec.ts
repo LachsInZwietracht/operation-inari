@@ -127,6 +127,10 @@ test.describe("Planvorlagen-Übersicht", () => {
       await expect(page.getByRole("heading", { name: "Neue Vorlage" })).toBeVisible();
       await expect(page.getByText("Erster Planungstag", { exact: true })).toHaveCount(0);
       await expect(page.getByText("Tag 1", { exact: true })).toBeVisible();
+      await expect(page.getByText("Durchschnittliche Nährwerte pro Tag")).toBeVisible();
+      await expect(page.getByText("Energie & Makros · Ø pro Tag")).toBeVisible();
+      await page.getByRole("button", { name: /Vitamine & Mineralstoffe/ }).click();
+      await expect(page.getByText("Vit. D", { exact: true })).toBeVisible();
 
       for (const [index, scope] of ["general", "patient"].entries()) {
         // General must stay general even when retaining a planner's patient context.

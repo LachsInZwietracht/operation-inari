@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarRange, LayoutTemplate, Plus, Save, Trash2 } from "lu
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { MealPlanLibrary, readMealPlanDragPayload, type MealPlanDragPayload } from "@/components/meal-plan-library";
+import { MealPlanTemplateNutritionSummary } from "@/components/meal-plan-template-nutrition-summary";
 import { useFoods, useFoodSearch } from "@/components/foods-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMealPlanTemplates } from "@/hooks/use-meal-plan-templates";
+import { fetchFoodsByIds } from "@/lib/data/foods-client";
 import { FOOD_CATEGORIES } from "@/lib/data/food-categories";
 import { MEAL_SLOT_LABELS } from "@/lib/constants";
 import { getMealPlanTemplateBlocks, getMealPlanTemplateSpanDays } from "@/lib/meal-plan-template-utils";
@@ -37,6 +39,7 @@ export function MealPlanTemplateEditor({ template, recipes, patients, patientId,
 }) {
   const router = useRouter();
   const foods = useFoods();
+  const [hydratedFoods, setHydratedFoods] = useState(foods);
   const { index, loadIndex, isLoading: loadingFoods } = useFoodSearch();
   const { saveTemplate } = useMealPlanTemplates({ initialTemplates: template ? [template] : [], patientId });
   const [name, setName] = useState(template?.name ?? "");
@@ -58,6 +61,7 @@ export function MealPlanTemplateEditor({ template, recipes, patients, patientId,
   const [saveError, setSaveError] = useState<string>();
   const [dirty, setDirty] = useState(false);
   const saveInFlight = useRef(false);
+  const attemptedFoodIds = useRef(new Set(foods.flatMap((food) => [food.id, ...(food.legacyId ? [food.legacyId] : [])])));
   const [savedId] = useState(() => template?.id ?? crypto.randomUUID());
   const categories = useMemo(() => new Map(FOOD_CATEGORIES.map((item) => [item.id, item.name])), []);
   const foodNames = useMemo(() => new Map([...foods, ...index].map((food) => [food.id, food.name])), [foods, index]);
@@ -65,6 +69,19 @@ export function MealPlanTemplateEditor({ template, recipes, patients, patientId,
   const entryCount = days.reduce((total, day) => total + day.slots.reduce((sum, slot) => sum + slot.entries.length, 0), 0);
 
   useEffect(() => { void loadIndex(); }, [loadIndex]);
+  useEffect(() => {
+    const missing = [...new Set(days.flatMap((day) => day.slots.flatMap((slot) =>
+      slot.entries.filter((entry) => entry.type === "food").map((entry) => entry.referenceId),
+    )))].filter((id) => !attemptedFoodIds.current.has(id));
+    if (missing.length === 0) return;
+    missing.forEach((id) => attemptedFoodIds.current.add(id));
+    void fetchFoodsByIds(missing).then((loaded) => {
+      setHydratedFoods((current) => {
+        const known = new Set(current.map((food) => food.id));
+        return [...current, ...loaded.filter((food) => !known.has(food.id))];
+      });
+    }).catch((error) => console.error("Failed to load template nutrition data:", error));
+  }, [days]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -167,6 +184,7 @@ export function MealPlanTemplateEditor({ template, recipes, patients, patientId,
               </section>)}
             </div>
           </div>
+          <MealPlanTemplateNutritionSummary days={days} foods={hydratedFoods} recipes={recipes} />
         </div>
       </div>
     </fieldset>
