@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   BookMarked,
   CalendarRange,
   ChefHat,
@@ -13,6 +15,7 @@ import {
   Search,
   SortAsc,
   Stethoscope,
+  Sigma,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,7 +71,9 @@ interface BibliothekClientProps {
   templates: MealPlanTemplate[];
   mealPlans: DailyMealPlan[];
   recipes: Recipe[];
+  patients: Array<{ id: string; firstName: string; lastName: string }>;
   patientId?: string;
+  initialScope: TemplateScope;
   initialIndication?: string;
   returnDate?: string;
 }
@@ -84,7 +89,7 @@ interface TemplateStats {
 }
 
 type SortKey = "name" | "kcalAsc" | "kcalDesc";
-type TemplateScope = "patient" | "advisor";
+type TemplateScope = "patient" | "general";
 type CreationSpan = "1" | "3" | "7";
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -151,10 +156,13 @@ export function BibliothekClient({
   templates,
   mealPlans,
   recipes,
+  patients,
   patientId,
+  initialScope,
   initialIndication,
   returnDate,
 }: BibliothekClientProps) {
+  const router = useRouter();
   const foods = useFoods();
   const { templates: managedTemplates, saveTemplate } = useMealPlanTemplates({
     initialTemplates: templates,
@@ -167,13 +175,13 @@ export function BibliothekClient({
   const [dietLineFilter, setDietLineFilter] = useState<string>("alle");
   const [durationFilter, setDurationFilter] =
     useState<MealPlanTemplateDuration>("all");
-  const [scopeFilter, setScopeFilter] = useState<TemplateScope>(patientId ? "patient" : "advisor");
+  const scopeFilter = initialScope;
   const [sort, setSort] = useState<SortKey>("name");
   const plansWithEntries = useMemo(() => {
     const plansByPatientAndDate = new Map<string, DailyMealPlan>();
     for (const plan of mealPlans) {
       if (plan.status === "archived" || countPlanEntries(plan) === 0) continue;
-      if (patientId && plan.patientId !== patientId) continue;
+      if (scopeFilter === "patient" && (!patientId || plan.patientId !== patientId)) continue;
       const key = `${plan.patientId ?? "unassigned"}:${plan.date}`;
       const existing = plansByPatientAndDate.get(key);
       if (!existing || planPriority(plan) > planPriority(existing)) {
@@ -183,7 +191,7 @@ export function BibliothekClient({
     return Array.from(plansByPatientAndDate.values()).sort((a, b) =>
       b.date.localeCompare(a.date),
     );
-  }, [mealPlans, patientId]);
+  }, [mealPlans, patientId, scopeFilter]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [sourcePlanId, setSourcePlanId] = useState<string>(
     plansWithEntries[0]?.id ?? "",
@@ -201,7 +209,7 @@ export function BibliothekClient({
     selectedSourcePlan?.dietLineId ?? "",
   );
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
-  const [creationScope, setCreationScope] = useState<TemplateScope>(patientId ? "patient" : "advisor");
+  const [creationScope, setCreationScope] = useState<TemplateScope>(initialScope);
   const [creationSpan, setCreationSpan] = useState<CreationSpan>("1");
   const selectedPeriodPlans = useMemo(
     () =>
@@ -276,10 +284,10 @@ export function BibliothekClient({
       if (template.sourceType !== "personal") {
         return false;
       }
-      if (patientId && scopeFilter === "patient" && template.patientId !== patientId) {
+      if (scopeFilter === "patient" && (!patientId || template.patientId !== patientId)) {
         return false;
       }
-      if ((scopeFilter === "advisor" || !patientId) && template.patientId) {
+      if (scopeFilter === "general" && template.patientId) {
         return false;
       }
       if (
@@ -321,15 +329,34 @@ export function BibliothekClient({
     });
   }, [managedTemplates, patientId, search, scopeFilter, indicationFilter, dietLineFilter, durationFilter, sort, statsByTemplate]);
 
+  const overviewHref = (nextScope: TemplateScope, nextPatientId = patientId): string => {
+    const params = new URLSearchParams({ scope: nextScope });
+    if (nextPatientId) params.set("patientId", nextPatientId);
+    if (initialIndication) params.set("indication", initialIndication);
+    if (returnDate) params.set("returnDate", returnDate);
+    return `/ernaehrungsplan/bibliothek?${params.toString()}`;
+  };
+
+  const changeScope = (nextScope: TemplateScope) => {
+    router.push(overviewHref(nextScope));
+  };
+
+  const changePatient = (nextPatientId: string) => {
+    router.push(overviewHref("patient", nextPatientId));
+  };
+
   const detailHrefFor = (templateId: string): string => {
     const params = new URLSearchParams();
     if (patientId) params.set("patientId", patientId);
     if (returnDate) params.set("returnDate", returnDate);
+    params.set("scope", scopeFilter);
     const query = params.toString();
     return `/ernaehrungsplan/bibliothek/${templateId}${query ? `?${query}` : ""}`;
   };
 
-  const totalAvailable = managedTemplates.length;
+  const totalAvailable = managedTemplates.filter((template) =>
+    scopeFilter === "patient" ? Boolean(patientId && template.patientId === patientId) : !template.patientId,
+  ).length;
   const plannerHref = patientId
     ? `/patienten/${patientId}?tab=ernaehrungsplan&planView=week${returnDate ? `&planDate=${returnDate}` : ""}`
     : "/ernaehrungsplan";
@@ -337,10 +364,9 @@ export function BibliothekClient({
   const patientCount = patientId
     ? managedTemplates.filter((template) => template.patientId === patientId).length
     : 0;
-  const advisorCount = managedTemplates.filter((template) => !template.patientId).length;
+  const generalCount = managedTemplates.filter((template) => !template.patientId).length;
   const hasActiveFilters =
     search.trim().length > 0 ||
-    (patientId && scopeFilter !== "patient") ||
     indicationFilter !== "alle" ||
     dietLineFilter !== "alle" ||
     durationFilter !== "all";
@@ -352,7 +378,7 @@ export function BibliothekClient({
     setTemplateDescription("");
     setTemplateIndication(initialIndication ?? "");
     setTemplateDietLineId(fallbackPlan?.dietLineId ?? "");
-    setCreationScope(patientId ? "patient" : "advisor");
+    setCreationScope(scopeFilter);
     setCreationSpan("1");
     setCreateDialogOpen(true);
   };
@@ -405,7 +431,7 @@ export function BibliothekClient({
         patientId: creationScope === "patient" ? patientId : undefined,
       });
       setCreateDialogOpen(false);
-      setScopeFilter(creationScope);
+      router.push(overviewHref(creationScope));
       toast.success(
         spanDays > 1
           ? `Vorlage für ${spanDays} Tage mit ${dayBlocks.length} Planungstagen erstellt.`
@@ -427,12 +453,29 @@ export function BibliothekClient({
         helpText="Der datumsgebundene Planer bleibt die Baufläche. Hier verwaltest du daraus gespeicherte Zeiträume, prüfst ihren Inhalt und wählst beim Anwenden bewusst Startdatum und Zieltermine."
       >
         <Button variant="outline" size="sm" asChild>
+          <Link href="/ernaehrungsplan/vergleich">
+            <Sigma className="mr-2 h-4 w-4" />
+            Pläne vergleichen
+          </Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/austauschtabellen">
+            <ArrowLeftRight className="mr-2 h-4 w-4" />
+            Austauschtabellen
+          </Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
           <Link href={plannerHref}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Zum Planer
           </Link>
         </Button>
-        <Button size="sm" onClick={openCreateDialog}>
+        <Button
+          size="sm"
+          onClick={openCreateDialog}
+          disabled={scopeFilter === "patient" && !patientId}
+          title={scopeFilter === "patient" && !patientId ? "Wähle zuerst einen Patienten aus." : undefined}
+        >
           <BookMarked className="mr-2 h-4 w-4" />
           Vorlage erstellen
         </Button>
@@ -451,6 +494,60 @@ export function BibliothekClient({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <BookMarked className="text-muted-foreground h-4 w-4" />
+              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Sammlung
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <FilterChip
+                active={scopeFilter === "general"}
+                onClick={() => changeScope("general")}
+              >
+                Allgemeine Vorlagen ({generalCount})
+              </FilterChip>
+              <FilterChip
+                active={scopeFilter === "patient"}
+                onClick={() => changeScope("patient")}
+              >
+                Patientenspezifische Vorlagen{patientId ? ` (${patientCount})` : ""}
+              </FilterChip>
+            </div>
+          </div>
+
+          {scopeFilter === "patient" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="template-patient-selector">Patient</Label>
+              <Select value={patientId} onValueChange={changePatient}>
+                <SelectTrigger id="template-patient-selector">
+                  <SelectValue placeholder="Patient auswählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((patient) => (
+                    <SelectItem key={patient.id} value={patient.id}>
+                      {patient.lastName}, {patient.firstName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {patientId ? (
+                <p className="text-muted-foreground text-xs">
+                  Patientenspezifische Vorlagen für {patients.find((patient) => patient.id === patientId)?.firstName ?? "diesen Patienten"} {patients.find((patient) => patient.id === patientId)?.lastName ?? ""}.
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Wähle einen Patienten aus, um dessen gebundene Vorlagen zu sehen oder eine neue anzulegen.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              Allgemeine Vorlagen sind deine wiederverwendbaren Vorlagen ohne Patientenzuordnung.
+            </p>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <div className="space-y-1">
               <label
@@ -492,29 +589,6 @@ export function BibliothekClient({
               </Select>
             </div>
           </div>
-
-          {patientId ? <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <BookMarked className="text-muted-foreground h-4 w-4" />
-              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                Sammlung
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <FilterChip
-                active={scopeFilter === "patient"}
-                onClick={() => setScopeFilter("patient")}
-              >
-                Dieser Patient ({patientCount})
-              </FilterChip>
-              <FilterChip
-                active={scopeFilter === "advisor"}
-                onClick={() => setScopeFilter("advisor")}
-              >
-                Meine Vorlagen ({advisorCount})
-              </FilterChip>
-            </div>
-          </div> : null}
 
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -599,7 +673,9 @@ export function BibliothekClient({
           <CardContent className="text-muted-foreground flex flex-col items-center gap-2 py-12 text-sm">
             <BookMarked className="text-muted-foreground/60 h-6 w-6" />
             <p>
-              {hasActiveFilters
+              {scopeFilter === "patient" && !patientId
+                ? "Wähle zuerst einen Patienten aus."
+                : hasActiveFilters
                 ? "Keine Vorlagen treffen auf die aktuelle Filterkombination zu."
                 : "Es sind aktuell keine Planvorlagen verfügbar."}
             </p>
@@ -609,7 +685,6 @@ export function BibliothekClient({
                 size="sm"
                 onClick={() => {
                   setSearch("");
-                  setScopeFilter(patientId ? "patient" : "advisor");
                   setIndicationFilter("alle");
                   setDietLineFilter("alle");
                   setDurationFilter("all");
@@ -639,7 +714,7 @@ export function BibliothekClient({
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant="secondary" className="text-xs">
-                        {template.patientId ? "Dieser Patient" : "Meine Vorlage"}
+                        {template.patientId ? "Patientenspezifisch" : "Allgemeine Vorlage"}
                       </Badge>
                       {template.indication && (
                         <Badge variant="secondary" className="text-xs">
@@ -722,25 +797,25 @@ export function BibliothekClient({
             ) : (
               <>
             {patientId ? <div className="space-y-1.5">
-              <Label>Geltungsbereich</Label>
+              <Label htmlFor="template-creation-scope">Geltungsbereich</Label>
               <Select value={creationScope} onValueChange={(value) => setCreationScope(value as TemplateScope)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="template-creation-scope"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="patient">Nur für diesen Patienten</SelectItem>
-                  <SelectItem value="advisor">Für alle meine Patienten</SelectItem>
+                  <SelectItem value="general">Für alle meine Patienten</SelectItem>
                 </SelectContent>
               </Select>
             </div> : null}
             <div className="space-y-1.5">
-              <Label>Erster Planungstag</Label>
+              <Label htmlFor="template-source-plan">Erster Planungstag</Label>
               <Select value={sourcePlanId} onValueChange={handleSourcePlanChange}>
-                <SelectTrigger>
+                <SelectTrigger id="template-source-plan">
                   <SelectValue placeholder="Plan auswählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {plansWithEntries.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {defaultTemplateName(plan)} · {formatDateLabel(plan.date)}
+                      {defaultTemplateName(plan)} · {formatDateLabel(plan.date)}{plan.patientId ? ` · ${patients.find((patient) => patient.id === plan.patientId)?.lastName ?? "Patient"}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -834,6 +909,7 @@ export function BibliothekClient({
               disabled={
                 isCreatingTemplate ||
                 plansWithEntries.length === 0 ||
+                (creationScope === "patient" && !patientId) ||
                 !hasPeriodEnd
               }
             >
@@ -857,6 +933,7 @@ function FilterChip({ active, onClick, children }: FilterChipProps) {
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "rounded-full border px-3 py-1 text-xs transition-colors",
         active

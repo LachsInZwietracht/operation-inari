@@ -48,7 +48,7 @@ export const NAV_SECTIONS: NavSection[] = [
       // everyone already under care. See lib/patient-journey.ts.
       { label: "Aufnahmen", icon: UserPlus, route: "/patienten/aufnahmen" },
       { label: "Patienten", icon: Users, route: "/patienten" },
-      { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplaene" },
+      { label: "Ernährungspläne", icon: CalendarDays, route: "/ernaehrungsplan/bibliothek" },
       { label: "Datenbank", icon: Database, route: "/datenbank" },
     ],
   },

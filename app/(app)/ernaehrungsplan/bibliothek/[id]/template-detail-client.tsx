@@ -105,6 +105,7 @@ interface TemplateDetailClientProps {
   nutrientIds: string[];
   patientId?: string;
   returnDate?: string;
+  scope?: "patient" | "general";
 }
 
 function nutrientDecimals(value: number, unit: string): number {
@@ -145,6 +146,7 @@ export function TemplateDetailClient({
   nutrientIds,
   patientId,
   returnDate,
+  scope = "general",
 }: TemplateDetailClientProps) {
   const router = useRouter();
   const foods = useFoods();
@@ -389,9 +391,10 @@ export function TemplateDetailClient({
     setDuplicateSuccessId(null);
   };
 
-  const backHref = patientId
-    ? `/ernaehrungsplan/bibliothek?patientId=${patientId}${returnDate ? `&returnDate=${returnDate}` : ""}`
-    : "/ernaehrungsplan/bibliothek";
+  const backParams = new URLSearchParams({ scope });
+  if (patientId) backParams.set("patientId", patientId);
+  if (returnDate) backParams.set("returnDate", returnDate);
+  const backHref = `/ernaehrungsplan/bibliothek?${backParams.toString()}`;
   const templateScopeLabel = template.patientId ? "Vorlage dieses Patienten" : "Meine Vorlage";
   const spanDays = getMealPlanTemplateSpanDays(template);
 

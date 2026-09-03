@@ -60,9 +60,15 @@ export default async function BibliothekDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ patientId?: string; returnDate?: string }>;
+  searchParams: Promise<{ patientId?: string; returnDate?: string; scope?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
+  const scope =
+    query.scope === "patient" || query.scope === "general"
+      ? query.scope
+      : query.patientId
+        ? "patient"
+        : "general";
   const supabase = await createServerSupabaseClient();
   const user = await getVerifiedUser(supabase);
 
@@ -99,6 +105,7 @@ export default async function BibliothekDetailPage({
         nutrientIds={TEMPLATE_DETAIL_NUTRIENT_IDS}
         patientId={query.patientId}
         returnDate={query.returnDate}
+        scope={scope}
       />
     </FoodsProvider>
   );

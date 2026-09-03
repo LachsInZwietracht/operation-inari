@@ -28,9 +28,9 @@ test.describe("Navigation", () => {
       { label: "Rezepte", path: "/rezepte", url: /\/rezepte/, heading: "Rezepte" },
       {
         label: "Ernährungspläne",
-        path: "/ernaehrungsplaene",
-        url: /\/ernaehrungsplaene/,
-        heading: "Ernährungspläne",
+        path: "/ernaehrungsplan/bibliothek",
+        url: /\/ernaehrungsplan\/bibliothek/,
+        heading: "Planvorlagen",
       },
       // /austauschtabellen is intentionally not a sidebar destination. It is a
       // contextual tool of the plan workflow, reached from the Ernährungspläne

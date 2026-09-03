@@ -3,6 +3,7 @@ import { fetchFoodsViaRpc } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlans } from "@/lib/data/meal-plans";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
+import { fetchPatients } from "@/lib/data/patients";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { FoodsProvider } from "@/components/foods-provider";
@@ -58,13 +59,19 @@ function extractFoodIds(
 export default async function BibliothekPage({
   searchParams,
 }: {
-  searchParams: Promise<{ patientId?: string; indication?: string; returnDate?: string }>;
+  searchParams: Promise<{ patientId?: string; indication?: string; returnDate?: string; scope?: string }>;
 }) {
-  const { patientId, indication, returnDate } = await searchParams;
+  const { patientId, indication, returnDate, scope } = await searchParams;
+  const initialScope =
+    scope === "patient" || scope === "general"
+      ? scope
+      : patientId
+        ? "patient"
+        : "general";
   const supabase = await createServerSupabaseClient();
   const user = await getVerifiedUser(supabase);
 
-  const [recipes, templates, mealPlans] = await Promise.all([
+  const [recipes, templates, mealPlans, patients] = await Promise.all([
     fetchRecipes(),
     fetchMealPlanTemplates({
       supabase,
@@ -76,6 +83,7 @@ export default async function BibliothekPage({
       userId: user?.id,
       includeSystem: false,
     }),
+    fetchPatients(supabase),
   ]);
 
   const foodIds = extractFoodIds(recipes, templates, mealPlans);
@@ -87,10 +95,13 @@ export default async function BibliothekPage({
   return (
     <FoodsProvider foods={foods}>
       <BibliothekClient
+        key={`${initialScope}:${patientId ?? "none"}`}
         templates={templates}
         mealPlans={mealPlans}
         recipes={recipes}
+        patients={patients.map(({ id, firstName, lastName }) => ({ id, firstName, lastName }))}
         patientId={patientId}
+        initialScope={initialScope}
         initialIndication={indication}
         returnDate={returnDate}
       />
