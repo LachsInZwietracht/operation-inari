@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import {
   ArrowLeft,
-  ArrowLeftRight,
+  Columns2,
   BookMarked,
   CalendarRange,
   ChefHat,
@@ -15,11 +15,11 @@ import {
   Search,
   SortAsc,
   Stethoscope,
-  Sigma,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/page-header";
+import { MealPlanTemplateComparison } from "@/components/meal-plan-template-comparison";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -163,6 +163,9 @@ export function BibliothekClient({
   returnDate,
 }: BibliothekClientProps) {
   const router = useRouter();
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [comparisonStartId, setComparisonStartId] = useState<string>();
+  const comparisonPatient = patients.find((patient) => patient.id === patientId);
   const foods = useFoods();
   const { templates: managedTemplates, saveTemplate } = useMealPlanTemplates({
     initialTemplates: templates,
@@ -452,17 +455,9 @@ export function BibliothekClient({
         description="Tages- und Mehrtagesvorlagen erstellen, ordnen und sicher anwenden."
         helpText="Der datumsgebundene Planer bleibt die Baufläche. Hier verwaltest du daraus gespeicherte Zeiträume, prüfst ihren Inhalt und wählst beim Anwenden bewusst Startdatum und Zieltermine."
       >
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/ernaehrungsplan/vergleich">
-            <Sigma className="mr-2 h-4 w-4" />
-            Pläne vergleichen
-          </Link>
-        </Button>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/austauschtabellen">
-            <ArrowLeftRight className="mr-2 h-4 w-4" />
-            Austauschtabellen
-          </Link>
+        <Button variant="outline" size="sm" onClick={() => { setComparisonStartId(undefined); setComparisonOpen(true); }}>
+          <Columns2 className="mr-2 h-4 w-4" />
+          Vorlagen vergleichen
         </Button>
         <Button variant="outline" size="sm" asChild>
           <Link href={plannerHref}>
@@ -705,12 +700,12 @@ export function BibliothekClient({
               ? DIET_LINES.find((line) => line.id === template.dietLineId)
               : undefined;
             return (
+              <div key={template.id} className="flex flex-col rounded-xl border bg-card shadow-sm">
               <Link
-                key={template.id}
                 href={detailHrefFor(template.id)}
-                className="group focus-visible:outline-none"
+                className="group flex-1 rounded-xl focus-visible:outline-none"
               >
-                <Card className="hover:border-primary/50 group-focus-visible:ring-ring h-full transition-colors group-focus-visible:ring-2">
+                <Card className="hover:bg-muted/20 group-focus-visible:ring-ring h-full border-0 shadow-none transition-colors group-focus-visible:ring-2">
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant="secondary" className="text-xs">
@@ -768,10 +763,26 @@ export function BibliothekClient({
                   </CardContent>
                 </Card>
               </Link>
+              <div className="border-t p-2">
+                <Button variant="ghost" size="sm" className="text-muted-foreground w-full" aria-label={`Vorlage ${template.name} vergleichen`} onClick={() => { setComparisonStartId(template.id); setComparisonOpen(true); }}>
+                  <Columns2 className="mr-2 size-4" /> Vergleichen
+                </Button>
+              </div>
+              </div>
             );
           })}
         </div>
       )}
+
+      <MealPlanTemplateComparison
+        key={comparisonStartId ?? "all"}
+        templates={managedTemplates}
+        recipes={recipes}
+        open={comparisonOpen}
+        onOpenChange={setComparisonOpen}
+        initialTemplateId={comparisonStartId}
+        patientName={comparisonPatient ? `${comparisonPatient.firstName} ${comparisonPatient.lastName}` : undefined}
+      />
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="sm:max-w-xl">

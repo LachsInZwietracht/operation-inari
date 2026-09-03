@@ -1,6 +1,7 @@
 import type * as React from "react"
 import {
   Apple,
+  ArrowLeftRight,
   BookOpen,
   Boxes,
   CalendarClock,
@@ -65,6 +66,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Tools",
     items: [
       { label: "Referenzwerte", icon: Ruler, route: "/referenzwerte" },
+      { label: "Austauschtabellen", icon: ArrowLeftRight, route: "/austauschtabellen" },
       { label: "Kalorienrechner", icon: Flame, route: "/kalorienrechner" },
     ],
   },

@@ -32,10 +32,7 @@ test.describe("Navigation", () => {
         url: /\/ernaehrungsplan\/bibliothek/,
         heading: "Planvorlagen",
       },
-      // /austauschtabellen is intentionally not a sidebar destination. It is a
-      // contextual tool of the plan workflow, reached from the Ernährungspläne
-      // tool list and from the plan exchange card, so it has no entry in
-      // lib/navigation.ts and does not belong in this sidebar sweep.
+      { label: "Austauschtabellen", path: "/austauschtabellen", url: /\/austauschtabellen/, heading: "Austauschtabellen" },
       // The patient chain is split at the seam where a plan starts: Aufnahmen
       // holds everyone still being taken on, Patienten everyone under care.
       {

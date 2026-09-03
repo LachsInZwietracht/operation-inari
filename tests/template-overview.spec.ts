@@ -35,6 +35,70 @@ async function createPatient(userId: string, lastName: string) {
 test.describe("Planvorlagen-Übersicht", () => {
   test.setTimeout(60_000);
 
+  test("compares templates in place with a fair time basis and relative days", async ({ page }, testInfo) => {
+    const userId = await testUserId();
+    const suffix = Math.random().toString(36).slice(2, 9);
+    let foodId: string | undefined;
+    const names = [`Tagesvorlage ${suffix}`, `Wochenvorlage ${suffix}`, `Alternative Woche ${suffix}`];
+    try {
+      const { data: food, error: foodError } = await admin.from("foods")
+        .insert({ name: `Vergleichsflocken ${suffix}`, data_source_id: "bls", source_food_id: `comparison-${suffix}` })
+        .select("id").single();
+      if (foodError) throw new Error(foodError.message);
+      foodId = food.id;
+      const { error: nutrientError } = await admin.from("food_nutrients").insert([
+        { food_id: foodId, nutrient_id: "energie", amount: 200 },
+        { food_id: foodId, nutrient_id: "eiweiss", amount: 10 },
+      ]);
+      if (nutrientError) throw new Error(nutrientError.message);
+      const slots = (amount: number) => [{ type: "fruehstueck", entries: [{ id: `entry-${amount}`, type: "food", referenceId: foodId, amount }] }];
+      const { error: templateError } = await admin.from("meal_plan_templates").insert([
+        { user_id: userId, name: names[0], source_type: "personal", slots: slots(100) },
+        { user_id: userId, name: names[1], source_type: "personal", slots: slots(200), day_blocks: [{ offsetDays: 0, slots: slots(200) }, { offsetDays: 6, slots: slots(200) }] },
+        { user_id: userId, name: names[2], source_type: "personal", slots: slots(100), day_blocks: [{ offsetDays: 0, slots: slots(100) }, { offsetDays: 6, slots: slots(100) }] },
+      ]);
+      if (templateError) throw new Error(templateError.message);
+
+      await page.goto("/ernaehrungsplan/bibliothek");
+      const sidebar = page.locator("[data-slot='sidebar-container']");
+      await expect(sidebar.getByRole("link", { name: "Austauschtabellen" })).toHaveAttribute("href", "/austauschtabellen");
+      await expect(page.getByRole("link", { name: "Pläne vergleichen", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: `Vorlage ${names[0]} vergleichen`, exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Zwei Pläne. Direkt nebeneinander." });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("combobox", { name: "Vorlage B" }).click();
+      await expect(page.getByRole("option", { name: new RegExp(names[0]) })).toBeDisabled();
+      await page.getByRole("option", { name: new RegExp(names[1]) }).click();
+      await expect(dialog.getByText("Unterschiedliche Zeitspannen: 1 und 7 Tage.")).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Gesamter Zeitraum" })).toBeDisabled();
+      await expect(dialog.locator('[data-nutrient="energie"]')).toContainText("+200 kcal");
+      await expect(dialog.locator('[data-nutrient="fett"]')).toContainText("Keine vollständigen Daten");
+      await dialog.getByRole("combobox", { name: "Vergleichstag" }).click();
+      await page.getByRole("option", { name: "Tag 7", exact: true }).click();
+      await expect(dialog.getByText("Dieser Tag liegt außerhalb der Vorlage.")).toBeVisible();
+
+      await dialog.getByRole("combobox", { name: "Vorlage A" }).click();
+      await page.getByRole("option", { name: new RegExp(names[2]) }).click();
+      await dialog.getByRole("button", { name: "Gesamter Zeitraum" }).click();
+      await expect(dialog.locator('[data-nutrient="energie"]')).toContainText("+400 kcal");
+      await dialog.screenshot({ path: testInfo.outputPath("template-comparison.png") });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(dialog.getByRole("combobox", { name: "Vorlage A" })).toBeVisible();
+      const dialogBounds = await dialog.boundingBox();
+      const pickerBounds = await dialog.getByRole("combobox", { name: "Vorlage A" }).boundingBox();
+      expect(dialogBounds).not.toBeNull();
+      expect(pickerBounds).not.toBeNull();
+      expect(pickerBounds!.x + pickerBounds!.width).toBeLessThanOrEqual(dialogBounds!.x + dialogBounds!.width);
+      await dialog.screenshot({ path: testInfo.outputPath("template-comparison-mobile.png") });
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible();
+      await expect(page).toHaveURL(/\/ernaehrungsplan\/bibliothek$/);
+    } finally {
+      await admin.from("meal_plan_templates").delete().eq("user_id", userId).in("name", names);
+      if (foodId) await admin.from("foods").delete().eq("id", foodId);
+    }
+  });
+
   test("persists newly created templates in the selected collection", async ({ page }) => {
     const userId = await testUserId();
     const suffix = Math.random().toString(36).slice(2, 9);
