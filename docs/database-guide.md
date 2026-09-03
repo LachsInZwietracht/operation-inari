@@ -296,6 +296,7 @@ The full schema is defined in Supabase migration files under `supabase/migration
 | `report_retention_policies` | Admin-controlled default report retention policy (retained for admin config; patient-bound report persistence removed) | `user_id`, `organization_id`, `retention_years`, `auto_delete_enabled`, `require_admin_approval`, `legal_hold_enabled` |
 | ~~`patient_reports`~~ / ~~`patient_report_versions`~~ | **Dropped** in `20260619000059_drop_patient_reports.sql` — the Berichte feature was removed in favour of the Statistiken patient tab. The `patient-report-files` storage bucket was also dropped. | — |
 | `appointments` | Practice calendar appointments | `user_id`, `title`, `date`, `start_time`, `end_time`, `patient_id`, `type` (beratung/kontrolle/team/webinar), `recurring`, `reminder` |
+| `practice_tasks` | Dashboard task board (hand-written to-dos, owner-only RLS) | `user_id`, `title`, `notes`, `status` (todo/in_progress/done), `priority`, `due_date`, `position` (float8, midpoint insert), `completed_at` |
 | `organizations` | Team/organization boundary for RBAC | `name`, `created_by` |
 | `organization_memberships` | Persisted user roles and invitations | `organization_id`, `user_id`, `email`, `role`, `status`, `invitation_sent_at`, `invitation_expires_at`, `revoked_at` |
 | `organization_sso_configs` | Admin-managed OIDC/SAML SSO routing config | `organization_id`, `provider_type`, `status`, `domains`, `issuer_url`, `metadata_url`, `metadata_xml`, `client_id`, `entity_id`, `sso_url` |

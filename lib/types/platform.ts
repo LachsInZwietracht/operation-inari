@@ -479,3 +479,28 @@ export interface GenericExportRequest {
   scope: ExportScope;
 }
 
+
+export type PracticeTaskStatus = "todo" | "in_progress" | "done";
+
+export type PracticeTaskPriority = "low" | "normal" | "high";
+
+/**
+ * Eine von Hand notierte Aufgabe des Dashboard-Boards.
+ *
+ * Bewusst getrennt von den abgeleiteten Eintraegen in `lib/dashboard-worklist.ts`:
+ * die entstehen aus Plänen, Fragebogen und Terminen, diese hier nur, weil
+ * jemand sie aufgeschrieben hat.
+ */
+export interface PracticeTask {
+  id: ID;
+  title: string;
+  notes?: string;
+  status: PracticeTaskStatus;
+  priority: PracticeTaskPriority;
+  dueDate?: string;
+  /** Sortierung innerhalb der Spalte, aufsteigend. */
+  position: number;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react"
 
+import { PracticeTaskBoard } from "@/components/practice-task-board"
 import { buildDashboardWorklist, type DashboardWorkItem } from "@/lib/dashboard-worklist"
 import type {
   CounselingSession,
@@ -26,6 +27,7 @@ import type {
   Patient,
   PatientIntakeSubmission,
   PracticeAppointment,
+  PracticeTask,
 } from "@/lib/types"
 
 const TEXT = {
@@ -69,6 +71,7 @@ interface DashboardProps {
   appointments: PracticeAppointment[]
   sessions: CounselingSession[]
   submissions: PatientIntakeSubmission[]
+  tasks: PracticeTask[]
 }
 
 function patientName(patient: Patient): string {
@@ -204,6 +207,7 @@ export function DashboardOverviewClient({
   appointments,
   sessions,
   submissions,
+  tasks,
 }: DashboardProps) {
   const [nowTs] = useState(() => Date.now())
   const today = useMemo(() => new Date(nowTs), [nowTs])
@@ -382,6 +386,11 @@ export function DashboardOverviewClient({
           )}
         </CardShell>
       </section>
+
+      <CardShell>
+        <CardHeading title="Aufgaben" helper="Dein Board — was du selbst notiert hast" />
+        <PracticeTaskBoard initialTasks={tasks} />
+      </CardShell>
 
       <section className="grid gap-5 lg:grid-cols-2">
         <CardShell>

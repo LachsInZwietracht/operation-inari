@@ -5,13 +5,14 @@ import { fetchPatients } from "@/lib/data/patients"
 import { fetchAppointmentsClient } from "@/lib/data/appointments-client"
 import { fetchCounselingSessionsClient } from "@/lib/data/counseling-client"
 import { fetchPatientIntakeSubmissionsClient } from "@/lib/data/patient-intake-submissions-client"
+import { fetchPracticeTasks } from "@/lib/data/practice-tasks-client"
 import { DashboardOverviewClient } from "./dashboard-overview-client"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   const user = await getVerifiedUser(supabase)
 
-  const [plans, patients, appointments, sessions, submissions] = await Promise.all([
+  const [plans, patients, appointments, sessions, submissions, tasks] = await Promise.all([
     // Own plans only — system/template plans belong in the Bibliothek.
     fetchMealPlans({ supabase, userId: user?.id, includeSystem: false }),
     fetchPatients(supabase),
@@ -27,6 +28,10 @@ export default async function DashboardPage() {
       console.warn("Falling back to empty intake list:", error)
       return []
     }),
+    fetchPracticeTasks(supabase).catch((error) => {
+      console.warn("Falling back to empty task board:", error)
+      return []
+    }),
   ])
 
   const metadataName = user?.user_metadata?.first_name
@@ -40,6 +45,7 @@ export default async function DashboardPage() {
       appointments={appointments}
       sessions={sessions}
       submissions={submissions}
+      tasks={tasks}
     />
   )
 }
