@@ -20,6 +20,7 @@ import {
   MEAL_PLAN_DRAG_TYPE,
   MEAL_PLAN_DRAG_ID,
   readMealPlanDragPayload,
+  readMealPlanTemplateDragPayload,
   type MealPlanDragPayload,
 } from "@/components/meal-plan-library"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
@@ -66,6 +67,7 @@ interface PlanDayWorkspaceProps {
   ) => void
   onOpenExchange: (slotType: MealSlotType, entryId?: string) => void
   onDropPayload: (slotType: MealSlotType, payload: MealPlanDragPayload) => void
+  onDropTemplate?: (templateId: string) => void
   allergenWarnings?: Map<string, string[]>
   isLocked?: boolean
 }
@@ -91,6 +93,7 @@ export function PlanDayWorkspace({
   onMoveEntry,
   onOpenExchange,
   onDropPayload,
+  onDropTemplate,
   allergenWarnings,
   isLocked,
 }: PlanDayWorkspaceProps) {
@@ -126,6 +129,12 @@ export function PlanDayWorkspace({
     event.preventDefault()
     setDropSlot(null)
     if (isLocked) return
+
+    const templateId = readMealPlanTemplateDragPayload(event)
+    if (templateId) {
+      onDropTemplate?.(templateId)
+      return
+    }
 
     const sourceSlot = event.dataTransfer.getData(MEAL_PLAN_DRAG_SOURCE_SLOT) as MealSlotType | ""
     const sourceEntryId = event.dataTransfer.getData(MEAL_PLAN_DRAG_SOURCE_ENTRY)

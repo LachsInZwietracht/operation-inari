@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   readMealPlanDragPayload,
+  readMealPlanTemplateDragPayload,
   type MealPlanDragPayload,
 } from "@/components/meal-plan-library"
 import { formatNumber } from "@/lib/format"
@@ -95,6 +96,7 @@ interface MealPlanWeekBoardProps {
   onCopyToNextDay: (date: string) => void
   onClearDay: (date: string) => void
   onDrop: (date: string, slotType: MealSlotType, payload: DragPayload) => void
+  onDropTemplate?: (date: string, templateId: string) => void
   onAddEntry: (date: string, slotType: MealSlotType) => void
   onRemoveEntry: (date: string, slotType: MealSlotType, entryId: string) => void
 }
@@ -112,6 +114,7 @@ export function MealPlanWeekBoard({
   onCopyToNextDay,
   onClearDay,
   onDrop,
+  onDropTemplate,
   onAddEntry,
   onRemoveEntry,
 }: MealPlanWeekBoardProps) {
@@ -122,6 +125,11 @@ export function MealPlanWeekBoard({
     event.preventDefault()
     setDropTarget(null)
     if (isReleasedPlan(plan)) return
+    const templateId = readMealPlanTemplateDragPayload(event)
+    if (templateId) {
+      onDropTemplate?.(plan.date, templateId)
+      return
+    }
     const payload = readMealPlanDragPayload(event)
     if (!payload) return
     onDrop(plan.date, slotType, payload)

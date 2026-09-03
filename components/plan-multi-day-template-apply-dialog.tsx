@@ -17,7 +17,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MEAL_SLOT_LABELS } from "@/lib/constants"
-import type { MealPlanTemplate, MealPlanTemplateDayBlock } from "@/lib/types"
+import { getMealPlanTemplateFilledBlocks, getMealPlanTemplateSpanDays } from "@/lib/meal-plan-template-utils"
+import type { MealPlanTemplate } from "@/lib/types"
 import type { MealEntry } from "@/lib/types"
 
 export interface TemplateApplyTarget {
@@ -37,12 +38,6 @@ interface PlanMultiDayTemplateApplyDialogProps {
   onConfirm: () => void | Promise<void>
 }
 
-function blocksFor(template: MealPlanTemplate): MealPlanTemplateDayBlock[] {
-  return template.dayBlocks?.length
-    ? template.dayBlocks
-    : [{ offsetDays: 0, slots: template.slots }]
-}
-
 /**
  * The template inspector deliberately comes before any mutation. It works for
  * one and multi-day templates alike, so a single draft never gets replaced by
@@ -59,14 +54,12 @@ export function PlanMultiDayTemplateApplyDialog({
   isApplying,
   onConfirm,
 }: PlanMultiDayTemplateApplyDialogProps) {
-  const blocks = blocksFor(template)
-  const hasGaps = blocks.length > 1 && blocks.some((block, index) =>
-    index > 0 && block.offsetDays !== blocks[index - 1].offsetDays + 1,
-  )
-  const spanDays = Math.max(...blocks.map((block) => block.offsetDays)) + 1
+  const blocks = getMealPlanTemplateFilledBlocks(template)
+  const spanDays = getMealPlanTemplateSpanDays(template)
+  const hasGaps = blocks.length < spanDays
   const occupiedTargets = targets.filter((target) => target.state === "draft")
   const protectedTargets = targets.filter((target) => target.state === "protected")
-  const canApply = protectedTargets.length === 0 && !isApplying
+  const canApply = blocks.length > 0 && protectedTargets.length === 0 && !isApplying
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isApplying && onOpenChange(next)}>
@@ -84,7 +77,7 @@ export function PlanMultiDayTemplateApplyDialog({
               <p className="font-medium">{template.name}</p>
               <Badge variant="outline">{template.patientId ? "Dieser Patient" : "Meine Vorlage"}</Badge>
               <Badge variant="outline">{blocks.length === 1 ? "1 Tag" : `${blocks.length} Planungstage`}</Badge>
-              {blocks.length > 1 ? <Badge variant="outline">Zeitraum {spanDays} Tage</Badge> : null}
+              {spanDays > 1 ? <Badge variant="outline">Zeitraum {spanDays} Tage</Badge> : null}
             </div>
             {template.description ? <p className="mt-2 text-sm text-muted-foreground">{template.description}</p> : null}
             <div className="mt-3 space-y-2 text-xs">
@@ -114,6 +107,7 @@ export function PlanMultiDayTemplateApplyDialog({
               })}
             </div>
             {hasGaps ? <p className="mt-2 text-xs text-muted-foreground">Die Vorlage enthält bewusste Lücken; sie bleiben beim Anwenden erhalten.</p> : null}
+            {blocks.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">Diese Vorlage enthält noch keine Mahlzeiten.</p> : null}
           </section>
 
           <div className="grid gap-3 sm:grid-cols-[minmax(0,190px)_1fr] sm:items-end">

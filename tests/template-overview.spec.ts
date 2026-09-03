@@ -121,15 +121,22 @@ test.describe("Planvorlagen-Übersicht", () => {
       });
       if (entryError) throw new Error(entryError.message);
 
+      await page.goto(`/ernaehrungsplan/bibliothek?scope=general&patientId=${patient.id}&returnDate=2040-02-03`);
+      await page.getByRole("button", { name: "Vorlage erstellen" }).click();
+      await expect(page).toHaveURL(/\/ernaehrungsplan\/bibliothek\/neu\?/);
+      await expect(page.getByRole("heading", { name: "Neue Vorlage" })).toBeVisible();
+      await expect(page.getByText("Erster Planungstag", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Tag 1", { exact: true })).toBeVisible();
+
       for (const [index, scope] of ["general", "patient"].entries()) {
         // General must stay general even when retaining a planner's patient context.
         await page.goto(`/ernaehrungsplan/bibliothek?scope=${scope}&patientId=${patient.id}&returnDate=2040-02-03`);
-        await page.getByRole("button", { name: "Vorlage erstellen" }).click();
-        const dialog = page.getByRole("dialog", { name: "Vorlage erstellen" });
+        await page.getByRole("button", { name: "Aus bestehendem Plan übernehmen" }).click();
+        const dialog = page.getByRole("dialog", { name: "Aus bestehendem Plan übernehmen" });
         await expect(dialog.getByRole("combobox", { name: "Geltungsbereich" })).toContainText(
           scope === "general" ? "Für alle meine Patienten" : "Nur für diesen Patienten",
         );
-        await dialog.getByRole("combobox", { name: "Erster Planungstag" }).click();
+        await dialog.getByRole("combobox", { name: "Quellplan" }).click();
         await page.getByRole("option", { name: new RegExp(`Ausgangsplan ${suffix}`) }).click();
         await dialog.getByLabel("Name", { exact: true }).fill(templateNames[index]);
         await dialog.getByRole("button", { name: "Vorlage speichern" }).click();

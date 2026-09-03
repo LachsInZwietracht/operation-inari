@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { TemplateDetailClient } from "./template-detail-client";
+import { MealPlanTemplateEditor } from "@/components/meal-plan-template-editor";
+import { fetchPatients } from "@/lib/data/patients";
 import { fetchFoodsViaRpc } from "@/lib/data/foods";
 import { fetchRecipes } from "@/lib/data/recipes";
 import { fetchMealPlanTemplates } from "@/lib/data/meal-plan-templates";
@@ -60,7 +62,7 @@ export default async function BibliothekDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ patientId?: string; returnDate?: string; scope?: string }>;
+  searchParams: Promise<{ patientId?: string; returnDate?: string; scope?: string; edit?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const scope =
@@ -99,14 +101,22 @@ export default async function BibliothekDetailPage({
 
   return (
     <FoodsProvider foods={foods}>
-      <TemplateDetailClient
+      {query.edit === "true" ? <MealPlanTemplateEditor
+        key={template.id}
+        template={template}
+        recipes={recipes}
+        patients={(await fetchPatients(supabase)).map(({ id, firstName, lastName }) => ({ id, firstName, lastName }))}
+        patientId={query.patientId}
+        returnDate={query.returnDate}
+        scope={scope}
+      /> : <TemplateDetailClient
         template={template}
         recipes={recipes}
         nutrientIds={TEMPLATE_DETAIL_NUTRIENT_IDS}
         patientId={query.patientId}
         returnDate={query.returnDate}
         scope={scope}
-      />
+      />}
     </FoodsProvider>
   );
 }

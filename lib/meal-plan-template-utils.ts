@@ -34,6 +34,15 @@ export function getMealPlanTemplateSpanDays(
   return Math.max(...blocks.map((block) => block.offsetDays)) + 1
 }
 
+/** Empty blocks preserve a chosen duration but must never erase dated plans. */
+export function getMealPlanTemplateFilledBlocks(
+  template: Pick<MealPlanTemplate, "dayBlocks" | "slots">,
+): MealPlanTemplateDayBlock[] {
+  return getMealPlanTemplateBlocks(template).filter((day) =>
+    day.slots.some((slot) => slot.entries.length > 0),
+  )
+}
+
 export function matchesMealPlanTemplateDuration(
   spanDays: number,
   duration: MealPlanTemplateDuration,

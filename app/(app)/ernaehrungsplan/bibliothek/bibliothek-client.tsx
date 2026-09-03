@@ -453,7 +453,7 @@ export function BibliothekClient({
       <PageHeader
         title="Planvorlagen"
         description="Tages- und Mehrtagesvorlagen erstellen, ordnen und sicher anwenden."
-        helpText="Der datumsgebundene Planer bleibt die Baufläche. Hier verwaltest du daraus gespeicherte Zeiträume, prüfst ihren Inhalt und wählst beim Anwenden bewusst Startdatum und Zieltermine."
+        helpText="Erstelle eine Vorlage ohne Kalenderdatum und gestalte ihre relativen Tage im Vorlagenraster. Alternativ kannst du Inhalte aus einem bestehenden Tagesplan übernehmen. Konkrete Termine bestimmst du erst beim Anwenden."
       >
         <Button variant="outline" size="sm" onClick={() => { setComparisonStartId(undefined); setComparisonOpen(true); }}>
           <Columns2 className="mr-2 h-4 w-4" />
@@ -466,13 +466,16 @@ export function BibliothekClient({
           </Link>
         </Button>
         <Button
+          variant="outline"
           size="sm"
           onClick={openCreateDialog}
           disabled={scopeFilter === "patient" && !patientId}
           title={scopeFilter === "patient" && !patientId ? "Wähle zuerst einen Patienten aus." : undefined}
         >
-          <BookMarked className="mr-2 h-4 w-4" />
-          Vorlage erstellen
+          Aus bestehendem Plan übernehmen
+        </Button>
+        <Button size="sm" disabled={scopeFilter === "patient" && !patientId} onClick={() => router.push(overviewHref(scopeFilter).replace("/bibliothek?", "/bibliothek/neu?"))}>
+          <BookMarked className="mr-2 h-4 w-4" />Vorlage erstellen
         </Button>
       </PageHeader>
 
@@ -787,7 +790,7 @@ export function BibliothekClient({
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Vorlage erstellen</DialogTitle>
+            <DialogTitle>Aus bestehendem Plan übernehmen</DialogTitle>
             <DialogDescription>
               Übernimm einen vorbereiteten Tag oder Zeitraum aus dem Planer. Ungefüllte Tage bleiben als bewusste Lücken erhalten.
             </DialogDescription>
@@ -818,7 +821,7 @@ export function BibliothekClient({
               </Select>
             </div> : null}
             <div className="space-y-1.5">
-              <Label htmlFor="template-source-plan">Erster Planungstag</Label>
+              <Label htmlFor="template-source-plan">Quellplan</Label>
               <Select value={sourcePlanId} onValueChange={handleSourcePlanChange}>
                 <SelectTrigger id="template-source-plan">
                   <SelectValue placeholder="Plan auswählen" />

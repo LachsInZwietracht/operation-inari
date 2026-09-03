@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic"
 import Link from "next/link"
+import { getMealPlanTemplateFilledBlocks } from "@/lib/meal-plan-template-utils"
 import { useRouter } from "next/navigation"
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -141,9 +142,7 @@ function getPatientIndications(patient?: Patient): string[] {
 }
 
 function getTemplateBlocks(template: MealPlanTemplate) {
-  return template.dayBlocks?.length
-    ? template.dayBlocks
-    : [{ offsetDays: 0, slots: template.slots }]
+  return getMealPlanTemplateFilledBlocks(template)
 }
 
 interface MealPlanPlannerProps {
@@ -1172,6 +1171,7 @@ export function MealPlanPlanner({
   const getTemplateApplyTargets = useCallback(
     (template: MealPlanTemplate, startDate: string): TemplateApplyTarget[] => {
       const blocks = getTemplateBlocks(template)
+      if (blocks.length === 0) return []
       const range = getPlansInRange(startDate, Math.max(...blocks.map((block) => block.offsetDays)) + 1)
       return blocks.map((block) => {
         const date = format(addDays(parseISO(startDate), block.offsetDays), "yyyy-MM-dd")
@@ -1186,6 +1186,10 @@ export function MealPlanPlanner({
 
   const confirmMultiDayTemplateApply = useCallback(async () => {
     if (!pendingMultiDayTemplate) return
+    if (getTemplateBlocks(pendingMultiDayTemplate.template).length === 0) {
+      toast.error("Diese Vorlage enthält noch keine Mahlzeiten.")
+      return
+    }
     if (pendingMultiDayTemplate.template.patientId && pendingMultiDayTemplate.template.patientId !== patientId) {
       setPendingMultiDayTemplate(null)
       toast.error("Diese Vorlage gehört zu einem anderen Patienten.")
@@ -1250,6 +1254,22 @@ export function MealPlanPlanner({
       })
     },
     [currentDate, patientId],
+  )
+
+  const handleDropTemplate = useCallback(
+    (date: string, templateId: string) => {
+      const template = mealPlanTemplates.find((item) => item.id === templateId)
+      if (!template) {
+        toast.error("Diese Vorlage ist nicht mehr verfügbar.")
+        return
+      }
+      if (template.patientId && template.patientId !== patientId) {
+        toast.error("Diese Vorlage gehört zu einem anderen Patienten.")
+        return
+      }
+      setPendingMultiDayTemplate({ template, startDate: date })
+    },
+    [mealPlanTemplates, patientId],
   )
 
   // Shared export trigger — rendered in the day header and reused in the week
@@ -1667,6 +1687,7 @@ export function MealPlanPlanner({
             onMoveEntry={moveEntry}
             onOpenExchange={handleOpenExchange}
             onDropPayload={(slotType, payload) => void handleDropPayload(slotType, payload)}
+            onDropTemplate={(templateId) => handleDropTemplate(currentDate, templateId)}
             allergenWarnings={entryAllergenWarnings}
             isLocked={currentPlan.status === "approved"}
           />
@@ -1709,6 +1730,7 @@ export function MealPlanPlanner({
             onCopyToNextDay={copyPlanToNextDay}
             onClearDay={clearPlan}
             onDrop={(date, slotType, payload) => void handleWeekDropPayload(date, slotType, payload)}
+            onDropTemplate={handleDropTemplate}
             onAddEntry={handleAddEntryForDate}
             onRemoveEntry={removeEntryForDate}
           />

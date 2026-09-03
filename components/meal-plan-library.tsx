@@ -42,6 +42,7 @@ export const MEAL_PLAN_DRAG_TYPE = "application/prodi-entry-type"
 export const MEAL_PLAN_DRAG_ID = "application/prodi-entry-id"
 export const MEAL_PLAN_DRAG_SOURCE_SLOT = "application/prodi-source-slot"
 export const MEAL_PLAN_DRAG_SOURCE_ENTRY = "application/prodi-source-entry"
+export const MEAL_PLAN_DRAG_TEMPLATE_ID = "application/prodi-template-id"
 
 export type MealPlanDragPayload = { type: MealEntry["type"]; referenceId: string }
 
@@ -64,6 +65,15 @@ export function readMealPlanDragPayload(event: DragEvent): MealPlanDragPayload |
   const referenceId = event.dataTransfer.getData(MEAL_PLAN_DRAG_ID)
   if (!type || !referenceId) return null
   return { type, referenceId }
+}
+
+export function setMealPlanTemplateDragPayload(event: DragEvent, templateId: string) {
+  event.dataTransfer.setData(MEAL_PLAN_DRAG_TEMPLATE_ID, templateId)
+  event.dataTransfer.effectAllowed = "copy"
+}
+
+export function readMealPlanTemplateDragPayload(event: DragEvent): string | null {
+  return event.dataTransfer.getData(MEAL_PLAN_DRAG_TEMPLATE_ID) || null
 }
 
 type LibraryTab = "recipes" | "foods" | "templates"
@@ -143,6 +153,8 @@ interface MealPlanLibraryProps {
   /** Opens the portable Inari plan-file import for the active day. */
   onImportPlanFile?: () => void
   className?: string
+  /** Template editing uses the food/recipe library without nested templates. */
+  hideTemplates?: boolean
 }
 
 function QuickAddMenu({
@@ -195,6 +207,7 @@ export function MealPlanLibrary({
   onApplyTemplate,
   onImportPlanFile,
   className,
+  hideTemplates = false,
 }: MealPlanLibraryProps) {
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState<LibraryTab>("recipes")
@@ -345,7 +358,7 @@ export function MealPlanLibrary({
   const tabs: Array<{ id: LibraryTab; label: string }> = [
     { id: "recipes", label: "Rezepte" },
     { id: "foods", label: "Lebensmittel" },
-    { id: "templates", label: "Vorlagen" },
+    ...(!hideTemplates ? [{ id: "templates" as const, label: "Vorlagen" }] : []),
   ]
 
   return (
@@ -657,7 +670,10 @@ export function MealPlanLibrary({
                   type="button"
                   className="hover:bg-accent focus-visible:ring-ring flex w-full items-center gap-2 rounded-md border px-3 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
                   disabled={isLocked || !onApplyTemplate}
+                  draggable={!isLocked && Boolean(onApplyTemplate)}
+                  onDragStart={(event) => setMealPlanTemplateDragPayload(event, template.id)}
                   onClick={() => onApplyTemplate?.(template)}
+                  title="Klicken für die Vorschau oder auf einen Tag im Planer ziehen"
                 >
                   <LayoutTemplate className="text-muted-foreground h-4 w-4 flex-none" />
                   <div className="min-w-0 flex-1">

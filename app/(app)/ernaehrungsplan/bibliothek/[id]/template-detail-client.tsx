@@ -418,7 +418,12 @@ export function TemplateDetailClient({
             onClick={openEditDialog}
           >
             <Pencil className="mr-2 h-4 w-4" />
-            Bearbeiten
+            Metadaten
+          </Button>
+          <Button size="sm" asChild>
+            <Link href={`/ernaehrungsplan/bibliothek/${template.id}?${backParams.toString()}&edit=true`}>
+              Inhalt bearbeiten
+            </Link>
           </Button>
           <Button
             variant="outline"

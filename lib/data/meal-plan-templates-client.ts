@@ -162,7 +162,7 @@ function serializeSlots(slots: MealSlot[]): RawSlot[] {
 }
 
 async function getAuthenticatedUserId(client: SupabaseClient): Promise<string | null> {
-  const { data, error } = await client.auth.getUser();
+  const { data, error } = await withTimeout(client.auth.getUser(), 10000, "Anmeldung konnte nicht rechtzeitig geprüft werden.");
   if (error) {
     throw new Error(error.message);
   }
@@ -230,11 +230,11 @@ export async function saveMealPlanTemplate(
     source_type: "personal" as const,
   };
 
-  const { data, error } = await client
+  const { data, error } = await withTimeout(client
     .from("meal_plan_templates")
     .upsert(payload, { onConflict: "id" })
     .select(TEMPLATE_COLUMNS)
-    .single();
+    .single(), 15000, "Vorlage konnte nicht rechtzeitig gespeichert werden.");
 
   if (error) {
     throw new Error(error.message);
