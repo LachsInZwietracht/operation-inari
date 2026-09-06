@@ -19,7 +19,6 @@ import {
   Ruler,
   ShieldCheck,
   ShieldCheck as ClipboardCheck,
-  ShoppingBasket,
   UserPlus,
   Users,
 } from "lucide-react"
@@ -59,7 +58,6 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Rezepte", icon: ChefHat, route: "/rezepte" },
       { label: "Lebensmittel", icon: Apple, route: "/lebensmittel/uebersicht" },
-      { label: "Einkaufsliste", icon: ShoppingBasket, route: "/ernaehrungsplan/einkaufsliste" },
     ],
   },
   {

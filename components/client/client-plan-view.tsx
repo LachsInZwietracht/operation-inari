@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { addDays, format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { ShoppingBasket, Check, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { ClientAlternativeRequest, ClientPlanFeedback, PlanMessageProvider } from "@/components/client/plan-messages"
@@ -151,6 +151,14 @@ export function ClientPlanView({
   const previousDate = format(addDays(parsedDate, -1), "yyyy-MM-dd")
   const nextDate = format(addDays(parsedDate, 1), "yyyy-MM-dd")
 
+  const shoppingLink = (
+    <Link href="/klient/plan/einkaufsliste" className="flex min-h-20 items-center gap-4 rounded-2xl border bg-background p-4 transition-colors hover:bg-accent">
+      <span className="rounded-2xl bg-primary/10 p-3 text-primary"><ShoppingBasket className="size-5" /></span>
+      <span className="flex-1"><span className="block font-medium">Für nächste Woche einkaufen</span><span className="text-sm text-muted-foreground">Deine Zutaten, schon zusammengestellt.</span></span>
+      <ChevronRight className="size-5 text-muted-foreground" />
+    </Link>
+  )
+
   const header = (
     <div className="flex items-center justify-between gap-2">
       <Button variant="ghost" size="icon" asChild>
@@ -191,6 +199,7 @@ export function ClientPlanView({
     return (
       <div className="space-y-4">
         {preview ? <p className="text-center font-medium">{date}</p> : header}
+        {!preview && shoppingLink}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Kein Plan für diesen Tag</CardTitle>
@@ -209,6 +218,7 @@ export function ClientPlanView({
     <PlanMessageProvider planId={preview ? undefined : plan.id}>
     <div className="space-y-4">
       {preview ? <p className="text-center font-medium">{format(parsedDate, "EEEE, d. MMMM", { locale: de })}</p> : header}
+      {!preview && shoppingLink}
 
       {!preview && <Card>
         <CardContent className="space-y-2 py-4">

@@ -86,11 +86,11 @@ function makeSourceKey(planId: string, recipeId?: string): string {
 
 function addToBucket(
   buckets: Map<string, Bucket>,
-  food: Food,
+  food: Pick<Food, "id" | "name" | "categoryId">,
   grams: number,
   source: ShoppingListSource,
 ): void {
-  if (grams <= 0) return;
+  if (!Number.isFinite(grams) || grams <= 0) return;
   const existing = buckets.get(food.id);
   if (existing) {
     existing.totalGrams += grams;
@@ -124,8 +124,8 @@ function addToBucket(
  */
 export function buildShoppingList(
   plans: DailyMealPlan[],
-  foodMap: Map<string, Food>,
-  recipeMap: Map<string, Recipe>,
+  foodMap: Map<string, Pick<Food, "id" | "name" | "categoryId">>,
+  recipeMap: Map<string, Pick<Recipe, "id" | "name" | "servings" | "ingredients">>,
 ): ShoppingList {
   const buckets = new Map<string, Bucket>();
   const missing: ShoppingListMissing[] = [];
@@ -167,7 +167,10 @@ export function buildShoppingList(
           });
           continue;
         }
-        if (recipe.servings <= 0) continue;
+        if (!Number.isFinite(recipe.servings) || recipe.servings <= 0 || recipe.ingredients.length === 0) {
+          missing.push({ referenceId: recipe.id, type: "recipe", planId: plan.id, planDate: plan.date });
+          continue;
+        }
         const scale = entry.amount / recipe.servings;
         if (scale <= 0) continue;
 
