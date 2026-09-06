@@ -1,5 +1,7 @@
 "use client"
 
+import { PlanRequestMarker } from "@/components/client/plan-messages"
+
 import { useState, type DragEvent } from "react"
 import { format, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
@@ -358,6 +360,7 @@ export function MealPlanWeekBoard({
                       >
                         <div className="pr-4 text-[11px] leading-tight font-medium">
                           {getEntryLabel(entry).split("(")[0]?.trim()}
+                          <PlanRequestMarker entryId={entry.id} />
                         </div>
                         <div className="text-muted-foreground font-mono text-[10px]">
                           {entry.type === "food"

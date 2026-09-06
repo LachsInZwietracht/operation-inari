@@ -1,5 +1,7 @@
 "use client"
 
+import { PlanRequestMarker } from "@/components/client/plan-messages"
+
 import { useMemo, useState, type DragEvent } from "react"
 import {
   AlertTriangle,
@@ -221,6 +223,7 @@ export function PlanDayWorkspace({
                           <span className="flex items-center gap-1.5">
                             <span className="truncate">
                               {getEntryName(entry, foodMap, recipeMap)}
+                              <PlanRequestMarker entryId={entry.id} />
                             </span>
                             {warnings && warnings.length > 0 && (
                               <Tooltip>

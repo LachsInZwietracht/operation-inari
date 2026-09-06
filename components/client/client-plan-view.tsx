@@ -7,6 +7,7 @@ import { de } from "date-fns/locale"
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { toast } from "sonner"
 
+import { ClientAlternativeRequest, ClientPlanFeedback, PlanMessageProvider } from "@/components/client/plan-messages"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -38,59 +39,50 @@ export function ClientPlanView({
   date,
   clientUserId,
   plan,
+  preview = false,
+  previewLabels,
 }: {
   date: string
   clientUserId: string | null
   plan: ClientPlanDay | null
+  preview?: boolean
+  previewLabels?: Map<string, string>
 }) {
   const [completions, setCompletions] = useState<Map<string, ClientMealCompletion>>(new Map())
   const [labels, setLabels] = useState<Map<string, string>>(new Map())
+  const [ingredients, setIngredients] = useState<Map<string, { id: string; name: string }[]>>(new Map())
   const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
 
   // Entries are polymorphic: reference_id points at foods or recipes.
   useEffect(() => {
-    if (!plan || plan.entries.length === 0) return
+    if (preview || !plan || plan.entries.length === 0) return
     let cancelled = false
 
-    const foodIds = plan.entries.filter((e) => e.entryType === "food").map((e) => e.referenceId)
-    const recipeIds = plan.entries.filter((e) => e.entryType === "recipe").map((e) => e.referenceId)
-
     async function loadLabels() {
+      const { data, error } = await createClient().rpc("get_client_plan_targets", { p_plan_id: plan!.id })
+      if (error) throw error
       const resolved = new Map<string, string>()
-
-      if (foodIds.length > 0) {
-        const response = await fetch("/api/foods/by-ids", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: [...new Set(foodIds)], nutrientIds: ["energie"] }),
-        })
-        if (response.ok) {
-          const foods = (await response.json()) as { id: string; name: string }[]
-          for (const food of foods) resolved.set(food.id, food.name)
-        }
+      const ingredientMap = new Map<string, { id: string; name: string }[]>()
+      for (const row of (data ?? []) as { entry_id: string; label: string; ingredients: { id: string; name: string }[] }[]) {
+        const entry = plan!.entries.find(item => item.id === row.entry_id)
+        if (!entry) continue
+        resolved.set(entry.referenceId, row.label)
+        ingredientMap.set(entry.referenceId, row.ingredients)
       }
-
-      if (recipeIds.length > 0) {
-        const { data } = await createClient()
-          .from("recipes")
-          .select("id,name")
-          .in("id", [...new Set(recipeIds)])
-        for (const recipe of (data ?? []) as { id: string; name: string }[]) {
-          resolved.set(recipe.id, recipe.name)
-        }
+      if (!cancelled) {
+        setLabels(resolved)
+        setIngredients(ingredientMap)
       }
-
-      if (!cancelled) setLabels(resolved)
     }
 
-    void loadLabels()
+    void loadLabels().catch(() => toast.error("Bezeichnungen und Zutaten konnten nicht geladen werden. Bitte lade den Plan erneut."))
     return () => {
       cancelled = true
     }
-  }, [plan])
+  }, [plan, preview])
 
   useEffect(() => {
-    if (!plan || !clientUserId) return
+    if (preview || !plan || !clientUserId) return
     let cancelled = false
 
     void fetchClientMealCompletions(clientUserId, plan.id)
@@ -103,7 +95,7 @@ export function ClientPlanView({
     return () => {
       cancelled = true
     }
-  }, [plan, clientUserId])
+  }, [plan, clientUserId, preview])
 
   const answer = useCallback(
     async (entry: ClientPlanEntry, skipped: boolean) => {
@@ -182,7 +174,7 @@ export function ClientPlanView({
     </div>
   )
 
-  if (!clientUserId) {
+  if (!clientUserId && !preview) {
     return (
       <Card>
         <CardHeader>
@@ -198,7 +190,7 @@ export function ClientPlanView({
   if (!plan || plan.entries.length === 0) {
     return (
       <div className="space-y-4">
-        {header}
+        {preview ? <p className="text-center font-medium">{date}</p> : header}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Kein Plan für diesen Tag</CardTitle>
@@ -214,10 +206,11 @@ export function ClientPlanView({
   const total = plan.entries.length
 
   return (
+    <PlanMessageProvider planId={preview ? undefined : plan.id}>
     <div className="space-y-4">
-      {header}
+      {preview ? <p className="text-center font-medium">{format(parsedDate, "EEEE, d. MMMM", { locale: de })}</p> : header}
 
-      <Card>
+      {!preview && <Card>
         <CardContent className="space-y-2 py-4">
           <div className="flex items-baseline justify-between">
             <p className="text-sm font-medium">
@@ -227,7 +220,7 @@ export function ClientPlanView({
           </div>
           <Progress value={total === 0 ? 0 : (doneCount / total) * 100} />
         </CardContent>
-      </Card>
+      </Card>}
 
       {SLOT_ORDER.map((slot) => {
         const entries = entriesBySlot.get(slot) ?? []
@@ -247,7 +240,8 @@ export function ClientPlanView({
                   const isPending = pendingEntryId === entry.id
 
                   return (
-                    <li key={entry.id} className="flex items-center gap-2 py-2">
+                    <li key={entry.id} className="py-2">
+                      <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <p
                           className={
@@ -256,7 +250,7 @@ export function ClientPlanView({
                               : "truncate text-sm"
                           }
                         >
-                          {labels.get(entry.referenceId) ??
+                          {(previewLabels ?? labels).get(entry.referenceId) ??
                             (entry.entryType === "recipe" ? "Rezept" : "Lebensmittel")}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -275,7 +269,7 @@ export function ClientPlanView({
                         </p>
                       </div>
 
-                      <Button
+                      {!preview && <><Button
                         variant={isDone ? "default" : "outline"}
                         size="icon"
                         disabled={isPending}
@@ -294,7 +288,9 @@ export function ClientPlanView({
                         onClick={() => void answer(entry, true)}
                       >
                         <X className="h-4 w-4" />
-                      </Button>
+                      </Button></>}
+                      </div>
+                      {!preview && <ClientAlternativeRequest key={`${plan.id}-${entry.id}`} planId={plan.id} entryId={entry.id} ingredients={ingredients.get(entry.referenceId)} />}
                     </li>
                   )
                 })}
@@ -303,6 +299,8 @@ export function ClientPlanView({
           </Card>
         )
       })}
+      {!preview && <ClientPlanFeedback key={plan.id} planId={plan.id} />}
     </div>
+    </PlanMessageProvider>
   )
 }

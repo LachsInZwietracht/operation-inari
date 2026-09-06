@@ -1,5 +1,8 @@
 "use client"
 
+import { useState } from "react"
+import type { DailyMealPlan } from "@/lib/types"
+import { ClientPlanView } from "@/components/client/client-plan-view"
 import { AlertTriangle, CheckCircle2, Loader2, Send, ShieldAlert } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +31,8 @@ interface PlanWeekReleaseDialogProps {
   review: WeekReleaseReview
   isReleasing: boolean
   onRelease: () => void
+  previewPlans?: DailyMealPlan[]
+  previewLabels?: Map<string, string>
 }
 
 /**
@@ -43,7 +48,11 @@ export function PlanWeekReleaseDialog({
   review,
   isReleasing,
   onRelease,
+  previewPlans = [],
+  previewLabels,
 }: PlanWeekReleaseDialogProps) {
+  const [previewDate, setPreviewDate] = useState("")
+  const previewPlan = previewPlans.find(plan => plan.date === previewDate) ?? previewPlans[0]
   const releasable = review.blockers.length === 0
   const visibilityText =
     review.clientVisibility === "linked"
@@ -54,7 +63,7 @@ export function PlanWeekReleaseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl max-h-[90dvh] overflow-y-auto" onClick={event => event.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Woche prüfen &amp; freigeben</DialogTitle>
           <DialogDescription>
@@ -101,6 +110,13 @@ export function PlanWeekReleaseDialog({
           ) : null}
 
           <p className="text-sm text-muted-foreground">{visibilityText}</p>
+          {previewPlan && <details><summary className="cursor-pointer text-sm font-medium">Vorschau aus Klientensicht</summary>
+            <div className="mt-3 space-y-3 rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Vorschau des Entwurfs. Erst „Verbindlich freigeben“ veröffentlicht diese Woche. Eingaben sind hier deaktiviert.</p>
+              <label className="block text-sm">Tag auswählen<select className="ml-2 rounded border bg-background p-1" value={previewPlan.date} onChange={event => setPreviewDate(event.target.value)}>{previewPlans.map(plan => <option key={plan.date} value={plan.date}>{plan.date}</option>)}</select></label>
+              <ClientPlanView key={previewPlan.date} date={previewPlan.date} clientUserId={null} preview previewLabels={previewLabels} plan={{ id: previewPlan.id, date: previewPlan.date, title: previewPlan.title, entries: previewPlan.slots.flatMap(slot => slot.entries.map(entry => ({ id: entry.id, slotType: slot.type, entryType: entry.type, referenceId: entry.referenceId, amount: entry.amount }))) }} />
+            </div>
+          </details>}
         </div>
 
         <DialogFooter>

@@ -1,5 +1,7 @@
 "use client"
 
+import { CounselorPlanMessages } from "@/components/client/plan-messages"
+
 import { useMemo, useState } from "react"
 import { addDays, format, formatDistanceToNowStrict, parseISO } from "date-fns"
 import { de } from "date-fns/locale"
@@ -748,6 +750,7 @@ export function PatientPlanStatus({
 
       <PlanCoverage coverage={coverage} onOpenPlanner={onOpenPlanner} />
 
+      <CounselorPlanMessages key={patient.id} patientId={patient.id} />
       <ClientPulse
         patient={patient}
         pulse={pulse}

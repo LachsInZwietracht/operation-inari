@@ -92,6 +92,7 @@ import { PlanNutrientGapTool } from "@/components/plan-nutrient-gap-tool"
 import type { NutrientGapAddPayload } from "@/components/plan-nutrient-gap-dialog"
 import { PlanBalanceRail } from "@/components/plan-balance-rail"
 import { PlanDayAnalysis } from "@/components/plan-day-analysis"
+import { PlanMessageProvider } from "@/components/client/plan-messages"
 import { PlanWeekReleaseDialog, type WeekReleaseReview } from "@/components/plan-week-release-dialog"
 import { PlanWeekCopyDialog } from "@/components/plan-week-copy-dialog"
 import { PlanWeekTemplateDialog, type WeekTemplateDraft } from "@/components/plan-week-template-dialog"
@@ -1340,6 +1341,7 @@ export function MealPlanPlanner({
   )
 
   return (
+    <PlanMessageProvider key={patientId} patientId={patientId}>
     <div className={embedded ? "space-y-4" : "space-y-6"}>
       {!embedded && (
       <PageHeader
@@ -1860,6 +1862,8 @@ export function MealPlanPlanner({
           patientName={visiblePatient ? `${visiblePatient.firstName} ${visiblePatient.lastName}` : "Patient"}
           weekRangeLabel={weekRangeLabel}
           review={weekReleaseReview}
+          previewPlans={weekPlans}
+          previewLabels={new Map([...foodMap].map(([id, food]) => [id, food.name] as const).concat([...recipeMap].map(([id, recipe]) => [id, recipe.name] as const)))}
           isReleasing={isReleasingWeek}
           onRelease={() => void handleReleaseWeek()}
         />
@@ -1928,5 +1932,6 @@ export function MealPlanPlanner({
         onDismiss={dismissPendingAllergenIntent}
       />
     </div>
+    </PlanMessageProvider>
   )
 }

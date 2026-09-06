@@ -1090,3 +1090,28 @@ The config logs which file and Supabase host it loaded at startup, e.g. `[playwr
 [^11]: https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid
 [^12]: https://world.openfoodfacts.org/data
 [^13]: https://www.efsa.europa.eu/en/data-report/food-composition-data
+
+### Client plan requests and feedback (2026-09-06)
+
+Migration `20260906000000_client_plan_messages.sql` adds `client_plan_messages`.
+Rows belong to one exact client link, patient and released daily plan. Alternative
+requests additionally retain the original meal-entry ID and optional recipe-ingredient
+ID, with a server-derived label, date and revision snapshot. A partial unique index
+prevents duplicate open requests for the same link/entry/ingredient, including
+concurrent submissions. Recipe edits do not rewrite the saved request label.
+
+Authenticated users have SELECT only, governed by RLS: the exact active link and
+nutrition consent are required for either participant. `send_client_plan_message`
+checks the authenticated client, plan owner, release state, entry membership,
+recipe-ingredient membership and text limits. `resolve_client_plan_message` permits
+only the linked plan owner to close a request with a nonempty reply. Both narrowly
+scoped functions use a fixed search path and deny anonymous execution. Revoking
+consent or the link removes read and write access. Archived revisions retain their
+message history but cannot receive new submissions. No message changes a plan or
+creates a diary entry. Apply the migration before enabling the new UI in a release.
+
+`get_client_plan_targets` returns only entry labels and recipe-ingredient identities
+for a plan the current client may read (active link, released plan). This deliberately
+includes counselor-owned custom-food names without opening their private catalog
+records or recipe notes. Nutrition consent controls client-to-counselor messages;
+as with the existing plan view it does not gate reading the counselor's plan labels.

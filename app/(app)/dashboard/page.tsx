@@ -1,3 +1,4 @@
+import { CounselorPlanMessages } from "@/components/client/plan-messages"
 import { createClient } from "@/lib/supabase/server"
 import { getVerifiedUser } from "@/lib/supabase/verified-user"
 import { fetchMealPlans } from "@/lib/data/meal-plans"
@@ -38,6 +39,8 @@ export default async function DashboardPage() {
   const firstName = typeof metadataName === "string" && metadataName ? metadataName : null
 
   return (
+    <div className="space-y-4">
+    <CounselorPlanMessages />
     <DashboardOverviewClient
       firstName={firstName}
       plans={plans}
@@ -47,5 +50,6 @@ export default async function DashboardPage() {
       submissions={submissions}
       tasks={tasks}
     />
+    </div>
   )
 }
