@@ -471,9 +471,9 @@ test.describe("Patient Management", () => {
       await expect(page.getByRole("dialog", { name: "Woche fortschreiben" })).toBeVisible();
       await expect(page.getByText("Nur leere Tage füllen")).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
-      await expect(page.getByRole("button", { name: "Plan prüfen & freigeben" })).toBeVisible();
-      await page.getByRole("button", { name: "Plan prüfen & freigeben" }).click();
-      await expect(page.getByRole("dialog", { name: "Plan prüfen & freigeben" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Woche prüfen & freigeben" })).toBeVisible();
+      await page.getByRole("button", { name: "Woche prüfen & freigeben" }).click();
+      await expect(page.getByRole("dialog", { name: "Woche prüfen & freigeben" })).toBeVisible();
       await expect(page.getByText("Vor der Freigabe beheben")).toBeVisible();
       await page.getByRole("button", { name: "Abbrechen" }).click();
       await expect(page.getByText("Nährstoff-Lückenfüller", { exact: true })).toHaveCount(0);

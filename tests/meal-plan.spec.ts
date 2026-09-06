@@ -470,15 +470,15 @@ test.describe("Ernährungsplan", () => {
       }
 
       await page.goto(`/patienten/${patient.id}?tab=ernaehrungsplan&planView=week&planDate=${weekStart}`);
-      await page.getByRole("button", { name: "Plan prüfen & freigeben" }).click();
-      await page.getByRole("dialog", { name: "Plan prüfen & freigeben" })
+      await page.getByRole("button", { name: "Woche prüfen & freigeben" }).click();
+      await page.getByRole("dialog", { name: "Woche prüfen & freigeben" })
         .getByRole("button", { name: "Verbindlich freigeben" })
         .click();
       await expect(page.getByRole("button", { name: "Änderungen vorbereiten" })).toBeVisible();
 
       await page.getByRole("button", { name: "Änderungen vorbereiten" }).click();
       await expect(page.getByText("Arbeitsfassung für die Woche vorbereitet.")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Plan prüfen & freigeben" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Woche prüfen & freigeben" })).toBeVisible();
 
       await expect.poll(async () => {
         const { data, error } = await admin

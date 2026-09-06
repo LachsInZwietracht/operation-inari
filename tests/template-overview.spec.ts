@@ -183,11 +183,11 @@ test.describe("Planvorlagen-Übersicht", () => {
 
       await page.goto("/dashboard");
       const sidebar = page.locator("[data-slot='sidebar-container']");
-      const plansLink = sidebar.getByRole("link", { name: "Ernährungspläne" });
+      const plansLink = sidebar.getByRole("link", { name: "Planvorlagen" });
       await expect(plansLink).toHaveAttribute("href", "/ernaehrungsplan/bibliothek");
       await plansLink.click();
       await expect(page).toHaveURL(/\/ernaehrungsplan\/bibliothek$/);
-      await expect(sidebar.getByRole("link", { name: "Ernährungspläne" })).toHaveAttribute("data-active", "true");
+      await expect(sidebar.getByRole("link", { name: "Planvorlagen" })).toHaveAttribute("data-active", "true");
 
       await page.goto("/ernaehrungsplaene");
       await expect(page).toHaveURL(/\/ernaehrungsplan\/bibliothek$/);

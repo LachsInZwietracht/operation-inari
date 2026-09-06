@@ -1320,7 +1320,7 @@ export function MealPlanPlanner({
       ) : (
         <Button size="sm" onClick={() => setWeekReleaseReviewOpen(true)}>
           <Send className="mr-1.5 h-4 w-4" />
-          Plan prüfen &amp; freigeben
+          Woche prüfen &amp; freigeben
         </Button>
       )}
       {exportMenu}

@@ -27,7 +27,7 @@ test.describe("Navigation", () => {
       { label: "Lebensmittel", path: "/lebensmittel/uebersicht", url: /\/lebensmittel\/uebersicht/, heading: "Lebensmittel" },
       { label: "Rezepte", path: "/rezepte", url: /\/rezepte/, heading: "Rezepte" },
       {
-        label: "Ernährungspläne",
+        label: "Planvorlagen",
         path: "/ernaehrungsplan/bibliothek",
         url: /\/ernaehrungsplan\/bibliothek/,
         heading: "Planvorlagen",

@@ -56,7 +56,7 @@ export function PlanWeekReleaseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Plan prüfen &amp; freigeben</DialogTitle>
+          <DialogTitle>Woche prüfen &amp; freigeben</DialogTitle>
           <DialogDescription>
             {patientName} · {weekRangeLabel}. Die Freigabe macht exakt diese sieben Tagespläne unveränderlich. Spätere Änderungen beginnen als neue Revision.
           </DialogDescription>
